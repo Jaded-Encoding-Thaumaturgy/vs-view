@@ -1,0 +1,127 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vsview"
+version = "0.1.0a0"
+description = "The next-generation VapourSynth previewer"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.14"
+classifiers = [
+    "Topic :: Multimedia :: Graphics",
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    # TODO: Change python version
+    # "Programming Language :: Python :: 3.12",
+    # "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+dependencies = [
+    "vapoursynth>=73",
+    "vsjetengine>=0.3.0",
+    "vspackrgb>=0.1.0",
+    "pyside6>=6.10.1",
+    "jetpytools>=2.2.2",
+    "pydantic>=2.0.0",
+    "typer>=0.20.0",
+    "pygments>=2.19.0",
+    "pluggy>=1.6.0",
+]
+[dependency-groups]
+dev = [
+    "vsstubs>=1.0.2",
+    "mypy>=1.19.0",
+    "ruff>=0.14.7",
+    # "objgraph>=3.6.2",
+    # "graphviz>=0.21",
+    "cython>=3.0.0",
+    "types-pygments>=2.19.0.20251121",
+]
+plugins = ["vsview-split-planes", "vsview-fftspectrum"]
+
+[project.scripts]
+vsview = "vsview.cli:app"
+
+[project.optional-dependencies]
+essential = ["vsview-split-planes"]
+
+[project.urls]
+# Documentation = ""
+"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view"
+Tracker = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
+"Contact" = "https://discord.gg/XTpc6Fa9eB"
+
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src/vsview"]
+include = ["README.md", "LICENSE", "pyproject.toml"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vsview"]
+exclude = ["README.md"]
+
+[tool.uv.workspace]
+members = ["src/vspackrgb", "src/plugins/*"]
+
+[tool.uv.sources]
+vsjetengine = { git = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-engine", branch = "main" }
+vsjetpack = { git = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack", branch = "main" }
+vspackrgb = { workspace = true }
+vsview-fftspectrum = { workspace = true }
+vsview-split-planes = { workspace = true }
+
+[tool.mypy]
+mypy_path = "$MYPY_CONFIG_FILE_DIR/stubs"
+
+exclude_gitignore = true
+
+# Flags changed by --strict
+warn_return_any = false
+extra_checks = false
+
+# Misc
+warn_unreachable = true
+
+enable_incomplete_feature = ["TypeForm"]
+allow_redefinition_new = true
+local_partial_types = true
+implicit_reexport = false
+strict = true
+
+show_column_numbers = true
+pretty = true
+color_output = true
+error_summary = true
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+extend-select = [
+    "E",
+    "C4",
+    "I",
+    "PYI",
+    "Q",
+    "SIM",
+    "N",
+    "W",
+    "UP",
+    "FURB",
+    "RUF",
+    "LOG",
+    "G",
+]
+ignore = ["N802", "N815"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.*" = ["F401", "F403"]

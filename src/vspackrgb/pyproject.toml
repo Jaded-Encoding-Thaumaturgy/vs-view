@@ -6,7 +6,16 @@ build-backend = "hatchling.build"
 name = "vspackrgb"
 version = "0.1.0"
 description = "RGB packing for VapourSynth frames"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.14"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
 dependencies = ["vapoursynth"]
 
 [project.optional-dependencies]
@@ -33,12 +42,7 @@ compile_py = false
 directives = { boundscheck = false, wraparound = false, nonecheck = false, language_level = 3 }
 
 # Platform-specific compilation arguments
-compile_args = [
-    { platforms = [
-        "linux",
-        "darwin",
-    ], arg = "-O3" },
-    { platforms = [
-        "windows",
-    ], arg = "/O2" },
+compile_args = [ # nofmt
+    { platforms = ["linux", "darwin"], arg = "-O3" },
+    { platforms = ["windows"], arg = "/O2" },
 ]

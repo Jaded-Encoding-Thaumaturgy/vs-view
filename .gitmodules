@@ -1,0 +1,9 @@
+[submodule "submodules/phosphor"]
+	path = submodules/phosphor
+	url = https://github.com/phosphor-icons/core.git
+[submodule "submodules/material"]
+	path = submodules/material
+	url = https://github.com/Templarian/MaterialDesign.git
+[submodule "submodules/lucide"]
+	path = submodules/lucide
+	url = https://github.com/lucide-icons/lucide.git
