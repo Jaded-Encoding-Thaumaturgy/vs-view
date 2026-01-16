@@ -18,7 +18,7 @@
 ### Prerequisites
 
 - **Python**: `>=3.12`
-- **VapourSynth**: `R73+`
+- **VapourSynth**: `R69+`
 
 ## Usage
 

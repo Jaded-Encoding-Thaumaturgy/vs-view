@@ -23,7 +23,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "vapoursynth>=73",
+    "vapoursynth>=69",
     "vsjetengine>=0.3.0",
     "vspackrgb>=0.1.0",
     "pyside6>=6.10.1",

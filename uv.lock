@@ -652,7 +652,7 @@ requires-dist = [
     { name = "pygments", specifier = ">=2.19.0" },
     { name = "pyside6", specifier = ">=6.10.1" },
     { name = "typer", specifier = ">=0.20.0" },
-    { name = "vapoursynth", specifier = ">=73" },
+    { name = "vapoursynth", specifier = ">=69" },
     { name = "vsjetengine", git = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-engine?branch=main" },
     { name = "vspackrgb", editable = "src/vspackrgb" },
     { name = "vsview-split-planes", marker = "extra == 'essential'", editable = "src/plugins/split-planes" },
