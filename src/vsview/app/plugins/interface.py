@@ -5,13 +5,13 @@ Plugin interface for VSView.
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Mapping, MutableMapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from itertools import zip_longest
 from logging import getLogger
 from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar, get_args, get_origin
-from weakref import WeakKeyDictionary
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar, get_args, get_origin
 
 import vapoursynth as vs
 from pydantic import BaseModel
@@ -20,13 +20,14 @@ from PySide6.QtGui import QPixmap, QShowEvent
 from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
 
 from vsview.app.settings import SettingsManager
-from vsview.app.settings.models import PluginNamespace
 from vsview.app.utils import ObjectType
 from vsview.app.views.video import BaseGraphicsView
 from vsview.vsenv.loop import run_in_loop
 
 if TYPE_CHECKING:
     from vsview.app.workspace.loader import LoaderWorkspace
+
+from .settings import PluginSettingsStore
 
 _logger = getLogger(__name__)
 
@@ -75,53 +76,18 @@ class LocalSettingsModel(BaseModel):
         return self.__class__(**base_values | overrides)
 
 
-class PluginAPI(QObject):
-    """API for plugins to interact with the workspace."""
-
-    statusMessage = Signal(str)  # message
-    """Signal to emit status messages."""
-
+class _PluginAPI(QObject):
+    statusMessage = Signal(str)
     globalSettingsChanged = Signal()
-    """Signal to emit when global settings change."""
-
     localSettingsChanged = Signal(str)
-    """Signal to emit when local settings change."""
 
     def __init__(self, workspace: LoaderWorkspace[Any]) -> None:
         super().__init__()
         self.__workspace = workspace
-        self.__global_settings_cache = WeakKeyDictionary[PluginBase[Any, Any], Any]()
-        self.__local_settings_cache = WeakKeyDictionary[PluginBase[Any, Any], Any]()
+        self.__settings_store: PluginSettingsStore | None = None
 
         SettingsManager.signals.globalChanged.connect(self._on_global_settings_changed)
         SettingsManager.signals.localChanged.connect(self._on_local_settings_changed)
-
-    @property
-    def file_path(self) -> Path | None:
-        """Return the file path of the currently loaded file, or None if not a file."""
-        from vsview.app.workspace.file import GenericFileWorkspace
-
-        if isinstance(self.__workspace, GenericFileWorkspace):
-            return self.__workspace.content
-        return None
-
-    @property
-    def current_frame(self) -> int:
-        """Return the current frame number."""
-        return self.__workspace.current_frame
-
-    @property
-    def current_tab_index(self) -> int:
-        """Return the index of the currently selected tab."""
-        return self.__workspace.current_tab_index
-
-    @property
-    def voutputs(self) -> dict[int, VideoOutputProxy]:
-        """Return a dictionary of VideoOutputProxy objects for all tabs."""
-        return {
-            k: VideoOutputProxy(voutput.vs_index, voutput.vs_name, voutput.vs_output, voutput.props)
-            for k, voutput in self.__workspace.tab_manager.voutputs.items()
-        }
 
     @property
     def current_voutput(self) -> VideoOutputProxy:
@@ -132,24 +98,14 @@ class PluginAPI(QObject):
         # This shouldn't happen
         raise NotImplementedError
 
-    def register_on_destroy(self, cb: Callable[[], Any]) -> None:
-        """
-        Register a callback to be called before the workspace begins a reload or when the workspace is destroyed.
-        This is generaly used to clean up VapourSynth resources.
-        """
-        self.__workspace.cbs_on_destroy.append(cb)
-
-    def frame_to_pixmap(
-        self,
-        f: vs.VideoFrame,
-        flags: Qt.ImageConversionFlag = Qt.ImageConversionFlag.NoFormatConversion,
-    ) -> QPixmap:
-        """
-        Convert a VapourSynth frame to a QPixmap. Assume the frame is already packed in GRAY32 format.
-        """
-        return QPixmap.fromImage(self.__workspace._packer.frame_to_qimage(f), flags).copy()
-
     # PRIVATE API
+
+    @property
+    def _settings_store(self) -> PluginSettingsStore:
+        if self.__settings_store is None:
+            self.__settings_store = PluginSettingsStore(self.__workspace)
+        return self.__settings_store
+
     def _is_truly_visible(self, plugin: PluginBase[Any, Any]) -> bool:
         # Check if this plugin is truly visible to the user.
 
@@ -209,8 +165,8 @@ class PluginAPI(QObject):
         if not self._is_truly_visible(plugin):
             return
 
-        tab_index = self.current_tab_index
-        current_frame = self.current_frame
+        tab_index = self.__workspace.current_tab_index
+        current_frame = self.__workspace.current_frame
 
         try:
             plugin.on_current_voutput_changed(self.current_voutput, tab_index)
@@ -234,8 +190,8 @@ class PluginAPI(QObject):
         if not self._is_truly_visible(plugin):
             return
 
-        tab_index = self.current_tab_index
-        current_frame = self.current_frame
+        tab_index = self.__workspace.current_tab_index
+        current_frame = self.__workspace.current_frame
 
         view.current_tab = tab_index
         _logger.debug("Found view: %s, current_tab=%d, outputs=%s", view, view.current_tab, list(view.outputs.keys()))
@@ -281,63 +237,96 @@ class PluginAPI(QObject):
                     with self.__workspace.env.use(), view.outputs[view.current_tab].get_frame(n) as frame:
                         view.on_current_frame_changed(n, frame)
 
-    def _get_cached_settings(self, plugin: PluginBase[Any, Any], scope: Literal["global", "local"]) -> Any:
-        cache = self.__global_settings_cache if scope == "global" else self.__local_settings_cache
+    def _get_cached_settings(self, plugin: PluginBase[Any, Any], scope: str) -> Any:
+        return self._settings_store.get(plugin, scope)
 
-        if plugin not in cache:
-            if scope == "global":
-                raw = SettingsManager.global_settings.plugins.setdefault(plugin.identifier, PluginNamespace())
-                model = getattr(plugin, "global_settings_model", None)
-            else:
-                if self.file_path is None:
-                    raw = PluginNamespace()
-                else:
-                    raw = SettingsManager.get_local_settings(self.file_path).plugins.setdefault(
-                        plugin.identifier, PluginNamespace()
-                    )
-                model = getattr(plugin, "local_settings_model", None)
-
-            # Convert PluginNamespace to dict for Pydantic validation
-            raw_data = vars(raw) if isinstance(raw, PluginNamespace) else raw
-            settings = model.model_validate(raw_data) if model is not None else raw
-
-            if isinstance(settings, LocalSettingsModel):
-                settings = settings.resolve(self._get_cached_settings(plugin, "global"))
-
-            cache[plugin] = settings
-
-        return cache[plugin]
-
-    def _set_settings(self, plugin: PluginBase[Any, Any], scope: Literal["global", "local"], value: Any) -> None:
-        if scope == "global":
-            SettingsManager.global_settings.plugins[plugin.identifier] = value
-            self.__global_settings_cache.pop(plugin, None)
-        elif self.file_path is not None:
-            SettingsManager.get_local_settings(self.file_path).plugins[plugin.identifier] = value
-            self.__local_settings_cache.pop(plugin, None)
+    def _update_settings(self, plugin: PluginBase[Any, Any], scope: str, **updates: Any) -> None:
+        self._settings_store.update(plugin, scope, **updates)
 
     def _on_global_settings_changed(self) -> None:
-        self.__global_settings_cache.clear()
+        self._settings_store.invalidate("global")
+        self._settings_store.invalidate("local")
         self.globalSettingsChanged.emit()
 
     def _on_local_settings_changed(self, path: str) -> None:
-        self.__local_settings_cache.clear()
+        self._settings_store.invalidate("local")
         self.localSettingsChanged.emit(path)
 
 
+class PluginAPI(_PluginAPI):
+    """API for plugins to interact with the workspace."""
+
+    if TYPE_CHECKING:
+        statusMessage = Signal(str)  # message
+        """Signal to emit status messages."""
+
+        globalSettingsChanged = Signal()
+        """Signal to emit when global settings change."""
+
+        localSettingsChanged = Signal(str)
+        """Signal to emit when local settings change."""
+
+    @property
+    def file_path(self) -> Path | None:
+        """Return the file path of the currently loaded file, or None if not a file."""
+        return self._settings_store.file_path
+
+    @property
+    def current_frame(self) -> int:
+        """Return the current frame number."""
+        return self.__workspace.current_frame
+
+    @property
+    def current_tab_index(self) -> int:
+        """Return the index of the currently selected tab."""
+        return self.__workspace.current_tab_index
+
+    @property
+    def voutputs(self) -> dict[int, VideoOutputProxy]:
+        """Return a dictionary of VideoOutputProxy objects for all tabs."""
+        return {
+            k: VideoOutputProxy(voutput.vs_index, voutput.vs_name, voutput.vs_output, voutput.props)
+            for k, voutput in self.__workspace.tab_manager.voutputs.items()
+        }
+
+    if TYPE_CHECKING:
+
+        @property
+        def current_voutput(self) -> VideoOutputProxy:
+            """Return the VideoOutput for the currently selected tab."""
+            ...
+
+    def register_on_destroy(self, cb: Callable[[], Any]) -> None:
+        """
+        Register a callback to be called before the workspace begins a reload or when the workspace is destroyed.
+        This is generaly used to clean up VapourSynth resources.
+        """
+        self.__workspace.cbs_on_destroy.append(cb)
+
+    def frame_to_pixmap(
+        self,
+        f: vs.VideoFrame,
+        flags: Qt.ImageConversionFlag = Qt.ImageConversionFlag.NoFormatConversion,
+    ) -> QPixmap:
+        """
+        Convert a VapourSynth frame to a QPixmap. Assume the frame is already packed in GRAY32 format.
+        """
+        return QPixmap.fromImage(self.__workspace._packer.frame_to_qimage(f), flags).copy()
+
+
 if sys.version_info >= (3, 13):
-    TGlobalSettings = TypeVar("TGlobalSettings", bound=BaseModel | PluginNamespace, default=PluginNamespace)
-    TLocalSettings = TypeVar("TLocalSettings", bound=BaseModel | PluginNamespace, default=PluginNamespace)
+    TGlobalSettings = TypeVar("TGlobalSettings", bound=BaseModel | None, default=None)
+    TLocalSettings = TypeVar("TLocalSettings", bound=BaseModel | None, default=None)
 else:
-    TGlobalSettings = TypeVar("TGlobalSettings", bound=BaseModel | PluginNamespace)
-    TLocalSettings = TypeVar("TLocalSettings", bound=BaseModel | PluginNamespace)
+    TGlobalSettings = TypeVar("TGlobalSettings", bound=BaseModel | None)
+    TLocalSettings = TypeVar("TLocalSettings", bound=BaseModel | None)
 
 
 class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):  # noqa: UP046
     """
     Settings wrapper providing lazy, always-fresh access.
 
-    Defaults to PluginNamespace when no model is defined.
+    Returns None if no settings model is defined for the scope.
     """
 
     def __init__(self, plugin: PluginBase[TGlobalSettings, TLocalSettings]) -> None:
@@ -373,10 +362,16 @@ class _PluginBaseMeta(ObjectType):
 
         for base in get_original_bases(cls):
             if (origin := get_origin(base)) and issubclass(origin, PluginBase):
-                for arg, n in zip(get_args(base), ["global", "local"]):
+                args = get_args(base)
+
+                for n, arg in zip_longest(["global", "local"], args, fillvalue=None):
+                    if arg is None or not isinstance(arg, type):
+                        setattr(cls, f"{n}_settings_model", None)
+                        continue
+
                     origin = get_origin(arg)
                     is_basemodel = (origin is None and issubclass(arg, BaseModel)) or (
-                        origin is not None and issubclass(get_origin(arg), BaseModel)
+                        origin is not None and issubclass(origin, BaseModel)
                     )
                     setattr(cls, f"{n}_settings_model", arg if is_basemodel else None)
                 break
@@ -410,23 +405,11 @@ class PluginBase(QWidget, Generic[TGlobalSettings, TLocalSettings], metaclass=_P
 
     def update_global_settings(self, **updates: Any) -> None:
         """Update specific global settings fields and trigger persistence."""
-        settings = self.api._get_cached_settings(self, "global")
-        for key, value in updates.items():
-            if isinstance(settings, MutableMapping):
-                settings[key] = value
-            else:
-                setattr(settings, key, value)
-        self.api._set_settings(self, "global", settings)
+        self.api._update_settings(self, "global", **updates)
 
     def update_local_settings(self, **updates: Any) -> None:
         """Update specific local settings fields and trigger persistence."""
-        settings = self.api._get_cached_settings(self, "local")
-        for key, value in updates.items():
-            if isinstance(settings, MutableMapping):
-                settings[key] = value
-            else:
-                setattr(settings, key, value)
-        self.api._set_settings(self, "local", settings)
+        self.api._update_settings(self, "local", **updates)
 
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
         """Called when the current video output changes."""

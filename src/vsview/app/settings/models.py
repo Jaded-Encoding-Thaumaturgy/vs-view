@@ -11,7 +11,6 @@ from enum import StrEnum
 from functools import wraps
 from logging import getLogger
 from pathlib import Path
-from types import SimpleNamespace
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -26,8 +25,7 @@ from typing import (
 )
 
 from jetpytools import SupportsRichComparison
-from pydantic import BaseModel, Field, GetCoreSchemaHandler, TypeAdapter, ValidationError, field_validator
-from pydantic_core import core_schema
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_serializer, field_validator
 from PySide6.QtCore import QTime
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QPlainTextEdit, QSpinBox, QTimeEdit, QWidget
@@ -404,29 +402,6 @@ class ActionID(StrEnum):
         return self
 
 
-class PluginNamespace(SimpleNamespace):
-    @classmethod
-    def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
-        return core_schema.no_info_plain_validator_function(
-            cls._validate,
-            serialization=core_schema.plain_serializer_function_ser_schema(cls._serialize, info_arg=False),
-        )
-
-    @classmethod
-    def _validate(cls, value: Any) -> PluginNamespace:
-        if isinstance(value, cls):
-            return value
-        if isinstance(value, SimpleNamespace):
-            return cls(**vars(value))
-        if isinstance(value, dict):
-            return cls(**value)
-        raise ValueError(f"Cannot convert {type(value)} to PluginNamespace")
-
-    @staticmethod
-    def _serialize(value: PluginNamespace) -> dict[str, Any]:
-        return vars(value)
-
-
 class ShortcutConfig(BaseModel):
     """Configuration for a single keyboard shortcut."""
 
@@ -662,6 +637,10 @@ class BaseSettings(BaseModel):
             data = data.setdefault(part, {})
         data[parts[-1]] = value
 
+    @field_serializer("plugins", check_fields=False)
+    def _serialize_plugins(self, value: dict[str, dict[str, Any] | BaseModel]) -> dict[str, dict[str, Any]]:
+        return {k: v.model_dump() if isinstance(v, BaseModel) else v for k, v in value.items()}
+
 
 class GlobalSettings(BaseSettings):
     """
@@ -705,7 +684,7 @@ class GlobalSettings(BaseSettings):
     timeline: TimelineSettings = TimelineSettings()
     view: ViewSettings = ViewSettings()
 
-    plugins: dict[str, PluginNamespace | BaseModel] = Field(default_factory=dict)
+    plugins: dict[str, dict[str, Any] | BaseModel] = Field(default_factory=dict)
 
     # Hidden
     window_geometry: WindowGeometry = WindowGeometry()
@@ -786,7 +765,7 @@ class LocalSettings(BaseSettings):
     last_output_tab_index: int = 0
     playback: LocalPlaybackSettings = LocalPlaybackSettings()
     synchronization: SynchronizationSettings = SynchronizationSettings()
-    plugins: dict[str, PluginNamespace | BaseModel] = Field(default_factory=dict)
+    plugins: dict[str, dict[str, Any] | BaseModel] = Field(default_factory=dict)
 
 
 # Global settings file location is inside the package directory

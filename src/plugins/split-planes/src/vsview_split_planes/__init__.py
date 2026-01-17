@@ -1,6 +1,7 @@
 from math import copysign
 from typing import Annotated, Any, Literal, assert_never
 
+from jetpytools import fallback
 from pydantic import BaseModel
 from PySide6.QtWidgets import QBoxLayout, QDoubleSpinBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QWidgetAction
 from vapoursynth import VideoNode
@@ -105,8 +106,9 @@ class SplitPlanesPlugin(PluginBase[GlobalSettings, LocalSettings]):
         self.api.globalSettingsChanged.connect(self.on_settings_changed)
 
     def on_settings_changed(self) -> None:
-        self.view.autofit = self.settings.global_.autofit
+        self.view.autofit = fallback(self.settings.local_.autofit, self.settings.global_.autofit)
         self.view.refresh(self)
+        self.view.sync_offset_controls_from_settings()
 
 
 class SplitPlanesView(PluginGraphicsView):
@@ -174,13 +176,13 @@ class SplitPlanesView(PluginGraphicsView):
         raise NotImplementedError
 
     def get_node(self, clip: VideoNode) -> VideoNode:
-        if self.settings.local_.offset_chroma is None:
+        if (offset_chroma := self.settings.local_.offset_chroma) is None:
             offset = False
-        elif isinstance(self.settings.local_.offset_chroma, (float, int)):
-            offset = scale_mask(abs(self.settings.local_.offset_chroma), 32, clip)
-            offset = copysign(offset, self.settings.local_.offset_chroma)
+        elif isinstance(offset_chroma, (float, int)):
+            offset = scale_mask(abs(offset_chroma), 32, clip)
+            offset = copysign(offset, offset_chroma)
         else:
-            offset = self.settings.local_.offset_chroma
+            offset = offset_chroma
 
         return stack_planes(
             clip,

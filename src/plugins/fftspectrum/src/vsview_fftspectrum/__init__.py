@@ -74,9 +74,7 @@ class FFTSpectrumPlugin(PluginBase[GlobalSettings]):
 
 
 class FFTSpectrumView(PluginGraphicsView):
-    def __init__(
-        self, parent: QWidget, api: PluginAPI, settings: PluginSettings[GlobalSettings, dict[str, Any]]
-    ) -> None:
+    def __init__(self, parent: QWidget, api: PluginAPI, settings: PluginSettings[GlobalSettings]) -> None:
         super().__init__(parent, api)
         self.settings = settings
         self.autofit = self.settings.global_.autofit
