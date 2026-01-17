@@ -11,7 +11,7 @@ from vsview.app.settings import SettingsManager
 if TYPE_CHECKING:
     from vsview.app.workspace.loader import LoaderWorkspace
 
-    from .interface import PluginBase
+    from .api import PluginBase
 
 
 class PluginSettingsStore:
@@ -42,7 +42,7 @@ class PluginSettingsStore:
         settings = model.model_validate(self._get_raw_settings(plugin.identifier, scope))
 
         # Resolve local settings with global fallbacks
-        from .interface import LocalSettingsModel
+        from .api import LocalSettingsModel
 
         if (
             scope == "local"

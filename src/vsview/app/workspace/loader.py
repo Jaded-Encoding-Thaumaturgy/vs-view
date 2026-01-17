@@ -31,7 +31,7 @@ from vsengine.vpy import ExecutionError, Script, load_code, load_script
 
 from ...vsenv import clear_environment, gc_collect, run_in_background, run_in_loop, unset_environment
 from ..outputs import FrameBuffer, VideoOutput, get_packer
-from ..plugins.interface import PluginAPI, PluginBase
+from ..plugins.api import PluginAPI, PluginBase
 from ..plugins.manager import PluginManager
 from ..settings import ActionID, ShortcutManager
 from ..views import OutputInfo, PluginSplitter

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import pluggy
 
 if TYPE_CHECKING:
-    from .interface import PluginBase
+    from .api import PluginBase
 
 hookspec = pluggy.HookspecMarker("vsview")
 """Marker to be used for hook specifications."""

@@ -13,7 +13,7 @@ from PySide6.QtCore import QObject, Signal
 
 from ...vsenv import run_in_background
 from . import specs
-from .interface import PluginBase
+from .api import PluginBase
 
 logger = getLogger(__name__)
 
