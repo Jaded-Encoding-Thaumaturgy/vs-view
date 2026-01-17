@@ -328,3 +328,8 @@ def get_monospace_font(size: int | None = None) -> QFont:
 @cache
 def app_icon() -> QIcon:
     return QIcon(str(Path(__file__).parent / "icon.png"))
+
+
+@cache
+def loading_icon() -> QIcon:
+    return QIcon(str(Path(__file__).parent / "loading.png"))

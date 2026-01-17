@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ...assets import app_icon
+from ...assets import loading_icon
 
 
 class SegmentedControl(QWidget):
@@ -140,7 +140,7 @@ class CustomLoadingPage(QWidget):
         self.progress_bar.setTextVisible(False)
 
         self.icon_label = QLabel(self)
-        self.icon_label.setPixmap(app_icon().pixmap(QSize(64, 64)))
+        self.icon_label.setPixmap(loading_icon().pixmap(QSize(150, 150)))
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.loading_layout.addWidget(self.icon_label)
         self.loading_layout.addWidget(QLabel("Loading...", self))
