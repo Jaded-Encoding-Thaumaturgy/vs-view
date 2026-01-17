@@ -1,6 +1,6 @@
 import sys
 
-import qdarktheme
+import qdarktheme  # type: ignore
 from PySide6.QtWidgets import QApplication
 
 app = QApplication(sys.argv)

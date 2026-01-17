@@ -11,7 +11,7 @@ from pathlib import Path
 
 microseconds = int
 
-# uv run python -X importtime -c "from vsview.cli import vsview_cli; vsview_cli()" 2> imports.txt && uv run python -m importtime imports.txt > imports.html
+# uv run python -X importtime -c "from vsview.cli import vsview_cli; vsview_cli()" 2> imports.txt && uv run python -m importtime imports.txt > imports.html  # noqa: E501
 
 
 @dataclass
@@ -34,7 +34,7 @@ class Import:
 
         return cls(name, int(self), int(cumulative), level)
 
-    def html(self, total):
+    def html(self, total: int) -> str:
         data = f"""<progress value="{self.cumulative}" max="{total}" style="width: 2em;"></progress>
             <code>{self.module}</code>
             <span style="color: #888; font-size:small; font-family: arial;">{self.cumulative / 1000:.3f} ms</span>
@@ -72,7 +72,7 @@ def parse_import_time_report(filename: Path) -> Import:
     return root
 
 
-def main():
+def main() -> None:
     argp = ArgumentParser()
     argp.add_argument("filename", type=Path)
     args = argp.parse_args()

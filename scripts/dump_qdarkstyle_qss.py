@@ -1,9 +1,9 @@
 import sys
 
-import qdarkstyle
+import qdarkstyle  # type: ignore
 from PySide6.QtWidgets import QApplication
-from qdarkstyle.dark.palette import DarkPalette
-from qdarkstyle.light.palette import LightPalette
+from qdarkstyle.dark.palette import DarkPalette  # type: ignore
+from qdarkstyle.light.palette import LightPalette  # type: ignore
 
 app = QApplication(sys.argv)
 
