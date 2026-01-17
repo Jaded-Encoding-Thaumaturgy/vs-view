@@ -5,6 +5,8 @@
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
 [![Discord](https://img.shields.io/discord/856381934052704266?label=Discord&logo=discord&logoColor=white)](https://discord.gg/XTpc6Fa9eB)
 
+<img src="src/vsview/assets/loading.png" height="200"/>
+
 **The next-generation VapourSynth previewer**
 
 </div>
