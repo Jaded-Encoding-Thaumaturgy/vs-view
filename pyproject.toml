@@ -32,7 +32,9 @@ dependencies = [
     "typer>=0.20.0",
     "pygments>=2.19.0",
     "pluggy>=1.6.0",
+    "typing_extensions>=4.15.0; python_version<'3.13'",
 ]
+
 [dependency-groups]
 dev = [
     "vsstubs>=1.0.2; python_version>='3.13'",
@@ -88,7 +90,6 @@ vsview-split-planes = { workspace = true }
 
 [tool.mypy]
 mypy_path = "$MYPY_CONFIG_FILE_DIR/stubs"
-
 exclude_gitignore = true
 
 # Flags changed by --strict
@@ -98,7 +99,6 @@ extra_checks = false
 # Misc
 warn_unreachable = true
 
-enable_incomplete_feature = ["TypeForm"]
 allow_redefinition_new = true
 local_partial_types = true
 implicit_reexport = false
@@ -109,6 +109,10 @@ pretty = true
 color_output = true
 error_summary = true
 
+[[tool.mypy.overrides]]
+module = "vapoursynth.*"
+ignore_errors = true
+
 [tool.ruff]
 line-length = 120
 
@@ -116,7 +120,7 @@ line-length = 120
 docstring-code-format = true
 
 [tool.ruff.lint]
-exclude = ["stubs/vapoursynth"]
+exclude = ["stubs/vapoursynth/*"]
 extend-select = [
     "E",
     "C4",

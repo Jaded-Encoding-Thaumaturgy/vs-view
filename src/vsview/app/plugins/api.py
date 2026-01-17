@@ -131,11 +131,13 @@ if sys.version_info >= (3, 13):
     TGlobalSettings = TypeVar("TGlobalSettings", bound=BaseModel | None, default=None)
     TLocalSettings = TypeVar("TLocalSettings", bound=BaseModel | None, default=None)
 else:
-    TGlobalSettings = TypeVar("TGlobalSettings", bound=BaseModel | None)
-    TLocalSettings = TypeVar("TLocalSettings", bound=BaseModel | None)
+    import typing_extensions
+
+    TGlobalSettings = typing_extensions.TypeVar("TGlobalSettings", bound=BaseModel | None, default=None)
+    TLocalSettings = typing_extensions.TypeVar("TLocalSettings", bound=BaseModel | None, default=None)
 
 
-class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):  # noqa: UP046
+class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     """
     Settings wrapper providing lazy, always-fresh access.
 
