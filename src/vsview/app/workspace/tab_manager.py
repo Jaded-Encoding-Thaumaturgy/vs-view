@@ -162,7 +162,8 @@ class TabManager(QWidget, IconReloadMixin):
             tab_label = TabLabel(voutput.vs_name, voutput.vs_index, new_tabs)
 
             # Inherit global autofit state
-            view.set_autofit(self.autofit_btn.isChecked())
+            with QSignalBlocker(view):
+                view.set_autofit(self.autofit_btn.isChecked())
 
             # Add tab with empty text (label widget replaces it)
             tab_i = new_tabs.addTab(view, "")
