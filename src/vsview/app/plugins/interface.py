@@ -297,7 +297,9 @@ class PluginAPI(QObject):
                     )
                 model = getattr(plugin, "local_settings_model", None)
 
-            settings = model.model_validate(raw) if model is not None else raw
+            # Convert PluginNamespace to dict for Pydantic validation
+            raw_data = vars(raw) if isinstance(raw, PluginNamespace) else raw
+            settings = model.model_validate(raw_data) if model is not None else raw
 
             if isinstance(settings, LocalSettingsModel):
                 settings = settings.resolve(self._get_cached_settings(plugin, "global"))
