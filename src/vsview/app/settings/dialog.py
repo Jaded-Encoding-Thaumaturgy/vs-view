@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Self
+from typing import Self
 
 from jetpytools import cachedproperty, classproperty
 from pygments.styles import get_all_styles
@@ -432,8 +432,8 @@ class SettingsDialog(QDialog, IconReloadMixin):
             for action_id in ActionID
         ]
 
-        # Build nested data dict from registry widgets
-        data = dict[str, Any]()
+        # Use existing settings as base to preserve hidden fields
+        data = self._settings_manager.global_settings.model_dump()
 
         for entry in self.global_settings_registry:
             widget = self._global_widgets[entry.key]
@@ -442,6 +442,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         # Add shortcuts (not in registry) and build settings dynamically
         data["shortcuts"] = shortcuts
+
         return GlobalSettings.model_validate(data)
 
     def _get_local_settings_from_ui(self) -> LocalSettings:
@@ -450,18 +451,14 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         local_settings = self._settings_manager.get_local_settings(self._script_path)
 
-        # Build data dict from registry widgets
-        data = dict[str, Any]()
+        # Use existing settings as base to preserve hidden fields
+        data = local_settings.model_dump()
 
         for entry in self.local_settings_registry:
             widget = self._local_widgets[entry.key]
             value = entry.metadata.get_value(widget)
             LocalSettings.set_nested_value(data, entry.key, value)
 
-        # Add non-registry fields and build settings dynamically
-        data["source_path"] = str(self._script_path)
-        data["last_frame"] = local_settings.last_frame
-        data["last_output_tab_index"] = local_settings.last_output_tab_index
         return LocalSettings.model_validate(data)
 
     def _on_apply(self) -> None:
