@@ -268,9 +268,10 @@ class MainWindow(QMainWindow):
         if not PluginManager().settings_extracted:
             logger.warning("Plugins not loaded yet, cannot open settings dialog")
             return
+
         dialog = SettingsDialog(
             wk.content
-            if isinstance((wk := self.stack.currentWidget()), GenericFileWorkspace) and hasattr(self, "content")
+            if isinstance((wk := self.stack.currentWidget()), GenericFileWorkspace) and hasattr(wk, "content")
             else None,
             self,
         )
