@@ -655,7 +655,7 @@ class GlobalSettings(BaseSettings):
             max=QTime(0, 30, 0, 0),
             display_format="mm:ss",
             tooltip="The interval for the auto save timer of both global and local settings in minutes",
-            to_ui=lambda tm: QTime(0, tm.minute, tm.second, 0),
+            to_ui=lambda tm, _qtime_cls=QTime: _qtime_cls(0, tm.minute, tm.second, 0),
             from_ui=lambda qtime: qtime.toPython(),
         ),
     ] = time(0, 2, 0, 0)
