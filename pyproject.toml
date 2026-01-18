@@ -55,7 +55,7 @@ essential = ["vsview-split-planes"]
 [project.urls]
 # Documentation = ""
 "Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view"
-Tracker = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
+"Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
 "Contact" = "https://discord.gg/XTpc6Fa9eB"
 
 

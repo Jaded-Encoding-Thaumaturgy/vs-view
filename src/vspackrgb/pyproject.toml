@@ -29,6 +29,11 @@ dependencies = ["vapoursynth"]
 [project.optional-dependencies]
 numpy = ["numpy>=2.0.0"]
 
+[project.urls]
+"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/vspackrgb"
+"Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
+"Contact" = "https://discord.gg/XTpc6Fa9eB"
+
 [dependency-groups]
 dev = ["cython>=3.0.0"]
 

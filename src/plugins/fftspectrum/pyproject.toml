@@ -23,6 +23,11 @@ dependencies = ["vsview", "vsjetpack>=1.1.0"]
 [project.entry-points.vsview]
 vsview_fftspectrum = "vsview_fftspectrum"
 
+[project.urls]
+"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/fftspectrum"
+"Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
+"Contact" = "https://discord.gg/XTpc6Fa9eB"
+
 [tool.uv.sources]
 vsview = { workspace = true }
 vsjetpack = { git = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack", branch = "main" }
