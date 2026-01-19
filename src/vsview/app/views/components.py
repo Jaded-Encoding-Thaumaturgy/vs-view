@@ -176,6 +176,7 @@ class AnimatedToggle(QCheckBox):
 
         self.bar_color = palette.color(QPalette.ColorRole.Base)
         self.bar_checked_color = palette.color(QPalette.ColorRole.Accent)
+        self.bar_border_unchecked_color = palette.color(QPalette.ColorRole.Dark)
 
         self.handle_color = palette.color(QPalette.ColorRole.Button)
         self.handle_checked_color = palette.color(QPalette.ColorRole.Highlight)
@@ -218,7 +219,12 @@ class AnimatedToggle(QCheckBox):
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
             # Draw bar
-            p.setPen(Qt.PenStyle.NoPen)
+            if t < 1.0:
+                pen = QPen(self.bar_border_unchecked_color)
+                pen.setWidthF(1.0 - t)
+                p.setPen(pen)
+            else:
+                p.setPen(Qt.PenStyle.NoPen)
             bar_rect = QRectF(0, 0, cont_rect.width() - handle_radius, 0.40 * cont_rect.height())
             bar_rect.moveCenter(cont_rect.center())
             rounding = bar_rect.height() / 2
