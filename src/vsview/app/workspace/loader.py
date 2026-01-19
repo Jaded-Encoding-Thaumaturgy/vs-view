@@ -680,11 +680,14 @@ class LoaderWorkspace[T](BaseWorkspace):
                     if cb_render:
                         cb_render(f)
 
+                    with self.env.use():
+                        self.api._on_current_voutput_changed()
+
             logger.debug("Requesting frame %d", target_frame)
             self.request_frame(target_frame, on_complete)
-
-        with self.env.use():
-            self.api._on_current_voutput_changed()
+        else:
+            with self.env.use():
+                self.api._on_current_voutput_changed()
 
     def _update_timeline_for_tab(self) -> None:
         voutput = self.tab_manager.current_voutput
