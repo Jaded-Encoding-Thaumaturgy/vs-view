@@ -70,7 +70,7 @@ class FFTSpectrumPlugin(PluginBase[GlobalSettings]):
 
     def on_settings_changed(self) -> None:
         self.view.set_autofit(self.settings.global_.autofit)
-        self.view.refresh(self)
+        self.view.refresh()
 
 
 class FFTSpectrumView(PluginGraphicsView):

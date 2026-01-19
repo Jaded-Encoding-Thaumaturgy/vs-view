@@ -226,7 +226,24 @@ class _PluginAPI(QObject):
             except Exception:
                 logger.exception("Failed to initialize view %r", view)
 
-    def _init_view(self, view: PluginGraphicsView, plugin: PluginBase[Any, Any], refresh: bool = False) -> None:
+    def _find_plugin_for_widget(self, widget: QWidget) -> PluginBase[Any, Any] | None:
+        from .api import PluginBase
+
+        current: QObject | None = widget.parent()
+
+        while current is not None:
+            if isinstance(current, PluginBase):
+                return current
+            current = current.parent()
+        logger.warning("Could not find plugin for widget %r", widget)
+        return None
+
+    def _init_view(
+        self, view: PluginGraphicsView, plugin: PluginBase[Any, Any] | None = None, refresh: bool = False
+    ) -> None:
+        if plugin is None and (plugin := self._find_plugin_for_widget(view)) is None:
+            return
+
         if not self._is_truly_visible(plugin):
             return
 

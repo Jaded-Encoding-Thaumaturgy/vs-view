@@ -195,6 +195,7 @@ class PluginBase(QWidget, Generic[TGlobalSettings, TLocalSettings], metaclass=_P
         Execution Thread: **Main or Background**.
         If you need to update the UI, use the `@run_in_loop` decorator.
         """
+        self.on_current_frame_changed(self.api.current_frame)
 
     def on_current_frame_changed(self, n: int) -> None:
         """
@@ -220,9 +221,9 @@ class PluginGraphicsView(BaseGraphicsView):
         """Update the UI with the new image on the main thread."""
         self.pixmap_item.setPixmap(image)
 
-    def refresh(self, plugin: PluginBase[Any, Any]) -> None:
+    def refresh(self) -> None:
         """Refresh the view."""
-        self.api._init_view(self, plugin, refresh=True)
+        self.api._init_view(self, refresh=True)
 
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
         """
@@ -231,6 +232,7 @@ class PluginGraphicsView(BaseGraphicsView):
         Execution Thread: **Main or Background**.
         If you need to update the UI, use the `@run_in_loop` decorator.
         """
+        self.api._init_view(self)
 
     def on_current_frame_changed(self, n: int, f: vs.VideoFrame) -> None:
         """
