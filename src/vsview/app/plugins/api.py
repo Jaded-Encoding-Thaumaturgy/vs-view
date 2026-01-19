@@ -189,10 +189,20 @@ class PluginBase(QWidget, Generic[TGlobalSettings, TLocalSettings], metaclass=_P
         self.api._update_settings(self, "local", **updates)
 
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
-        """Called when the current video output changes."""
+        """
+        Called when the current video output changes.
+
+        Execution Thread: **Main or Background**.
+        If you need to update the UI, use the `@run_in_loop` decorator.
+        """
 
     def on_current_frame_changed(self, n: int) -> None:
-        """Called when the current frame changes."""
+        """
+        Called when the current frame changes.
+
+        Execution Thread: **Main or Background**.
+        If you need to update the UI, use the `@run_in_loop` decorator.
+        """
 
 
 class PluginGraphicsView(BaseGraphicsView):
@@ -215,12 +225,20 @@ class PluginGraphicsView(BaseGraphicsView):
         self.api._init_view(self, plugin, refresh=True)
 
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
-        """Called when the current video output changes."""
+        """
+        Called when the current video output changes.
+
+        Execution Thread: **Main or Background**.
+        If you need to update the UI, use the `@run_in_loop` decorator.
+        """
 
     def on_current_frame_changed(self, n: int, f: vs.VideoFrame) -> None:
         """
         Called when the current frame changes.
         `n` is the frame number and `f` is the packed VideoFrame in GRAY32 format.
+
+        Execution Thread: **Main or Background**.
+        If you need to update the UI, use the `@run_in_loop` decorator.
         """
         self.update_display(self.api.frame_to_pixmap(f))
 
