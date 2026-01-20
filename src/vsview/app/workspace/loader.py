@@ -320,9 +320,14 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     def clear_environment(self) -> None:
         if self.cbs_on_destroy:
-            with self.env.use():
-                for cb in self.cbs_on_destroy:
-                    cb()
+
+            @run_in_loop(return_future=False)
+            def destroy() -> None:
+                with self.env.use():
+                    for cb in self.cbs_on_destroy:
+                        cb()
+
+            destroy()
         return super().clear_environment()
 
     @contextmanager
