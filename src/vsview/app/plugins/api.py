@@ -5,7 +5,8 @@ Plugin API for VSView.
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
@@ -95,6 +96,14 @@ class PluginAPI(_PluginAPI):
         This is generaly used to clean up VapourSynth resources.
         """
         self.__workspace.cbs_on_destroy.append(cb)
+
+    @contextmanager
+    def vs_context(self) -> Iterator[None]:
+        """
+        Context manager for using the VapourSynth environment of the workspace.
+        """
+        with self.__workspace.env.use():
+            yield
 
     def frame_to_pixmap(
         self,
