@@ -11,6 +11,7 @@ from ..app.plugins import (
 )
 from ..app.settings.models import Checkbox, DoubleSpin, Dropdown, PlainTextEdit, Spin, WidgetMetadata
 from ..app.views.components import AnimatedToggle, SegmentedControl
+from ..assets import IconName, IconReloadMixin
 from ..vsenv import run_in_background, run_in_loop
 from .output import set_output
 
@@ -19,6 +20,8 @@ __all__ = [
     "Checkbox",
     "DoubleSpin",
     "Dropdown",
+    "IconName",
+    "IconReloadMixin",
     "LocalSettingsModel",
     "PlainTextEdit",
     "PluginAPI",
