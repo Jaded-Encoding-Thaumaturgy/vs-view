@@ -44,6 +44,7 @@ class PluginSplitter(QSplitter, IconReloadMixin):
         )
         self.close_btn.clicked.connect(lambda: self.setSizes([1, 0]))
         self.right_corner_layout.addWidget(self.close_btn)
+        self.register_icon_button(self.close_btn, IconName.X_CIRCLE)
 
         self.plugin_tabs.setCornerWidget(self.right_corner_container, Qt.Corner.TopRightCorner)
         self.addWidget(self.plugin_tabs)
