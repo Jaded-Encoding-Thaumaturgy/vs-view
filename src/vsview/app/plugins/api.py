@@ -13,10 +13,11 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
 
 import vapoursynth as vs
 from pydantic import BaseModel
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtGui import QPixmap, QShowEvent
 from PySide6.QtWidgets import QWidget
 
+from vsview.app.outputs import Packer
 from vsview.app.views.video import BaseGraphicsView
 from vsview.vsenv.loop import run_in_loop
 
@@ -90,6 +91,11 @@ class PluginAPI(_PluginAPI):
         """Return whether playback is currently active."""
         return self.__workspace.tbar.is_playing
 
+    @property
+    def packer(self) -> Packer:
+        """Return the packer used by the workspace."""
+        return self.__workspace._packer
+
     def register_on_destroy(self, cb: Callable[[], Any]) -> None:
         """
         Register a callback to be called before the workspace begins a reload or when the workspace is destroyed.
@@ -104,16 +110,6 @@ class PluginAPI(_PluginAPI):
         """
         with self.__workspace.env.use():
             yield
-
-    def frame_to_pixmap(
-        self,
-        f: vs.VideoFrame,
-        flags: Qt.ImageConversionFlag = Qt.ImageConversionFlag.NoFormatConversion,
-    ) -> QPixmap:
-        """
-        Convert a VapourSynth frame to a QPixmap. Assume the frame is already packed in GRAY32 format.
-        """
-        return QPixmap.fromImage(self.__workspace._packer.frame_to_qimage(f), flags).copy()
 
 
 class LocalSettingsModel(BaseModel):
@@ -274,7 +270,7 @@ class PluginGraphicsView(BaseGraphicsView):
         Execution Thread: **Main or Background**.
         If you need to update the UI, use the `@run_in_loop` decorator.
         """
-        self.update_display(self.api.frame_to_pixmap(f))
+        self.update_display(QPixmap.fromImage(self.api.packer.frame_to_qimage(f)).copy())
 
     def get_node(self, clip: vs.VideoNode) -> vs.VideoNode:
         """
