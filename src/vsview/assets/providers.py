@@ -30,6 +30,8 @@ class IconName(StrEnum):
     FILE_VIDEO = "file-video"
     FILE_CODE = "file-code"
     SAVE = "floppy-disk"
+    ARROW_LEFT = "arrow-left"
+    ARROW_RIGHT = "arrow-right"
 
 
 class IconProvider(ABC):
