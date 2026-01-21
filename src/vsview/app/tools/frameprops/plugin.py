@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping
+from contextlib import suppress
 from logging import getLogger
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
+import vapoursynth as vs
 from jetpytools import fallback
 from pydantic import BaseModel
 from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QPoint, QSignalBlocker, QSize, Qt, Signal
-from PySide6.QtGui import QAction, QIcon, QPalette, QStandardItem, QStandardItemModel
+from PySide6.QtGui import QAction, QIcon, QImage, QPalette, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -18,6 +20,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QSizePolicy,
+    QSplitter,
     QStackedWidget,
     QStyle,
     QStyledItemDelegate,
@@ -27,9 +30,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from vspackrgb.helpers import get_plane_buffer
 
 from vsview.api import (
     AnimatedToggle,
+    BaseGraphicsView,
     Checkbox,
     IconName,
     IconReloadMixin,
@@ -38,6 +43,7 @@ from vsview.api import (
     PluginBase,
     run_in_loop,
 )
+from vsview.app.plugins.api import VideoOutputProxy
 
 from .builtins.field import FIELD_CATEGORY, FIELD_FORMATTERS
 from .builtins.metrics import METRICS_CATEGORY, METRICS_FORMATTERS
@@ -53,6 +59,137 @@ ITEM_TYPE_CATEGORY = "category"
 ITEM_TYPE_PROPERTY = "property"
 
 logger = getLogger(__name__)
+
+
+class RowData(NamedTuple):
+    key: str
+    value: str
+    raw_key: str | list[str]
+    raw_value: Any
+
+
+class FramePropsViewMixin:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+
+    def get_row_data(self: FramePropsTreeView | FramePropsTableView, index: QModelIndex) -> RowData:  # type: ignore[misc]
+        model = self.model()
+        row = index.row()
+        parent = index.parent()
+
+        name_index = model.index(row, 0, parent)
+        value_index = model.index(row, 1, parent)
+
+        name = name_index.data(Qt.ItemDataRole.DisplayRole)
+        value = value_index.data(Qt.ItemDataRole.DisplayRole)
+
+        raw_key = name_index.data(ROLE_RAW_DATA)
+        raw_value = value_index.data(ROLE_RAW_DATA)
+
+        return RowData(name, value, raw_key, raw_value)
+
+    def _show_context_menu(self: FramePropsTreeView | FramePropsTableView, pos: QPoint) -> None:  # type: ignore[misc]
+        if not (index := self.indexAt(pos)).isValid():
+            return
+
+        # TreeView specific: ignore categories
+        if (item := self.current_model.itemFromIndex(index)) and item.data(ROLE_ITEM_TYPE) == ITEM_TYPE_CATEGORY:
+            return
+
+        data = self.get_row_data(index)
+
+        menu = QMenu(self)
+
+        if isinstance(data.raw_value, vs.VideoFrame):
+            preview_action = QAction("Preview Frame", self)
+            preview_action.triggered.connect(lambda: self.previewRequested.emit(data.raw_value, data.raw_key))
+            menu.addAction(preview_action)
+            menu.addSeparator()
+
+        key_label = "Name" if isinstance(self, FramePropsTreeView) else "Key"
+
+        copy_value_action = QAction("Copy Value", self)
+        copy_value_action.triggered.connect(lambda: self._copy_to_clipboard(data.value, "value"))
+        menu.addAction(copy_value_action)
+
+        copy_key_action = QAction(f"Copy {key_label}", self)
+        copy_key_action.triggered.connect(lambda: self._copy_to_clipboard(data.key, "key"))
+        menu.addAction(copy_key_action)
+
+        copy_row_action = QAction(f"Copy as {key_label}=Value", self)
+        copy_row_action.triggered.connect(lambda: self._copy_to_clipboard(f"{data.key}={data.value}", "row"))
+        menu.addAction(copy_row_action)
+
+        if isinstance(self, FramePropsTreeView):
+            menu.addSeparator()
+            copy_original_action = QAction("Copy Original Key", self)
+            copy_original_action.triggered.connect(lambda: self._copy_to_clipboard(str(data.raw_key), "original key"))
+            menu.addAction(copy_original_action)
+
+        menu.exec(self.viewport().mapToGlobal(pos))
+
+    def _copy_to_clipboard(self: FramePropsTreeView | FramePropsTableView, text: str, description: str) -> None:  # type: ignore[misc]
+        QApplication.clipboard().setText(text)
+
+        logger.debug("Copied %s: %r", description, text)
+        self.copyMessage.emit(f"Copied {description}: {text[:50]}{'...' if len(text) > 50 else ''}")
+
+
+# PySide6 stubs are missing
+if TYPE_CHECKING:
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QFontMetrics
+    from PySide6.QtWidgets import QStyleOptionViewItem as QQStyleOptionViewItem
+
+    class QStyleOptionViewItem(QQStyleOptionViewItem):
+        widget: QWidget
+        rect: QRect
+        fontMetrics: QFontMetrics
+        features: QQStyleOptionViewItem.ViewItemFeature
+        textElideMode: Qt.TextElideMode
+else:
+    from PySide6.QtWidgets import QStyleOptionViewItem
+
+
+class WordWrapDelegate(QStyledItemDelegate):
+    def initStyleOption(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> None:  # type: ignore[override]
+        super().initStyleOption(option, index)
+        if index.column() == 1:
+            option.features |= QStyleOptionViewItem.ViewItemFeature.WrapText
+            option.textElideMode = Qt.TextElideMode.ElideNone
+
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> QSize:  # type: ignore[override]
+        size = super().sizeHint(option, index)
+
+        if index.column() != 1:
+            return size
+
+        if not (text := index.data(Qt.ItemDataRole.DisplayRole)):
+            return size
+
+        if isinstance((view := option.widget), QTreeView):
+            header = view.header()
+        elif isinstance(view, QTableView):
+            header = view.horizontalHeader()
+        else:
+            return size
+
+        if (column_width := header.sectionSize(index.column())) <= 0:
+            return size
+
+        text_margin = view.style().pixelMetric(QStyle.PixelMetric.PM_FocusFrameHMargin, option, view) + 1
+        available_width = column_width - (2 * text_margin) - 4
+
+        text_rect = option.fontMetrics.boundingRect(
+            0,
+            0,
+            available_width,
+            10000,
+            Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignLeft,
+            str(text),
+        )
+
+        return QSize(size.width(), max(size.height(), text_rect.height() + 4))
 
 
 class FramePropsModel(QStandardItemModel):
@@ -163,68 +300,13 @@ class FramePropsModel(QStandardItemModel):
         return item
 
 
-# PySide6 stubs are missing
-if TYPE_CHECKING:
-    from PySide6.QtCore import QRect
-    from PySide6.QtGui import QFontMetrics
-    from PySide6.QtWidgets import QStyleOptionViewItem as QQStyleOptionViewItem
-
-    class QStyleOptionViewItem(QQStyleOptionViewItem):
-        widget: QWidget
-        rect: QRect
-        fontMetrics: QFontMetrics
-        features: QQStyleOptionViewItem.ViewItemFeature
-        textElideMode: Qt.TextElideMode
-else:
-    from PySide6.QtWidgets import QStyleOptionViewItem
-
-
-class WordWrapDelegate(QStyledItemDelegate):
-    def initStyleOption(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> None:  # type: ignore[override]
-        super().initStyleOption(option, index)
-        if index.column() == 1:
-            option.features |= QStyleOptionViewItem.ViewItemFeature.WrapText
-            option.textElideMode = Qt.TextElideMode.ElideNone
-
-    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> QSize:  # type: ignore[override]
-        size = super().sizeHint(option, index)
-
-        if index.column() != 1:
-            return size
-
-        if not (text := index.data(Qt.ItemDataRole.DisplayRole)):
-            return size
-
-        if isinstance((view := option.widget), QTreeView):
-            header = view.header()
-        elif isinstance(view, QTableView):
-            header = view.horizontalHeader()
-        else:
-            return size
-
-        if (column_width := header.sectionSize(index.column())) <= 0:
-            return size
-
-        text_margin = view.style().pixelMetric(QStyle.PixelMetric.PM_FocusFrameHMargin, option, view) + 1
-        available_width = column_width - (2 * text_margin) - 4
-
-        text_rect = option.fontMetrics.boundingRect(
-            0,
-            0,
-            available_width,
-            10000,
-            Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignLeft,
-            str(text),
-        )
-
-        return QSize(size.width(), max(size.height(), text_rect.height() + 4))
-
-
-class FramePropsTreeView(QTreeView):
+class FramePropsTreeView(QTreeView, FramePropsViewMixin):
     copyMessage = Signal(str)
+    previewRequested = Signal(object, str)  # (VideoFrame, title)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        FramePropsViewMixin.__init__(self)
 
         self.current_model = FramePropsModel(self)
         self.setModel(self.current_model)
@@ -260,69 +342,6 @@ class FramePropsTreeView(QTreeView):
         if logical_index == 1 and old_size != new_size:
             self.doItemsLayout()
 
-    def _show_context_menu(self, pos: QPoint) -> None:
-        if not (index := self.indexAt(pos)).isValid():
-            return
-
-        if self.current_model.itemFromIndex(index).data(ROLE_ITEM_TYPE) == ITEM_TYPE_CATEGORY:
-            return
-
-        menu = QMenu(self)
-
-        copy_value_action = QAction("Copy Value", self)
-        copy_value_action.triggered.connect(lambda: self._copy_value(index))
-        menu.addAction(copy_value_action)
-
-        copy_name_action = QAction("Copy Name", self)
-        copy_name_action.triggered.connect(lambda: self._copy_name(index))
-        menu.addAction(copy_name_action)
-
-        copy_row_action = QAction("Copy as Name=Value", self)
-        copy_row_action.triggered.connect(lambda: self._copy_row(index))
-        menu.addAction(copy_row_action)
-
-        menu.addSeparator()
-
-        copy_original_action = QAction("Copy Original Key", self)
-        copy_original_action.triggered.connect(lambda: self._copy_original_key(index))
-        menu.addAction(copy_original_action)
-
-        menu.exec(self.viewport().mapToGlobal(pos))
-
-    def _get_row_data(self, index: QModelIndex) -> tuple[str, str, str | Any]:
-        row = index.row()
-        parent = index.parent()
-
-        name_index = self.current_model.index(row, 0, parent)
-        value_index = self.current_model.index(row, 1, parent)
-
-        name = name_index.data(Qt.ItemDataRole.DisplayRole)
-        value = value_index.data(Qt.ItemDataRole.DisplayRole)
-        original_key = name_index.data(ROLE_RAW_DATA)
-
-        return name, value, original_key
-
-    def _copy_to_clipboard(self, text: str, description: str) -> None:
-        QApplication.clipboard().setText(text)
-        logger.debug("Copied %s: %r", description, text)
-        self.copyMessage.emit(f"Copied {description}: {text[:50]}{'...' if len(text) > 50 else ''}")
-
-    def _copy_value(self, index: QModelIndex) -> None:
-        _, value, _ = self._get_row_data(index)
-        self._copy_to_clipboard(value, "value")
-
-    def _copy_name(self, index: QModelIndex) -> None:
-        name, _, _ = self._get_row_data(index)
-        self._copy_to_clipboard(name, "name")
-
-    def _copy_row(self, index: QModelIndex) -> None:
-        name, value, _ = self._get_row_data(index)
-        self._copy_to_clipboard(f"{name}={value}", "row")
-
-    def _copy_original_key(self, index: QModelIndex) -> None:
-        _, _, original_key = self._get_row_data(index)
-        self._copy_to_clipboard(original_key, "original key")
-
 
 class FramePropsTableModel(QStandardItemModel):
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -353,11 +372,13 @@ class FramePropsTableModel(QStandardItemModel):
         return item
 
 
-class FramePropsTableView(QTableView):
+class FramePropsTableView(QTableView, FramePropsViewMixin):
     copyMessage = Signal(str)
+    previewRequested = Signal(object, str)  # (frame, title)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        FramePropsViewMixin.__init__(self)
 
         self.current_model = FramePropsTableModel(self)
         self.setModel(self.current_model)
@@ -383,49 +404,54 @@ class FramePropsTableView(QTableView):
     def update_props(self, props: Mapping[str, Any]) -> None:
         self.current_model.load_props(props)
 
-    def _show_context_menu(self, pos: QPoint) -> None:
-        """Show context menu with copy options."""
-        if not (index := self.indexAt(pos)).isValid():
-            return
 
-        menu = QMenu(self)
+class FramePropPreviewGraphicsView(BaseGraphicsView):
+    def __init__(self, parent: QWidget | None, api: PluginAPI) -> None:
+        super().__init__(parent)
+        self.api = api
+        self._f2c_cache = dict[int, vs.VideoNode]()
+        self.api.register_on_destroy(self._f2c_cache.clear)
 
-        copy_value_action = QAction("Copy Value", self)
-        copy_value_action.triggered.connect(lambda: self._copy_value(index))
-        menu.addAction(copy_value_action)
+    def set_frame(self, frame: vs.VideoFrame) -> None:
+        with frame:
+            qimage = self.frame_to_qimage(frame)
 
-        copy_key_action = QAction("Copy Key", self)
-        copy_key_action.triggered.connect(lambda: self._copy_key(index))
-        menu.addAction(copy_key_action)
+        self.pixmap_item.setPixmap(QPixmap.fromImage(qimage))
 
-        copy_row_action = QAction("Copy as Key=Value", self)
-        copy_row_action.triggered.connect(lambda: self._copy_row(index))
-        menu.addAction(copy_row_action)
+        if self.autofit:
+            self.set_zoom(0)
 
-        menu.exec(self.viewport().mapToGlobal(pos))
+    def frame_to_qimage(self, frame: vs.VideoFrame) -> QImage:
+        match frame.format.id:
+            case vs.GRAY8:
+                fmt = QImage.Format.Format_Grayscale8
+            case vs.GRAY16:
+                fmt = QImage.Format.Format_Grayscale16
+            case _:
+                with self.api.vs_context():
+                    packed_clip = self.api.packer.pack_clip(self.frame2clip(frame))
 
-    def _get_row_data(self, index: QModelIndex) -> tuple[str, str]:
-        row = index.row()
-        key = self.current_model.index(row, 0).data(Qt.ItemDataRole.DisplayRole)
-        value = self.current_model.index(row, 1).data(Qt.ItemDataRole.DisplayRole)
-        return key, value
+                    with packed_clip.get_frame(0) as packed:
+                        return self.api.packer.frame_to_qimage(packed).copy()
 
-    def _copy_to_clipboard(self, text: str, description: str) -> None:
-        QApplication.clipboard().setText(text)
-        logger.debug("Copied %s: %r", description, text)
-        self.copyMessage.emit(f"Copied {description}: {text[:50]}{'...' if len(text) > 50 else ''}")
+        return QImage(
+            get_plane_buffer(frame, 0),  # type: ignore[call-overload]
+            frame.width,
+            frame.height,
+            frame.get_stride(0),
+            fmt,
+        ).copy()
 
-    def _copy_value(self, index: QModelIndex) -> None:
-        _, value = self._get_row_data(index)
-        self._copy_to_clipboard(value, "value")
+    def frame2clip(self, frame: vs.VideoFrame) -> vs.VideoNode:
+        key = hash((frame.width, frame.height, frame.format.id))
 
-    def _copy_key(self, index: QModelIndex) -> None:
-        key, _ = self._get_row_data(index)
-        self._copy_to_clipboard(key, "key")
+        if key not in self._f2c_cache:
+            self._f2c_cache[key] = vs.core.std.BlankClip(
+                width=frame.width, height=frame.height, format=frame.format, keep=True
+            )
 
-    def _copy_row(self, index: QModelIndex) -> None:
-        key, value = self._get_row_data(index)
-        self._copy_to_clipboard(f"{key}={value!r}", "row")
+        frame_cp = frame.copy()
+        return vs.core.std.ModifyFrame(self._f2c_cache[key], self._f2c_cache[key], lambda n, f: frame_cp)
 
 
 class GlobalSettings(BaseModel):
@@ -446,6 +472,8 @@ class LocalSettings(LocalSettingsModel):
 class FramePropsPlugin(PluginBase[GlobalSettings, LocalSettings], IconReloadMixin):
     identifier = "jet_vsview_frameprops"
     display_name = "Frame Props"
+
+    current_preview_key: str
 
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent, api)
@@ -504,12 +532,17 @@ class FramePropsPlugin(PluginBase[GlobalSettings, LocalSettings], IconReloadMixi
 
         layout.addWidget(self.toolbar)
 
-        self.stack = QStackedWidget(self)
+        self.splitter = QSplitter(Qt.Orientation.Vertical, self)
 
-        self.raw_table = FramePropsTableView(self)
-        self.pretty_tree = FramePropsTreeView(self)
+        self.stack = QStackedWidget(self.splitter)
+
+        self.raw_table = FramePropsTableView(self.stack)
+        self.pretty_tree = FramePropsTreeView(self.stack)
         self.raw_table.copyMessage.connect(self.status_message)
         self.pretty_tree.copyMessage.connect(self.status_message)
+
+        self.raw_table.previewRequested.connect(self._show_preview)
+        self.pretty_tree.previewRequested.connect(self._show_preview)
 
         self.stack.addWidget(self.raw_table)
         self.stack.addWidget(self.pretty_tree)
@@ -518,10 +551,54 @@ class FramePropsPlugin(PluginBase[GlobalSettings, LocalSettings], IconReloadMixi
         self.pretty_toggle.setChecked(fallback(self.settings.local_.pretty, self.settings.global_.pretty))
         self.pretty_toggle.toggled.connect(lambda checked: self.update_local_settings(pretty=not not checked))  # noqa: SIM208
 
-        layout.addWidget(self.stack)
+        self.splitter.addWidget(self.stack)
 
+        self.preview_container = QWidget(self.splitter)
+        preview_layout = QVBoxLayout(self.preview_container)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(2)
+
+        preview_header = QToolBar(self.preview_container)
+        preview_header.setMovable(False)
+
+        self.preview_label = QLabel("Preview", self.preview_container)
+        preview_header.addWidget(self.preview_label)
+
+        preview_spacer = QWidget(preview_header)
+        preview_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        preview_header.addWidget(preview_spacer)
+
+        close_btn = self.make_tool_button(
+            IconName.X_CIRCLE,
+            "Close preview",
+            self.preview_container,
+            icon_size=QSize(16, 16),
+        )
+        close_btn.clicked.connect(self._hide_preview)
+        preview_header.addWidget(close_btn)
+
+        preview_layout.addWidget(preview_header)
+
+        self.preview_view = FramePropPreviewGraphicsView(self.preview_container, self.api)
+        self.preview_view.set_autofit(True)
+        self.preview_view.setMinimumWidth(200)
+        preview_layout.addWidget(self.preview_view)
+
+        self.splitter.addWidget(self.preview_container)
+
+        self.splitter.setSizes([1, 0])
+
+        layout.addWidget(self.splitter)
+
+        self.register_icon_button(close_btn, IconName.X_CIRCLE, QSize(16, 16))
         self.register_icon_button(self.prev_btn, IconName.ARROW_LEFT, QSize(24, 24), icon_states=nav_icon_states)
         self.register_icon_button(self.next_btn, IconName.ARROW_RIGHT, QSize(24, 24), icon_states=nav_icon_states)
+
+        self.api.register_on_destroy(close_btn.click)
+
+    def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
+        self._hide_preview()
+        return super().on_current_voutput_changed(voutput, tab_index)
 
     def on_current_frame_changed(self, n: int) -> None:
         self.update_history_ui(n)
@@ -561,6 +638,7 @@ class FramePropsPlugin(PluginBase[GlobalSettings, LocalSettings], IconReloadMixi
 
         self.update_views(props)
         self.update_nav_buttons()
+        self.refresh_preview(current_frame)
 
     def update_views(self, props: Mapping[str, Any]) -> None:
         self.pretty_tree.update_props(props)
@@ -576,6 +654,16 @@ class FramePropsPlugin(PluginBase[GlobalSettings, LocalSettings], IconReloadMixi
         self.prev_btn.setEnabled(current_index > 0)
         self.next_btn.setEnabled(current_index < self.history_combo.count() - 1)
 
+    def refresh_preview(self, current_frame: int) -> None:
+        if self.splitter.sizes()[1] == 0:
+            return
+
+        props = self.api.current_voutput.props[current_frame]
+        key = self.current_preview_key
+
+        if (key := self.current_preview_key) in props and isinstance(props[key], vs.VideoFrame):
+            self.preview_view.set_frame(props[key])
+
     def status_message(self, message: str) -> None:
         if len(msg_lines := message.split("\n")) > 1:
             self.api.statusMessage.emit(f"{self.display_name}: {msg_lines[0]}...")
@@ -590,6 +678,7 @@ class FramePropsPlugin(PluginBase[GlobalSettings, LocalSettings], IconReloadMixi
             props = self.api.current_voutput.props[frame]
             self.update_views(props)
             self.update_nav_buttons()
+            self.refresh_preview(frame)
 
     def _on_prev_clicked(self) -> None:
         current_index = self.history_combo.currentIndex()
@@ -600,3 +689,19 @@ class FramePropsPlugin(PluginBase[GlobalSettings, LocalSettings], IconReloadMixi
         current_index = self.history_combo.currentIndex()
         if current_index < self.history_combo.count() - 1:
             self.history_combo.setCurrentIndex(current_index + 1)
+
+    def _show_preview(self, frame: vs.VideoFrame, key_name: str) -> None:
+        self.current_preview_key = key_name
+
+        self.preview_label.setText(f"Preview: {key_name!r}")
+        self.preview_view.set_frame(frame)
+
+        self.splitter.setSizes([int(self.splitter.height() * 0.6), int(self.splitter.height() * 0.4)])
+
+    @run_in_loop(return_future=False)
+    def _hide_preview(self) -> None:
+        self.splitter.setSizes([1, 0])
+        self.preview_view.reset_scene()
+
+        with suppress(AttributeError):
+            del self.current_preview_key
