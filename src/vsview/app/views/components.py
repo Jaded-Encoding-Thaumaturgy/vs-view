@@ -4,7 +4,6 @@ from PySide6.QtCore import (
     QEasingCurve,
     QPoint,
     QPointF,
-    QPropertyAnimation,
     QRectF,
     QSize,
     Qt,
@@ -142,14 +141,16 @@ class CustomLoadingPage(QWidget):
         self.icon_label = QLabel(self)
         self.icon_label.setPixmap(loading_icon().pixmap(QSize(150, 150)))
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_label.setMinimumHeight(150 + 30)  # Reserve space for bounce
         self.loading_layout.addWidget(self.icon_label)
         self.loading_layout.addWidget(QLabel("Loading...", self))
         self.loading_layout.addWidget(self.progress_bar)
 
-        self.icon_animation = QPropertyAnimation(self.icon_label, b"pos", self)
+        self.icon_animation = QVariantAnimation(self)
         self.icon_animation.setDuration(1500)
         self.icon_animation.setEasingCurve(QEasingCurve.Type.InBounce)
         self.icon_animation.setLoopCount(-1)
+        self.icon_animation.valueChanged.connect(self._update_bounce)
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
@@ -157,13 +158,13 @@ class CustomLoadingPage(QWidget):
         QTimer.singleShot(0, self._start_animation)
 
     def _start_animation(self) -> None:
-        start_pos = self.icon_label.pos()
-        end_pos = QPoint(start_pos.x(), start_pos.y() - 30)
-
-        self.icon_animation.setStartValue(start_pos)
-        self.icon_animation.setKeyValueAt(0.5, end_pos)
-        self.icon_animation.setEndValue(start_pos)
+        self.icon_animation.setStartValue(0)
+        self.icon_animation.setKeyValueAt(0.5, 30)
+        self.icon_animation.setEndValue(0)
         self.icon_animation.start()
+
+    def _update_bounce(self, value: int) -> None:
+        self.icon_label.setContentsMargins(0, 0, 0, int(value))
 
 
 class AnimatedToggle(QCheckBox):
