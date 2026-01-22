@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable, Hashable, Iterable
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Any, cast
+from typing import Any
 
 from jetpytools import Singleton, flatten, inject_self
 from vapoursynth import VideoFrame
@@ -79,9 +79,8 @@ class FormatterRegistry(Singleton):
     @inject_self
     def register(self, *formatter: FormatterProperty | IterFormatter) -> None:
         """Register a property formatter."""
-        formatters = cast(Iterable[FormatterProperty], flatten(formatter))
 
-        for f in formatters:
+        for f in flatten(formatter):
             self._formatters[f.prop_key] = f
 
             if f.prop_key not in self._order:
