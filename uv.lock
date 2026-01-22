@@ -632,6 +632,7 @@ dependencies = [
 
 [package.optional-dependencies]
 essential = [
+    { name = "vsview-frameprops-more" },
     { name = "vsview-split-planes" },
 ]
 
@@ -661,6 +662,7 @@ requires-dist = [
     { name = "vapoursynth", specifier = ">=69" },
     { name = "vsjetengine", specifier = ">=1.0.0" },
     { name = "vspackrgb", editable = "src/vspackrgb" },
+    { name = "vsview-frameprops-more", marker = "extra == 'essential'", editable = "src/plugins/frameprops-more" },
     { name = "vsview-split-planes", marker = "extra == 'essential'", editable = "src/plugins/split-planes" },
 ]
 provides-extras = ["essential"]
