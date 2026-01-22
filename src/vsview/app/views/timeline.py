@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
+from fractions import Fraction
 from functools import cache
 from logging import getLogger
 from math import floor
@@ -235,8 +236,8 @@ class Timeline(QWidget):
         # Data needed for calculations
         self.total_frames = 1000
         self.total_time = Time(seconds=100)
-        self.fps_num = 25
-        self.fps_den = 1
+        # Same default as BlankClip
+        self.fps = Fraction(25)
 
         self.notches = dict[NotchProvider, list[Notch[Any]]]()
 
@@ -564,14 +565,14 @@ class Timeline(QWidget):
         super().resizeEvent(event)
         self.update()
 
-    def set_data(self, total_frames: int, fps_num: int, fps_den: int) -> None:
+    def set_data(self, total_frames: int, fps: Fraction) -> None:
         self.total_frames = total_frames
-        self.fps_num = fps_num
-        self.fps_den = fps_den
+        self.fps = fps
 
-        if fps_num > 0:
-            self.total_time = Time(seconds=total_frames * fps_den / fps_num)
+        if self.fps.numerator > 0:
+            self.total_time = Time(seconds=total_frames * fps.denominator / fps.numerator)
         else:
+            # FIXME: VFR update
             self.total_time = Time(seconds=0)
 
         self.update()
@@ -767,10 +768,6 @@ class PlaybackContainer(QWidget, IconReloadMixin):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        # FPS info for frame/time conversion (set via set_fps_info)
-        self._fps_num = 0
-        self._fps_den = 1
-
         self.setAutoFillBackground(True)
 
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
@@ -952,6 +949,15 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         self.settings = PlaybackSettings()
 
+    @property
+    def fps(self) -> Fraction:
+        """FPS info for frame/time conversion"""
+        return self._fps if hasattr(self, "_fps") else Fraction(0)
+
+    @fps.setter
+    def fps(self, value: Fraction | float) -> None:
+        self._fps = Fraction(value)
+
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         with QSignalBlocker(self.seek_step_spinbox):
             self.seek_step_spinbox.setValue(self.settings.seek_step)
@@ -971,12 +977,11 @@ class PlaybackContainer(QWidget, IconReloadMixin):
             self.zone_frame_spinbox.setValue(self.settings.zone_frames)
 
         # Sync zone time based on FPS
-        if self._fps_num > 0:
-            seconds = self.settings.zone_frames * self._fps_den / self._fps_num
-            zone_time = Time(seconds=seconds)
-
+        if self.fps.numerator > 0:
             with QSignalBlocker(self.zone_time_edit):
-                self.zone_time_edit.setTime(zone_time.to_qtime())
+                self.zone_time_edit.setTime(
+                    Time(seconds=self.settings.zone_frames * self.fps.denominator / self.fps.numerator).to_qtime()
+                )
 
         with QSignalBlocker(self.loop_checkbox):
             self.loop_checkbox.setChecked(self.settings.loop)
@@ -1047,28 +1052,21 @@ class PlaybackContainer(QWidget, IconReloadMixin):
     def _emit_settings(self) -> None:
         self.settingsChanged.emit(self.settings.seek_step, self.settings.speed, self.settings.uncapped)
 
-    def set_fps_info(self, fps_num: int, fps_den: int) -> None:
-        self._fps_num = fps_num
-        self._fps_den = fps_den
-
     def _on_zone_frames_changed(self, new_frame: int, old_frame: int) -> None:
         self.settings.zone_frames = new_frame
 
         # Convert frames to time based on FPS
-        if self._fps_num > 0:
-            seconds = new_frame * self._fps_den / self._fps_num
-            time = Time(seconds=seconds)
-
+        if self.fps.numerator > 0:
             with QSignalBlocker(self.zone_time_edit):
-                self.zone_time_edit.setTime(time.to_qtime())
+                self.zone_time_edit.setTime(
+                    Time(seconds=new_frame * self.fps.denominator / self.fps.numerator).to_qtime()
+                )
 
     def _on_zone_time_changed(self, new_time: QTime, old_time: QTime) -> None:
         # Convert time to frames based on FPS
-        if self._fps_num > 0:
-            total_ms = new_time.msecsSinceStartOfDay()
-            seconds = total_ms / 1000.0
-            frames = round(seconds * self._fps_num / self._fps_den)
-            frames = max(1, frames)
+        if self.fps.numerator > 0:
+            seconds = new_time.msecsSinceStartOfDay() / 1000.0
+            frames = max(1, round(seconds * self.fps.denominator / self.fps.numerator))
 
             self.settings.zone_frames = frames
 

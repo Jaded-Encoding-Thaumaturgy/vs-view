@@ -587,13 +587,19 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.disable_reloading = False
 
     @run_in_loop
-    def init_timeline(self, total_frames: int, fps_num: int, fps_den: int) -> None:
-        """Initialize the timeline with video data."""
-        self.tbar.timeline.set_data(total_frames, fps_num, fps_den)
+    def init_timeline(self) -> None:
+        if not (voutput := self.tab_manager.current_voutput):
+            logger.debug("No voutput available")
+            return
+
+        fps = voutput.clip.fps
+        total_frames = voutput.clip.num_frames
+
+        self.tbar.timeline.set_data(total_frames, fps)
 
         # Use configured FPS history size, or auto-calculate from FPS when set to 0
         if (fps_history_size := self.global_settings.view.fps_history_size) <= 0:
-            fps_history_size = round(fps_num / fps_den)
+            fps_history_size = round(fps.numerator / fps.denominator)
 
         self._playback.fps_history = deque(maxlen=clamp(fps_history_size, 1, total_frames))
 
@@ -603,7 +609,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         with QSignalBlocker(self.tbar.playback_container.time_edit):
             self.tbar.playback_container.time_edit.setMaximumTime(self.tbar.timeline.total_time.to_qtime())
 
-        self.tbar.playback_container.set_fps_info(fps_num, fps_den)
+        self.tbar.playback_container.fps = fps
 
     @run_in_loop
     def update_timeline_cursor(self, n: int) -> None:
@@ -618,10 +624,11 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.tbar.playback_container.time_edit.setTime(time.to_qtime())
 
     def _frame_to_time(self, frame: int) -> Time:
-        if self.tbar.timeline.fps_num > 0:
-            seconds = frame * self.tbar.timeline.fps_den / self.tbar.timeline.fps_num
-            return Time(seconds=seconds)
-        return Time(seconds=0)
+        return Time(
+            seconds=frame * self.tbar.timeline.fps.denominator / self.tbar.timeline.fps.numerator
+            if self.tbar.timeline.fps.numerator > 0
+            else 0
+        )
 
     @run_in_loop(return_future=False)
     def set_loaded_page(self) -> None:
@@ -665,7 +672,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         logger.debug("Switched to video output: clip=%r", self.tab_manager.current_voutput.clip)
 
-        self._update_timeline_for_tab()
+        self.init_timeline()
         target_frame = self._calculate_target_frame()
         self.update_timeline_cursor(target_frame)
         self.current_tab_index = index
@@ -694,11 +701,6 @@ class LoaderWorkspace[T](BaseWorkspace):
         else:
             with self.env.use():
                 self.api._on_current_voutput_changed()
-
-    def _update_timeline_for_tab(self) -> None:
-        voutput = self.tab_manager.current_voutput
-        assert voutput is not None
-        self.init_timeline(voutput.clip.num_frames, voutput.clip.fps_num, voutput.clip.fps_den)
 
     def _calculate_target_frame(self) -> int:
         # Returns sync playhead frame if enabled, otherwise returns the
@@ -769,29 +771,22 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.warning("No current video output, ignoring")
             return
 
-        clip = voutput.clip
-        fps_num = clip.fps_num
-        fps_den = clip.fps_den
-        total_frames = clip.num_frames
-
         # Calculate total duration
-        if fps_num > 0:
-            total_seconds = total_frames * fps_den / fps_num
+        if voutput.clip.fps.numerator > 0:
+            total_seconds = voutput.clip.num_frames * voutput.clip.fps.denominator / voutput.clip.fps.numerator
             total_duration = Time(seconds=total_seconds).to_ts("{H}:{M:02d}:{S:02d}.{ms:03d}")
-            fps_str = f"{fps_num / fps_den:.3f}" if fps_den else "0"
+            fps_str = f"{voutput.clip.fps.numerator / voutput.clip.fps.denominator:.3f}"
         else:
+            # FIXME: VFR support here
             total_duration = "0:00:00.000"
             fps_str = "0"
 
-        # Get format name from the original clip
-        format_name = clip.format.name if clip.format else "NONE"
-
         info = OutputInfo(
             total_duration=total_duration,
-            total_frames=total_frames,
-            width=clip.width,
-            height=clip.height,
-            format_name=format_name,
+            total_frames=voutput.clip.num_frames,
+            width=voutput.clip.width,
+            height=voutput.clip.height,
+            format_name=voutput.clip.format.name if voutput.clip.format else "NONE",
             fps=fps_str,
         )
 
@@ -811,7 +806,12 @@ class LoaderWorkspace[T](BaseWorkspace):
     def _on_time_changed(self, time: QTime, old_time: QTime) -> None:
         logger.debug("Time changed: time=%s", time)
 
-        frame = cround(Time.from_qtime(time).total_seconds() * self.tbar.timeline.fps_num / self.tbar.timeline.fps_den)
+        # FIXME: Probably doesn't work with VFR here
+        frame = cround(
+            Time.from_qtime(time).total_seconds()
+            * self.tbar.timeline.fps.numerator
+            / self.tbar.timeline.fps.denominator
+        )
 
         logger.debug("Time changed: frame=%d", frame)
 
