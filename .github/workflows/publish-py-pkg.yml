@@ -35,7 +35,7 @@ jobs:
       github.event_name == 'push' && startsWith(github.ref, format('refs/tags/{0}/v', inputs.tag))
 
     environment:
-      name: pypi
+      name: pypi-${{ inputs.package }}
       url: https://pypi.org/p/${{ inputs.package }}
 
     env:
