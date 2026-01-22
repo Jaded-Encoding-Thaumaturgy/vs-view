@@ -11,6 +11,7 @@ members = [
     "vspackrgb",
     "vsview",
     "vsview-fftspectrum",
+    "vsview-frameprops-more",
     "vsview-split-planes",
 ]
 
@@ -640,6 +641,7 @@ dev = [
 ]
 plugins = [
     { name = "vsview-fftspectrum" },
+    { name = "vsview-frameprops-more" },
     { name = "vsview-split-planes" },
 ]
 
@@ -669,6 +671,7 @@ dev = [
 ]
 plugins = [
     { name = "vsview-fftspectrum", editable = "src/plugins/fftspectrum" },
+    { name = "vsview-frameprops-more", editable = "src/plugins/frameprops-more" },
     { name = "vsview-split-planes", editable = "src/plugins/split-planes" },
 ]
 
@@ -685,6 +688,16 @@ requires-dist = [
     { name = "vsjetpack", git = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack?branch=main" },
     { name = "vsview", editable = "." },
 ]
+
+[[package]]
+name = "vsview-frameprops-more"
+source = { editable = "src/plugins/frameprops-more" }
+dependencies = [
+    { name = "vsview" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "vsview", editable = "." }]
 
 [[package]]
 name = "vsview-split-planes"
