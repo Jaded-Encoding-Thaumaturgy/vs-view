@@ -735,9 +735,6 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     @Slot(int)
     def _seek_frame(self, delta: int) -> None:
-        if not hasattr(self, "current_frame"):
-            return
-
         if not self.tab_manager.current_voutput:
             logger.warning("No current video output, ignoring")
             return
