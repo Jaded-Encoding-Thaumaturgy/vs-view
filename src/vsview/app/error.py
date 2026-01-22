@@ -13,25 +13,43 @@ from ..vsenv import run_in_loop
 logger = getLogger(__name__)
 
 
-def _is_user_script_frame(filename: str) -> bool:
-    return not filename.startswith("src/cython/") and not filename.startswith("<")
+def _is_user_script_frame(filename: str, user_script_path: str | None = None) -> bool:
+    normalized_filename = filename.lower().replace("\\", "/")
+
+    if user_script_path:
+        normalized_script = user_script_path.lower().replace("\\", "/")
+
+        if (normalized_filename == normalized_script) or (
+            user_script_path.startswith("<") and filename == user_script_path
+        ):
+            return True
+
+    if filename.startswith("src/cython/") or filename.startswith("<"):
+        return False
+
+    return not any(
+        marker in normalized_filename for marker in ("site-packages/", "/lib/", ".venv/", "venv/", "lib/python")
+    )
 
 
-def _find_user_script_frame(tb: TracebackException) -> tuple[str, int] | None:
+def _find_user_script_frame(tb: TracebackException, user_script_path: str | None = None) -> tuple[str, int] | None:
     if not tb.stack:
         return None
 
     # Walk backwards from the last frame to find a user script frame
     for frame in reversed(tb.stack):
-        if frame.filename and frame.lineno is not None and _is_user_script_frame(frame.filename):
+        if frame.filename and frame.lineno is not None and _is_user_script_frame(frame.filename, user_script_path):
             return (frame.filename, frame.lineno)
 
     return None
 
 
 @run_in_loop(return_future=False)
-def show_error(error: ExecutionError, parent: QWidget) -> None:
+def show_error(error: ExecutionError, parent: QWidget, user_script_path: str | None = None) -> None:
     e = error.parent_error
+
+    logger.error("Full traceback:", exc_info=e)
+
     tb = TracebackException.from_exception(e)
     context = list[str]()
 
@@ -39,7 +57,7 @@ def show_error(error: ExecutionError, parent: QWidget) -> None:
     # (traceback points to vsengine's compile() call, not the user's script)
     if isinstance(e, SyntaxError) and e.filename is not None and e.lineno is not None:
         filename, lineno = e.filename, e.lineno
-    elif result := _find_user_script_frame(tb):
+    elif result := _find_user_script_frame(tb, user_script_path):
         filename, lineno = result
     else:
         filename, lineno = None, None
@@ -63,9 +81,8 @@ def show_error(error: ExecutionError, parent: QWidget) -> None:
     else:
         context.append("(no traceback information available)")
 
-    error_message = f"A {e.__class__.__name__} exception was raised while running the script.\n\n{'\n'.join(context)}\n"
-
-    logger.error(error_message)
+    header = f"A {e.__class__.__name__} exception was raised while running the script."
+    error_message = f"{header}\n\n{'\n'.join(context)}\n\n{e.__class__.__name__}: {e}\n"
 
     font = get_monospace_font()
     metrics = QFontMetrics(font)

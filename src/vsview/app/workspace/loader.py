@@ -1072,6 +1072,15 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
         """Return additional keyword arguments for vsengine.vpy.load_{content_type}()."""
         return {}
 
+    @property
+    def _user_script_path(self) -> str:
+        """Return the user script path/filename for error reporting."""
+        return (
+            str(self._script_content)
+            if self.content_type == "script"
+            else self._script_kwargs.get("filename", repr(self.content))
+        )
+
     def loader(self) -> None:
         module = ModuleType("__vsview__")
         module.__dict__.update(self.vsargs)
@@ -1097,7 +1106,7 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
 
             self.statusLoadingErrored.emit("Execution error")
 
-            show_error(e, self)
+            show_error(e, self, self._user_script_path)
             # Clear traceback to release VS core references held in the exception chain
             e.parent_error.__traceback__ = None
             e.__traceback__ = None
