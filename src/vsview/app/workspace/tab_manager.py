@@ -232,11 +232,11 @@ class TabManager(QWidget, IconReloadMixin):
         if index < 0:
             return
 
-        new_widget = self.tabs.view(index)
+        new_view = self.tabs.view(index)
 
         if (
             self.sync_scroll_btn.isChecked()
-            and self.previous_view is not new_widget
+            and self.previous_view is not new_view
             and not self.previous_view.autofit
             and not self.previous_view.pixmap_item.pixmap().isNull()
         ):
@@ -247,8 +247,8 @@ class TabManager(QWidget, IconReloadMixin):
             v_ratio = prev_v_bar.value() / prev_v_bar.maximum() if prev_v_bar.maximum() > 0 else 0.0
 
             # Apply scroll immediately
-            new_h_bar = new_widget.horizontalScrollBar()
-            new_v_bar = new_widget.verticalScrollBar()
+            new_h_bar = new_view.horizontalScrollBar()
+            new_v_bar = new_view.verticalScrollBar()
 
             if new_h_bar.maximum() > 0:
                 new_h_bar.setValue(int(h_ratio * new_h_bar.maximum()))
