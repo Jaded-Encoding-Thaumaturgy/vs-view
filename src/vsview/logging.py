@@ -1,11 +1,12 @@
 import os
 from collections.abc import Callable
 from copy import copy
-from logging import DEBUG, INFO, Formatter, LogRecord, captureWarnings, getLogger
+from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, Formatter, LogRecord, captureWarnings, getLogger
 from threading import main_thread
-from typing import TypeGuard
+from typing import TYPE_CHECKING, TypeGuard
 
 from jetpytools import fallback
+from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.text import Text
@@ -16,6 +17,45 @@ main_thread_name = main_thread().name
 
 def _is_lambda(obj: object) -> TypeGuard[Callable[[], object]]:
     return callable(obj) and getattr(obj, "__name__", None) == "<lambda>"
+
+
+# PySide6 doesn't have stubs for QMessageLogContext
+if TYPE_CHECKING:
+    from PySide6.QtCore import QMessageLogContext as QQMessageLogContext
+
+    class QMessageLogContext(QQMessageLogContext):
+        CurrentVersion: int
+        version: int
+        line: int
+        file: str | None
+        function: str | None
+        category: str
+else:
+    from PySide6.QtCore import QMessageLogContext
+
+
+def _qt_message_handler(mode: QtMsgType, context: QMessageLogContext, message: str) -> None:
+    level_map = {
+        QtMsgType.QtDebugMsg: DEBUG,
+        QtMsgType.QtInfoMsg: INFO,
+        QtMsgType.QtWarningMsg: WARNING,
+        QtMsgType.QtCriticalMsg: ERROR,
+        QtMsgType.QtFatalMsg: CRITICAL,
+        QtMsgType.QtSystemMsg: CRITICAL,
+    }
+
+    category = context.category if context.category else "default"
+
+    if not category.startswith("qt."):
+        category = f"qt.{category}"
+
+    level = level_map[mode]
+
+    # Demote spammy FFmpeg version info to DEBUG
+    if category == "qt.multimedia.ffmpeg" and level == INFO and "FFmpeg version" in message:
+        level = DEBUG
+
+    getLogger(category).log(level, message, stacklevel=2)
 
 
 class CustomHandler(RichHandler):
@@ -39,9 +79,11 @@ def setup_logging(
     vs_level: int | None = None,
     vsview_level: int | None = None,
     vsengine_level: int | None = INFO,
+    qt_level: int | None = None,
     capture_warnings: bool = True,
 ) -> None:
     os.environ["NO_COLOR"] = "1"
+    qInstallMessageHandler(_qt_message_handler)
 
     # FIXME: Change that to INFO later
     level = fallback(level, DEBUG)
@@ -75,6 +117,9 @@ def setup_logging(
     logger.setLevel(fallback(vsengine_level, level))
     logger.addHandler(handler)
     logger.propagate = False
+
+    logger = getLogger("qt")
+    logger.setLevel(fallback(qt_level, level))
 
     if capture_warnings:
         import warnings
