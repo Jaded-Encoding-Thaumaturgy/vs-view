@@ -1113,7 +1113,6 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
 
         fut = self.script.run()
 
-        # Wait for script execution to complete
         try:
             fut.result()
             logger.debug("%s execution completed successfully", self.content_type.title())
@@ -1127,7 +1126,6 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
             e.parent_error.__traceback__ = None
             e.__traceback__ = None
 
-            # Raise a clean exception without the original traceback chain
             raise RuntimeError("Script execution failed") from None
 
     def clear_environment(self) -> None:

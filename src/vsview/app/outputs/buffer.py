@@ -141,38 +141,29 @@ class FrameBuffer:
         bundles = list(self._bundles)
         self._bundles.clear()
 
-        # Wait for all futures to complete
+        frames_to_close = list[vs.VideoFrame]()
+
         for bundle in bundles:
             try:
-                if not bundle.main_future.done():
-                    bundle.main_future.result()
+                frame = bundle.main_future.result()
+                frames_to_close.append(frame)
             except Exception:
-                logger.exception("Failed to clear main frame %d", bundle.n)
+                logger.exception("Failed to get main frame %d for cleanup", bundle.n)
 
             for identifier, fut in bundle.plugin_futures.items():
                 try:
-                    if not fut.done():
-                        fut.result()
+                    frame = fut.result()
+                    frames_to_close.append(frame)
                 except Exception:
-                    logger.exception("Failed to clear plugin frame %s:%d", identifier, bundle.n)
+                    logger.exception("Failed to get plugin frame %s:%d for cleanup", identifier, bundle.n)
 
-        # Close all frames
-        for bundle in bundles:
+        for frame in frames_to_close:
             try:
-                if bundle.main_future.done() and not bundle.main_future.exception():
-                    (frame := bundle.main_future.result()).close()
-                    del frame
+                frame.close()
             except Exception:
-                logger.exception("Failed to close main frame %d", bundle.n)
+                logger.exception("Failed to close frame during cleanup")
 
-            for identifier, fut in bundle.plugin_futures.items():
-                try:
-                    if fut.done() and not fut.exception():
-                        (frame := fut.result()).close()
-                        del frame
-                except Exception:
-                    logger.exception("Failed to close plugin frame %s:%d", identifier, bundle.n)
-
+        del frames_to_close
         del bundles
         gc.collect()
 
