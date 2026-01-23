@@ -220,9 +220,6 @@ class VideoFileWorkspace(GenericFileWorkspace):
             logger.error("File not found: %s", self.content)
             raise FileNotFoundError(f"File not found: {self.content}")
 
-        # Pause console status to avoid conflict with BestSource's progress bar
-        self.statusConsolePaused.emit()
-
         try:
             with self.env.use():
                 if not hasattr(self.env.core, "bs"):
@@ -239,8 +236,7 @@ class VideoFileWorkspace(GenericFileWorkspace):
         except Exception:
             logger.exception("There was an error:")
             raise
-        finally:
-            self.statusConsoleResumed.emit()
+
         logger.debug("Loaded file: %s", self.content)
 
 

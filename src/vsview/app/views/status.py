@@ -4,10 +4,8 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from PySide6.QtCore import QSize, Qt, QTimer, Slot
 from PySide6.QtGui import QPalette, QPixmap, QTransform
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
-from rich.status import Status
 
 from ...assets import IconName, IconReloadMixin, load_icon
-from ...logging import console
 
 if TYPE_CHECKING:
     from ..workspace import LoaderWorkspace
@@ -37,8 +35,6 @@ class StatusWidget(IconReloadMixin, QWidget):
 
         # Local settings signal connection (for showing "Settings saved" message)
         self._settings_manager.signals.localChanged.connect(self._on_settings_changed)
-
-        self._console_status = Status("", console=console, spinner="aesthetic")
 
         self._reload_icons()  # Initial icon load
         self.register_icon_callback(self._reload_icons)
@@ -183,8 +179,6 @@ class StatusWidget(IconReloadMixin, QWidget):
         self.message_icon_label.setPixmap(self.spinner_frames[0])
         self.message_text_label.setText(message)
         self._spinner_timer.start()
-        self._console_status.update(message)
-        self._console_status.start()
 
     def stop_loading(self, completed_message: str = "Completed", *, error: bool = False) -> None:
         """
@@ -197,17 +191,6 @@ class StatusWidget(IconReloadMixin, QWidget):
         self.message_icon_label.setPixmap(self.error_pixmap if error else self.check_pixmap)
         self.message_text_label.setText(completed_message)
         self._message_timer.start(self._settings_manager.global_settings.status_message_timeout)
-        self._console_status.stop()
-
-    def pause_console_status(self) -> None:
-        """Pause the console status spinner to allow other Rich live displays to run."""
-        if self._is_loading:
-            self._console_status.stop()
-
-    def resume_console_status(self) -> None:
-        """Resume the console status spinner after pausing."""
-        if self._is_loading:
-            self._console_status.start()
 
     def error_loading(self, error_message: str) -> None:
         """
@@ -249,7 +232,6 @@ class StatusWidget(IconReloadMixin, QWidget):
         self._plugin_message_timer.stop()
         self._is_loading = False
         self._spinner_timer.stop()
-        self._console_status.stop()
         self.message_icon_label.clear()
         self.message_text_label.clear()
         self.duration_label.clear()
@@ -268,8 +250,6 @@ class StatusWidget(IconReloadMixin, QWidget):
         workspace.statusLoadingFinished.connect(self.stop_loading)
         workspace.statusLoadingErrored.connect(self.error_loading)
         workspace.statusOutputChanged.connect(self.set_output_info)
-        workspace.statusConsolePaused.connect(self.pause_console_status)
-        workspace.statusConsoleResumed.connect(self.resume_console_status)
 
         workspace.tab_manager.statusLoadingStarted.connect(self.start_loading)
         workspace.tab_manager.statusLoadingFinished.connect(self.stop_loading)
@@ -284,8 +264,6 @@ class StatusWidget(IconReloadMixin, QWidget):
         workspace.statusLoadingFinished.disconnect(self.stop_loading)
         workspace.statusLoadingErrored.disconnect(self.error_loading)
         workspace.statusOutputChanged.disconnect(self.set_output_info)
-        workspace.statusConsolePaused.disconnect(self.pause_console_status)
-        workspace.statusConsoleResumed.disconnect(self.resume_console_status)
 
         workspace.tab_manager.statusLoadingStarted.disconnect(self.start_loading)
         workspace.tab_manager.statusLoadingFinished.disconnect(self.stop_loading)

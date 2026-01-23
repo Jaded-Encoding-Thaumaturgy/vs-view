@@ -112,8 +112,6 @@ class LoaderWorkspace[T](BaseWorkspace):
     statusLoadingFinished = Signal(str)  # completed message
     statusLoadingErrored = Signal(str)  # error message
     statusOutputChanged = Signal(object)  # OutputInfo dataclass
-    statusConsolePaused = Signal()  # pause console status
-    statusConsoleResumed = Signal()  # resume console status
     workspacePluginsLoaded = Signal()  # emitted when plugin instances are created
 
     dock_widget_feature = (
