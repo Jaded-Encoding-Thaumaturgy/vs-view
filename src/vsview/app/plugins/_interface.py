@@ -185,7 +185,7 @@ class _PluginAPI(QObject):
 
         for plugin in self.__workspace.plugins:
             if not self._is_truly_visible(plugin):
-                return
+                continue
 
             for view in plugin.findChildren(PluginGraphicsView):
                 if view.current_tab in view.outputs and self.__workspace._playback.buffer:
