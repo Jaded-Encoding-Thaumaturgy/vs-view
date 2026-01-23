@@ -37,8 +37,6 @@ class TabViewWidget(QTabWidget):
         if not isinstance(args[0], GraphicsView):
             raise ValueError("TabViewWidget can only contain GraphicsViews")
 
-        self.recent_views[args[0]] = None
-
         return super().addTab(*args)
 
     def removeTab(self, index: int, /) -> None:
