@@ -114,10 +114,6 @@ class LoaderWorkspace[T](BaseWorkspace):
     statusOutputChanged = Signal(object)  # OutputInfo dataclass
     workspacePluginsLoaded = Signal()  # emitted when plugin instances are created
 
-    dock_widget_feature = (
-        QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
-    )
-
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
@@ -1037,7 +1033,9 @@ class LoaderWorkspace[T](BaseWorkspace):
         for plugin_type in PluginManager.tooldocks:
             dock = QDockWidget(plugin_type.display_name, self.dock_container)
             dock.setObjectName(plugin_type.identifier)
-            dock.setFeatures(self.dock_widget_feature)
+            dock.setFeatures(
+                QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+            )
             dock.setVisible(False)
 
             plugin_obj = plugin_type(dock, self.api)
