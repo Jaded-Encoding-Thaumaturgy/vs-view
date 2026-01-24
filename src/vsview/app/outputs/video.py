@@ -55,22 +55,6 @@ class VideoOutput:
             with suppress(AttributeError):
                 delattr(self, attr)
 
-    def request_qimage(self, n: int, env: ManagedEnvironment) -> QImage:
-        """Request a QImage synchronously."""
-
-        with self.request_frame(n, env) as frame:
-            return self.packer.frame_to_qimage(frame)
-
-    def request_frame(self, n: int, env: ManagedEnvironment) -> vs.VideoFrame:
-        """Request a frame synchronously. Remember to close the frame when done."""
-        with env.use():
-            return self.prepared_clip.get_frame(n)
-
-    def request_frame_async(self, n: int, env: ManagedEnvironment) -> Future[vs.VideoFrame]:
-        """Request a frame asynchronously without blocking. Remember to close the frame when done."""
-        with env.use():
-            return self.prepared_clip.get_frame_async(n)
-
     def _get_props_on_render(self, n: int, f: vs.VideoFrame) -> vs.VideoFrame:
         self.props[n] = f.props
         return f
