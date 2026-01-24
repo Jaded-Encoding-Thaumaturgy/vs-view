@@ -837,7 +837,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         total_frames = self.tab_manager.current_voutput.clip.num_frames
 
-        if self._playback.buffer and not self._playback.buffer.is_empty:
+        if self._playback.buffer and self._playback.buffer._bundles:
             try:
                 result = self._playback.buffer.get_next_frame()
             except Exception as e:

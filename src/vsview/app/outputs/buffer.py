@@ -54,10 +54,6 @@ class FrameBuffer:
         with self.env.use():
             vs.register_on_destroy(self._plugin_nodes.clear)
 
-    @property
-    def is_empty(self) -> bool:
-        return not self._bundles
-
     def register_plugin_node(self, identifier: str, node: vs.VideoNode) -> None:
         self._plugin_nodes[identifier] = node
         logger.debug("Registered plugin node: %s", identifier)
