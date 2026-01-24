@@ -207,9 +207,14 @@ class TabManager(QWidget, IconReloadMixin):
     @run_in_loop
     def update_current_view(self, image: QImage, skip_adjustments: bool = False) -> None:
         """Update the view with a new rendered frame."""
-        self.current_view.pixmap_item.setPixmap(
-            QPixmap.fromImage(image, Qt.ImageConversionFlag.NoFormatConversion),
-        )
+
+        try:
+            self.current_view.pixmap_item.setPixmap(
+                QPixmap.fromImage(image, Qt.ImageConversionFlag.NoFormatConversion),
+            )
+        except ValueError:
+            logger.warning("Failed to update view with new frame")
+            return
 
         if skip_adjustments:
             return
