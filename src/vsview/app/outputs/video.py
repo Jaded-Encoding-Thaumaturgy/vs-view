@@ -1,26 +1,35 @@
+from __future__ import annotations
+
 from collections.abc import Mapping
-from concurrent.futures import Future
 from contextlib import suppress
 from logging import getLogger
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import vapoursynth as vs
-from PySide6.QtGui import QImage
-from vsengine.policy import ManagedEnvironment
 
 from ..settings import SettingsManager
 from .packing import Packer
+
+if TYPE_CHECKING:
+    from ...api._helpers import VideoMetadata
 
 logger = getLogger(__name__)
 
 
 class VideoOutput:
-    def __init__(self, vs_output: vs.VideoOutputTuple, vs_index: int, vs_name: str | None, packer: Packer) -> None:
+    def __init__(
+        self,
+        vs_output: vs.VideoOutputTuple,
+        vs_index: int,
+        packer: Packer,
+        metadata: VideoMetadata | None = None,
+    ) -> None:
         from ..utils import LRUCache, cache_clip
 
         self.packer = packer
         self.vs_index = vs_index
-        self.vs_name = vs_name
+        self.vs_name = metadata.name if metadata else None
+        # self.alpha = metadata.alpha if metadata else None
 
         self.vs_output = vs_output
         self.clip = self.vs_output.clip.std.ModifyFrame(self.vs_output.clip, self._get_props_on_render)

@@ -4,7 +4,7 @@ from concurrent.futures import Future
 from importlib.util import find_spec
 from logging import getLogger
 from pathlib import Path
-from typing import ClassVar, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
 from jetpytools import to_arr
 from PySide6.QtCore import QByteArray, Qt, QTimer
@@ -123,7 +123,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         else:
             self.workspacePluginsLoaded.connect(self._restore_layout)
 
-    def get_output_metadata(self) -> dict[int, str]:
+    def get_output_metadata(self) -> dict[int, Any]:
         return output_metadata.get(str(self.content), {})
 
     @run_in_background(name="LoadContent")

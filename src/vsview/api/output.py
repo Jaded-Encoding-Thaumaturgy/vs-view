@@ -13,15 +13,15 @@ from typing import Any, assert_never, overload
 import vapoursynth as vs
 from jetpytools import flatten, to_arr
 
+from ._helpers import AudioMetadata, VideoMetadata
 from ._helpers import output_metadata as _output_metadata
 
 __all__ = ["set_output"]
 
 _logger = getLogger(__name__)
 
-type VideoNodeIterable = vs.VideoNode | Iterable[VideoNodeIterable]
-type AudioNodeIterable = vs.AudioNode | Iterable[AudioNodeIterable]
-type RawNodeIterable = vs.RawNode | Iterable[RawNodeIterable]
+type VideoNodeIterable = Iterable[vs.VideoNode | VideoNodeIterable]
+type AudioNodeIterable = Iterable[vs.AudioNode | AudioNodeIterable]
 
 # TimecodesT = (
 #     str
@@ -77,21 +77,56 @@ def set_output(
 ) -> None: ...
 
 
+# AudioNode signature
 @overload
 def set_output(
-    node: VideoNodeIterable | AudioNodeIterable | RawNodeIterable, index: int | Sequence[int] = ..., /, **kwargs: Any
+    node: vs.AudioNode,
+    index: int = ...,
+    /,
+    *,
+    downmix: bool = True,
+    **kwargs: Any,
 ) -> None: ...
 
 
 @overload
 def set_output(
-    node: VideoNodeIterable | AudioNodeIterable | RawNodeIterable, name: str | bool | None = ..., /, **kwargs: Any
+    node: vs.AudioNode,
+    name: str | bool | None = ...,
+    /,
+    *,
+    downmix: bool = True,
+    **kwargs: Any,
 ) -> None: ...
 
 
 @overload
 def set_output(
-    node: VideoNodeIterable | AudioNodeIterable | RawNodeIterable,
+    node: vs.AudioNode,
+    index: int = ...,
+    name: str | bool | None = ...,
+    /,
+    *,
+    downmix: bool = True,
+    **kwargs: Any,
+) -> None: ...
+
+
+@overload
+def set_output(
+    node: VideoNodeIterable | AudioNodeIterable, index: int | Sequence[int] = ..., /, **kwargs: Any
+) -> None: ...
+
+
+@overload
+def set_output(
+    node: VideoNodeIterable | AudioNodeIterable, name: str | bool | None = ..., /, **kwargs: Any
+) -> None: ...
+
+
+@overload
+def set_output(
+    node: VideoNodeIterable | AudioNodeIterable,
     index: int | Sequence[int] = ...,
     name: str | bool | None = ...,
     /,
@@ -100,7 +135,7 @@ def set_output(
 
 
 def set_output(
-    node: vs.VideoNode | VideoNodeIterable | AudioNodeIterable | RawNodeIterable,
+    node: vs.VideoNode | vs.AudioNode | VideoNodeIterable | AudioNodeIterable,
     index_or_name: int | Sequence[int] | str | bool | None = None,
     name: str | bool | None = None,
     /,
@@ -109,6 +144,8 @@ def set_output(
     # timecodes: TimecodesT = None,
     # denominator: int = 1001,
     # scenes: ScenesT = None,
+    *,
+    downmix: bool = True,
     **kwargs: Any,
 ) -> None:
     """
@@ -138,6 +175,8 @@ def set_output(
         name: Explicit name override. If provided when index_or_name is an int,
             this sets the display name for the output.
         alpha: Optional alpha channel VideoNode (only for VideoNode outputs).
+        downmix: If True and a AudioNode is passed, assumes the audio is multi-channel (5.1 or 7.1)
+            and downmixes it to stereo.  Default to True.
         **kwargs: Additional keyword arguments (reserved for future use).
     """
     if isinstance(index_or_name, (str, bool)):
@@ -185,7 +224,10 @@ def set_output(
                 effective_name = name
 
         if file := getattr(script_module, "__file__", None):
-            _output_metadata[file][i] = effective_name or f"{title} {i}"
+            if isinstance(n, vs.VideoNode):
+                _output_metadata[file][i] = VideoMetadata(effective_name or f"{title} {i}", alpha)
+            elif isinstance(n, vs.AudioNode):
+                _output_metadata[file][i] = AudioMetadata(effective_name or f"{title} {i}", downmix)
 
         # if isinstance(n, vs.VideoNode):
         #     if timecodes:

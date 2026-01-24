@@ -331,9 +331,9 @@ class LoaderWorkspace[T](BaseWorkspace):
         yield
         self.statusLoadingFinished.emit(completed_message)
 
-    def get_output_metadata(self) -> dict[int, str]:
+    def get_output_metadata(self) -> dict[int, Any]:
         """
-        Get metadata for video outputs.
+        Get metadata for VapourSynth outputs.
 
         Returns:
             A dictionary mapping output index to metadata string.
@@ -362,7 +362,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         try:
             for i, output in items:
-                voutputs.append(VideoOutput(output, i, metadata.get(i), self._packer))
+                voutputs.append(VideoOutput(output, i, self._packer, metadata.get(i)))
         except Exception:
             for voutput in voutputs:
                 voutput.clear()
