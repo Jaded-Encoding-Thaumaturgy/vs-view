@@ -2,16 +2,20 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from contextlib import suppress
+from fractions import Fraction
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
 import vapoursynth as vs
+from jetpytools import cround
 
 from ..settings import SettingsManager
 from .packing import Packer
 
 if TYPE_CHECKING:
     from ...api._helpers import VideoMetadata
+    from ..views.timeline import Frame, Time
+
 
 logger = getLogger(__name__)
 
@@ -54,6 +58,22 @@ class VideoOutput:
         for attr in ["vs_output", "clip", "prepared_clip"]:
             with suppress(AttributeError):
                 delattr(self, attr)
+
+    def time_to_frame(self, time: Time, fps: Fraction | None = None) -> Frame:
+        from ..views.timeline import Frame
+
+        if fps is None:
+            fps = self.clip.fps
+
+        return Frame(cround(time.total_seconds() * fps.numerator / fps.denominator) if fps.denominator > 0 else 0)
+
+    def frame_to_time(self, frame: int, fps: Fraction | None = None) -> Time:
+        from ..views.timeline import Time
+
+        if fps is None:
+            fps = self.clip.fps
+
+        return Time(seconds=frame * fps.denominator / fps.numerator if fps.numerator > 0 else 0)
 
     def _get_props_on_render(self, n: int, f: vs.VideoFrame) -> vs.VideoFrame:
         self.props[n] = f.props

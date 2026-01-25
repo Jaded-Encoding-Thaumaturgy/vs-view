@@ -4,7 +4,6 @@ from collections.abc import Callable, Iterator
 from concurrent.futures import Future, wait
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from fractions import Fraction
 from functools import partial
 from logging import getLogger
 from pathlib import Path
@@ -607,27 +606,17 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     @run_in_loop
     def update_timeline_cursor(self, n: int) -> None:
-        self.tbar.timeline.cursor_x = Frame(n)
+        if not self.tab_manager.current_voutput:
+            return
 
-        time = self._frame_to_time(n)
+        self.tbar.timeline.cursor_x = (n := Frame(n))
 
         with QSignalBlocker(self.tbar.playback_container.frame_edit):
-            self.tbar.playback_container.frame_edit.setValue(Frame(n))
+            self.tbar.playback_container.frame_edit.setValue(n)
 
         with QSignalBlocker(self.tbar.playback_container.time_edit):
+            time = self.tab_manager.current_voutput.frame_to_time(n)
             self.tbar.playback_container.time_edit.setTime(time.to_qtime())
-
-    def _frame_to_time(self, frame: int, fps: Fraction | None = None) -> Time:
-        if fps is None:
-            fps = self.tbar.timeline.fps
-
-        return Time(seconds=frame * fps.denominator / fps.numerator if fps.numerator > 0 else 0)
-
-    def _time_to_frame(self, time: Time, fps: Fraction | None = None) -> Frame:
-        if fps is None:
-            fps = self.tbar.timeline.fps
-
-        return Frame(cround(time.total_seconds() * fps.numerator / fps.denominator) if fps.denominator > 0 else 0)
 
     @run_in_loop(return_future=False)
     def set_loaded_page(self) -> None:
@@ -714,8 +703,8 @@ class LoaderWorkspace[T](BaseWorkspace):
         src_fps = self.tab_manager.previous_view.output.clip.fps
         tgt_fps = self.tab_manager.current_voutput.clip.fps
 
-        current_time = self._frame_to_time(self.current_frame, src_fps)
-        target_frame = self._time_to_frame(current_time, tgt_fps)
+        current_time = self.tab_manager.current_voutput.frame_to_time(self.current_frame, src_fps)
+        target_frame = self.tab_manager.current_voutput.time_to_frame(current_time, tgt_fps)
 
         target_frame = clamp(target_frame, 0, self.tab_manager.current_voutput.clip.num_frames - 1)
 

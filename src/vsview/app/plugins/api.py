@@ -70,7 +70,10 @@ class PluginAPI(_PluginAPI):
     @property
     def current_time(self) -> timedelta:
         """Return the current time."""
-        return self.__workspace._frame_to_time(self.current_frame)
+        if voutput := self.__workspace.tab_manager.current_voutput:
+            return voutput.frame_to_time(self.current_frame)
+
+        raise NotImplementedError
 
     @property
     def current_tab_index(self) -> int:
