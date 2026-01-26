@@ -958,7 +958,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         # Register visible plugin nodes for pre-fetching
         self.api._register_plugin_nodes_to_buffer()
 
-        self._playback.buffer.allocate(self.current_frame, total_frames, loop_range=loop_range)
+            self._playback.buffer.allocate(self.current_frame, loop_range=loop_range)
 
         logger.debug(
             "Target frame interval: %d ns (fps=%s), buffer_size=%d",

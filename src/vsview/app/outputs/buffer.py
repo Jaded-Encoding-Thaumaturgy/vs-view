@@ -46,7 +46,7 @@ class FrameBuffer:
 
         self._size = SettingsManager.global_settings.view.buffer_size
         self._bundles = deque[FrameBundle]()
-        self._total_frames = 0
+        self._total_frames = video_output.prepared_clip.num_frames
         self._loop_range: range | None = None
         self._invalidated = False
         self._plugin_nodes = dict[str, vs.VideoNode]()
@@ -58,11 +58,10 @@ class FrameBuffer:
         self._plugin_nodes[identifier] = node
         logger.debug("Registered plugin node: %s", identifier)
 
-    def allocate(self, start_frame: int, total_frames: int, loop_range: range | None = None) -> None:
-        self._total_frames = total_frames
+    def allocate(self, start_frame: int, loop_range: range | None = None) -> None:
         self._loop_range = loop_range
 
-        frames_to_buffer = min(self._size, total_frames - start_frame - 1)
+        frames_to_buffer = min(self._size, self._total_frames - start_frame - 1)
         logger.debug(
             "Allocating buffer: start=%d, buffering %d frames, %d plugins",
             start_frame,
