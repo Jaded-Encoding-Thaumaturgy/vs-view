@@ -65,7 +65,7 @@ class PluginAPI(_PluginAPI):
     @property
     def current_frame(self) -> int:
         """Return the current frame number."""
-        return self.__workspace.current_frame
+        return self.__workspace.playback.current_frame
 
     @property
     def current_time(self) -> timedelta:
@@ -98,7 +98,7 @@ class PluginAPI(_PluginAPI):
     @property
     def is_playing(self) -> bool:
         """Return whether playback is currently active."""
-        return self.__workspace.tbar.is_playing
+        return self.__workspace.playback.is_playing
 
     @property
     def packer(self) -> Packer:

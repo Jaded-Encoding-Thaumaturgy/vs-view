@@ -217,8 +217,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.stack.addWidget(self.loaded_page)
 
         # Playback state
-        self._playback = PlaybackState()
-        self.tbar.playback_timer.timeout.connect(self._on_playback_timer)
+        self.playback = PlaybackState(self)
 
         # Reloading state
         self.disable_reloading = True
@@ -306,7 +305,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         )
 
         self._stop_playback()
-        self._playback.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
+        self.playback.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
 
         self.tab_manager.deleteLater()
 
@@ -396,7 +395,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.clear_failed_load()
                 return
 
-        tabs = self.tab_manager.create_tabs(voutputs, self.current_frame)
+        tabs = self.tab_manager.create_tabs(voutputs, self.playback.current_frame)
 
         with QSignalBlocker(self.tab_manager):
             self.tab_manager.swap_tabs(tabs, self.current_tab_index)
@@ -444,7 +443,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         with self.tbar.disabled(), self.tab_manager.clear_voutputs_on_fail():
             self.loop.from_thread(self.content_area.setDisabled, True)
             self.tab_manager.disable_switch = True
-            self._playback.wait_for_cleanup(0.25, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
+            self.playback.wait_for_cleanup(0.25, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
 
             # 1. Capture and Preserve State
             saved_state = self.tab_manager.current_view.state
@@ -474,7 +473,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                     return
 
             # 4. Reconstruct UI
-            tabs = self.tab_manager.create_tabs(voutputs, self.current_frame, enabled=False)
+            tabs = self.tab_manager.create_tabs(voutputs, self.playback.current_frame, enabled=False)
 
             # Apply saved pixmap
             for view, voutput in zip(tabs.views(), voutputs, strict=True):
@@ -512,7 +511,7 @@ class LoaderWorkspace[T](BaseWorkspace):
     @run_in_loop(return_future=False)
     def clear_failed_load(self) -> None:
         self._stop_playback()
-        self._playback.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
+        self.playback.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
 
         with QSignalBlocker(self.tab_manager.tabs):
             self.tab_manager.tabs.clear()
@@ -535,7 +534,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 logger.exception("Resize failed with the message:")
                 self.clear_failed_load()
             elif self.tab_manager.tabs.currentIndex() != -1:
-                self.current_frame = n
+                self.playback.current_frame = n
                 self.tab_manager.current_view.last_frame = n
 
         fut.add_done_callback(on_complete)
@@ -554,7 +553,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.disable_reloading = True
 
         with self.env.use():
-            if self.tbar.is_playing:
+            if self.playback.is_playing:
                 with voutput.prepared_clip.get_frame(n) as frame:
                     logger.debug("Frame %d rendered", n)
                     image = voutput.packer.frame_to_qimage(frame)
@@ -589,7 +588,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         if (fps_history_size := self.global_settings.view.fps_history_size) <= 0:
             fps_history_size = round(fps.numerator / fps.denominator)
 
-        self._playback.fps_history = deque(maxlen=clamp(fps_history_size, 1, total_frames))
+        self.playback.fps_history = deque(maxlen=clamp(fps_history_size, 1, total_frames))
 
         with QSignalBlocker(self.tbar.playback_container.frame_edit):
             self.tbar.playback_container.frame_edit.setMaximum(Frame(total_frames - 1))
@@ -651,7 +650,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             return
 
         self._stop_playback()
-        self._playback.wait_for_cleanup()
+        self.playback.wait_for_cleanup()
 
         logger.debug("Switched to video output: clip=%r", self.tab_manager.current_voutput.clip)
 
@@ -698,7 +697,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         src_fps = self.tab_manager.previous_view.output.clip.fps
         tgt_fps = self.tab_manager.current_voutput.clip.fps
 
-        current_time = self.tab_manager.current_voutput.frame_to_time(self.current_frame, src_fps)
+        current_time = self.tab_manager.current_voutput.frame_to_time(self.playback.current_frame, src_fps)
         target_frame = self.tab_manager.current_voutput.time_to_frame(current_time, tgt_fps)
 
         target_frame = clamp(target_frame, 0, self.tab_manager.current_voutput.clip.num_frames - 1)
@@ -716,7 +715,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.warning("No current video output, ignoring")
             return
 
-        new_frame = clamp(self.current_frame + delta, 0, self.tab_manager.current_voutput.clip.num_frames - 1)
+        new_frame = clamp(self.playback.current_frame + delta, 0, self.tab_manager.current_voutput.clip.num_frames - 1)
         self.request_frame(new_frame)
 
     @Slot(int)
@@ -724,22 +723,20 @@ class LoaderWorkspace[T](BaseWorkspace):
         self._seek_frame(direction * self.tbar.playback_container.settings.seek_step)
 
     def _on_playback_settings_changed(self, seek_step: int, speed: float, uncapped: bool) -> None:
-        if self.tbar.is_playing:
+        if self.playback.is_playing:
             self._restart_playback()
 
     def _on_play_zone(self, zone_frames: int, loop: bool) -> None:
         if not self.tab_manager.current_voutput:
             return
 
-        start_frame = self.current_frame
         # Ensure zone doesn't exceed total frames
-        total_frames = self.tab_manager.current_voutput.clip.num_frames
-        end_frame = min(start_frame + zone_frames, total_frames)
+        end_frame = min(self.playback.current_frame + zone_frames, self.tab_manager.current_voutput.clip.num_frames)
 
-        loop_range = range(start_frame, end_frame) if loop else None
+        loop_range = range(self.playback.current_frame, end_frame) if loop else None
         stop_at = end_frame if not loop else None
 
-        self.tbar.is_playing = True
+        self.playback.is_playing = True
         self.tbar.playback_container.play_pause_btn.setChecked(True)
         self.tbar.set_playback_controls_enabled(False)
         self.tbar.timeline.is_events_blocked = True
@@ -751,7 +748,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     def _restart_playback(self) -> None:
         self._stop_playback()
-        self.tbar.is_playing = True
+        self.playback.is_playing = True
         self.tbar.playback_container.play_pause_btn.setChecked(True)
         self._start_playback()
 
@@ -807,8 +804,8 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.request_frame(frame)
 
     @run_in_background(name="PlaybackNextFrame")
-    def _playback_next_frame(self) -> None:
-        if not self.tbar.is_playing:
+    def _play_next_frame(self) -> None:
+        if not self.playback.is_playing:
             return
 
         if not self.tab_manager.current_voutput:
@@ -818,13 +815,13 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         total_frames = self.tab_manager.current_voutput.clip.num_frames
 
-        if self._playback.buffer and self._playback.buffer._bundles:
+        if self.playback.buffer and self.playback.buffer._bundles:
             try:
-                result = self._playback.buffer.get_next_frame()
+                result = self.playback.buffer.get_next_frame()
             except Exception as e:
                 logger.error(
                     "An error occured during the rendering of the frame %d with the message: (%s): %s",
-                    self.current_frame + 1,
+                    self.playback.current_frame + 1,
                     e.__class__.__name__,
                     e,
                 )
@@ -834,13 +831,13 @@ class LoaderWorkspace[T](BaseWorkspace):
             if result:
                 frame_n, frame, plugin_frames = result
 
-                if self._playback.stop_at_frame is not None and frame_n >= self._playback.stop_at_frame:
+                if self.playback.stop_at_frame is not None and frame_n >= self.playback.stop_at_frame:
                     self._toggle_playback()
                     return
 
                 self._track_fps()
 
-                self.current_frame = frame_n
+                self.playback.current_frame = frame_n
                 self.tab_manager.current_view.last_frame = frame_n
 
                 try:
@@ -858,8 +855,8 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self._schedule_or_continue(frame_n + 1)
                 return
 
-        # Fallback to sync request
-        next_frame = self.current_frame + 1
+        # Skips frame
+        next_frame = self.playback.current_frame + 1
 
         if next_frame >= total_frames:
             self._toggle_playback()
@@ -870,14 +867,14 @@ class LoaderWorkspace[T](BaseWorkspace):
     def _track_fps(self) -> None:
         now = perf_counter_ns()
 
-        self._playback.fps_history.append(now)
+        self.playback.fps_history.append(now)
 
-        if (total_elapsed := self._playback.fps_history[-1] - self._playback.fps_history[0]) > 0:
-            avg_fps = (len(self._playback.fps_history) - 1) * 1_000_000_000 / total_elapsed
+        if (total_elapsed := self.playback.fps_history[-1] - self.playback.fps_history[0]) > 0:
+            avg_fps = (len(self.playback.fps_history) - 1) * 1_000_000_000 / total_elapsed
 
-            if now - self._playback.last_fps_update_ns >= FPS_UPDATE_INTERVAL_NS:
+            if now - self.playback.last_fps_update_ns >= FPS_UPDATE_INTERVAL_NS:
                 self.statusLoadingStarted.emit(f"Playing @ {avg_fps:.3f} fps")
-                self._playback.last_fps_update_ns = now
+                self.playback.last_fps_update_ns = now
 
     def _schedule_or_continue(self, next_frame: int, sync: bool = False) -> None:
         def sync_on_complete(_: object) -> None:
@@ -908,9 +905,9 @@ class LoaderWorkspace[T](BaseWorkspace):
             self._playback_next_frame()
 
     def _toggle_playback(self) -> None:
-        self.tbar.is_playing = not self.tbar.is_playing
+        self.playback.is_playing = not self.playback.is_playing
 
-        if self.tbar.is_playing:
+        if self.playback.is_playing:
             self._start_playback()
         else:
             self._stop_playback()
