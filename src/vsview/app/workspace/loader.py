@@ -669,7 +669,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.tbar.timeline.set_data(total_frames, fps)
 
         # Use configured FPS history size, or auto-calculate from FPS when set to 0
-        if (fps_history_size := self.global_settings.view.fps_history_size) <= 0:
+        if (fps_history_size := self.global_settings.playback.fps_history_size) <= 0:
             fps_history_size = round(fps.numerator / fps.denominator)
 
         self.playback.fps_history = deque(maxlen=clamp(fps_history_size, 1, total_frames))

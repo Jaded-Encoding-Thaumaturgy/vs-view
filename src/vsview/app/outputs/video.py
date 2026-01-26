@@ -37,14 +37,16 @@ class VideoOutput:
 
         self.vs_output = vs_output
         self.clip = self.vs_output.clip.std.ModifyFrame(self.vs_output.clip, self._get_props_on_render)
-        self.props = LRUCache[int, Mapping[str, Any]](cache_size=SettingsManager.global_settings.view.buffer_size * 2)
+        self.props = LRUCache[int, Mapping[str, Any]](
+            cache_size=SettingsManager.global_settings.playback.buffer_size * 2
+        )
 
         try:
             self.prepared_clip = self.packer.pack_clip(self.clip)
         except Exception as e:
             raise RuntimeError(f"Failed to pack clip with the message: '{e}'") from e
 
-        if cache_size := SettingsManager.global_settings.view.cache_size:
+        if cache_size := SettingsManager.global_settings.playback.cache_size:
             try:
                 self.prepared_clip = cache_clip(self.prepared_clip, cache_size)
             except Exception as e:

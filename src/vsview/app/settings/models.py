@@ -502,8 +502,59 @@ class TimelineSettings(BaseModel):
     ] = 24
 
 
+class PlaybackSettings(BaseModel):
+    """Settings for the video playback stuff"""
+
+    __section__ = "Playback"
+
+    buffer_size: Annotated[
+        int,
+        Spin(
+            label="Buffer Size",
+            min=1,
+            max=120,
+            suffix=" frames",
+            tooltip="Number of frames to buffer during playback",
+        ),
+    ] = 15
+
+    audio_buffer_size: Annotated[
+        int,
+        Spin(
+            label="Audio Buffer Size",
+            min=1,
+            max=10,
+            suffix=" frames",
+            tooltip="Number of audio frames to buffer both in memory and on the audio device.\n"
+            "3 is a good default. Increase it if you experience audio stuttering or dropouts.",
+        ),
+    ] = 3
+
+    cache_size: Annotated[
+        int,
+        Spin(
+            label="Cache size",
+            min=0,
+            max=1_000_000,
+            suffix=" frames",
+            tooltip="Number of frames to cache",
+        ),
+    ] = 10
+
+    fps_history_size: Annotated[
+        int,
+        Spin(
+            label="FPS History Size (0 = auto)",
+            min=0,
+            max=10_000,
+            suffix=" frames",
+            tooltip="Number of frames to keep in the FPS history",
+        ),
+    ] = 0
+
+
 class ViewSettings(BaseModel):
-    """Settings for the GraphicsView component & video playback things"""
+    """Settings for the GraphicsView components"""
 
     __section__ = "View"
 
@@ -576,51 +627,6 @@ class ViewSettings(BaseModel):
             tooltip="Zoom factors for the views\nPut one factor per line",
         ),
     ] = [0.25, 0.5, 0.75, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
-
-    buffer_size: Annotated[
-        int,
-        Spin(
-            label="Buffer Size",
-            min=1,
-            max=120,
-            suffix=" frames",
-            tooltip="Number of frames to buffer during playback",
-        ),
-    ] = 15
-
-    audio_buffer_size: Annotated[
-        int,
-        Spin(
-            label="Audio Buffer Size",
-            min=1,
-            max=10,
-            suffix=" frames",
-            tooltip="Number of audio frames to buffer both in memory and on the audio device.\n"
-            "3 is a good default. Increase it if you experience audio stuttering or dropouts.",
-        ),
-    ] = 3
-
-    cache_size: Annotated[
-        int,
-        Spin(
-            label="Cache size",
-            min=0,
-            max=1_000_000,
-            suffix=" frames",
-            tooltip="Number of frames to cache",
-        ),
-    ] = 10
-
-    fps_history_size: Annotated[
-        int,
-        Spin(
-            label="FPS History Size (0 = auto)",
-            min=0,
-            max=10_000,
-            suffix=" frames",
-            tooltip="Number of frames to keep in the FPS history",
-        ),
-    ] = 0
 
 
 class WindowGeometry(BaseModel):
@@ -699,6 +705,7 @@ class GlobalSettings(BaseSettings):
 
     appearance: AppearanceSettings = AppearanceSettings()
     timeline: TimelineSettings = TimelineSettings()
+    playback: PlaybackSettings = PlaybackSettings()
     view: ViewSettings = ViewSettings()
 
     plugins: dict[str, dict[str, Any] | BaseModel] = Field(default_factory=dict)

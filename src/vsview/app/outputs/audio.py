@@ -285,7 +285,7 @@ class AudioSink(QAudioSink):
         super().reset()
 
     def setup(self) -> None:
-        self.setBufferSize(SettingsManager.global_settings.view.audio_buffer_size * self.output.bytes_per_frame)
+        self.setBufferSize(SettingsManager.global_settings.playback.audio_buffer_size * self.output.bytes_per_frame)
         self.setVolume(self.output.volume)
 
         self._iodevice = self.start()
