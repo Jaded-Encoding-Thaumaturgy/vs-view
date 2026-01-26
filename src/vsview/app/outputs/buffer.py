@@ -49,7 +49,7 @@ class FrameBuffer:
         self.video_output = video_output
         self.env = env
 
-        self._size = SettingsManager.global_settings.view.buffer_size
+        self._size = SettingsManager.global_settings.playback.buffer_size
         self._bundles = deque[FrameBundle]()
         self._total_frames = video_output.prepared_clip.num_frames
         self._loop_range: range | None = None
@@ -227,7 +227,7 @@ class AudioBuffer:
         self.audio_output = audio_output
         self.env = env
 
-        self._size = SettingsManager.global_settings.view.audio_buffer_size
+        self._size = SettingsManager.global_settings.playback.audio_buffer_size
         self._bundles = deque[AudioBundle]()
         self._total_frames = audio_output.prepared_audio.num_frames
         self._loop_range: range | None = None
