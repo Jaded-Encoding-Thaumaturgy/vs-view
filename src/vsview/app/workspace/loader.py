@@ -104,15 +104,19 @@ class PlaybackState(QObject):
         self._audio_cleanup_future: Future[None] | None = None
 
     def reset(self) -> None:
+        self.last_fps_update_ns = 0
+        self.fps_history.clear()
+
+        self.stop_at_frame = None
+
         self.frame_interval_ns = 0
         self.next_frame_time_ns = 0
 
-        self.last_fps_update_ns = 0
-        self.fps_history.clear()
-        self.stop_at_frame = None
-
         self.audio_frame_interval_ns = 0
         self.next_audio_frame_time_ns = 0
+
+        self.video_timer.stop()
+        self.audio_timer.stop()
 
         if self.buffer:
             self._cleanup_future = self.buffer.invalidate()
