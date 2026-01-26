@@ -456,10 +456,6 @@ class LoaderWorkspace[T](BaseWorkspace):
                     if view is not self.tab_manager.current_view:
                         view.clear_scene()
 
-            # Clear old references
-            for vo in self.tab_manager.voutputs.values():
-                vo.clear()
-
             preserve_ui()
 
             # 2. Reset Environment
