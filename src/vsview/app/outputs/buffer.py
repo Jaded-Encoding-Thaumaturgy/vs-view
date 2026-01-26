@@ -72,6 +72,9 @@ class FrameBuffer:
         current_n = start_frame
 
         for _ in range(frames_to_buffer):
+            if self._invalidated:
+                break
+
             next_frame = self._calculate_next_frame(current_n)
             if next_frame is not None:
                 self._bundles.appendleft(self._request_bundle(next_frame))
