@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
 
 import vapoursynth as vs
+from jetpytools import fallback
 from pydantic import BaseModel
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QPixmap, QShowEvent
@@ -42,6 +43,20 @@ class VideoOutputProxy:
     """
     Frame properties of the clip.
     """
+
+
+@dataclass(frozen=True, slots=True)
+class AudioOutputProxy:
+    """Read-only proxy for an audio output."""
+
+    vs_index: int
+    """Index of the audio output in the VapourSynth environment."""
+
+    vs_name: str | None
+    """Name of the audio output, if any, when using `vsview.set_output()`."""
+
+    vs_output: vs.AudioNode
+    """The object created by `vapoursynth.get_outputs()`."""
 
 
 class PluginAPI(_PluginAPI):
@@ -94,6 +109,14 @@ class PluginAPI(_PluginAPI):
         def current_voutput(self) -> VideoOutputProxy:
             """Return the VideoOutput for the currently selected tab."""
             ...
+
+    @property
+    def aoutputs(self) -> list[AudioOutputProxy]:
+        """Return a list of AudioOutputProxy objects."""
+        return [
+            AudioOutputProxy(aoutput.vs_index, aoutput.vs_name, aoutput.vs_output)
+            for aoutput in fallback(self.__workspace.aoutputs, [])
+        ]
 
     @property
     def is_playing(self) -> bool:

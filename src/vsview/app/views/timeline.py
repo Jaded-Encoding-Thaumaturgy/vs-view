@@ -12,7 +12,7 @@ from math import floor
 from typing import Any, Literal, NamedTuple, Protocol, Self
 
 from jetpytools import clamp, cround
-from PySide6.QtCore import QEvent, QLineF, QRectF, QSignalBlocker, QSize, Qt, QTime, QTimer, Signal
+from PySide6.QtCore import QEvent, QLineF, QRectF, QSignalBlocker, QSize, Qt, QTime, Signal
 from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
@@ -31,6 +31,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -47,6 +48,8 @@ from PySide6.QtWidgets import (
 from vsengine.loops import get_loop
 
 from ...assets import IconName, IconReloadMixin
+from ...vsenv import run_in_loop
+from ..outputs import AudioOutput
 from ..settings import SettingsManager
 from .components import SegmentedControl
 
@@ -764,6 +767,8 @@ class PlaybackContainer(QWidget, IconReloadMixin):
     seekStepReset = Signal()
     settingsChanged = Signal(int, float, bool)  # seek_step, speed, uncapped
     playZone = Signal(int, bool)  # zone_frames, loop
+    volumeChanged = Signal(int)  # volume 0-100
+    muteChanged = Signal(bool)  # is_muted
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -797,10 +802,43 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         self.current_layout.addSpacing(5)
 
+        # Audio controls
+        self.audio_controls = QWidget(self)
+        self.audio_controls_layout = QHBoxLayout(self.audio_controls)
+        self.audio_controls_layout.setContentsMargins(0, 0, 0, 0)
+        self.audio_controls_layout.setSpacing(4)
+
+        self.mute_btn = self.make_tool_button(
+            self.make_icon((IconName.VOLUME_HIGH, self.palette().color(self.ICON_COLOR)), size=self.ICON_SIZE),
+            "Mute / Unmute",
+            self.audio_controls,
+            checkable=True,
+            icon_size=self.ICON_SIZE,
+            color_role=self.ICON_COLOR,
+        )
+        self.mute_btn.clicked.connect(self._on_mute_clicked)
+        self.audio_controls_layout.addWidget(self.mute_btn)
+
+        # Volume slider
+        self.volume_slider = QSlider(Qt.Orientation.Horizontal, self.audio_controls)
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setValue(50)
+        self.volume_slider.setFixedWidth(60)
+        self.volume_slider.setToolTip("Volume: 50%")
+        self.volume_slider.valueChanged.connect(self._on_volume_changed)
+        self.audio_controls_layout.addWidget(self.volume_slider)
+
+        self.current_layout.addWidget(self.audio_controls)
+        self.audio_controls.setEnabled(False)
+
+        self._is_muted = False
+        self._volume = 50
+
         self._setup_context_menu()
 
-        # Play/pause has different icons per state, use custom callback
+        # Different icons per state, use custom callback
         self.register_icon_callback(lambda: self.play_pause_btn.setIcon(self._make_play_pause_icon()))
+        self.register_icon_callback(self._update_mute_icon)
 
     def _make_play_pause_icon(self) -> QIcon:
         palette = self.palette()
@@ -949,10 +987,86 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         self.settings = PlaybackSettings()
 
+        self.context_menu.addSeparator()
+
+        audio_widget = QWidget(self.context_menu)
+        audio_layout = QFormLayout(audio_widget)
+        audio_layout.setContentsMargins(6, 6, 6, 6)
+
+        self.audio_output_combo = QComboBox(audio_widget)
+        audio_layout.addRow("Audio Output", self.audio_output_combo)
+
+        audio_action = QWidgetAction(self.context_menu)
+        audio_action.setDefaultWidget(audio_widget)
+        self.context_menu.addAction(audio_action)
+
+    def _update_mute_icon(self) -> None:
+        if self._is_muted:
+            return self.mute_btn.setIcon(
+                self.make_icon(
+                    (IconName.VOLUME_MUTE, self.palette().color(QPalette.ColorRole.Mid)),
+                    size=self.ICON_SIZE,
+                )
+            )
+
+        if self._volume == 0:
+            icon_name = IconName.VOLUME_OFF
+        elif self._volume < 33:
+            icon_name = IconName.VOLUME_LOW
+        elif self._volume < 67:
+            icon_name = IconName.VOLUME_MID
+        else:
+            icon_name = IconName.VOLUME_HIGH
+
+        self.mute_btn.setIcon(self.make_icon((icon_name, self.palette().color(self.ICON_COLOR)), size=self.ICON_SIZE))
+
+    def _on_mute_clicked(self, checked: bool) -> None:
+        self._is_muted = checked
+        self._update_mute_icon()
+        self.muteChanged.emit(self._is_muted)
+
+    def _on_volume_changed(self, value: int) -> None:
+        self._volume = value
+        self.volume_slider.setToolTip(f"Volume: {value}%")
+        self._update_mute_icon()
+
+        # Unmute if volume is changed while muted
+        if self._is_muted and value > 0:
+            self._is_muted = False
+            self.mute_btn.setChecked(False)
+            self.muteChanged.emit(False)
+
+        self.volumeChanged.emit(value)
+
+    @property
+    def volume(self) -> int:
+        return 0 if self._is_muted else self._volume
+
+    @volume.setter
+    def volume(self, value: int) -> None:
+        self._volume = clamp(value, 0, 100)
+
+        with QSignalBlocker(self.volume_slider):
+            self.volume_slider.setValue(self._volume)
+
+        self._update_mute_icon()
+
+    @property
+    def is_muted(self) -> bool:
+        return self._is_muted
+
+    @is_muted.setter
+    def is_muted(self, value: bool) -> None:
+        self._is_muted = value
+
+        with QSignalBlocker(self.mute_btn):
+            self.mute_btn.setChecked(value)
+
+        self._update_mute_icon()
+
     @property
     def fps(self) -> Fraction:
-        """FPS info for frame/time conversion"""
-        return self._fps if hasattr(self, "_fps") else Fraction(0)
+        return getattr(self, "_fps", Fraction(0))
 
     @fps.setter
     def fps(self, value: Fraction | float) -> None:
@@ -991,6 +1105,9 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         )
         menu_pos = event.globalPos()
         menu_pos.setY(menu_pos.y() - self.context_menu.sizeHint().height())
+
+        self.audio_output_combo.setEnabled(self.audio_output_combo.count() > 0)
+
         self.context_menu.exec(menu_pos)
 
     def _on_seek_step_changed(self, value: int) -> None:
@@ -1080,6 +1197,19 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.playZone.emit(self.settings.zone_frames, self.settings.loop)
         self.context_menu.close()
 
+    @run_in_loop
+    def set_audio_outputs(self, aoutputs: list[AudioOutput]) -> None:
+        with QSignalBlocker(self.audio_output_combo):
+            self.audio_output_combo.clear()
+            self.audio_output_combo.addItems(
+                [
+                    f"{a.vs_index}: {a.vs_name if a.vs_name else f'Audio {a.vs_index}'} ({a.chanels_layout.pretty_name})"  # noqa: E501
+                    for a in aoutputs
+                ]
+            )
+
+        self.audio_controls.setEnabled(len(aoutputs) > 0)
+
 
 class TimelineControlBar(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -1100,9 +1230,6 @@ class TimelineControlBar(QWidget):
 
         self.timeline = Timeline(self)
         self.timeline_layout.addWidget(self.timeline)
-
-        self.playback_timer = QTimer(self, timerType=Qt.TimerType.PreciseTimer)
-        self.is_playing = False
 
     def set_playback_controls_enabled(self, enabled: bool) -> None:
         """

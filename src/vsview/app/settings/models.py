@@ -588,6 +588,18 @@ class ViewSettings(BaseModel):
         ),
     ] = 15
 
+    audio_buffer_size: Annotated[
+        int,
+        Spin(
+            label="Audio Buffer Size",
+            min=1,
+            max=10,
+            suffix=" frames",
+            tooltip="Number of audio frames to buffer both in memory and on the audio device.\n"
+            "3 is a good default. Increase it if you experience audio stuttering or dropouts.",
+        ),
+    ] = 3
+
     cache_size: Annotated[
         int,
         Spin(

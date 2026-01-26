@@ -456,7 +456,7 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
         self.content = CodeContent(self.code_dock.editor.toPlainText(), self.filename)
 
         if not self.loaded_once:
-            return self.load_content(self.content, self._playback.current_frame, self.current_tab_index)
+            return self.load_content(self.content, self.playback.current_frame, self.current_tab_index)
 
         return super().reload_content()
 

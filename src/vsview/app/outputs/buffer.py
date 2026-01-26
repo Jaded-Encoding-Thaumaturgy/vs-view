@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import gc
 from collections import deque
-from concurrent.futures import Future
+from collections.abc import Callable
+from concurrent.futures import Future, wait
 from logging import getLogger
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -13,17 +14,21 @@ from ...vsenv import run_in_background
 from ..settings import SettingsManager
 
 if TYPE_CHECKING:
+    from .audio import AudioOutput
     from .video import VideoOutput
 
 logger = getLogger(__name__)
 
 
 class FrameBundle(NamedTuple):
-    """A bundle of frames for a single frame number: main frame + plugin frames."""
-
     n: int
     main_future: Future[vs.VideoFrame]
     plugin_futures: dict[str, Future[vs.VideoFrame]]
+
+
+class AudioBundle(NamedTuple):
+    n: int
+    future: Future[vs.AudioFrame]
 
 
 class FrameBuffer:
@@ -81,6 +86,21 @@ class FrameBuffer:
                 current_n = next_frame
             else:
                 break
+
+    def wait_for_first_frame(self, timeout: float | None = None, stall_cb: Callable[[], None] | None = None) -> None:
+        if self._invalidated or not self._bundles:
+            return
+
+        first_frame = self._bundles[-1]
+
+        # Wait for both main frame and all registered plugin frames
+        _, undone = wait([first_frame.main_future, *first_frame.plugin_futures.values()], timeout)
+
+        if undone and stall_cb:
+            stall_cb()
+
+        for f in [first_frame.main_future, *first_frame.plugin_futures.values()]:
+            f.result()
 
     def invalidate(self) -> Future[None]:
         self._invalidated = True
@@ -180,6 +200,135 @@ class FrameBuffer:
                 plugin_futures[identifier] = node.get_frame_async(n)
 
         return FrameBundle(n, main_future, plugin_futures)
+
+    def _calculate_next_frame(self, current_frame: int) -> int | None:
+        next_frame = current_frame + 1
+
+        if self._loop_range and next_frame >= self._loop_range.stop:
+            return self._loop_range.start
+
+        return next_frame if next_frame < self._total_frames else None
+
+
+class AudioBuffer:
+    """Manages async pre-fetching of audio frames during playback."""
+
+    __slots__ = (
+        "_bundles",
+        "_invalidated",
+        "_loop_range",
+        "_size",
+        "_total_frames",
+        "audio_output",
+        "env",
+    )
+
+    def __init__(self, audio_output: AudioOutput, env: ManagedEnvironment) -> None:
+        self.audio_output = audio_output
+        self.env = env
+
+        self._size = SettingsManager.global_settings.view.audio_buffer_size
+        self._bundles = deque[AudioBundle]()
+        self._total_frames = audio_output.prepared_audio.num_frames
+        self._loop_range: range | None = None
+        self._invalidated = False
+
+    def allocate(self, start_frame: int, loop_range: range | None = None) -> None:
+        self._loop_range = loop_range
+
+        logger.debug(
+            "Allocating audio buffer: start=%d, buffering %d frames",
+            start_frame,
+            self._size,
+        )
+
+        with self.env.use():
+            next_n = start_frame + 1
+
+            for _ in range(self._size):
+                if self._invalidated or next_n is None:
+                    break
+
+                self._bundles.appendleft(AudioBundle(next_n, self.audio_output.prepared_audio.get_frame_async(next_n)))
+                next_n = self._calculate_next_frame(next_n)
+
+    def wait_for_first_frame(self, timeout: float | None = None, stall_cb: Callable[[], None] | None = None) -> None:
+        if self._invalidated or not self._bundles:
+            return
+
+        first_frame = self._bundles[-1]
+
+        _, undone = wait([first_frame.future], timeout)
+
+        if undone and stall_cb:
+            stall_cb()
+
+        first_frame.future.result()
+
+    def invalidate(self) -> Future[None]:
+        self._invalidated = True
+        return self.clear()
+
+    def get_next_frame(self) -> tuple[int, vs.AudioFrame] | None:
+        """
+        Get the next buffered audio frame and request a new one at the front.
+
+        Returns None if the next frame isn't ready yet or buffer is empty.
+        """
+        if self._invalidated or not self._bundles:
+            return None
+
+        if not self._bundles[-1].future.done():
+            return None
+
+        bundle = self._bundles.pop()
+
+        try:
+            frame = bundle.future.result()
+        except Exception:
+            logger.exception("Failed to get audio frame %d", bundle.n)
+            return None
+
+        # Request next frame at the front of the buffer
+        if not self._invalidated and self._bundles:
+            next_frame = self._calculate_next_frame(self._bundles[0].n)
+
+            if next_frame is not None:
+                with self.env.use():
+                    self._bundles.appendleft(
+                        AudioBundle(next_frame, self.audio_output.prepared_audio.get_frame_async(next_frame))
+                    )
+
+        return bundle.n, frame
+
+    @run_in_background(name="ClearAudioBuffer")
+    def clear(self) -> None:
+        """Clear all buffered frames and trigger garbage collection."""
+        bundles = list(self._bundles)
+        self._bundles.clear()
+
+        frames_to_close = list[vs.AudioFrame]()
+
+        for bundle in bundles:
+            try:
+                frame = bundle.future.result()
+                frames_to_close.append(frame)
+            except Exception:
+                logger.error("Failed to get audio frame for cleanup")
+                logger.debug("Full traceback:", exc_info=True)
+
+        for frame in frames_to_close:
+            try:
+                frame.close()
+            except Exception:
+                logger.error("Failed to close audio frame during cleanup")
+                logger.debug("Full traceback:", exc_info=True)
+
+        del frames_to_close
+        del bundles
+        gc.collect()
+
+        logger.debug("Audio buffer cleared")
 
     def _calculate_next_frame(self, current_frame: int) -> int | None:
         next_frame = current_frame + 1
