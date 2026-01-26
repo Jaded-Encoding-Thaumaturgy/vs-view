@@ -767,7 +767,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
     seekStepReset = Signal()
     settingsChanged = Signal(int, float, bool)  # seek_step, speed, uncapped
     playZone = Signal(int, bool)  # zone_frames, loop
-    volumeChanged = Signal(int)  # volume 0-100
+    volumeChanged = Signal(float)  # volume 0.0-1.0
     muteChanged = Signal(bool)  # is_muted
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -821,8 +821,8 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         # Volume slider
         self.volume_slider = QSlider(Qt.Orientation.Horizontal, self.audio_controls)
-        self.volume_slider.setRange(0, 100)
-        self.volume_slider.setValue(50)
+        self.volume_slider.setRange(0, 1000)
+        self.volume_slider.setValue(500)
         self.volume_slider.setFixedWidth(60)
         self.volume_slider.setToolTip("Volume: 50%")
         self.volume_slider.valueChanged.connect(self._on_volume_changed)
@@ -832,7 +832,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.audio_controls.setEnabled(False)
 
         self._is_muted = False
-        self._volume = 50
+        self._volume = 0.5
 
         self._setup_context_menu()
 
@@ -1011,9 +1011,9 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         if self._volume == 0:
             icon_name = IconName.VOLUME_OFF
-        elif self._volume < 33:
+        elif self._volume < 0.33:
             icon_name = IconName.VOLUME_LOW
-        elif self._volume < 67:
+        elif self._volume < 0.67:
             icon_name = IconName.VOLUME_MID
         else:
             icon_name = IconName.VOLUME_HIGH
@@ -1026,28 +1026,30 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.muteChanged.emit(self._is_muted)
 
     def _on_volume_changed(self, value: int) -> None:
-        self._volume = value
-        self.volume_slider.setToolTip(f"Volume: {value}%")
+        self._volume = value / 1000.0
+        volume_text = f"Volume: {self._volume * 100:.0f}%"
+        self.volume_slider.setToolTip(volume_text)
+
         self._update_mute_icon()
 
         # Unmute if volume is changed while muted
-        if self._is_muted and value > 0:
+        if self._is_muted and self._volume > 0:
             self._is_muted = False
             self.mute_btn.setChecked(False)
             self.muteChanged.emit(False)
 
-        self.volumeChanged.emit(value)
+        self.volumeChanged.emit(self._volume)
 
     @property
-    def volume(self) -> int:
-        return 0 if self._is_muted else self._volume
+    def volume(self) -> float:
+        return 0.0 if self._is_muted else self._volume
 
     @volume.setter
-    def volume(self, value: int) -> None:
-        self._volume = clamp(value, 0, 100)
+    def volume(self, value: float) -> None:
+        self._volume = clamp(value, 0.0, 1.0)
 
         with QSignalBlocker(self.volume_slider):
-            self.volume_slider.setValue(self._volume)
+            self.volume_slider.setValue(round(self._volume * 1000))
 
         self._update_mute_icon()
 
