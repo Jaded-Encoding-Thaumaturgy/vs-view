@@ -146,20 +146,23 @@ class FrameBuffer:
                 frame = bundle.main_future.result()
                 frames_to_close.append(frame)
             except Exception:
-                logger.exception("Failed to get main frame %d for cleanup", bundle.n)
+                logger.error("Failed to get main frame %d for cleanup", bundle.n)
+                logger.debug("Full traceback:", exc_info=True)
 
             for identifier, fut in bundle.plugin_futures.items():
                 try:
                     frame = fut.result()
                     frames_to_close.append(frame)
                 except Exception:
-                    logger.exception("Failed to get plugin frame %s:%d for cleanup", identifier, bundle.n)
+                    logger.error("Failed to get plugin frame %s:%d for cleanup", identifier, bundle.n)
+                    logger.debug("Full traceback:", exc_info=True)
 
         for frame in frames_to_close:
             try:
                 frame.close()
             except Exception:
-                logger.exception("Failed to close frame during cleanup")
+                logger.error("Failed to close frame during cleanup")
+                logger.debug("Full traceback:", exc_info=True)
 
         del frames_to_close
         del bundles
