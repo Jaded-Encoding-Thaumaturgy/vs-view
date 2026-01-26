@@ -650,7 +650,6 @@ class LoaderWorkspace[T](BaseWorkspace):
             return
 
         self._stop_playback()
-        self.playback.wait_for_cleanup()
 
         logger.debug("Switched to video output: clip=%r", self.tab_manager.current_voutput.clip)
 
