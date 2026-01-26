@@ -188,8 +188,8 @@ class _PluginAPI(QObject):
                 continue
 
             for view in plugin.findChildren(PluginGraphicsView):
-                if view.current_tab in view.outputs and self.__workspace._playback.buffer:
-                    self.__workspace._playback.buffer.register_plugin_node(
+                if view.current_tab in view.outputs and self.__workspace.playback.buffer:
+                    self.__workspace.playback.buffer.register_plugin_node(
                         plugin.identifier, view.outputs[view.current_tab]
                     )
 
@@ -206,17 +206,14 @@ class _PluginAPI(QObject):
         if not self._is_truly_visible(plugin):
             return
 
-        tab_index = self.__workspace.current_tab_index
-        current_frame = self.__workspace.current_frame
-
         try:
-            plugin.on_current_voutput_changed(self.current_voutput, tab_index)
+            plugin.on_current_voutput_changed(self.current_voutput, self.__workspace.current_tab_index)
         except Exception:
             logger.exception("on_current_voutput_changed: Failed to initialize plugin %r", plugin)
             return
 
         try:
-            plugin.on_current_frame_changed(current_frame)
+            plugin.on_current_frame_changed(self.__workspace.playback.current_frame)
         except Exception:
             logger.exception("on_current_frame_changed: Failed to initialize plugin %r", plugin)
             return
@@ -249,7 +246,7 @@ class _PluginAPI(QObject):
             return
 
         tab_index = self.__workspace.current_tab_index
-        current_frame = self.__workspace.current_frame
+        current_frame = self.__workspace.playback.current_frame
 
         # Detect if we are actually changing tabs or forcing a refresh
         output_changed = view.current_tab != tab_index

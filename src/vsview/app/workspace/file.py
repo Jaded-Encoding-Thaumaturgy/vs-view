@@ -73,7 +73,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         return SettingsManager.get_local_settings(self.content)
 
     def save_settings(self) -> Future[None]:
-        self.local_settings.last_frame = self.current_frame
+        self.local_settings.last_frame = self.playback.current_frame
         self.local_settings.last_output_tab_index = self.tab_manager.tabs.currentIndex()
         self.local_settings.synchronization.sync_playhead = self.tab_manager.is_sync_playhead_enabled
         self.local_settings.synchronization.sync_zoom = self.tab_manager.is_sync_zoom_enabled
@@ -110,7 +110,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.tbar.playback_container.settings.loop = self.local_settings.playback.loop
 
         if frame is None:
-            self.current_frame = self.local_settings.last_frame
+            self.playback.current_frame = self.local_settings.last_frame
 
         if tab_index is None:
             self.current_tab_index = self.local_settings.last_output_tab_index
