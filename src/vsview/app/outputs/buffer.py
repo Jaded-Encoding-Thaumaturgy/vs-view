@@ -110,12 +110,9 @@ class FrameBuffer:
         """
         Get the next buffered frame set (main + plugins) and request a new one at the front.
 
-        Returns None if the next frame isn't ready yet.
+        Returns None if the buffer is empty.
         """
         if self._invalidated or not self._bundles:
-            return None
-
-        if not self._bundles[-1].main_future.done():
             return None
 
         bundle = self._bundles.pop()
@@ -146,8 +143,9 @@ class FrameBuffer:
                 logger.exception("Failed to get plugin frame %s for frame %d", identifier, bundle.n)
 
         # Request next frame set at the front of the buffer (if not invalidated)
-        if not self._invalidated and self._bundles:
-            next_frame = self._calculate_next_frame(self._bundles[0].n)
+        if not self._invalidated:
+            next_frame = self._calculate_next_frame(self._bundles[0].n if self._bundles else bundle.n)
+
             if next_frame is not None:
                 self._bundles.appendleft(self._request_bundle(next_frame))
 
@@ -273,12 +271,9 @@ class AudioBuffer:
         """
         Get the next buffered audio frame and request a new one at the front.
 
-        Returns None if the next frame isn't ready yet or buffer is empty.
+        Returns None if the buffer is empty.
         """
         if self._invalidated or not self._bundles:
-            return None
-
-        if not self._bundles[-1].future.done():
             return None
 
         bundle = self._bundles.pop()
@@ -290,8 +285,8 @@ class AudioBuffer:
             return None
 
         # Request next frame at the front of the buffer
-        if not self._invalidated and self._bundles:
-            next_frame = self._calculate_next_frame(self._bundles[0].n)
+        if not self._invalidated:
+            next_frame = self._calculate_next_frame(self._bundles[0].n if self._bundles else bundle.n)
 
             if next_frame is not None:
                 with self.env.use():

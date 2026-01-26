@@ -898,7 +898,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         total_frames = self.tab_manager.current_voutput.clip.num_frames
 
-        if self.playback.buffer and self.playback.buffer._bundles:
+        if self.playback.buffer:
             try:
                 result = self.playback.buffer.get_next_frame()
             except Exception as e:
@@ -938,14 +938,14 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self._schedule_or_continue()
                 return
 
-        # Skips frame
-        next_frame = self.playback.current_frame + 1
-
-        if next_frame >= total_frames:
+        if self.playback.current_frame + 1 >= total_frames:
             self._toggle_playback()
             return
 
-        self._schedule_or_continue()
+        if self.tbar.playback_container.settings.uncapped:
+            self.loop.from_thread(self._play_next_frame)
+        else:
+            self._schedule_or_continue()
 
     def _track_fps(self) -> None:
         now = perf_counter_ns()
@@ -960,10 +960,6 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.playback.last_fps_update_ns = now
 
     def _schedule_or_continue(self) -> None:
-        if self.tbar.playback_container.settings.uncapped:
-            self._play_next_frame()
-            return
-
         # Use absolute targets to prevent clock drift; catch up immediately if lagging
         self.playback.next_frame_time_ns += self.playback.frame_interval_ns
 
