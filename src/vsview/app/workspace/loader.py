@@ -1082,7 +1082,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         if not aoutput.setup_sink(
             self.tbar.playback_container.settings.speed,
-            self.tbar.playback_container.volume / 100.0,
+            self.tbar.playback_container.volume,
         ):
             return
 
@@ -1164,9 +1164,9 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.playback.audio_buffer.invalidate()
             self.playback.audio_buffer = None
 
-    def _on_volume_changed(self, volume: int) -> None:
+    def _on_volume_changed(self, volume: float) -> None:
         if aoutput := self.current_aoutput:
-            aoutput.volume = volume / 100.0
+            aoutput.volume = volume
 
     def _on_mute_changed(self, is_muted: bool) -> None:
         if is_muted:
