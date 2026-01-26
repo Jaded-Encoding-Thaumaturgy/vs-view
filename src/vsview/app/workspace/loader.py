@@ -352,6 +352,14 @@ class LoaderWorkspace[T](BaseWorkspace):
     def current_aoutput(self) -> AudioOutput | None:
         return self.aoutputs[self.tbar.playback_container.audio_output_combo.currentIndex()] if self.aoutputs else None
 
+    @property
+    def current_audio_index(self) -> int | None:
+        return getattr(self, "_current_audio_index", None)
+
+    @current_audio_index.setter
+    def current_audio_index(self, value: int | None) -> None:
+        self._current_audio_index = value
+
     def deleteLater(self) -> None:
         logger.debug(
             "%s(%r) deleteLater called, cleaning up resources",
@@ -483,7 +491,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         with QSignalBlocker(self.tab_manager):
             self.tab_manager.swap_tabs(tabs, self.current_tab_index)
 
-        self.tbar.playback_container.set_audio_outputs(self.aoutputs)
+        self.tbar.playback_container.set_audio_outputs(self.aoutputs, self.current_audio_index)
 
         # Load plugins in the load_content function so the plugins can get the file_path
         # and do VS things in the init since the environment is already created.
@@ -575,7 +583,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.tab_manager.autofit_btn.isChecked(),
             ).result()
 
-            self.tbar.playback_container.set_audio_outputs(self.aoutputs)
+            self.tbar.playback_container.set_audio_outputs(self.aoutputs, self.current_audio_index)
 
             @run_in_loop(return_future=False)
             def on_complete(f: Future[None]) -> None:
@@ -1175,6 +1183,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             self._restart_playback()
 
     def _on_audio_output_changed(self, index: int) -> None:
+        self.current_audio_index = index
         if self.playback.is_playing:
             self._restart_playback()
 

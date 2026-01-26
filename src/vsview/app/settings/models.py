@@ -552,6 +552,28 @@ class PlaybackSettings(BaseModel):
         ),
     ] = 0
 
+    default_volume: Annotated[
+        float,
+        Spin(
+            label="Default Volume",
+            suffix=" %",
+            from_ui=lambda v: v / 100,
+            to_ui=lambda v: int(v * 100),
+        ),
+    ] = 0.5
+
+    downmix: Annotated[
+        bool,
+        Checkbox(
+            label="Downmix",
+            text="Always downmix surround to stereo",
+            tooltip=(
+                "Always downmix surround to stereo when AudioNode is passed through "
+                "set_output and its downmix parameter is None (default)."
+            ),
+        ),
+    ] = True
+
 
 class ViewSettings(BaseModel):
     """Settings for the GraphicsView components"""
@@ -725,6 +747,10 @@ class LocalPlaybackSettings(BaseModel):
     uncapped: bool = False
     zone_frames: int = 100
     loop: bool = False
+
+    last_audio_index: int | None = None
+    current_volume: float = 0.5
+    muted: bool = False
 
     @property
     def seek_step(self) -> int:

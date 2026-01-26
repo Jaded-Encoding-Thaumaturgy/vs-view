@@ -84,7 +84,7 @@ def set_output(
     index: int = ...,
     /,
     *,
-    downmix: bool = True,
+    downmix: bool | None = None,
     **kwargs: Any,
 ) -> None: ...
 
@@ -95,7 +95,7 @@ def set_output(
     name: str | bool | None = ...,
     /,
     *,
-    downmix: bool = True,
+    downmix: bool | None = None,
     **kwargs: Any,
 ) -> None: ...
 
@@ -107,7 +107,7 @@ def set_output(
     name: str | bool | None = ...,
     /,
     *,
-    downmix: bool = True,
+    downmix: bool | None = None,
     **kwargs: Any,
 ) -> None: ...
 
@@ -145,7 +145,7 @@ def set_output(
     # denominator: int = 1001,
     # scenes: ScenesT = None,
     *,
-    downmix: bool = True,
+    downmix: bool | None = None,
     **kwargs: Any,
 ) -> None:
     """
@@ -175,8 +175,8 @@ def set_output(
         name: Explicit name override. If provided when index_or_name is an int,
             this sets the display name for the output.
         alpha: Optional alpha channel VideoNode (only for VideoNode outputs).
-        downmix: If True and a AudioNode is passed, assumes the audio is multi-channel (5.1 or 7.1)
-            and downmixes it to stereo.  Default to True.
+        downmix: if None (default), follows the global settings downmix of vsview if previewed
+            through vsview. Otherwise True or False forces the behavior.
         **kwargs: Additional keyword arguments (reserved for future use).
     """
     if isinstance(index_or_name, (str, bool)):

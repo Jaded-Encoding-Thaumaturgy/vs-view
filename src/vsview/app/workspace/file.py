@@ -86,16 +86,16 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.local_settings.playback.zone_frames = self.tbar.playback_container.settings.zone_frames
         self.local_settings.playback.loop = self.tbar.playback_container.settings.loop
 
+        self.local_settings.playback.last_audio_index = self.current_audio_index
+        self.local_settings.playback.current_volume = self.tbar.playback_container._volume
+        self.local_settings.playback.muted = self.tbar.playback_container.is_muted
+
         # Save layout state
         self.local_settings.layout.plugin_splitter_sizes = self.plugin_splitter.sizes()
         self.local_settings.layout.plugin_tab_index = self.plugin_splitter.plugin_tabs.currentIndex()
         self.local_settings.layout.dock_state = b64encode(self.dock_container.saveState().data()).decode("ascii")
 
-        return self._save_settings_worker()
-
-    @run_in_background(name="SaveSettings")
-    def _save_settings_worker(self) -> None:
-        SettingsManager.save_local(self.content, self.local_settings)
+        return self.loop.to_thread_named("SaveSettings", SettingsManager.save_local, self.content, self.local_settings)
 
     def init_load(self, frame: int | None = None, tab_index: int | None = None) -> None:
         self.tab_manager.sync_playhead_btn.setChecked(self.local_settings.synchronization.sync_playhead)
@@ -108,6 +108,10 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.tbar.playback_container.settings.uncapped = self.local_settings.playback.uncapped
         self.tbar.playback_container.settings.zone_frames = self.local_settings.playback.zone_frames
         self.tbar.playback_container.settings.loop = self.local_settings.playback.loop
+
+        self.tbar.playback_container.volume = self.local_settings.playback.current_volume
+        self.tbar.playback_container.is_muted = self.local_settings.playback.muted
+        self.current_audio_index = self.local_settings.playback.last_audio_index
 
         if frame is None:
             self.playback.current_frame = self.local_settings.last_frame

@@ -822,7 +822,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         # Volume slider
         self.volume_slider = QSlider(Qt.Orientation.Horizontal, self.audio_controls)
         self.volume_slider.setRange(0, 1000)
-        self.volume_slider.setValue(500)
+        self.volume_slider.setValue(int(SettingsManager.global_settings.playback.default_volume * 1000))
         self.volume_slider.setFixedWidth(60)
         self.volume_slider.setToolTip("Volume: 50%")
         self.volume_slider.valueChanged.connect(self._on_volume_changed)
@@ -832,7 +832,8 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.audio_controls.setEnabled(False)
 
         self._is_muted = False
-        self._volume = 0.5
+        self._volume = SettingsManager.global_settings.playback.default_volume / 100
+        self._update_mute_icon()
 
         self._setup_context_menu()
 
@@ -1202,7 +1203,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.context_menu.close()
 
     @run_in_loop
-    def set_audio_outputs(self, aoutputs: list[AudioOutput]) -> None:
+    def set_audio_outputs(self, aoutputs: list[AudioOutput], index: int | None = None) -> None:
         with QSignalBlocker(self.audio_output_combo):
             self.audio_output_combo.clear()
             self.audio_output_combo.addItems(
@@ -1212,7 +1213,11 @@ class PlaybackContainer(QWidget, IconReloadMixin):
                 ]
             )
 
-        self.audio_controls.setEnabled(len(aoutputs) > 0)
+        if len(aoutputs) > 0:
+            self.audio_controls.setEnabled(True)
+
+            if index is not None:
+                self.audio_output_combo.setCurrentIndex(index)
 
 
 class TimelineControlBar(QWidget):

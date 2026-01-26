@@ -14,7 +14,7 @@ class VideoMetadata(NamedTuple):
 
 class AudioMetadata(NamedTuple):
     name: str
-    downmix: bool
+    downmix: bool | None
 
 
 class DefaultUserDict[K, V](UserDict[K, V]):

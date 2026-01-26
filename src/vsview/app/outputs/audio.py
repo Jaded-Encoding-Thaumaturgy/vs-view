@@ -77,7 +77,11 @@ class AudioOutput:
         self.vs_output = vs_output
         self.vs_index = vs_index
         self.vs_name = metadata.name if metadata else None
-        self.downmix = metadata.downmix if metadata else None
+        self.downmix = (
+            metadata.downmix
+            if metadata and metadata.downmix is not None
+            else SettingsManager.global_settings.playback.downmix
+        )
         self.chanels_layout = PrettyChannelsLayout(tuple(self.vs_output.channels))
 
         # Playback node
