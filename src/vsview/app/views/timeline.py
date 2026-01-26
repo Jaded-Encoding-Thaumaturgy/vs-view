@@ -1030,6 +1030,8 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         volume_text = f"Volume: {self._volume * 100:.0f}%"
         self.volume_slider.setToolTip(volume_text)
 
+        QToolTip.showText(QCursor.pos(), volume_text, self.volume_slider)
+
         self._update_mute_icon()
 
         # Unmute if volume is changed while muted
