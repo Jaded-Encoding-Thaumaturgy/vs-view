@@ -1112,11 +1112,3 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
             e.__traceback__ = None
 
             raise RuntimeError("Script execution failed") from None
-
-    def clear_environment(self) -> None:
-        super().clear_environment()
-
-        if hasattr(self, "script"):
-            return clear_environment(self.script)
-
-        return None

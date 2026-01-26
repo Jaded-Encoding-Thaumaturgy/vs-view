@@ -70,5 +70,5 @@ class BaseWorkspace(QMainWindow):
         return super().deleteLater()
 
     def clear_environment(self) -> None:
-        if self._env:
-            clear_environment(self._env)
+        if env := getattr(self, "script", self._env):
+            clear_environment(env)
