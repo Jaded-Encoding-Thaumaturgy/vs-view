@@ -220,48 +220,44 @@ class AudioOutput:
         Create a stereo downmix of the source audio using std.AudioMix.
         """
 
-        num_channels = self.vs_output.num_channels
+        audio = self.vs_output
+
 
         # Build downmix matrix
         # 5.1/7.1 to stereo downmix coefficients:
-        # L = 1.0*L + 0.707*C + 0.707*Ls + 0.0*LFE
-        # R = 1.0*R + 0.707*C + 0.707*Rs + 0.0*LFE
+        # L = 1.0*L + 0.707*C + 0.707*Ls + 0.707*Lb
+        # R = 1.0*R + 0.707*C + 0.707*Rs + 0.707*Rb
 
-        left_coeffs = [0.0] * num_channels
-        right_coeffs = [0.0] * num_channels
+        left_coeffs = [0.0] * audio.num_channels
+        right_coeffs = [0.0] * audio.num_channels
 
-        # Standard layout: L, R, C, LFE, Ls, Rs
-        left_coeffs[0] = 1.0  # Left
-        right_coeffs[1] = 1.0  # Right
+        for i, channel in enumerate(audio.channels):
+            match channel:
+                case vs.AudioChannels.FRONT_LEFT:
+                    left_coeffs[i] = 1.0
+                case vs.AudioChannels.FRONT_RIGHT:
+                    right_coeffs[i] = 1.0
+                case vs.AudioChannels.FRONT_CENTER:
+                    left_coeffs[i] = self.DOWNMIX_COEFF
+                    right_coeffs[i] = self.DOWNMIX_COEFF
+                case vs.AudioChannels.SIDE_LEFT | vs.AudioChannels.BACK_LEFT:
+                    left_coeffs[i] = self.DOWNMIX_COEFF
+                case vs.AudioChannels.SIDE_RIGHT | vs.AudioChannels.BACK_RIGHT:
+                    right_coeffs[i] = self.DOWNMIX_COEFF
 
-        # Center
-        if num_channels >= 3:
-            left_coeffs[2] = self.DOWNMIX_COEFF
-            right_coeffs[2] = self.DOWNMIX_COEFF
-
-        # Skip LFE (3)
-
-        if num_channels >= 6:
-            left_coeffs[4] = self.DOWNMIX_COEFF  # Left Surround
-            right_coeffs[5] = self.DOWNMIX_COEFF  # Right Surround
-
-        if num_channels >= 8:
-            left_coeffs[6] = self.DOWNMIX_COEFF  # Side Left
-            right_coeffs[7] = self.DOWNMIX_COEFF  # Side Right
-
-        # Calculate normalization using root-sum-square to preserve power.
         normalization = max(sum(c**2 for c in left_coeffs) ** 0.5, sum(c**2 for c in right_coeffs) ** 0.5, 1.0)
 
         final_matrix = [(c / normalization) for c in (left_coeffs + right_coeffs)]
 
         logger.debug(
-            "Creating downmix: %d channels -> Stereo. Normalization: %.4f. Matrix: %s",
-            num_channels,
+            "Creating downmix: %d channels -> Stereo. Normalization: %.4f. Matrix: %s. Layout: %s",
+            audio.num_channels,
             normalization,
             final_matrix,
+            [c.name for c in audio.channels],
         )
 
-        return self.vs_output.std.AudioMix(matrix=final_matrix, channels_out=[vs.FRONT_LEFT, vs.FRONT_RIGHT])
+        return audio.std.AudioMix(matrix=final_matrix, channels_out=[vs.FRONT_LEFT, vs.FRONT_RIGHT])
 
     def time_to_frame(self, seconds: float, *, eps: float = 1e-6) -> int:
         return cround(seconds * self.fps, eps=eps)
