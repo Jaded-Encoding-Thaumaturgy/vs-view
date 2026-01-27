@@ -48,6 +48,7 @@ plugins = [
     "vsview-split-planes",
     "vsview-fftspectrum",
     "vsview-frameprops-more",
+    "vsview-audio-convert",
 ]
 
 [project.scripts]
@@ -89,6 +90,7 @@ vspackrgb = { workspace = true }
 vsview-fftspectrum = { workspace = true }
 vsview-split-planes = { workspace = true }
 vsview-frameprops-more = { workspace = true }
+vsview-audio-convert = { workspace = true }
 
 [tool.mypy]
 mypy_path = "$MYPY_CONFIG_FILE_DIR/stubs"
