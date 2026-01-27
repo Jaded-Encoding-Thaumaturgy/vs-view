@@ -26,7 +26,6 @@ class PluginManager(Singleton):
     def __init__(self) -> None:
         self.manager = pluggy.PluginManager("vsview")
         self._signals = PluginSignals()
-        self._loaded = False
         self._settings_extracted = False
         self._load_future: Future[None] | None = None
 
@@ -44,7 +43,7 @@ class PluginManager(Singleton):
 
     @inject_self.property
     def loaded(self) -> bool:
-        return self._loaded
+        return self._load_future is not None and self._load_future.done()
 
     @inject_self.property
     def signals(self) -> PluginSignals:
@@ -52,7 +51,7 @@ class PluginManager(Singleton):
 
     @inject_self
     def load(self) -> None:
-        if self._loaded or self._load_future:
+        if self._load_future:
             return
 
         self._load_future = self._load_worker()
@@ -70,7 +69,6 @@ class PluginManager(Singleton):
         logger.debug("Loading entrypoints...")
         n = self.manager.load_setuptools_entrypoints("vsview")
 
-        self._loaded = True
         self._signals.pluginsLoaded.emit()
 
         logger.debug("Loaded %d third party plugins", n)
