@@ -12,8 +12,10 @@ on:
         options:
           - vsview
           - vspackrgb
-          - split-planes
+          - audio-convert
           - fftspectrum
+          - frameprops-more
+          - split-planes
 
 env:
   PYTHON_VERSION: "3.14"
@@ -33,12 +35,18 @@ jobs:
           - tag: vsview
             package: vsview
             path: .
-          - tag: split-planes
-            package: vsview-split-planes
-            path: src/plugins/split-planes
+          - tag: audio-convert
+            package: vsview-audio-convert
+            path: src/plugins/audio-convert
           - tag: fftspectrum
             package: vsview-fftspectrum
             path: src/plugins/fftspectrum
+          - tag: frameprops-more
+            package: vsview-frameprops-more
+            path: src/plugins/frameprops-more
+          - tag: split-planes
+            package: vsview-split-planes
+            path: src/plugins/split-planes
 
     uses: ./.github/workflows/publish-py-pkg.yml
     with:
@@ -119,7 +127,7 @@ jobs:
     needs: [vspackrgb_build, vspackrgb_sdist]
 
     environment:
-      name: pypi
+      name: pypi-vspackrgb
       url: https://pypi.org/p/vspackrgb
 
     permissions:
