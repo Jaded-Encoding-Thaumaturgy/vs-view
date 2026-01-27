@@ -3,7 +3,7 @@ requires = ["hatchling", "versioningit"]
 build-backend = "hatchling.build"
 
 [project]
-name = "vsview-frameprops-more"
+name = "vsview-frameprops-extended"
 dynamic = ["version"]
 description = "A vsview plugin adding more categories and formatters to the built-in vsview frameprops tool"
 readme = "README.md"
@@ -24,7 +24,7 @@ dependencies = ["vsview", "vsjetpack>=1.0.0"]
 vsview_frameprops_more = "vsview_frameprops_more"
 
 [project.urls]
-"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/frameprops-more"
+"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/frameprops-extended"
 "Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
 "Contact" = "https://discord.gg/XTpc6Fa9eB"
 
@@ -35,8 +35,8 @@ vsview = { workspace = true }
 source = "versioningit"
 
 [tool.versioningit.vcs]
-match = ["frameprops-more/v*"]
-default-tag = "frameprops-more/v0.0.0"
+match = ["frameprops-extended/v*"]
+default-tag = "frameprops-extended/v0.0.0"
 
 [tool.versioningit.tag2version]
-rmprefix = "frameprops-more/v"
+rmprefix = "frameprops-extended/v"

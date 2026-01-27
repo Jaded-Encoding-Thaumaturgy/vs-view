@@ -47,7 +47,7 @@ dev = [
 plugins = [
     "vsview-split-planes",
     "vsview-fftspectrum",
-    "vsview-frameprops-more",
+    "vsview-frameprops-extended",
     "vsview-audio-convert",
 ]
 
@@ -55,7 +55,7 @@ plugins = [
 vsview = "vsview.cli:app"
 
 [project.optional-dependencies]
-essential = ["vsview-split-planes", "vsview-frameprops-more"]
+essential = ["vsview-split-planes", "vsview-frameprops-extended"]
 
 [project.urls]
 # Documentation = ""
@@ -88,7 +88,7 @@ members = ["src/vspackrgb", "src/plugins/*"]
 vspackrgb = { workspace = true }
 vsview-fftspectrum = { workspace = true }
 vsview-split-planes = { workspace = true }
-vsview-frameprops-more = { workspace = true }
+vsview-frameprops-extended = { workspace = true }
 vsview-audio-convert = { workspace = true }
 
 [tool.mypy]

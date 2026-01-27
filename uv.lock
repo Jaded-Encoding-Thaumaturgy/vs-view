@@ -12,7 +12,7 @@ members = [
     "vsview",
     "vsview-audio-convert",
     "vsview-fftspectrum",
-    "vsview-frameprops-more",
+    "vsview-frameprops-extended",
     "vsview-split-planes",
 ]
 
@@ -637,7 +637,7 @@ dependencies = [
 
 [package.optional-dependencies]
 essential = [
-    { name = "vsview-frameprops-more" },
+    { name = "vsview-frameprops-extended" },
     { name = "vsview-split-planes" },
 ]
 
@@ -652,7 +652,7 @@ dev = [
 plugins = [
     { name = "vsview-audio-convert" },
     { name = "vsview-fftspectrum" },
-    { name = "vsview-frameprops-more" },
+    { name = "vsview-frameprops-extended" },
     { name = "vsview-split-planes" },
 ]
 
@@ -668,7 +668,7 @@ requires-dist = [
     { name = "vapoursynth", specifier = ">=69" },
     { name = "vsjetengine", specifier = ">=1.0.0" },
     { name = "vspackrgb", editable = "src/vspackrgb" },
-    { name = "vsview-frameprops-more", marker = "extra == 'essential'", editable = "src/plugins/frameprops-more" },
+    { name = "vsview-frameprops-extended", marker = "extra == 'essential'", editable = "src/plugins/frameprops-extended" },
     { name = "vsview-split-planes", marker = "extra == 'essential'", editable = "src/plugins/split-planes" },
 ]
 provides-extras = ["essential"]
@@ -684,7 +684,7 @@ dev = [
 plugins = [
     { name = "vsview-audio-convert", editable = "src/plugins/audio-convert" },
     { name = "vsview-fftspectrum", editable = "src/plugins/fftspectrum" },
-    { name = "vsview-frameprops-more", editable = "src/plugins/frameprops-more" },
+    { name = "vsview-frameprops-extended", editable = "src/plugins/frameprops-extended" },
     { name = "vsview-split-planes", editable = "src/plugins/split-planes" },
 ]
 
@@ -713,8 +713,8 @@ requires-dist = [
 ]
 
 [[package]]
-name = "vsview-frameprops-more"
-source = { editable = "src/plugins/frameprops-more" }
+name = "vsview-frameprops-extended"
+source = { editable = "src/plugins/frameprops-extended" }
 dependencies = [
     { name = "vsjetpack" },
     { name = "vsview" },

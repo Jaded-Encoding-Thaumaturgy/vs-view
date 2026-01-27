@@ -14,7 +14,7 @@ on:
           - vspackrgb
           - audio-convert
           - fftspectrum
-          - frameprops-more
+          - frameprops-extended
           - split-planes
 
 env:

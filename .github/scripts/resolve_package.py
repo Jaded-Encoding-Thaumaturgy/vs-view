@@ -20,13 +20,15 @@ def main() -> None:
         if match:
             target = match.group(1)
 
+    # fmt: off
     all_pkgs = [
         {"tag": "vsview", "package": "vsview", "path": "."},
         {"tag": "audio-convert", "package": "vsview-audio-convert", "path": "src/plugins/audio-convert"},
         {"tag": "fftspectrum", "package": "vsview-fftspectrum", "path": "src/plugins/fftspectrum"},
-        {"tag": "frameprops-more", "package": "vsview-frameprops-more", "path": "src/plugins/frameprops-more"},
+        {"tag": "frameprops-extended", "package": "vsview-frameprops-extended", "path": "src/plugins/frameprops-extended"},  # noqa: E501
         {"tag": "split-planes", "package": "vsview-split-planes", "path": "src/plugins/split-planes"},
     ]
+    # fmt: on
 
     filtered = [p for p in all_pkgs if p["tag"] == target]
 
