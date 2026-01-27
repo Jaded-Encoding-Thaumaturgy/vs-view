@@ -5,7 +5,7 @@
 These features are present in VSPreview and need to be brought over.
 
 - [ ] VFR support + timecode files loading
-- [ ] Audio support
+- [x] Audio support
 - [ ] Scening (+ API for custom notches on the timeline)
 - [ ] Pipette
 - [ ] Benchmark (Likely a wrapper for `vspipe`)
@@ -29,7 +29,7 @@ These features are present in VSPreview and need to be brought over.
 - [x] View Menu: Toggle visibility for toolpanels/tooldocks
 - [ ] Theming: Add option for loading external QSS themes
 - [ ] Allow plugins to have configurable shortcuts.
-- [ ] Allow arbitrary hooks as plugin such as custom chroma resizers.
+- [x] Allow arbitrary hooks as plugin such as custom chroma resizers.
 
 ## Known Issues
 
