@@ -11,6 +11,7 @@ from .specs import hookimpl
 
 __all__ = [
     "LocalSettingsModel",
+    "NodeProcessor",
     "PluginAPI",
     "PluginGraphicsView",
     "PluginSettings",

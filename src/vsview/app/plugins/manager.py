@@ -40,6 +40,25 @@ class PluginManager(Singleton):
     def toolpanels(self) -> list[type[WidgetPluginBase]]:
         return self.manager.hook.vsview_register_toolpanel()
 
+    @inject_self.cached.property
+    def video_processor(self) -> type[NodeProcessor[VideoNode]] | None:
+        return self.manager.hook.vsview_get_video_processor()
+
+    @inject_self.cached.property
+    def audio_processor(self) -> type[NodeProcessor[AudioNode]] | None:
+        return self.manager.hook.vsview_get_audio_processor()
+
+    @property
+    def _all_plugins(self) -> list[type[WidgetPluginBase | NodeProcessor[Any]]]:
+        all_plugins: list[Any] = [*self.tooldocks, *self.toolpanels]
+
+        if vp := self.video_processor:
+            all_plugins.append(vp)
+        if ap := self.audio_processor:
+            all_plugins.append(ap)
+
+        return all_plugins
+
     @inject_self.property
     def settings_extracted(self) -> bool:
         return self._settings_extracted
@@ -98,13 +117,19 @@ class PluginManager(Singleton):
         global_entries = list[SettingEntry]()
         local_entries = list[SettingEntry]()
 
-        for plugin in {*self.tooldocks, *self.toolpanels}:
-            if plugin.global_settings_model is None:
-                continue
-            section = f"Plugin - {plugin.display_name}"
+        for plugin in self._all_plugins:
+            global_model = plugin.global_settings_model
+            local_model = plugin.local_settings_model
+            identifier = plugin.identifier
+            display_name = plugin.display_name
 
-            global_entries.extend(extract_plugin_settings(plugin.global_settings_model, plugin.identifier, section))
-            local_entries.extend(extract_plugin_settings(plugin.local_settings_model, plugin.identifier, section))
+            if global_model is None:
+                continue
+
+            section = f"Plugin - {display_name}"
+
+            global_entries.extend(extract_plugin_settings(global_model, identifier, section))
+            local_entries.extend(extract_plugin_settings(local_model, identifier, section))
 
             self.populate_default_settings("global")
 
@@ -126,7 +151,7 @@ class PluginManager(Singleton):
 
         model_attr = f"{scope}_settings_model"
 
-        for plugin in {*self.tooldocks, *self.toolpanels}:
+        for plugin in self._all_plugins:
             if (model := getattr(plugin, model_attr)) is None:
                 continue
 

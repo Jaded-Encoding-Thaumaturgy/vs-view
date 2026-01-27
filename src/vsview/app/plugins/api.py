@@ -171,11 +171,13 @@ class LocalSettingsModel(BaseModel):
 if sys.version_info >= (3, 13):
     TGlobalSettings = TypeVar("TGlobalSettings", bound=BaseModel | None, default=None)
     TLocalSettings = TypeVar("TLocalSettings", bound=BaseModel | None, default=None)
+    NodeT = TypeVar("NodeT", bound=vs.RawNode)
 else:
     import typing_extensions
 
     TGlobalSettings = typing_extensions.TypeVar("TGlobalSettings", bound=BaseModel | None, default=None)
     TLocalSettings = typing_extensions.TypeVar("TLocalSettings", bound=BaseModel | None, default=None)
+    NodeT = typing_extensions.TypeVar("NodeT", bound=vs.RawNode)
 
 
 class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
@@ -185,7 +187,7 @@ class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     Returns None if no settings model is defined for the scope.
     """
 
-    def __init__(self, plugin: PluginBase[TGlobalSettings, TLocalSettings]) -> None:
+    def __init__(self, plugin: _PluginBase[TGlobalSettings, TLocalSettings]) -> None:
         self._plugin = plugin
 
     @property
@@ -332,3 +334,26 @@ class PluginGraphicsView(BaseGraphicsView):
         By default, it returns the clip as-is.
         """
         return clip
+
+
+# Node Processing Hooks
+class NodeProcessor(
+    _PluginBase[TGlobalSettings, TLocalSettings],
+    Generic[NodeT, TGlobalSettings, TLocalSettings],  # noqa: UP046
+    metaclass=_PluginBaseMeta,
+):
+    """Interface for objects that process VapourSynth nodes."""
+
+    __plugin_base__ = True
+
+    def prepare(self, node: NodeT, /) -> NodeT:
+        """
+        Process the input node and return a modified node of the same type.
+
+        Args:
+            node: The raw input node (VideoNode or AudioNode).
+
+        Returns:
+            The processed node compatible with the player's output requirements.
+        """
+        raise NotImplementedError

@@ -8,16 +8,19 @@ from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
 import vapoursynth as vs
-from jetpytools import clamp, cround, fallback
+from jetpytools import clamp, cround
 from PySide6.QtCore import QIODevice
 from PySide6.QtMultimedia import QAudio, QAudioFormat, QAudioSink
 from PySide6.QtWidgets import QApplication
 
 from ...vsenv import run_in_loop
+from ..plugins.manager import PluginManager
 from ..settings import SettingsManager
+from ..utils import LRUCache
 
 if TYPE_CHECKING:
     from ...api._helpers import AudioMetadata
+    from ..plugins import PluginAPI
 
 logger = getLogger(__name__)
 
@@ -73,13 +76,7 @@ class AudioOutput:
     # https://github.com/vapoursynth/vapoursynth/blob/8cd1cba539bf70eea21dc242d43349603115632d/include/VapourSynth4.h#L36
     SAMPLES_PER_FRAME = 3072
 
-    def __init__(
-        self,
-        vs_output: vs.AudioNode,
-        vs_index: int,
-        metadata: AudioMetadata | None = None,
-        delay: float | None = None,
-    ) -> None:
+    def __init__(self, vs_output: vs.AudioNode, vs_index: int, metadata: AudioMetadata | None) -> None:
         self.vs_output = vs_output
         self.vs_index = vs_index
         self.vs_name = metadata.name if metadata else None
@@ -90,27 +87,7 @@ class AudioOutput:
         )
         self.chanels_layout = PrettyChannelsLayout(tuple(self.vs_output.channels))
 
-        # Playback node
-        self.prepared_audio = self.get_prepared_audio(delay)
-
-        if self.prepared_audio.sample_type == vs.FLOAT:
-            self.array_type = "f"
-            sample_format = QAudioFormat.SampleFormat.Float
-        elif self.prepared_audio.bits_per_sample <= 16:
-            self.array_type = "h"
-            sample_format = QAudioFormat.SampleFormat.Int16
-        else:
-            self.array_type = "i"
-            sample_format = QAudioFormat.SampleFormat.Int32
-
-        self._audio_buffer = array(self.array_type, [0] * (self.SAMPLES_PER_FRAME * self.prepared_audio.num_channels))
-
-        self.qformat = QAudioFormat()
-        self.qformat.setChannelCount(self.prepared_audio.num_channels)
-        self.qformat.setSampleRate(self.prepared_audio.sample_rate)
-        self.qformat.setSampleFormat(sample_format)
-
-        self.sink = AudioSink(self.qformat)
+        self._cache_delay_audio = LRUCache[float, vs.AudioNode]()
 
     @property
     def fps(self) -> Fraction:
@@ -129,6 +106,53 @@ class AudioOutput:
         self._volume = clamp(value, 0.0, 1.0)
         self.sink.setVolume(self._volume)
 
+    def prepare_audio(self, delay_s: float, api: PluginAPI) -> None:
+        audio = self._cache_delay_audio.get(delay_s)
+
+        if audio is None:
+            audio = self.vs_output
+
+            if PluginManager.audio_processor:
+                audio = PluginManager.audio_processor(api).prepare(audio)
+
+            if self.vs_output.num_channels > 2 and self.downmix:
+                audio = self.create_stereo_downmix(audio)
+
+            # Apply audio delay
+            if delay_s != 0:
+                delay_samples = round(delay_s * audio.sample_rate)
+                abs_delay = abs(delay_samples)
+                silence = audio.std.BlankAudio(length=abs_delay, keep=True)
+
+                if delay_samples > 0:
+                    audio = (silence + audio)[: audio.num_samples]
+                elif delay_samples < 0:
+                    audio = (audio[abs_delay:] + silence)[: audio.num_samples]
+
+            self._cache_delay_audio[delay_s] = audio
+
+        self.prepared_audio = audio
+
+        # Playback node
+        if audio.sample_type == vs.FLOAT:
+            self.array_type = "f"
+            sample_format = QAudioFormat.SampleFormat.Float
+        elif audio.bits_per_sample <= 16:
+            self.array_type = "h"
+            sample_format = QAudioFormat.SampleFormat.Int16
+        else:
+            self.array_type = "i"
+            sample_format = QAudioFormat.SampleFormat.Int32
+
+        self._audio_buffer = array(self.array_type, [0] * (self.SAMPLES_PER_FRAME * audio.num_channels))
+
+        self.qformat = QAudioFormat()
+        self.qformat.setChannelCount(audio.num_channels)
+        self.qformat.setSampleRate(audio.sample_rate)
+        self.qformat.setSampleFormat(sample_format)
+
+        self.sink = AudioSink(self.qformat)
+
     def clear(self) -> None:
         """Clear VapourSynth resources."""
         if hasattr(self, "sink"):
@@ -140,21 +164,7 @@ class AudioOutput:
             with suppress(AttributeError):
                 delattr(self, name)
 
-    def get_prepared_audio(self, delay_s: float | None = None) -> vs.AudioNode:
-        audio = self.create_stereo_downmix() if self.vs_output.num_channels > 2 and self.downmix else self.vs_output
-
-        # Apply audio delay
-        if (delay := fallback(delay_s, SettingsManager.global_settings.playback.audio_delay)) != 0:
-            delay_samples = round(delay * audio.sample_rate)
-            abs_delay = abs(delay_samples)
-            silence = audio.std.BlankAudio(length=abs_delay, keep=True)
-
-            if delay_samples > 0:
-                audio = (silence + audio)[: audio.num_samples]
-            elif delay_samples < 0:
-                audio = (audio[abs_delay:] + silence)[: audio.num_samples]
-
-        return audio
+        self._cache_delay_audio.clear()
 
     def render_raw_audio_frame(self, frame: vs.AudioFrame) -> None:
         if not self.sink.ready:
@@ -215,13 +225,10 @@ class AudioOutput:
         )
         return True
 
-    def create_stereo_downmix(self) -> vs.AudioNode:
+    def create_stereo_downmix(self, audio: vs.AudioNode) -> vs.AudioNode:
         """
         Create a stereo downmix of the source audio using std.AudioMix.
         """
-
-        audio = self.vs_output
-
 
         # Build downmix matrix
         # 5.1/7.1 to stereo downmix coefficients:

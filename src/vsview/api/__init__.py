@@ -2,6 +2,7 @@
 
 from ..app.plugins import (
     LocalSettingsModel,
+    NodeProcessor,
     PluginAPI,
     PluginGraphicsView,
     PluginSettings,
@@ -25,6 +26,7 @@ __all__ = [
     "IconName",
     "IconReloadMixin",
     "LocalSettingsModel",
+    "NodeProcessor",
     "PlainTextEdit",
     "PluginAPI",
     "PluginGraphicsView",

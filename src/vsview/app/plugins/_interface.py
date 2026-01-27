@@ -344,7 +344,7 @@ class _PluginBaseMeta(ObjectType):
             return cls
 
         # WidgetPluginBase and NodeProcessor are now defined so it's safe to import them
-        from .api import WidgetPluginBase
+        from .api import NodeProcessor, WidgetPluginBase
 
         for base in get_original_bases(cls):
             if not (origin := get_origin(base)):
@@ -354,6 +354,8 @@ class _PluginBaseMeta(ObjectType):
 
             if issubclass(origin, WidgetPluginBase):
                 scope = ["global", "local"]
+            elif issubclass(origin, NodeProcessor):
+                scope = [None, "global", "local"]
             else:
                 continue
 

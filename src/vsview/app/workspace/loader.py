@@ -456,7 +456,9 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         try:
             for i, output in items:
-                aoutputs.append(AudioOutput(output, i, metadata.get(i), self.tbar.playback_container.audio_delay))
+                aoutput = AudioOutput(output, i, metadata.get(i))
+                aoutput.prepare_audio(self.tbar.playback_container.audio_delay, self.api)
+                aoutputs.append(aoutput)
         except Exception:
             for aoutput in aoutputs:
                 aoutput.clear()
@@ -1196,7 +1198,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         with self.env.use():
             for aoutput in self.aoutputs:
-                aoutput.prepared_audio = aoutput.get_prepared_audio(delay_s)
+                aoutput.prepare_audio(delay_s, self.api)
 
     def _copy_current_frame_to_clipboard(self) -> None:
         frame = self.tbar.playback_container.frame_edit.value()
