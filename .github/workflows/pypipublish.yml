@@ -21,50 +21,75 @@ env:
   PYTHON_VERSION: "3.14"
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.check.outputs.matrix }}
+      is-vspackrgb: ${{ steps.check.outputs.is-vspackrgb }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: check
+        run: python .github/scripts/resolve_package.py
+        env:
+          INPUT_PACKAGE: ${{ inputs.package }}
+
   # Pure Python packages
   python-package:
     name: ${{ matrix.package }}
+    needs: [prepare]
+    if: needs.prepare.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
 
     permissions:
-      contents: write
+      contents: read
       id-token: write
 
     strategy:
       matrix:
-        include:
-          - tag: vsview
-            package: vsview
-            path: .
-          - tag: audio-convert
-            package: vsview-audio-convert
-            path: src/plugins/audio-convert
-          - tag: fftspectrum
-            package: vsview-fftspectrum
-            path: src/plugins/fftspectrum
-          - tag: frameprops-more
-            package: vsview-frameprops-more
-            path: src/plugins/frameprops-more
-          - tag: split-planes
-            package: vsview-split-planes
-            path: src/plugins/split-planes
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
-    uses: ./.github/workflows/publish-py-pkg.yml
-    with:
-      tag: ${{ matrix.tag }}
-      package: ${{ matrix.package }}
-      path: ${{ matrix.path }}
-      python-version: "3.14"
-    secrets:
-      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+    environment:
+      name: pypi-${{ matrix.package }}
+      url: https://pypi.org/p/${{ matrix.package }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Build
+        working-directory: ${{ matrix.path }}
+        run: uvx hatch build
+
+      - name: Check the output
+        working-directory: ${{ matrix.path }}
+        run: uvx twine check --strict dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ matrix.path }}/dist
+
+      - name: Post webhook for failure
+        if: failure()
+        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@v1
+        with:
+          webhook-url: ${{ secrets.WEBHOOK_URL }}
 
   # vspackrgb - Cython package, needs cross-platform wheel builds
   vspackrgb_build:
     name: Build vspackrgb wheels (${{ matrix.os }})
+    needs: [prepare]
+    # Simplified condition using prepare output
+    if: needs.prepare.outputs.is-vspackrgb == 'true'
     runs-on: ${{ matrix.os }}
-
-    if: >-
-      github.event_name == 'workflow_dispatch' && inputs.package == 'vspackrgb' ||
-      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/vspackrgb/v')
 
     strategy:
       fail-fast: false
@@ -89,14 +114,11 @@ jobs:
           name: wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
 
-  # Build source distribution for vspackrgb
   vspackrgb_sdist:
     name: Build vspackrgb sdist
+    needs: [prepare]
+    if: needs.prepare.outputs.is-vspackrgb == 'true'
     runs-on: ubuntu-latest
-
-    if: >-
-      github.event_name == 'workflow_dispatch' && inputs.package == 'vspackrgb' ||
-      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/vspackrgb/v')
 
     steps:
       - name: Checkout repository
@@ -131,7 +153,7 @@ jobs:
       url: https://pypi.org/p/vspackrgb
 
     permissions:
-      contents: write
+      contents: read
       id-token: write
 
     steps:
