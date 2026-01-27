@@ -56,6 +56,11 @@ class PluginManager(Singleton):
 
         self._load_future = self._load_worker()
 
+    @inject_self
+    def wait_for_loaded(self) -> None:
+        if self._load_future:
+            self._load_future.result()
+
     @run_in_background(name="PluginManagerLoad")
     def _load_worker(self) -> None:
         self.manager.add_hookspecs(specs)
