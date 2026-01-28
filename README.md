@@ -6,7 +6,7 @@
 [![Lint](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/actions/workflows/lint.yml/badge.svg)](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/actions/workflows/lint.yml)
 [![Discord](https://img.shields.io/discord/856381934052704266?label=Discord&logo=discord&logoColor=7F71FF)](https://discord.gg/XTpc6Fa9eB)
 
-<img src="src/vsview/assets/loading.png" height="200"/>
+<img src="https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/raw/main/src/vsview/assets/loading.png" height="200"/>
 
 **The next-generation VapourSynth previewer**
 
@@ -53,4 +53,3 @@ uv run vsview
 If you are in an environment where you cannot compile C extensions,
 remove `"src/vspackrgb"` from `members` and comment out the `vspackrgb = { workspace = true }` line
 in `pyproject.toml` before running `uv sync` to use the pre-compiled version from PyPI.
-
