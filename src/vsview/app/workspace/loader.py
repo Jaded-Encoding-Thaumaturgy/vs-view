@@ -377,6 +377,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         self._stop_playback()
         self.playback.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
+        self.loop.wait_for_threads()
 
         self.tab_manager.deleteLater()
 

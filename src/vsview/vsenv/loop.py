@@ -10,6 +10,7 @@ from types import CoroutineType
 from typing import Any, Literal, cast, overload
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
+from PySide6.QtWidgets import QApplication
 from vsengine.loops import EventLoop, get_loop
 
 type _Coro[R] = CoroutineType[Any, Any, R]
@@ -29,6 +30,7 @@ class QtEventLoop(QObject, EventLoop):
         self._invoke.connect(self._on_invoke)
 
     def detach(self) -> None:
+        self.wait_for_threads(100)
         self._invoke.disconnect(self._on_invoke)
         self._pending.clear()
 
@@ -101,6 +103,17 @@ class QtEventLoop(QObject, EventLoop):
 
         QThreadPool.globalInstance().start(QRunnable.create(wrapper))
         return fut
+
+    def wait_for_threads(self, timeout_ms: int = 500) -> None:
+        """Wait for all background threads in the global thread pool to finish."""
+
+        pool = QThreadPool.globalInstance()
+
+        for _ in range(max(1, timeout_ms // 10)):
+            if pool.activeThreadCount() == 0:
+                break
+            pool.waitForDone(10)
+            QApplication.processEvents()
 
 
 @overload
