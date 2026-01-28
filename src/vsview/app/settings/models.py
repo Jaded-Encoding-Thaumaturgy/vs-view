@@ -710,7 +710,11 @@ class GlobalSettings(BaseSettings):
 
     __section__ = "General"
 
-    shortcuts: list[ShortcutConfig]  # Default generated from ActionID
+    shortcuts: list[ShortcutConfig] = Field(
+        default_factory=lambda: [
+            ShortcutConfig(action_id=action, key_sequence=action.default_key) for action in ActionID
+        ]
+    )
 
     autosave: Annotated[
         time,
@@ -864,10 +868,5 @@ class LocalSettings(BaseSettings):
 
 # Global settings file location is inside the package directory
 GLOBAL_SETTINGS_PATH = Path(__file__).parent.parent.parent / "global_settings.json"
-
-
-# Create default instances with generated shortcuts
-DEFAULT_GLOBAL_SETTINGS = GlobalSettings(
-    shortcuts=[ShortcutConfig(action_id=action, key_sequence=action.default_key) for action in ActionID]
-)
+DEFAULT_GLOBAL_SETTINGS = GlobalSettings()
 DEFAULT_LOCAL_SETTINGS = LocalSettings()
