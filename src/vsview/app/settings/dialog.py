@@ -307,12 +307,9 @@ class SettingsDialog(QDialog, IconReloadMixin):
             weight_combo.setCurrentIndex(weight_combo.findData(provider.default_weight))
 
     def _create_shortcuts_tab(self) -> SettingsTab:
-        from ..plugins.manager import PluginManager
         from .shortcuts import ShortcutManager
 
         self._shortcut_widgets = ShortcutWidgets()
-
-        plugin_display_names = {plugin.identifier: plugin.display_name for plugin in PluginManager.all_plugins}
 
         grouped_actions = dict[str, list[str]]()
 
@@ -321,8 +318,8 @@ class SettingsDialog(QDialog, IconReloadMixin):
             first_component = aid.split(".")[0]
 
             # Check if this is a plugin shortcut
-            if first_component in plugin_display_names:
-                group_name = f"Plugin - {plugin_display_names[first_component]}"
+            if first_component in self._plugin_display_names:
+                group_name = f"Plugin - {self._plugin_display_names[first_component]}"
             else:
                 group_name = first_component.title()
 
@@ -487,7 +484,8 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         for aid, editor in self._shortcut_widgets.editors.items():
             key = editor.keySequence().toString()
-            if key:
+            # Exclude plugin shortcuts from built-in shortcut conflict detection
+            if key and aid.split(".")[0] not in self._plugin_display_names:
                 key_to_actions.setdefault(key, []).append(aid)
 
         # Find conflicting keys (assigned to more than one action)
@@ -517,6 +515,12 @@ class SettingsDialog(QDialog, IconReloadMixin):
         from .shortcuts import ShortcutManager
 
         return {aid: d.default_key for aid, d in ShortcutManager.definitions.items()}
+
+    @cachedproperty
+    def _plugin_display_names(self) -> dict[str, str]:
+        from ..plugins.manager import PluginManager
+
+        return {plugin.identifier: plugin.display_name for plugin in PluginManager.all_plugins}
 
     def _reset_shortcut(self, aid: str) -> None:
         default_key = self._default_shortcuts.get(aid, "")
