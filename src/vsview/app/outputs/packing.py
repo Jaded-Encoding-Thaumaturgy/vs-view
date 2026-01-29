@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from functools import cache
 from logging import getLogger
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import vapoursynth as vs
 from PySide6.QtGui import QImage
@@ -32,14 +32,16 @@ class Packer(ABC):
         self.bit_depth = bit_depth
         self.vs_format, self.qt_format = Packer.FORMAT_CONFIG[bit_depth]
 
-    def to_rgb_planar(self, clip: vs.VideoNode) -> vs.VideoNode:
-        return clip.resize.Point(
+    def to_rgb_planar(self, clip: vs.VideoNode, **kwargs: Any) -> vs.VideoNode:
+        params = dict[str, Any](
             format=self.vs_format,
             dither_type=SettingsManager.global_settings.view.dither_type,
             resample_filter_uv=SettingsManager.global_settings.view.chroma_resizer.vs_func,
             filter_param_a_uv=SettingsManager.global_settings.view.chroma_resizer.param_a,
             filter_param_b_uv=SettingsManager.global_settings.view.chroma_resizer.param_b,
         )
+
+        return clip.resize.Point(**params | kwargs)
 
     @abstractmethod
     def to_rgb_packed(self, clip: vs.VideoNode) -> vs.VideoNode: ...
