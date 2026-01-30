@@ -295,10 +295,6 @@ class PlaybackManager(QObject):
         if self.state.is_playing:
             self._stop_playback()
 
-    def wait_for_cleanup(self, timeout: float | None = None, stall_cb: Callable[[], None] | None = None) -> None:
-        """Wait for buffer cleanup to complete."""
-        self.state.wait_for_cleanup(timeout, stall_cb)
-
     @run_in_background(name="StartPlayback")
     def _start_playback(self, loop_range: range | None = None, stop_at: int | None = None) -> None:
         logger.debug("Starting playback")

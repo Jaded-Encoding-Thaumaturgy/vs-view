@@ -237,7 +237,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         )
 
         self.playback.stop()
-        self.playback.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
+        self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
         self.loop.wait_for_threads()
 
         return super().deleteLater()
@@ -341,7 +341,10 @@ class LoaderWorkspace[T](BaseWorkspace):
         with self.tbar.disabled(), self.tab_manager.clear_voutputs_on_fail():
             self.loop.from_thread(self.content_area.setDisabled, True)
             self.tab_manager.disable_switch = True
-            self.playback.wait_for_cleanup(0.25, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
+            self.playback.state.wait_for_cleanup(
+                0.25,
+                stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
+            )
 
             # 1. Capture and Preserve State
             saved_state = self.tab_manager.current_view.state
@@ -409,7 +412,7 @@ class LoaderWorkspace[T](BaseWorkspace):
     @run_in_loop(return_future=False)
     def clear_failed_load(self) -> None:
         self.playback.stop()
-        self.playback.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
+        self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
 
         with QSignalBlocker(self.tab_manager.tabs):
             self.tab_manager.tabs.clear()
