@@ -237,12 +237,6 @@ class Timeline(QWidget):
         # Internal cursor state (can be Frame, Time, or raw int pixels)
         self._cursor_val: int | Frame | Time = 0
 
-        # Data needed for calculations
-        self.total_frames = 1000
-        self.total_time = Time(seconds=100)
-        # Same default as BlankClip
-        self.fps = Fraction(25)
-
         self.notches = dict[NotchProvider, list[Notch[Any]]]()
 
         # Optimization attributes
@@ -268,6 +262,27 @@ class Timeline(QWidget):
         self.mode_selector_action = QWidgetAction(self.context_menu)
         self.mode_selector_action.setDefaultWidget(self.mode_selector)
         self.context_menu.addAction(self.mode_selector_action)
+
+    @property
+    def total_frames(self) -> int:
+        if isinstance((parent := self.parent()), TimelineControlBar):
+            return parent.total_frames
+
+        raise NotImplementedError
+
+    @property
+    def fps(self) -> Fraction:
+        if isinstance((parent := self.parent()), TimelineControlBar):
+            return parent.fps
+
+        raise NotImplementedError
+
+    @property
+    def total_time(self) -> Time:
+        if isinstance((parent := self.parent()), TimelineControlBar):
+            return parent.total_time
+
+        raise NotImplementedError
 
     @property
     def cursor_x(self) -> int:
@@ -567,18 +582,6 @@ class Timeline(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
-        self.update()
-
-    def set_data(self, total_frames: int, fps: Fraction) -> None:
-        self.total_frames = total_frames
-        self.fps = fps
-
-        if self.fps.numerator > 0:
-            self.total_time = Time(seconds=total_frames * fps.denominator / fps.numerator)
-        else:
-            # FIXME: VFR update
-            self.total_time = Time(seconds=0)
-
         self.update()
 
     def set_sizes(self) -> None:
@@ -1095,11 +1098,10 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
     @property
     def fps(self) -> Fraction:
-        return getattr(self, "_fps", Fraction(0))
+        if isinstance((parent := self.parent()), TimelineControlBar):
+            return parent.fps
 
-    @fps.setter
-    def fps(self, value: Fraction | float) -> None:
-        self._fps = Fraction(value)
+        raise NotImplementedError
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         with QSignalBlocker(self.seek_step_spinbox):
@@ -1306,6 +1308,39 @@ class TimelineControlBar(QWidget):
 
         self.timeline = Timeline(self)
         self.timeline_layout.addWidget(self.timeline)
+
+    @property
+    def total_frames(self) -> int:
+        return self._total_frames
+
+    @property
+    def fps(self) -> Fraction:
+        return self._fps
+
+    @property
+    def total_time(self) -> Time:
+        if self._fps.numerator > 0:
+            return Time(seconds=self._total_frames * self._fps.denominator / self._fps.numerator)
+        return Time(seconds=0)
+
+    def set_data(self, total_frames: int, fps: Fraction) -> None:
+        self._total_frames = total_frames
+        self._fps = fps
+
+        self.timeline.update()
+
+        # Playback Container
+        with QSignalBlocker(self.playback_container.zone_frame_spinbox):
+            self.playback_container.zone_frame_spinbox.setMaximum(Frame(total_frames - 1))
+
+        with QSignalBlocker(self.playback_container.zone_time_edit):
+            self.playback_container.zone_time_edit.setMaximumTime(self.total_time.to_qtime())
+
+        with QSignalBlocker(self.playback_container.frame_edit):
+            self.playback_container.frame_edit.setMaximum(Frame(total_frames - 1))
+
+        with QSignalBlocker(self.playback_container.time_edit):
+            self.playback_container.time_edit.setMaximumTime(self.total_time.to_qtime())
 
     @run_in_loop(return_future=False)
     def set_playback_controls_enabled(self, enabled: bool) -> None:

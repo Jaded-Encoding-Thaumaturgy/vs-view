@@ -426,24 +426,16 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.debug("No voutput available")
             return
 
-        fps = voutput.clip.fps
         total_frames = voutput.clip.num_frames
+        fps = voutput.clip.fps
 
-        self.tbar.timeline.set_data(total_frames, fps)
+        self.tbar.set_data(total_frames, fps)
 
         # Use configured FPS history size, or auto-calculate from FPS when set to 0
         if (fps_history_size := self.global_settings.playback.fps_history_size) <= 0:
             fps_history_size = round(fps.numerator / fps.denominator)
 
         self.playback.state.fps_history = deque(maxlen=clamp(fps_history_size, 1, total_frames))
-
-        with QSignalBlocker(self.tbar.playback_container.frame_edit):
-            self.tbar.playback_container.frame_edit.setMaximum(Frame(total_frames - 1))
-
-        with QSignalBlocker(self.tbar.playback_container.time_edit):
-            self.tbar.playback_container.time_edit.setMaximumTime(self.tbar.timeline.total_time.to_qtime())
-
-        self.tbar.playback_container.fps = fps
 
     @run_in_loop
     def update_timeline_cursor(self, n: int) -> None:
