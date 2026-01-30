@@ -1304,6 +1304,7 @@ class TimelineControlBar(QWidget):
         self.timeline = Timeline(self)
         self.timeline_layout.addWidget(self.timeline)
 
+    @run_in_loop(return_future=False)
     def set_playback_controls_enabled(self, enabled: bool) -> None:
         """
         Enable or disable playback controls (except play/pause button).

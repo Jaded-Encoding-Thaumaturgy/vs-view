@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
 )
 
 from ...vsenv import run_in_background, run_in_loop
-from ..outputs import VideoOutput
 from ..settings import ActionID, SettingsManager, ShortcutManager
 
 logger = getLogger(__name__)
@@ -350,17 +349,11 @@ class GraphicsView(BaseGraphicsView):
     zoomChanged = Signal(float)
     autofitChanged = Signal(bool)
 
-    def __init__(self, output: VideoOutput, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-
-        self.output = output
 
         self.last_frame = 0
         self.loaded_once = False
-
-    def deleteLater(self) -> None:
-        self.output.clear()
-        return super().deleteLater()
 
     def set_zoom(self, value: float) -> None:
         super().set_zoom(value)

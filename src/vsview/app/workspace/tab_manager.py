@@ -109,20 +109,12 @@ class TabManager(QWidget, IconReloadMixin):
         sm.register_shortcut(ActionID.AUTOFIT_ALL_VIEWS, self.autofit_btn.toggle, self)
 
     @property
-    def voutputs(self) -> dict[int, VideoOutput]:
-        return {i: view.output for i, view in enumerate(self.tabs.views())}
-
-    @property
-    def current_voutput(self) -> VideoOutput | None:
-        return self.voutputs.get(self.tabs.currentIndex())
-
-    @property
     def current_view(self) -> GraphicsView:
         return self.tabs.currentWidget()
 
     @property
     def previous_view(self) -> GraphicsView:
-        return self.tabs.previous_view
+        return self.tabs.widget(self.tabs.previous_tab_index)
 
     @property
     def is_sync_playhead_enabled(self) -> bool:
@@ -147,7 +139,7 @@ class TabManager(QWidget, IconReloadMixin):
         new_tabs.setDocumentMode(True)
 
         for voutput in video_outputs:
-            view = GraphicsView(voutput, self)
+            view = GraphicsView(self)
             view.zoomChanged.connect(self._on_zoom_changed)
             view.autofitChanged.connect(partial(self._on_autofit_changed, view))
             view.statusSavingImageStarted.connect(self.statusLoadingStarted.emit)

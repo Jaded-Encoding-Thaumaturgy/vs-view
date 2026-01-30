@@ -337,7 +337,7 @@ class MainWindow(QMainWindow):
                 btn.workspace,
                 shortcut=QKeySequence(ShortcutManager.get_key(ActionID.RELOAD)),
             )
-            reload_action.setDisabled(btn.workspace.disable_reloading)
+            reload_action.setEnabled(btn.workspace.playback.can_reload)
             reload_action.triggered.connect(btn.workspace.reload_content)
             actions.append(reload_action)
 
@@ -376,7 +376,7 @@ class MainWindow(QMainWindow):
             self.status_widget.connect_workspace(widget)
             self._connected_workspace = widget
 
-            if widget.tab_manager.current_voutput:
+            if widget.outputs_manager.current_voutput:
                 widget._emit_output_info()
         else:
             self.status_widget.clear()

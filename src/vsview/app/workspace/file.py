@@ -56,11 +56,14 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.tab_manager.autofit_btn.toggled.connect(
             lambda checked: setattr(self.local_settings.synchronization, "autofit_all_views", checked)
         )
+        self.tbar.playback_container.settingsChanged.connect(
+            lambda seek_step, speed, uncapped: setattr(self.local_settings.playback, "seek_step", seek_step)
+        )
         SettingsManager.signals.localChanged.connect(self._on_local_settings_changed)
 
     def deleteLater(self) -> None:
         self._autosave_timer.stop()
-        self._stop_playback()
+        self.playback.stop()
 
         if hasattr(self, "content"):
             self.save_settings().result()
@@ -73,7 +76,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         return SettingsManager.get_local_settings(self.content)
 
     def save_settings(self) -> Future[None]:
-        self.local_settings.last_frame = self.playback.current_frame
+        self.local_settings.last_frame = self.playback.state.current_frame
         self.local_settings.last_output_tab_index = self.tab_manager.tabs.currentIndex()
         self.local_settings.synchronization.sync_playhead = self.tab_manager.is_sync_playhead_enabled
         self.local_settings.synchronization.sync_zoom = self.tab_manager.is_sync_zoom_enabled
@@ -86,7 +89,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.local_settings.playback.zone_frames = self.tbar.playback_container.settings.zone_frames
         self.local_settings.playback.loop = self.tbar.playback_container.settings.loop
 
-        self.local_settings.playback.last_audio_index = self.current_audio_index
+        self.local_settings.playback.last_audio_index = self.outputs_manager.current_audio_index
         self.local_settings.playback.current_volume = self.tbar.playback_container.raw_volume
         self.local_settings.playback.muted = self.tbar.playback_container.is_muted
         self.local_settings.playback.audio_delay = self.tbar.playback_container.audio_delay
@@ -113,13 +116,14 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.tbar.playback_container.volume = self.local_settings.playback.current_volume
         self.tbar.playback_container.is_muted = self.local_settings.playback.muted
         self.tbar.playback_container.audio_delay = self.local_settings.playback.audio_delay
-        self.current_audio_index = self.local_settings.playback.last_audio_index
+
+        self.outputs_manager.current_audio_index = self.local_settings.playback.last_audio_index
 
         if frame is None:
-            self.playback.current_frame = self.local_settings.last_frame
+            self.playback.state.current_frame = self.local_settings.last_frame
 
         if tab_index is None:
-            self.current_tab_index = self.local_settings.last_output_tab_index
+            self.outputs_manager.current_video_index = self.local_settings.last_output_tab_index
 
         PluginManager.populate_default_settings("local", self.content)
 
@@ -197,11 +201,6 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
             self.tab_manager.sync_zoom_btn.setChecked(self.local_settings.synchronization.sync_zoom)
             self.tab_manager.sync_scroll_btn.setChecked(self.local_settings.synchronization.sync_scroll)
             self.tab_manager.autofit_btn.setChecked(self.local_settings.synchronization.autofit_all_views)
-
-    def _on_playback_settings_changed(self, seek_step: int, speed: float, uncapped: bool) -> None:
-        self.local_settings.playback.seek_step = seek_step
-
-        super()._on_playback_settings_changed(seek_step, speed, uncapped)
 
 
 class VideoFileWorkspace(GenericFileWorkspace):

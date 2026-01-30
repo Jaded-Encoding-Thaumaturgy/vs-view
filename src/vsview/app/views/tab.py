@@ -23,14 +23,14 @@ class TabViewWidget(QTabWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self.recent_views = OrderedDict[GraphicsView, None]()
+        self.recent_tabs = OrderedDict[int, None]()
         self.currentChanged.connect(self._on_current_changed)
 
     @property
-    def previous_view(self) -> GraphicsView:
-        """Get the previously active view, or the only view if just one exists."""
-        views = list(self.recent_views)
-        return views[-2] if len(views) >= 2 else views[0]
+    def previous_tab_index(self) -> int:
+        """Get the index of the previously active tab, or the only tab if just one exists."""
+        tabs = list(self.recent_tabs)
+        return tabs[-2] if len(tabs) >= 2 else tabs[0]
 
     @copy_signature(QTabWidget.addTab)
     def addTab(self, *args: Any) -> int:
@@ -40,10 +40,8 @@ class TabViewWidget(QTabWidget):
         return super().addTab(*args)
 
     def removeTab(self, index: int, /) -> None:
-        widget = self.widget(index)
-
-        if isinstance(widget, GraphicsView) and widget in self.recent_views:
-            del self.recent_views[widget]
+        if index in self.recent_tabs:
+            del self.recent_tabs[index]
 
         super().removeTab(index)
 
@@ -73,12 +71,20 @@ class TabViewWidget(QTabWidget):
 
         return super().setCurrentWidget(widget)
 
+    def widget(self, index: int) -> GraphicsView:
+        view = super().widget(index)
+
+        if not isinstance(view, GraphicsView):
+            raise ValueError("Current widget is not a GraphicsView")
+
+        return view
+
     def deleteLater(self) -> None:
         self.clear()
         return super().deleteLater()
 
     def clear(self) -> None:
-        self.recent_views.clear()
+        self.recent_tabs.clear()
 
         for view in self.views():
             view.clear_scene()
@@ -126,13 +132,10 @@ class TabViewWidget(QTabWidget):
         if index == -1:
             return
 
-        widget = self.widget(index)
-
-        if isinstance(widget, GraphicsView):
-            if widget in self.recent_views:
-                self.recent_views.move_to_end(widget)
-            else:
-                self.recent_views[widget] = None
+        if index in self.recent_tabs:
+            self.recent_tabs.move_to_end(index)
+        else:
+            self.recent_tabs[index] = None
 
 
 class TabLabel(QWidget):

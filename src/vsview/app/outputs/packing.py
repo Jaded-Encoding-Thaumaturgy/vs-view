@@ -97,7 +97,10 @@ def _is_vszip_available() -> bool:
     return res
 
 
-def get_packer(method: str, bit_depth: int) -> Packer:
+def get_packer(method: str | None = None, bit_depth: int | None = None) -> Packer:
+    method = method or SettingsManager.global_settings.view.packing_method
+    bit_depth = bit_depth or SettingsManager.global_settings.view.bit_depth
+
     if method == "auto":
         method = "vszip" if _is_vszip_available() else "cython"
         logger.debug("Auto-selected packing method: %s", method)
@@ -106,7 +109,7 @@ def get_packer(method: str, bit_depth: int) -> Packer:
         case "vszip":
             if not _is_vszip_available():
                 logger.error("vszip plugin is not available")
-                return get_packer("auto", 8)
+                return CythonPacker(8)
 
             return VszipPacker(bit_depth)
 

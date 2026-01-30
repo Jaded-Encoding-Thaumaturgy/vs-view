@@ -129,14 +129,13 @@ class _PluginAPI(QObject):
         """Return the VideoOutput for the currently selected tab."""
         from .api import VideoOutputProxy
 
-        if voutput := self.__workspace.tab_manager.current_voutput:
+        if voutput := self.__workspace.outputs_manager.current_voutput:
             return VideoOutputProxy(voutput.vs_index, voutput.vs_name, voutput.vs_output, voutput.props)
 
         # This shouldn't happen
         raise NotImplementedError
 
     # PRIVATE API
-
     @property
     def _settings_store(self) -> _PluginSettingsStore:
         if self.__settings_store is None:
@@ -188,8 +187,8 @@ class _PluginAPI(QObject):
                 continue
 
             for view in plugin.findChildren(PluginGraphicsView):
-                if view.current_tab in view.outputs and self.__workspace.playback.buffer:
-                    self.__workspace.playback.buffer.register_plugin_node(
+                if view.current_tab in view.outputs and self.__workspace.playback.state.buffer:
+                    self.__workspace.playback.state.buffer.register_plugin_node(
                         plugin.identifier, view.outputs[view.current_tab]
                     )
 
@@ -207,13 +206,16 @@ class _PluginAPI(QObject):
             return
 
         try:
-            plugin.on_current_voutput_changed(self.current_voutput, self.__workspace.current_tab_index)
+            plugin.on_current_voutput_changed(
+                self.current_voutput,
+                self.__workspace.outputs_manager.current_video_index,
+            )
         except Exception:
             logger.exception("on_current_voutput_changed: Failed to initialize plugin %r", plugin)
             return
 
         try:
-            plugin.on_current_frame_changed(self.__workspace.playback.current_frame)
+            plugin.on_current_frame_changed(self.__workspace.playback.state.current_frame)
         except Exception:
             logger.exception("on_current_frame_changed: Failed to initialize plugin %r", plugin)
             return
@@ -245,8 +247,8 @@ class _PluginAPI(QObject):
         if not self._is_truly_visible(plugin):
             return
 
-        tab_index = self.__workspace.current_tab_index
-        current_frame = self.__workspace.playback.current_frame
+        tab_index = self.__workspace.outputs_manager.current_video_index
+        current_frame = self.__workspace.playback.state.current_frame
 
         # Detect if we are actually changing tabs or forcing a refresh
         output_changed = view.current_tab != tab_index
@@ -260,7 +262,7 @@ class _PluginAPI(QObject):
         if tab_index not in view.outputs:
             with self.__workspace.env.use():
                 node = view.get_node(self.current_voutput.vs_output.clip)
-                packed = self.__workspace._packer.pack_clip(node)
+                packed = self.__workspace.outputs_manager.packer.pack_clip(node)
                 view.outputs[tab_index] = packed
                 logger.debug("Created output node for tab %d", tab_index)
 

@@ -600,6 +600,18 @@ class PlaybackSettings(BaseModel):
         ),
     ] = 0.0
 
+    fps_update_interval: Annotated[
+        float,
+        DoubleSpin(
+            label="FPS Update Interval",
+            min=0.1,
+            max=60.0,
+            suffix=" s",
+            decimals=1,
+            tooltip="Interval for updating the FPS display in seconds",
+        ),
+    ] = 1.0
+
 
 class ViewSettings(BaseModel):
     """Settings for the GraphicsView components"""

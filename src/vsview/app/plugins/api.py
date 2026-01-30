@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
 
 import vapoursynth as vs
-from jetpytools import fallback
 from pydantic import BaseModel
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QPixmap, QShortcut, QShowEvent
@@ -82,28 +81,28 @@ class PluginAPI(_PluginAPI):
     @property
     def current_frame(self) -> int:
         """Return the current frame number."""
-        return self.__workspace.playback.current_frame
+        return self.__workspace.playback.state.current_frame
 
     @property
     def current_time(self) -> timedelta:
         """Return the current time."""
-        if voutput := self.__workspace.tab_manager.current_voutput:
+        if voutput := self.__workspace.outputs_manager.current_voutput:
             return voutput.frame_to_time(self.current_frame)
 
         raise NotImplementedError
 
     @property
-    def current_tab_index(self) -> int:
+    def current_video_index(self) -> int:
         """Return the index of the currently selected tab."""
-        return self.__workspace.current_tab_index
+        return self.__workspace.outputs_manager.current_video_index
 
     @property
-    def voutputs(self) -> dict[int, VideoOutputProxy]:
+    def voutputs(self) -> list[VideoOutputProxy]:
         """Return a dictionary of VideoOutputProxy objects for all tabs."""
-        return {
-            k: VideoOutputProxy(voutput.vs_index, voutput.vs_name, voutput.vs_output, voutput.props)
-            for k, voutput in self.__workspace.tab_manager.voutputs.items()
-        }
+        return [
+            VideoOutputProxy(voutput.vs_index, voutput.vs_name, voutput.vs_output, voutput.props)
+            for voutput in self.__workspace.outputs_manager.voutputs
+        ]
 
     if TYPE_CHECKING:
 
@@ -117,18 +116,24 @@ class PluginAPI(_PluginAPI):
         """Return a list of AudioOutputProxy objects."""
         return [
             AudioOutputProxy(aoutput.vs_index, aoutput.vs_name, aoutput.vs_output)
-            for aoutput in fallback(self.__workspace.aoutputs, [])
+            for aoutput in self.__workspace.outputs_manager.aoutputs
         ]
+
+    def current_aoutput(self) -> AudioOutputProxy | None:
+        if aoutput := self.__workspace.outputs_manager.current_aoutput:
+            return AudioOutputProxy(aoutput.vs_index, aoutput.vs_name, aoutput.vs_output)
+
+        return None
 
     @property
     def is_playing(self) -> bool:
         """Return whether playback is currently active."""
-        return self.__workspace.playback.is_playing
+        return self.__workspace.playback.state.is_playing
 
     @property
     def packer(self) -> Packer:
         """Return the packer used by the workspace."""
-        return self.__workspace._packer
+        return self.__workspace.outputs_manager.packer
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """

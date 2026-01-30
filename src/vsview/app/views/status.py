@@ -253,6 +253,10 @@ class StatusWidget(IconReloadMixin, QWidget):
         workspace.statusLoadingErrored.connect(self.error_loading)
         workspace.statusOutputChanged.connect(self.set_output_info)
 
+        workspace.playback.statusLoadingStarted.connect(self.start_loading)
+        workspace.playback.statusLoadingFinished.connect(self.stop_loading)
+        workspace.playback.statusLoadingErrored.connect(self.error_loading)
+
         workspace.tab_manager.statusLoadingStarted.connect(self.start_loading)
         workspace.tab_manager.statusLoadingFinished.connect(self.stop_loading)
 
@@ -266,6 +270,10 @@ class StatusWidget(IconReloadMixin, QWidget):
         workspace.statusLoadingFinished.disconnect(self.stop_loading)
         workspace.statusLoadingErrored.disconnect(self.error_loading)
         workspace.statusOutputChanged.disconnect(self.set_output_info)
+
+        workspace.playback.statusLoadingStarted.disconnect(self.start_loading)
+        workspace.playback.statusLoadingFinished.disconnect(self.stop_loading)
+        workspace.playback.statusLoadingErrored.disconnect(self.error_loading)
 
         workspace.tab_manager.statusLoadingStarted.disconnect(self.start_loading)
         workspace.tab_manager.statusLoadingFinished.disconnect(self.stop_loading)
