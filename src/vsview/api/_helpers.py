@@ -4,12 +4,10 @@ from os import PathLike
 from typing import Any, NamedTuple
 
 from jetpytools import copy_signature
-from vapoursynth import VideoNode
 
 
 class VideoMetadata(NamedTuple):
     name: str
-    alpha: VideoNode | None
 
 
 class AudioMetadata(NamedTuple):

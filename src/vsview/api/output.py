@@ -225,7 +225,7 @@ def set_output(
 
         if file := getattr(script_module, "__file__", None):
             if isinstance(n, vs.VideoNode):
-                _output_metadata[file][i] = VideoMetadata(effective_name or f"{title} {i}", alpha)
+                _output_metadata[file][i] = VideoMetadata(effective_name or f"{title} {i}")
             elif isinstance(n, vs.AudioNode):
                 _output_metadata[file][i] = AudioMetadata(effective_name or f"{title} {i}", downmix)
 
