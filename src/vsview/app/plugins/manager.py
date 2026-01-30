@@ -80,13 +80,13 @@ class PluginManager(Singleton):
         return self.manager.hook.vsview_get_audio_processor()
 
     @inject_self.property
-    def all_plugins(self) -> list[type[WidgetPluginBase | NodeProcessor[Any]]]:
-        all_plugins: list[Any] = [*self.tooldocks, *self.toolpanels]
+    def all_plugins(self) -> set[type[WidgetPluginBase | NodeProcessor[Any]]]:
+        all_plugins: set[Any] = {*self.tooldocks, *self.toolpanels}
 
         if vp := self.video_processor:
-            all_plugins.append(vp)
+            all_plugins.add(vp)
         if ap := self.audio_processor:
-            all_plugins.append(ap)
+            all_plugins.add(ap)
 
         return all_plugins
 
