@@ -72,12 +72,17 @@ def vsview_cli(
             else:
                 main_window.load_new_file(file)
     else:
+        # Show window first for faster perceived startup
+        main_window.show()
+        main_window.repaint()
+        app.processEvents()
+
+        # Now create default workspaces
         main_window.script_subaction.trigger()
         main_window.file_subaction.trigger()
         main_window.stack.animations_enabled = False
         main_window.quick_script_subaction.trigger()
         main_window.button_group.buttons()[0].click()
         main_window.stack.animations_enabled = True
-        main_window.show()
 
     sys.exit(app.exec())
