@@ -127,11 +127,6 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
 
         PluginManager.populate_default_settings("local", self.content)
 
-        if self.plugins_loaded:
-            self._restore_layout()
-        else:
-            self.workspacePluginsLoaded.connect(self._restore_layout)
-
     def get_output_metadata(self) -> dict[int, Any]:
         return output_metadata.get(str(self.content), {})
 
@@ -165,6 +160,11 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         super().clear_failed_load()
 
     @run_in_loop(return_future=False)
+    def load_plugins(self) -> None:
+        if not self.plugins_loaded:
+            super().load_plugins()
+            self._restore_layout()
+
     def _restore_layout(self) -> None:
         layout = self.local_settings.layout
 

@@ -146,7 +146,7 @@ class MainWindow(QMainWindow):
         self.view_menu.addMenu(self.view_toolpanels_submenu)
 
         self.settings_action = QAction("Settings", self)
-        self.settings_action.triggered.connect(self._on_open_settings)
+        self.settings_action.triggered.connect(self._on_open_settings_when_plugins_loaded)
         self.menu_bar.addAction(self.settings_action)
 
         self.help_menu = self.menu_bar.addMenu("Help")
@@ -155,10 +155,7 @@ class MainWindow(QMainWindow):
         self.statusBar().addWidget(self.status_widget, 1)
         self.status_widget.set_ready()
 
-        if (pm := PluginManager()).loaded:
-            self._init_view_tools_settings()
-        else:
-            pm.signals.pluginsLoaded.connect(self._init_view_tools_settings)
+        PluginManager.call_when_loaded(self._init_view_tools_settings)
 
         # Track currently connected workspace for status bar
         self._connected_workspace: LoaderWorkspace[Any] | None = None
@@ -313,12 +310,14 @@ class MainWindow(QMainWindow):
         btn = self.add_workspace(VideoFileWorkspace)
         btn.workspace.load_btn.click()
 
+    def _on_open_settings_when_plugins_loaded(self) -> None:
+        if not PluginManager.loaded:
+            logger.warning("Plugins are still loading...")
+
+        PluginManager.call_when_loaded(self._on_open_settings)
+
     def _on_open_settings(self) -> None:
         # Get current workspace's script path if available
-        if not PluginManager.settings_extracted:
-            logger.warning("Plugins not loaded yet, cannot open settings dialog")
-            return
-
         dialog = SettingsDialog(
             wk.content
             if isinstance((wk := self.stack.currentWidget()), GenericFileWorkspace) and hasattr(wk, "content")
@@ -397,13 +396,8 @@ class MainWindow(QMainWindow):
         plugins: list[Any],
         settings: dict[str, bool],
         callback: Callable[[LoaderWorkspace[Any], int, bool], None],
-        empty_text: str,
     ) -> None:
         menu.clear()
-
-        if not PluginManager.loaded:
-            menu.addAction(QAction(empty_text, menu, enabled=False))
-            return
 
         for i, plugin in enumerate(plugins):
             action = QAction(
@@ -427,21 +421,23 @@ class MainWindow(QMainWindow):
             menu.addAction(action)
 
     def _populate_tooldocks_menu(self) -> None:
-        self._populate_plugin_menu(
-            self.view_tooldocks_submenu,
-            PluginManager.tooldocks,
-            self.settings_manager.global_settings.view_tools.docks,
-            lambda wk, idx, checked: wk.docks[idx].setVisible(checked) if wk.dock_toggle_btn.isChecked() else None,
-            "No tool docks available",
+        PluginManager.call_when_loaded(
+            lambda: self._populate_plugin_menu(
+                self.view_tooldocks_submenu,
+                PluginManager.tooldocks,
+                self.settings_manager.global_settings.view_tools.docks,
+                lambda wk, idx, checked: wk.docks[idx].setVisible(checked) if wk.dock_toggle_btn.isChecked() else None,
+            )
         )
 
     def _populate_toolpanels_menu(self) -> None:
-        self._populate_plugin_menu(
-            self.view_toolpanels_submenu,
-            PluginManager.toolpanels,
-            self.settings_manager.global_settings.view_tools.panels,
-            lambda wk, idx, checked: wk.plugin_splitter.plugin_tabs.setTabVisible(idx, checked),
-            "No tool panels available",
+        PluginManager.call_when_loaded(
+            lambda: self._populate_plugin_menu(
+                self.view_toolpanels_submenu,
+                PluginManager.toolpanels,
+                self.settings_manager.global_settings.view_tools.panels,
+                lambda wk, idx, checked: wk.plugin_splitter.plugin_tabs.setTabVisible(idx, checked),
+            )
         )
 
     def _on_sidebar_button_clicked(self, btn: WorkspaceToolButton[Any]) -> None:

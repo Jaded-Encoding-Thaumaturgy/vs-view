@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import weakref
+from collections.abc import Callable
 from concurrent.futures import Future
 from importlib import import_module
+from inspect import ismethod
 from logging import getLogger
 from pathlib import Path
 from threading import Lock
@@ -10,8 +13,8 @@ from typing import TYPE_CHECKING, Any, Literal
 import pluggy
 from jetpytools import Singleton, inject_self
 from pydantic import BaseModel
-from PySide6.QtCore import QObject, Signal
 from vapoursynth import AudioNode, VideoNode
+from vsengine.loops import EventLoop, get_loop
 
 from ...vsenv import run_in_background
 from . import specs
@@ -22,14 +25,40 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
-class PluginSignals(QObject):
-    pluginsLoaded = Signal()
+class Notifier:
+    def __init__(self) -> None:
+        self._callbacks = list[tuple[weakref.ReferenceType[Callable[[], Any]], EventLoop]]()
+        self._ready = False
+        self._lock = Lock()
+
+    def register(self, callback: Callable[[], Any]) -> None:
+        with self._lock:
+            if self._ready:
+                get_loop().from_thread(callback)
+                return
+
+            self._callbacks.append(
+                (weakref.WeakMethod(callback) if ismethod(callback) else weakref.ref(callback), get_loop())
+            )
+
+    def notify(self) -> None:
+        with self._lock:
+            if self._ready:
+                return
+
+            self._ready = True
+            current_callbacks = self._callbacks[:]
+            self._callbacks.clear()
+
+        for ref, loop in current_callbacks:
+            if (cb := ref()) is not None:
+                loop.from_thread(cb)
 
 
 class PluginManager(Singleton):
     def __init__(self) -> None:
         self.manager = pluggy.PluginManager("vsview")
-        self._signals = PluginSignals()
+        self._notifier = Notifier()
         self._settings_extracted = False
         self._load_future: Future[None] | None = None
         self._lock = Lock()
@@ -62,16 +91,8 @@ class PluginManager(Singleton):
         return all_plugins
 
     @inject_self.property
-    def settings_extracted(self) -> bool:
-        return self._settings_extracted
-
-    @inject_self.property
     def loaded(self) -> bool:
         return self._load_future is not None and self._load_future.done()
-
-    @inject_self.property
-    def signals(self) -> PluginSignals:
-        return self._signals
 
     @inject_self
     def load(self) -> None:
@@ -84,6 +105,10 @@ class PluginManager(Singleton):
     def wait_for_loaded(self) -> None:
         if self._load_future:
             self._load_future.result()
+
+    @inject_self
+    def call_when_loaded(self, cb: Callable[[], Any]) -> None:
+        self._notifier.register(cb)
 
     @run_in_background(name="PluginManagerLoad")
     def _load_worker(self) -> None:
@@ -102,7 +127,9 @@ class PluginManager(Singleton):
         self._construct_settings_registry()
 
         logger.debug("Loaded %d third party plugins", n)
-        self._signals.pluginsLoaded.emit()
+
+        # Fire signal
+        self._notifier.notify()
 
     def _register_shortcuts(self) -> None:
         from ..settings.shortcuts import ShortcutManager
@@ -166,7 +193,6 @@ class PluginManager(Singleton):
         SettingsDialog.global_settings_registry.extend(global_entries)
         SettingsDialog.local_settings_registry.extend(local_entries)
 
-        self._settings_extracted = True
         logger.debug("Plugin settings extracted")
 
     @inject_self

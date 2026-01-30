@@ -55,7 +55,6 @@ class LoaderWorkspace[T](BaseWorkspace):
     statusLoadingFinished = Signal(str)  # completed message
     statusLoadingErrored = Signal(str)  # error message
     statusOutputChanged = Signal(object)  # OutputInfo dataclass
-    workspacePluginsLoaded = Signal()  # emitted when plugin instances are created
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -300,10 +299,8 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         # Load plugins in the load_content function so the plugins can get the file_path
         # and do VS things in the init since the environment is already created.
-        if PluginManager.loaded:
-            self.load_plugins()
-        else:
-            PluginManager.signals.pluginsLoaded.connect(self.load_plugins)
+        PluginManager.wait_for_loaded()
+        self.load_plugins()
 
         @run_in_loop(return_future=False)
         def on_complete(f: Future[None]) -> None:
@@ -315,7 +312,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.tab_manager.disable_switch = False
             self.playback.can_reload = True
 
-        # Handle potiential error on frame rendering
+        # Handle potential error on frame rendering
         try:
             self._on_tab_changed(self.outputs_manager.current_video_index, cb_render=on_complete)
         except Exception:
@@ -635,7 +632,6 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self._setup_panels()
 
             self.plugins_loaded = True
-            self.workspacePluginsLoaded.emit()
 
     def _setup_docks(self) -> None:
         for plugin_type in PluginManager.tooldocks:
