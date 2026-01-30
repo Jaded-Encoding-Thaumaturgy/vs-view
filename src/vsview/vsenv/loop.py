@@ -115,6 +115,9 @@ class QtEventLoop(QObject, EventLoop):
             pool.waitForDone(10)
             QApplication.processEvents()
 
+        # Final flush to process any signals from threads that just finished
+        QApplication.processEvents()
+
 
 @overload
 def run_in_loop[**P, R](func: Callable[P, R] | Callable[P, _Coro[R]]) -> Callable[P, Future[R]]: ...
