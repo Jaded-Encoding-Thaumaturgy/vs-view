@@ -148,7 +148,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.docks = list[QDockWidget]()
         self.plugins_loaded = False
 
-        self.outputs_manager = OutputsManager(self.api)
+        self.outputs_manager = OutputsManager()
 
         # PlaybackManager - handles video/audio playback logic
         self.playback = PlaybackManager(
@@ -373,7 +373,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             # Apply saved pixmap
             for view, voutput in zip(tabs.views(), voutputs, strict=True):
-                saved_state.apply_pixmap(view, (voutput.clip.width, voutput.clip.height))
+                saved_state.apply_pixmap(view, (voutput.vs_output.clip.width, voutput.vs_output.clip.height))
 
             with QSignalBlocker(self.tab_manager):
                 self.tab_manager.swap_tabs(tabs, self.tab_manager.tabs.currentIndex())
@@ -426,8 +426,8 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.debug("No voutput available")
             return
 
-        total_frames = voutput.clip.num_frames
-        fps = voutput.clip.fps
+        total_frames = voutput.vs_output.clip.num_frames
+        fps = voutput.vs_output.clip.fps
 
         self.tbar.set_data(total_frames, fps)
 
@@ -475,6 +475,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.content,
             self.video_outputs,
             self.get_output_metadata(),
+            self.api,
         )
 
         if not voutputs:
@@ -484,6 +485,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.content,
             self.audio_outputs,
             self.get_output_metadata(),
+            self.api,
             delay_s=self.tbar.playback_container.audio_delay,
         )
 
@@ -511,7 +513,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         self.playback.stop()
 
-        logger.debug("Switched to video output: clip=%r", self.outputs_manager.current_voutput.clip)
+        logger.debug("Switched to video output: clip=%r", self.outputs_manager.current_voutput.vs_output.clip)
 
         self.init_timeline()
         target_frame = self._calculate_target_frame()
@@ -553,13 +555,13 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         assert self.outputs_manager.current_voutput
 
-        src_fps = self.outputs_manager.voutputs[self.tab_manager.tabs.previous_tab_index].clip.fps
-        tgt_fps = self.outputs_manager.current_voutput.clip.fps
+        src_fps = self.outputs_manager.voutputs[self.tab_manager.tabs.previous_tab_index].vs_output.clip.fps
+        tgt_fps = self.outputs_manager.current_voutput.vs_output.clip.fps
 
         current_time = self.outputs_manager.current_voutput.frame_to_time(self.playback.state.current_frame, src_fps)
         target_frame = self.outputs_manager.current_voutput.time_to_frame(current_time, tgt_fps)
 
-        target_frame = clamp(target_frame, 0, self.outputs_manager.current_voutput.clip.num_frames - 1)
+        target_frame = clamp(target_frame, 0, self.outputs_manager.current_voutput.vs_output.clip.num_frames - 1)
 
         logger.debug(
             "Sync playhead enabled, targeting frame %d (from time %.3fs)",
@@ -574,10 +576,14 @@ class LoaderWorkspace[T](BaseWorkspace):
             return
 
         # Calculate total duration
-        if voutput.clip.fps.numerator > 0:
-            total_seconds = voutput.clip.num_frames * voutput.clip.fps.denominator / voutput.clip.fps.numerator
+        if voutput.vs_output.clip.fps.numerator > 0:
+            total_seconds = (
+                voutput.vs_output.clip.num_frames
+                * voutput.vs_output.clip.fps.denominator
+                / voutput.vs_output.clip.fps.numerator
+            )
             total_duration = Time(seconds=total_seconds).to_ts("{H}:{M:02d}:{S:02d}.{ms:03d}")
-            fps_str = f"{voutput.clip.fps.numerator / voutput.clip.fps.denominator:.3f}"
+            fps_str = f"{voutput.vs_output.clip.fps.numerator / voutput.vs_output.clip.fps.denominator:.3f}"
         else:
             # FIXME: VFR support here
             total_duration = "0:00:00.000"
@@ -585,10 +591,10 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         info = OutputInfo(
             total_duration=total_duration,
-            total_frames=voutput.clip.num_frames,
-            width=voutput.clip.width,
-            height=voutput.clip.height,
-            format_name=voutput.clip.format.name if voutput.clip.format else "NONE",
+            total_frames=voutput.vs_output.clip.num_frames,
+            width=voutput.vs_output.clip.width,
+            height=voutput.vs_output.clip.height,
+            format_name=voutput.vs_output.clip.format.name if voutput.vs_output.clip.format else "NONE",
             fps=fps_str,
         )
 

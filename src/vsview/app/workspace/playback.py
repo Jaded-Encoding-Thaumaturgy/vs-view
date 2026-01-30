@@ -273,7 +273,7 @@ class PlaybackManager(QObject):
             logger.warning("No current video output, ignoring seek")
             return
 
-        self.request_frame(clamp(self.state.current_frame + delta, 0, voutput.clip.num_frames - 1))
+        self.request_frame(clamp(self.state.current_frame + delta, 0, voutput.vs_output.clip.num_frames - 1))
 
     @Slot(int)
     def seek_n_frames(self, direction: int) -> None:
@@ -430,7 +430,7 @@ class PlaybackManager(QObject):
                 self._schedule_or_continue()
                 return
 
-        if self.state.current_frame + 1 >= voutput.clip.num_frames:
+        if self.state.current_frame + 1 >= voutput.vs_output.clip.num_frames:
             self.toggle_playback()
             return
 
@@ -471,11 +471,11 @@ class PlaybackManager(QObject):
         # Calculate target frame interval for FPS limiting
         if self._tbar.playback_container.settings.uncapped:
             self.state.frame_interval_ns = 0
-        elif voutput.clip.fps.denominator > 0:
+        elif voutput.vs_output.clip.fps.denominator > 0:
             self.state.frame_interval_ns = cround(
                 1_000_000_000
-                * voutput.clip.fps.denominator
-                / (voutput.clip.fps.numerator * self._tbar.playback_container.settings.speed)
+                * voutput.vs_output.clip.fps.denominator
+                / (voutput.vs_output.clip.fps.numerator * self._tbar.playback_container.settings.speed)
             )
         else:
             self.state.frame_interval_ns = 0
@@ -489,7 +489,7 @@ class PlaybackManager(QObject):
         logger.debug(
             "Target frame interval: %d ns (fps=%s), buffer_size=%d",
             self.state.frame_interval_ns,
-            voutput.clip.fps,
+            voutput.vs_output.clip.fps,
             self.state.buffer._size,
         )
 
@@ -585,7 +585,7 @@ class PlaybackManager(QObject):
             return
 
         # Ensure zone doesn't exceed total frames
-        end_frame = min(self.state.current_frame + zone_frames, voutput.clip.num_frames)
+        end_frame = min(self.state.current_frame + zone_frames, voutput.vs_output.clip.num_frames)
 
         loop_range = range(self.state.current_frame, end_frame) if loop else None
         stop_at = end_frame if not loop else None

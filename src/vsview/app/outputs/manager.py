@@ -19,9 +19,6 @@ logger = getLogger(__name__)
 class OutputsManager:
     """Manages video and audio outputs."""
 
-    def __init__(self, api: PluginAPI) -> None:
-        self.api = api
-
     @property
     def packer(self) -> Packer:
         return self._packer
@@ -73,6 +70,7 @@ class OutputsManager:
         content: Any,
         vs_vouputs: Mapping[int, VideoOutputTuple],
         metadata: dict[int, Any],
+        api: PluginAPI,
     ) -> list[VideoOutput]:
         """
         Create VideoOutput wrappers for all video outputs.
@@ -94,7 +92,9 @@ class OutputsManager:
 
         try:
             for i, output in items:
-                voutputs.append(VideoOutput(output, i, self.packer, metadata.get(i)))
+                voutput = VideoOutput(output, i, self.packer, metadata.get(i))
+                voutput.prepare_video(api)
+                voutputs.append(voutput)
         except Exception:
             for voutput in voutputs:
                 voutput.clear()
@@ -110,6 +110,7 @@ class OutputsManager:
         content: Any,
         vs_aouputs: Mapping[int, AudioNode],
         metadata: dict[int, Any],
+        api: PluginAPI,
         *,
         delay_s: float = 0.0,
     ) -> list[AudioOutput]:
@@ -126,7 +127,7 @@ class OutputsManager:
         try:
             for i, output in items:
                 aoutput = AudioOutput(output, i, metadata.get(i))
-                aoutput.prepare_audio(delay_s, self.api)
+                aoutput.prepare_audio(delay_s, api)
                 aoutputs.append(aoutput)
         except Exception:
             for aoutput in aoutputs:

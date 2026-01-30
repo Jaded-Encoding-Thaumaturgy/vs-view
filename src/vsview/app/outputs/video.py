@@ -9,11 +9,14 @@ from typing import TYPE_CHECKING, Any
 import vapoursynth as vs
 from jetpytools import cround
 
+from ..plugins.manager import PluginManager
 from ..settings import SettingsManager
+from ..utils import LRUCache, cache_clip
 from .packing import Packer
 
 if TYPE_CHECKING:
     from ...api._helpers import VideoMetadata
+    from ..plugins import PluginAPI
     from ..views.timeline import Frame, Time
 
 
@@ -28,23 +31,28 @@ class VideoOutput:
         packer: Packer,
         metadata: VideoMetadata | None = None,
     ) -> None:
-        from ..utils import LRUCache, cache_clip
-
-        self.packer = packer
-        self.vs_index = vs_index
-        self.vs_name = metadata.name if metadata else None
-        # self.alpha = metadata.alpha if metadata else None
-
         self.vs_output = vs_output
-        self.clip = self.vs_output.clip.std.ModifyFrame(self.vs_output.clip, self._get_props_on_render)
+        self.vs_index = vs_index
+        self.packer = packer
+        self.vs_name = metadata.name if metadata else None
+
         self.props = LRUCache[int, Mapping[str, Any]](
             cache_size=SettingsManager.global_settings.playback.buffer_size * 2
         )
 
-        try:
-            self.prepared_clip = self.packer.pack_clip(self.clip)
-        except Exception as e:
-            raise RuntimeError(f"Failed to pack clip with the message: '{e}'") from e
+    def prepare_video(self, api: PluginAPI) -> None:
+        clip = self.vs_output.clip.std.ModifyFrame(self.vs_output.clip, self._get_props_on_render)
+
+        if PluginManager.video_processor:
+            clip = PluginManager.video_processor(api).prepare(clip)
+
+        if clip.format.id != vs.GRAY32:
+            try:
+                self.prepared_clip = self.packer.pack_clip(clip)
+            except Exception as e:
+                raise RuntimeError(f"Failed to pack clip with the message: '{e}'") from e
+        else:
+            self.prepared_clip = clip
 
         if cache_size := SettingsManager.global_settings.playback.cache_size:
             try:
@@ -54,10 +62,9 @@ class VideoOutput:
 
     def clear(self) -> None:
         """Clear VapourSynth resources."""
-        if hasattr(self, "props"):
-            self.props.clear()
+        self.props.clear()
 
-        for attr in ["vs_output", "clip", "prepared_clip"]:
+        for attr in ["vs_output", "prepared_clip"]:
             with suppress(AttributeError):
                 delattr(self, attr)
 
@@ -65,7 +72,7 @@ class VideoOutput:
         from ..views.timeline import Frame
 
         if fps is None:
-            fps = self.clip.fps
+            fps = self.vs_output.clip.fps
 
         return Frame(cround(time.total_seconds() * fps.numerator / fps.denominator) if fps.denominator > 0 else 0)
 
@@ -73,7 +80,7 @@ class VideoOutput:
         from ..views.timeline import Time
 
         if fps is None:
-            fps = self.clip.fps
+            fps = self.vs_output.clip.fps
 
         return Time(seconds=frame * fps.denominator / fps.numerator if fps.numerator > 0 else 0)
 
