@@ -1083,6 +1083,9 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
     @audio_delay.setter
     def audio_delay(self, value: float) -> None:
+        if self._audio_delay == value:
+            return
+
         self._audio_delay = value
 
         with QSignalBlocker(self.audio_delay_combo):
