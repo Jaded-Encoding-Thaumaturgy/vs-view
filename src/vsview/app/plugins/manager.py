@@ -4,6 +4,7 @@ from concurrent.futures import Future
 from importlib import import_module
 from logging import getLogger
 from pathlib import Path
+from threading import Lock
 from typing import TYPE_CHECKING, Any, Literal
 
 import pluggy
@@ -31,6 +32,7 @@ class PluginManager(Singleton):
         self._signals = PluginSignals()
         self._settings_extracted = False
         self._load_future: Future[None] | None = None
+        self._lock = Lock()
 
     @inject_self.cached.property
     def tooldocks(self) -> list[type[WidgetPluginBase]]:
@@ -178,12 +180,13 @@ class PluginManager(Singleton):
 
         model_attr = f"{scope}_settings_model"
 
-        for plugin in self.all_plugins:
-            if (model := getattr(plugin, model_attr)) is None:
-                continue
+        with self._lock:
+            for plugin in self.all_plugins:
+                if (model := getattr(plugin, model_attr)) is None:
+                    continue
 
-            defaults = model().model_dump()
-            raw = settings_container.plugins.get(plugin.identifier, {})
-            existing = raw.model_dump() if isinstance(raw, BaseModel) else raw
+                raw = settings_container.plugins.get(plugin.identifier, {})
+                existing = raw.model_dump() if isinstance(raw, BaseModel) else raw
 
-            settings_container.plugins[plugin.identifier] = model.model_validate(defaults | existing)
+                # Validate existing settings (missing fields will be filled with defaults by Pydantic)
+                settings_container.plugins[plugin.identifier] = model.model_validate(existing)
