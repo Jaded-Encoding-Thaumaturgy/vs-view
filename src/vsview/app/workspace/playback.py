@@ -318,26 +318,20 @@ class PlaybackManager(QObject):
             self._prepare_video(loop_range=loop_range)
             self._prepare_audio(loop_range=loop_range)
 
-            # Check if user cancelled
-            if not self.state.is_playing or not self.state.audio_buffer:
-                return
+            if self.state.audio_buffer:
+                self.state.audio_buffer.wait_for_first_frame(
+                    timeout=0.25,
+                    stall_cb=lambda: self.statusLoadingStarted.emit("Buffering audio..."),
+                )
 
-            self.state.audio_buffer.wait_for_first_frame(
-                timeout=0.25,
-                stall_cb=lambda: self.statusLoadingStarted.emit("Buffering audio..."),
-            )
-
-            # Check if user cancelled
-            if not self.state.is_playing or not self.state.buffer:
-                return
-
-            self.state.buffer.wait_for_first_frame(
-                timeout=0.25,
-                stall_cb=lambda: self.statusLoadingStarted.emit("Buffering..."),
-            )
+            if self.state.buffer:
+                self.state.buffer.wait_for_first_frame(
+                    timeout=0.25,
+                    stall_cb=lambda: self.statusLoadingStarted.emit("Buffering..."),
+                )
 
             # Check if user cancelled
-            if not all([self.state.is_playing, self.state.buffer, self.state.audio_buffer]):
+            if not self.state.is_playing:
                 return
 
             self._api._on_playback_started()
