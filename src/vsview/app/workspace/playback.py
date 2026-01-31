@@ -447,19 +447,46 @@ class PlaybackManager(QObject):
 
         self.state.fps_history.append(now)
 
-        if (total_elapsed := self.state.fps_history[-1] - self.state.fps_history[0]) > 0:
-            avg_fps = (len(self.state.fps_history) - 1) * 1_000_000_000 / total_elapsed
-
-            if (
-                now - self.state.last_fps_update_ns
-                >= SettingsManager.global_settings.playback.fps_update_interval * 1_000_000_000
-            ):
-                self.statusLoadingStarted.emit(f"Playing @ {avg_fps:.3f} fps")
-                self.state.last_fps_update_ns = now
+        if (total_elapsed := self.state.fps_history[-1] - self.state.fps_history[0]) > 0 and (
+            now - self.state.last_fps_update_ns
+            >= SettingsManager.global_settings.playback.fps_update_interval * 1_000_000_000
+        ):
+            self.statusLoadingStarted.emit(
+                f"Playing @ {(len(self.state.fps_history) - 1) * 1_000_000_000 / total_elapsed:.3f} fps"
+            )
+            self.state.last_fps_update_ns = now
 
     def _schedule_or_continue(self) -> None:
-        # Use absolute targets to prevent clock drift; catch up immediately if lagging
-        self.state.next_frame_time_ns += self.state.frame_interval_ns
+        if self._tbar.playback_container.settings.uncapped:
+            self._play_next_frame()
+            return
+
+        # VFR path
+        if self.state.frame_interval_ns == 0 and (voutput := self._outputs_manager.current_voutput):
+            available_frames = list(voutput.props)
+            props = None
+            i = -1
+
+            # Find the first frame that is <= current_frame
+            while -i < len(available_frames):
+                if (n := available_frames[i]) <= self.state.current_frame:
+                    props = voutput.props[n]
+                    break
+                i -= 1
+
+            if props:
+                duration_num = props["_DurationNum"]
+                duration_den = props["_DurationDen"]
+            else:
+                logger.warning("No duration props available for frame %d, assuming 25fps", self.state.current_frame)
+                duration_num = 1
+                duration_den = 25
+
+            self.state.next_frame_time_ns += cround(
+                1_000_000_000 * duration_num / (duration_den * self._tbar.playback_container.settings.speed)
+            )
+        else:
+            self.state.next_frame_time_ns += self.state.frame_interval_ns
 
         # Schedule timer only if delay is significant; avoids timer overhead for <1ms delays
         if (delay_ns := self.state.next_frame_time_ns - perf_counter_ns()) > MIN_FRAME_DELAY_NS:
@@ -474,13 +501,14 @@ class PlaybackManager(QObject):
         # Calculate target frame interval for FPS limiting
         if self._tbar.playback_container.settings.uncapped:
             self.state.frame_interval_ns = 0
-        elif voutput.vs_output.clip.fps.denominator > 0:
+        elif voutput.vs_output.clip.fps > 0:
             self.state.frame_interval_ns = cround(
                 1_000_000_000
                 * voutput.vs_output.clip.fps.denominator
                 / (voutput.vs_output.clip.fps.numerator * self._tbar.playback_container.settings.speed)
             )
         else:
+            logger.debug("VFR detected")
             self.state.frame_interval_ns = 0
 
         # Create and allocate video buffer
@@ -498,17 +526,25 @@ class PlaybackManager(QObject):
 
     def _prepare_audio(self, loop_range: range | None = None) -> None:
         if (
-            not (aoutput := self._outputs_manager.current_aoutput)
-            or self._tbar.playback_container.is_muted
-            or self._tbar.playback_container.settings.uncapped
+            self._tbar.playback_container.is_muted
+            or not (aoutput := self._outputs_manager.current_aoutput)
             or not (voutput := self._outputs_manager.current_voutput)
         ):
+            return
+
+        if self._tbar.playback_container.settings.uncapped:
+            logger.debug("Uncapped settings detected, no audio will be played")
             return
 
         if not aoutput.setup_sink(
             self._tbar.playback_container.settings.speed,
             self._tbar.playback_container.volume,
         ):
+            return
+
+        # Temporaly disable audio for VFR clips
+        # Audio can only be played reliably if a timecode file is passed.
+        if voutput.vs_output.clip.fps <= 0:
             return
 
         # Calculate starting audio frame from current video time
