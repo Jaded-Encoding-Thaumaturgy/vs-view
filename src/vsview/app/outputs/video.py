@@ -40,6 +40,9 @@ class VideoOutput:
             cache_size=SettingsManager.global_settings.playback.buffer_size * 2
         )
 
+        self.last_frame = 0
+        self.loaded_once = False
+
     def prepare_video(self, api: PluginAPI) -> None:
         clip = self.vs_output.clip.std.ModifyFrame(self.vs_output.clip, self._get_props_on_render)
 

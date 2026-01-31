@@ -71,6 +71,8 @@ class OutputsManager:
         vs_vouputs: Mapping[int, VideoOutputTuple],
         metadata: dict[int, Any],
         api: PluginAPI,
+        *,
+        last_frame: int = 0,
     ) -> list[VideoOutput]:
         """
         Create VideoOutput wrappers for all video outputs.
@@ -93,6 +95,7 @@ class OutputsManager:
         try:
             for i, output in items:
                 voutput = VideoOutput(output, i, self.packer, metadata.get(i))
+                voutput.last_frame = last_frame
                 voutput.prepare_video(api)
                 voutputs.append(voutput)
         except Exception:

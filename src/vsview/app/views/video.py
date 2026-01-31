@@ -52,7 +52,6 @@ class ViewState(NamedTuple):
 
         view.pixmap_item.setPixmap(pixmap)
         view.setSceneRect(view.pixmap_item.boundingRect())
-        view.loaded_once = False
 
     @run_in_loop(return_future=False)
     def apply_frozen_state(self, view: GraphicsView) -> None:
@@ -348,12 +347,6 @@ class BaseGraphicsView(QGraphicsView):
 class GraphicsView(BaseGraphicsView):
     zoomChanged = Signal(float)
     autofitChanged = Signal(bool)
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-
-        self.last_frame = 0
-        self.loaded_once = False
 
     def set_zoom(self, value: float) -> None:
         super().set_zoom(value)

@@ -220,6 +220,9 @@ class PlaybackManager(QObject):
         """Request a specific frame to be rendered and displayed."""
         logger.debug("Frame requested: %d", n)
 
+        if not (voutput := self._outputs_manager.current_voutput):
+            return
+
         fut = self._render_frame(n)
 
         def on_complete(f: Future[None]) -> None:
@@ -227,8 +230,8 @@ class PlaybackManager(QObject):
                 logger.exception("Frame render failed")
                 self.loadFailed.emit()
             elif self._tab_manager.tabs.currentIndex() != -1:
+                voutput.last_frame = n
                 self.state.current_frame = n
-                self._tab_manager.current_view.last_frame = n
 
         fut.add_done_callback(on_complete)
 
@@ -413,7 +416,7 @@ class PlaybackManager(QObject):
                 self._track_fps()
 
                 self.state.current_frame = frame_n
-                self._tab_manager.current_view.last_frame = frame_n
+                voutput.last_frame = frame_n
 
                 try:
                     with self._env.use(), frame:

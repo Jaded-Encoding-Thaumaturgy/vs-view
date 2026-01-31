@@ -134,7 +134,7 @@ class TabManager(QWidget, IconReloadMixin):
         return super().deleteLater()
 
     @run_in_loop(return_future=False)
-    def create_tabs(self, video_outputs: Sequence[VideoOutput], frame: int = 0, enabled: bool = True) -> TabViewWidget:
+    def create_tabs(self, video_outputs: Sequence[VideoOutput], enabled: bool = True) -> TabViewWidget:
         new_tabs = TabViewWidget(self)
         new_tabs.setDocumentMode(True)
 
@@ -144,7 +144,6 @@ class TabManager(QWidget, IconReloadMixin):
             view.autofitChanged.connect(partial(self._on_autofit_changed, view))
             view.statusSavingImageStarted.connect(self.statusLoadingStarted.emit)
             view.statusSavingImageFinished.connect(self.statusLoadingFinished.emit)
-            view.last_frame = frame
 
             tab_label = TabLabel(voutput.vs_name, voutput.vs_index, new_tabs)
 

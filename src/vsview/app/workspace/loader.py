@@ -290,7 +290,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.clear_failed_load()
                 return
 
-        tabs = self.tab_manager.create_tabs(voutputs, self.playback.state.current_frame)
+        tabs = self.tab_manager.create_tabs(voutputs)
 
         with QSignalBlocker(self.tab_manager):
             self.tab_manager.swap_tabs(tabs, self.outputs_manager.current_video_index)
@@ -369,7 +369,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                     return
 
             # 4. Reconstruct UI
-            tabs = self.tab_manager.create_tabs(voutputs, self.playback.state.current_frame, enabled=False)
+            tabs = self.tab_manager.create_tabs(voutputs, enabled=False)
 
             # Apply saved pixmap
             for view, voutput in zip(tabs.views(), voutputs, strict=True):
@@ -476,6 +476,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.video_outputs,
             self.get_output_metadata(),
             self.api,
+            last_frame=self.playback.state.current_frame,
         )
 
         if not voutputs:
@@ -507,27 +508,30 @@ class LoaderWorkspace[T](BaseWorkspace):
     def _on_tab_changed(
         self, index: int, seamless: bool = False, cb_render: Callable[[Future[None]], None] | None = None
     ) -> None:
+        self.playback.stop()
+        self.outputs_manager.current_video_index = index
+
         if not self.outputs_manager.current_voutput:
             logger.debug("Invalid tab index %d, ignoring", index)
             return
 
-        self.playback.stop()
-
         logger.debug("Switched to video output: clip=%r", self.outputs_manager.current_voutput.vs_output.clip)
 
-        self.init_timeline()
         target_frame = self._calculate_target_frame()
+        self.init_timeline()
         self.update_timeline_cursor(target_frame)
-        self.outputs_manager.current_video_index = index
         self._emit_output_info()
 
+        previous_voutput = self.outputs_manager.voutputs[self.tab_manager.tabs.previous_tab_index]
+        current_voutput = self.outputs_manager.current_voutput
+
         if (
-            not (self.tab_manager.previous_view.last_frame == self.tab_manager.current_view.last_frame == target_frame)
-            or not self.tab_manager.current_view.loaded_once
+            not (previous_voutput.last_frame == current_voutput.last_frame == target_frame)
+            or not current_voutput.loaded_once
         ):
             if not seamless:
                 self.set_loading_page()
-            self.tab_manager.current_view.loaded_once = True
+            current_voutput.loaded_once = True
 
             def on_complete(f: Future[None]) -> None:
                 if not f.exception():
@@ -546,15 +550,17 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.api._on_current_voutput_changed()
 
     def _calculate_target_frame(self) -> int:
+        if not (voutput := self.outputs_manager.current_voutput):
+            raise NotImplementedError
+
         if not self.tab_manager.is_sync_playhead_enabled:
             logger.debug(
                 "Sync playhead disabled, using last frame %d",
-                (target_frame := self.tab_manager.current_view.last_frame),
+                (target_frame := voutput.last_frame),
             )
             return target_frame
 
-        assert self.outputs_manager.current_voutput
-
+        # FIXME: VFR support here
         src_fps = self.outputs_manager.voutputs[self.tab_manager.tabs.previous_tab_index].vs_output.clip.fps
         tgt_fps = self.outputs_manager.current_voutput.vs_output.clip.fps
 
