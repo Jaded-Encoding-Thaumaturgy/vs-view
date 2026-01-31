@@ -6,12 +6,13 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Iterable, Sequence
+from copy import deepcopy
 from logging import getLogger
 from types import FrameType
 from typing import Any, assert_never, overload
 
 import vapoursynth as vs
-from jetpytools import flatten, to_arr
+from jetpytools import CustomValueError, flatten, to_arr
 
 from ._helpers import AudioMetadata, VideoMetadata
 from ._helpers import output_metadata as _output_metadata
@@ -23,13 +24,6 @@ _logger = getLogger(__name__)
 type VideoNodeIterable = Iterable[vs.VideoNode | VideoNodeIterable]
 type AudioNodeIterable = Iterable[vs.AudioNode | AudioNodeIterable]
 
-# TimecodesT = (
-#     str
-#     | PathLike[str]
-#     | dict[tuple[int | None, int | None], float | tuple[int, int] | Fraction]
-#     | list[Fraction]
-#     | None
-# )
 # ScenesT = Keyframes | list[tuple[int, int]] | list[Keyframes | list[tuple[int, int]]] | None
 
 
@@ -41,8 +35,7 @@ def set_output(
     /,
     *,
     alpha: vs.VideoNode | None = ...,
-    # timecodes: TimecodesT = None,
-    # denominator: int = 1001,
+    framedurs: Sequence[float] | None = None,
     # scenes: ScenesT = None,
     **kwargs: Any,
 ) -> None: ...
@@ -55,8 +48,7 @@ def set_output(
     /,
     *,
     alpha: vs.VideoNode | None = ...,
-    # timecodes: TimecodesT = None,
-    # denominator: int = 1001,
+    framedurs: Sequence[float] | None = None,
     # scenes: ScenesT = None,
     **kwargs: Any,
 ) -> None: ...
@@ -69,9 +61,8 @@ def set_output(
     name: str | bool | None = ...,
     /,
     alpha: vs.VideoNode | None = ...,
-    # *,
-    # timecodes: TimecodesT = None,
-    # denominator: int = 1001,
+    *,
+    framedurs: Sequence[float] | None = None,
     # scenes: ScenesT = None,
     **kwargs: Any,
 ) -> None: ...
@@ -140,11 +131,9 @@ def set_output(
     name: str | bool | None = None,
     /,
     alpha: vs.VideoNode | None = None,
-    # *,
-    # timecodes: TimecodesT = None,
-    # denominator: int = 1001,
-    # scenes: ScenesT = None,
     *,
+    framedurs: Sequence[float] | None = None,
+    # scenes: ScenesT = None,
     downmix: bool | None = None,
     **kwargs: Any,
 ) -> None:
@@ -175,6 +164,7 @@ def set_output(
         name: Explicit name override. If provided when index_or_name is an int,
             this sets the display name for the output.
         alpha: Optional alpha channel VideoNode (only for VideoNode outputs).
+        framedurs: Optional sequence of frame durations in seconds for VFR clips (only for VideoNode outputs).
         downmix: if None (default), follows the global settings downmix of vsview if previewed
             through vsview. Otherwise True or False forces the behavior.
         **kwargs: Additional keyword arguments (reserved for future use).
@@ -225,14 +215,14 @@ def set_output(
 
         if file := getattr(script_module, "__file__", None):
             if isinstance(n, vs.VideoNode):
-                _output_metadata[file][i] = VideoMetadata(effective_name or f"{title} {i}")
+                if framedurs and len(framedurs) != n.num_frames:
+                    raise CustomValueError(
+                        "framedurs length must match number of frames", kwargs.get("func", set_output)
+                    )
+
+                _output_metadata[file][i] = VideoMetadata(effective_name or f"{title} {i}", deepcopy(framedurs))
             elif isinstance(n, vs.AudioNode):
                 _output_metadata[file][i] = AudioMetadata(effective_name or f"{title} {i}", downmix)
-
-        # if isinstance(n, vs.VideoNode):
-        #     if timecodes:
-        #         timecodes = str(timecodes) if not isinstance(timecodes, (dict, list)) else timecodes
-        #         set_timecodes(i, timecodes, n, denominator)
 
         #     if scenes:
         #         set_scening(scenes, n, effective_name or f"{title} {i}")

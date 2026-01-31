@@ -1,5 +1,5 @@
 from collections import UserDict, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from os import PathLike
 from typing import Any, NamedTuple
 
@@ -8,6 +8,7 @@ from jetpytools import copy_signature
 
 class VideoMetadata(NamedTuple):
     name: str
+    framedurs: Sequence[float] | None
 
 
 class AudioMetadata(NamedTuple):

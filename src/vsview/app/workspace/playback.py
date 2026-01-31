@@ -463,28 +463,42 @@ class PlaybackManager(QObject):
 
         # VFR path
         if self.state.frame_interval_ns == 0 and (voutput := self._outputs_manager.current_voutput):
-            available_frames = list(voutput.props)
-            props = None
-            i = -1
-
-            # Find the first frame that is <= current_frame
-            while -i < len(available_frames):
-                if (n := available_frames[i]) <= self.state.current_frame:
-                    props = voutput.props[n]
-                    break
-                i -= 1
-
-            if props:
-                duration_num = props["_DurationNum"]
-                duration_den = props["_DurationDen"]
+            # If framedurs has been provided
+            if voutput.framedurs:
+                self.state.next_frame_time_ns += cround(
+                    1_000_000_000
+                    * voutput.framedurs[self.state.current_frame]
+                    / self._tbar.playback_container.settings.speed
+                )
+            # Fallback to frameprops for frame duration
             else:
-                logger.warning("No duration props available for frame %d, assuming 25fps", self.state.current_frame)
-                duration_num = 1
-                duration_den = 25
+                available_frames = list(voutput.props)
+                props = None
+                i = -1
 
-            self.state.next_frame_time_ns += cround(
-                1_000_000_000 * duration_num / (duration_den * self._tbar.playback_container.settings.speed)
-            )
+                # Find the first frame that is <= current_frame
+                while -i < len(available_frames):
+                    if (n := available_frames[i]) <= self.state.current_frame:
+                        props = voutput.props[n]
+                        break
+                    i -= 1
+
+                if props:
+                    try:
+                        duration_num = props["_DurationNum"]
+                        duration_den = props["_DurationDen"]
+                    except KeyError:
+                        logger.exception("Duration props not available for frame %d", self.state.current_frame)
+                        self.toggle_playback()
+                        return
+                else:
+                    logger.warning("No duration props available for frame %d, assuming 25fps", self.state.current_frame)
+                    duration_num = 1
+                    duration_den = 25
+
+                self.state.next_frame_time_ns += cround(
+                    1_000_000_000 * duration_num / (duration_den * self._tbar.playback_container.settings.speed)
+                )
         else:
             self.state.next_frame_time_ns += self.state.frame_interval_ns
 

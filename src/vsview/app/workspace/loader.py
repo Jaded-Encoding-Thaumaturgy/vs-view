@@ -560,9 +560,8 @@ class LoaderWorkspace[T](BaseWorkspace):
             )
             return target_frame
 
-        # FIXME: VFR support here
-        src_fps = self.outputs_manager.voutputs[self.tab_manager.tabs.previous_tab_index].vs_output.clip.fps
-        tgt_fps = self.outputs_manager.current_voutput.vs_output.clip.fps
+        src_fps = self.outputs_manager.voutputs[self.tab_manager.tabs.previous_tab_index]
+        tgt_fps = self.outputs_manager.current_voutput
 
         current_time = self.outputs_manager.current_voutput.frame_to_time(self.playback.state.current_frame, src_fps)
         target_frame = self.outputs_manager.current_voutput.time_to_frame(current_time, tgt_fps)
@@ -588,20 +587,22 @@ class LoaderWorkspace[T](BaseWorkspace):
                 * voutput.vs_output.clip.fps.denominator
                 / voutput.vs_output.clip.fps.numerator
             )
-            total_duration = Time(seconds=total_seconds).to_ts("{H}:{M:02d}:{S:02d}.{ms:03d}")
-            fps_str = f"{voutput.vs_output.clip.fps.numerator / voutput.vs_output.clip.fps.denominator:.3f}"
+            total_duration = Time(seconds=total_seconds)
+            fps = voutput.vs_output.clip.fps.numerator / voutput.vs_output.clip.fps.denominator
+        elif voutput.cum_durations:
+            total_duration = Time(seconds=voutput.cum_durations[-1])
+            fps = voutput.vs_output.clip.num_frames / total_duration.total_seconds()
         else:
-            # FIXME: VFR support here
-            total_duration = "0:00:00.000"
-            fps_str = "0"
+            total_duration = Time()
+            fps = 0
 
         info = OutputInfo(
-            total_duration=total_duration,
+            total_duration=total_duration.to_ts("{H}:{M:02d}:{S:02d}.{ms:03d}"),
             total_frames=voutput.vs_output.clip.num_frames,
             width=voutput.vs_output.clip.width,
             height=voutput.vs_output.clip.height,
             format_name=voutput.vs_output.clip.format.name if voutput.vs_output.clip.format else "NONE",
-            fps=fps_str,
+            fps=f"{fps:.3f}",
         )
 
         self.statusOutputChanged.emit(info)

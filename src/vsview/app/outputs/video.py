@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections.abc import Mapping
 from contextlib import suppress
 from fractions import Fraction
+from itertools import accumulate
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
@@ -35,6 +37,9 @@ class VideoOutput:
         self.vs_index = vs_index
         self.packer = packer
         self.vs_name = metadata.name if metadata else None
+        self.framedurs = metadata.framedurs if metadata else None
+
+        self.cum_durations = list(accumulate(self.framedurs)) if self.framedurs else None
 
         self.props = LRUCache[int, Mapping[str, Any]](
             cache_size=SettingsManager.global_settings.playback.buffer_size * 2
@@ -71,21 +76,34 @@ class VideoOutput:
             with suppress(AttributeError):
                 delattr(self, attr)
 
-    def time_to_frame(self, time: Time, fps: Fraction | None = None) -> Frame:
+    def time_to_frame(self, time: Time, fps: VideoOutput | Fraction | None = None) -> Frame:
         from ..views.timeline import Frame
 
-        if fps is None:
-            fps = self.vs_output.clip.fps
+        fps, cum_durations = self._get_fps_and_durations(fps)
+
+        if fps == 0 and cum_durations:
+            return Frame(bisect_right(cum_durations, time.total_seconds()))
 
         return Frame(cround(time.total_seconds() * fps.numerator / fps.denominator) if fps.denominator > 0 else 0)
 
-    def frame_to_time(self, frame: int, fps: Fraction | None = None) -> Time:
+    def frame_to_time(self, frame: int, fps: VideoOutput | Fraction | None = None) -> Time:
         from ..views.timeline import Time
 
-        if fps is None:
-            fps = self.vs_output.clip.fps
+        fps, cum_durations = self._get_fps_and_durations(fps)
+
+        if fps == 0 and cum_durations:
+            return Time(seconds=cum_durations[frame - 1] if frame > 0 else 0)
 
         return Time(seconds=frame * fps.denominator / fps.numerator if fps.numerator > 0 else 0)
+
+    def _get_fps_and_durations(self, fps: VideoOutput | Fraction | None) -> tuple[Fraction, list[float] | None]:
+        if fps is None:
+            return self.vs_output.clip.fps, self.cum_durations
+
+        if isinstance(fps, VideoOutput):
+            return fps.vs_output.clip.fps, fps.cum_durations
+
+        return fps, self.cum_durations
 
     def _get_props_on_render(self, n: int, f: vs.VideoFrame) -> vs.VideoFrame:
         self.props[n] = f.props
