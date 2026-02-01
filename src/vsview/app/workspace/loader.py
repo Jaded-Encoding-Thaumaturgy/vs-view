@@ -433,7 +433,13 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         # Use configured FPS history size, or auto-calculate from FPS when set to 0
         if (fps_history_size := self.global_settings.playback.fps_history_size) <= 0:
-            fps_history_size = round(fps) if fps > 0 else 25
+            fps_history_size = (
+                round(fps)
+                if fps > 0
+                else round(1 / (sum(voutput.framedurs) / len(voutput.framedurs)))
+                if voutput.framedurs
+                else 25
+            )
 
         self.playback.state.fps_history = deque(maxlen=clamp(fps_history_size, 1, total_frames))
 
