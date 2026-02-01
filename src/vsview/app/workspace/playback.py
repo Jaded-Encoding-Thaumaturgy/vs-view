@@ -564,9 +564,9 @@ class PlaybackManager(QObject):
         ):
             return
 
-        # Temporaly disable audio for VFR clips
-        # Audio can only be played reliably if a timecode file is passed.
-        if voutput.vs_output.clip.fps <= 0:
+        # Audio can only be played reliably if there are frame durations
+        if not voutput.cum_durations:
+            logger.warning("No frame durations available, audio will not be played")
             return
 
         # Calculate starting audio frame from current video time
