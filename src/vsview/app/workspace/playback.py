@@ -523,12 +523,15 @@ class PlaybackManager(QObject):
             )
         else:
             logger.debug("VFR detected")
-            props = voutput.props[self.state.current_frame]
-
-            if "_DurationNum" not in props or "_DurationDen" not in props:
-                raise RuntimeError("Both '_DurationNum' and '_DurationDen' props need to be available for VFR playback")
-
             self.state.frame_interval_ns = 0
+
+            if not voutput.framedurs:
+                props = voutput.props[self.state.current_frame]
+
+                if "_DurationNum" not in props or "_DurationDen" not in props:
+                    raise RuntimeError(
+                        "Both '_DurationNum' and '_DurationDen' props need to be available for VFR playback"
+                    )
 
         # Create and allocate video buffer
         self.state.buffer = FrameBuffer(video_output=voutput, env=self._env)
