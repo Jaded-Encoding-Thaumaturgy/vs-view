@@ -1,6 +1,7 @@
 from base64 import b64decode, b64encode
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from concurrent.futures import Future
+from contextlib import contextmanager
 from importlib.util import find_spec
 from logging import getLogger
 from pathlib import Path
@@ -137,27 +138,13 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
 
     @run_in_background(name="LoadContent")
     def load_content(self, content: Path, /, frame: int | None = None, tab_index: int | None = None) -> None:
-        super().load_content(content, frame, tab_index).result()
-
-        self.loop.from_thread(
-            self._autosave_timer.start,
-            (self.global_settings.autosave.minute * 60 + self.global_settings.autosave.second) * 1000,
-        )
+        with self._restart_autosave():
+            super().load_content(content, frame, tab_index).result()
 
     @run_in_background(name="ReloadContent")
     def reload_content(self) -> None:
-        remaining_time = self._autosave_timer.remainingTime()
-
-        self.loop.from_thread(self._autosave_timer.stop)
-
-        super().reload_content().result()
-
-        self.loop.from_thread(
-            self._autosave_timer.start,
-            remaining_time
-            if remaining_time > 0
-            else (self.global_settings.autosave.minute * 60 + self.global_settings.autosave.second) * 1000,
-        )
+        with self._restart_autosave():
+            super().reload_content().result()
 
     @run_in_loop(return_future=False)
     def clear_failed_load(self) -> None:
@@ -169,6 +156,20 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         if not self.plugins_loaded:
             super().load_plugins()
             self._restore_layout()
+
+    @contextmanager
+    def _restart_autosave(self) -> Iterator[None]:
+        remaining_time = self._autosave_timer.remainingTime()
+        self.loop.from_thread(self._autosave_timer.stop)
+
+        yield
+
+        self.loop.from_thread(
+            self._autosave_timer.start,
+            remaining_time
+            if remaining_time > 0
+            else (self.global_settings.autosave.minute * 60 + self.global_settings.autosave.second) * 1000,
+        )
 
     def _restore_layout(self) -> None:
         layout = self.local_settings.layout
