@@ -4,7 +4,8 @@
 
 These features are present in VSPreview and need to be brought over.
 
-- [ ] VFR support + timecode files loading
+- [x] VFR support
+- [ ] ~~timecode files loading~~
 - [x] Audio support
 - [ ] Scening (+ API for custom notches on the timeline)
 - [ ] Pipette
