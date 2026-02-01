@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
-from fractions import Fraction
 from functools import cache
 from logging import getLogger
 from math import floor
@@ -271,16 +271,16 @@ class Timeline(QWidget):
         raise NotImplementedError
 
     @property
-    def fps(self) -> Fraction:
+    def total_time(self) -> Time:
         if isinstance((parent := self.parent()), TimelineControlBar):
-            return parent.fps
+            return parent.total_time
 
         raise NotImplementedError
 
     @property
-    def total_time(self) -> Time:
+    def cum_durations(self) -> list[Time] | None:
         if isinstance((parent := self.parent()), TimelineControlBar):
-            return parent.total_time
+            return parent.cum_durations
 
         raise NotImplementedError
 
@@ -625,9 +625,13 @@ class Timeline(QWidget):
 
     def x_to_time(self, x: int) -> Time:
         """Converts an X pixel coordinate to a Time value."""
-        if self.rect_f.width() == 0:
-            return Time(0)
-        return Time(seconds=(x * self.total_time.total_seconds() / self.rect_f.width()))
+        if self.rect_f.width() == 0 or self.cum_durations:
+            return Time()
+
+        if not self.cum_durations:
+            return Time()
+
+        return self.cum_durations[frame - 1] if (frame := self.x_to_frame(x)) > 0 else Time()
 
     def x_to_frame(self, x: int) -> Frame:
         """Converts an X pixel coordinate to a Frame number."""
@@ -643,7 +647,10 @@ class Timeline(QWidget):
             width = self.rect_f.width()
 
             if isinstance(cursor, Time):
-                return floor(cursor.total_seconds() / self.total_time.total_seconds() * width)
+                if not self.cum_durations:
+                    return 0
+
+                return self.cursor_to_x(Frame(bisect_right(self.cum_durations, cursor)))
 
             if isinstance(cursor, Frame):
                 return floor(cursor / self.total_frames * width)
@@ -1097,9 +1104,9 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.audioDelayChanged.emit(value)
 
     @property
-    def fps(self) -> Fraction:
+    def cum_durations(self) -> list[Time] | None:
         if isinstance((parent := self.parent()), TimelineControlBar):
-            return parent.fps
+            return parent.cum_durations
 
         raise NotImplementedError
 
@@ -1121,11 +1128,12 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         with QSignalBlocker(self.zone_frame_spinbox):
             self.zone_frame_spinbox.setValue(self.settings.zone_frames)
 
-        # Sync zone time based on FPS
-        if self.fps.numerator > 0:
+        if self.cum_durations:
             with QSignalBlocker(self.zone_time_edit):
                 self.zone_time_edit.setTime(
-                    Time(seconds=self.settings.zone_frames * self.fps.denominator / self.fps.numerator).to_qtime()
+                    self.cum_durations[self.settings.zone_frames - 1].to_qtime()
+                    if self.settings.zone_frames > 0
+                    else QTime()
                 )
 
         with QSignalBlocker(self.loop_checkbox):
@@ -1225,18 +1233,15 @@ class PlaybackContainer(QWidget, IconReloadMixin):
     def _on_zone_frames_changed(self, new_frame: int, old_frame: int) -> None:
         self.settings.zone_frames = new_frame
 
-        # Convert frames to time based on FPS
-        if self.fps.numerator > 0:
+        # Convert frames to time
+        if self.cum_durations:
             with QSignalBlocker(self.zone_time_edit):
-                self.zone_time_edit.setTime(
-                    Time(seconds=new_frame * self.fps.denominator / self.fps.numerator).to_qtime()
-                )
+                self.zone_time_edit.setTime(self.cum_durations[new_frame - 1].to_qtime() if new_frame > 0 else QTime())
 
     def _on_zone_time_changed(self, new_time: QTime, old_time: QTime) -> None:
-        # Convert time to frames based on FPS
-        if self.fps.numerator > 0:
-            seconds = new_time.msecsSinceStartOfDay() / 1000.0
-            frames = max(1, round(seconds * self.fps.denominator / self.fps.numerator))
+        # Convert time to frames
+        if self.cum_durations:
+            frames = max(1, bisect_right(self.cum_durations, Time.from_qtime(new_time)))
 
             self.settings.zone_frames = frames
 
@@ -1314,18 +1319,16 @@ class TimelineControlBar(QWidget):
         return self._total_frames
 
     @property
-    def fps(self) -> Fraction:
-        return self._fps
+    def total_time(self) -> Time:
+        return self._cum_durations[-1] if self._cum_durations else Time()
 
     @property
-    def total_time(self) -> Time:
-        if self._fps.numerator > 0:
-            return Time(seconds=self._total_frames * self._fps.denominator / self._fps.numerator)
-        return Time(seconds=0)
+    def cum_durations(self) -> list[Time] | None:
+        return self._cum_durations
 
-    def set_data(self, total_frames: int, fps: Fraction) -> None:
+    def set_data(self, total_frames: int, cum_durations: list[float] | None = None) -> None:
         self._total_frames = total_frames
-        self._fps = fps
+        self._cum_durations = [Time(seconds=cum) for cum in cum_durations] if cum_durations else None
 
         self.timeline.update()
 

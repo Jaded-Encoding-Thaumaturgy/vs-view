@@ -426,10 +426,10 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.debug("No voutput available")
             return
 
-        total_frames = voutput.vs_output.clip.num_frames
         fps = voutput.vs_output.clip.fps
+        total_frames = voutput.vs_output.clip.num_frames
 
-        self.tbar.set_data(total_frames, fps)
+        self.tbar.set_data(total_frames, voutput.cum_durations)
 
         # Use configured FPS history size, or auto-calculate from FPS when set to 0
         if (fps_history_size := self.global_settings.playback.fps_history_size) <= 0:

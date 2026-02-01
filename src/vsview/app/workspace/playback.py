@@ -691,13 +691,10 @@ class PlaybackManager(QObject):
     def _on_time_changed(self, time: QTime, old_time: QTime) -> None:
         logger.debug("Time changed: time=%s", time)
 
-        # FIXME: Probably doesn't work with VFR here
-        frame = cround(
-            Time.from_qtime(time).total_seconds()
-            * self._tbar.timeline.fps.numerator
-            / self._tbar.timeline.fps.denominator
-        )
+        if not (voutput := self._outputs_manager.current_voutput):
+            return
 
+        frame = voutput.time_to_frame(Time.from_qtime(time))
         logger.debug("Time changed: frame=%d", frame)
 
         self.request_frame(frame)

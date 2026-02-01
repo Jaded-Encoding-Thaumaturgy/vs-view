@@ -39,7 +39,13 @@ class VideoOutput:
         self.vs_name = metadata.name if metadata else None
         self.framedurs = metadata.framedurs if metadata else None
 
-        self.cum_durations = list(accumulate(self.framedurs)) if self.framedurs else None
+        self.cum_durations = (
+            list(accumulate(self.framedurs))
+            if self.framedurs
+            else list(accumulate([float(1 / self.vs_output.clip.fps)] * self.vs_output.clip.num_frames))
+            if self.vs_output.clip.fps > 0
+            else None
+        )
 
         self.props = LRUCache[int, Mapping[str, Any]](
             cache_size=SettingsManager.global_settings.playback.buffer_size * 2
@@ -84,7 +90,7 @@ class VideoOutput:
         if fps == 0 and cum_durations:
             return Frame(bisect_right(cum_durations, time.total_seconds()))
 
-        return Frame(cround(time.total_seconds() * fps.numerator / fps.denominator) if fps.denominator > 0 else 0)
+        return Frame(cround(time.total_seconds() * fps) if fps > 0 else 0)
 
     def frame_to_time(self, frame: int, fps: VideoOutput | Fraction | None = None) -> Time:
         from ..views.timeline import Time
@@ -94,7 +100,7 @@ class VideoOutput:
         if fps == 0 and cum_durations:
             return Time(seconds=cum_durations[frame - 1] if frame > 0 else 0)
 
-        return Time(seconds=frame * fps.denominator / fps.numerator if fps.numerator > 0 else 0)
+        return Time(seconds=frame * fps.denominator / fps.numerator if fps > 0 else 0)
 
     def _get_fps_and_durations(self, fps: VideoOutput | Fraction | None) -> tuple[Fraction, list[float] | None]:
         if fps is None:
