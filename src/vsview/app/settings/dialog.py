@@ -318,8 +318,8 @@ class SettingsDialog(QDialog, IconReloadMixin):
             first_component = aid.split(".")[0]
 
             # Check if this is a plugin shortcut
-            if first_component in self._plugin_display_names:
-                group_name = f"Plugin - {self._plugin_display_names[first_component]}"
+            if first_component in self._plugin_names:
+                group_name = f"Plugin - {self._plugin_names[first_component]}"
             else:
                 group_name = first_component.title()
 
@@ -484,9 +484,16 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         for aid, editor in self._shortcut_widgets.editors.items():
             key = editor.keySequence().toString()
-            # Exclude plugin shortcuts from built-in shortcut conflict detection
-            if key and aid.split(".")[0] not in self._plugin_display_names:
-                key_to_actions.setdefault(key, []).append(aid)
+
+            if not key or (
+                # Exclude plugin shortcuts with a reduced scope
+                aid.split(".")[0] in self._plugin_names
+                and ShortcutManager.get_hierarchy(aid)
+                <= ShortcutManager.SCOPE_HIERARCHY[Qt.ShortcutContext.WidgetWithChildrenShortcut]
+            ):
+                continue
+
+            key_to_actions.setdefault(key, []).append(aid)
 
         # Find conflicting keys (assigned to more than one action)
         conflicting_keys = {key for key, actions in key_to_actions.items() if len(actions) > 1}
@@ -517,7 +524,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
         return {aid: d.default_key for aid, d in ShortcutManager.definitions.items()}
 
     @cachedproperty
-    def _plugin_display_names(self) -> dict[str, str]:
+    def _plugin_names(self) -> dict[str, str]:
         from ..plugins.manager import PluginManager
 
         return {plugin.identifier: plugin.display_name for plugin in PluginManager.all_plugins}

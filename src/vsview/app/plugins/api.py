@@ -164,29 +164,44 @@ class PluginAPI(_PluginAPI):
         with self.__workspace.env.use():
             yield
 
-    def register_action(self, action_id: str, action: QAction) -> None:
+    def register_action(
+        self,
+        action_id: str,
+        action: QAction,
+        *,
+        context: Qt.ShortcutContext = Qt.ShortcutContext.WidgetWithChildrenShortcut,
+    ) -> None:
         """
         Register a QAction for shortcut management.
 
         Args:
             action_id: The namespaced identifier (e.g., "my_plugin.do_thing").
             action: The QAction to manage.
+            context: The context in which the shortcut should be active.
         """
-        ShortcutManager.register_action(action_id, action)
+        ShortcutManager.register_action(action_id, action, context=context)
 
-    def register_shortcut(self, action_id: str, callback: Callable[[], Any], context: QWidget) -> QShortcut:
+    def register_shortcut(
+        self,
+        action_id: str,
+        callback: Callable[[], Any],
+        parent: QWidget,
+        *,
+        context: Qt.ShortcutContext = Qt.ShortcutContext.WidgetWithChildrenShortcut,
+    ) -> QShortcut:
         """
         Create and register a QShortcut for shortcut management.
 
         Args:
             action_id: The namespaced identifier (e.g., "my_plugin.do_thing").
             callback: The function to call when the shortcut is activated.
-            context: The parent widget that determines shortcut scope.
+            parent: The parent widget that determines shortcut scope.
+            context: The context in which the shortcut should be active.
 
         Returns:
             The created QShortcut instance.
         """
-        return ShortcutManager.register_shortcut(action_id, callback, context)
+        return ShortcutManager.register_shortcut(action_id, callback, parent, context=context)
 
 
 class LocalSettingsModel(BaseModel):
