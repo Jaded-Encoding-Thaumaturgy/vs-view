@@ -625,7 +625,7 @@ class Timeline(QWidget):
 
     def x_to_time(self, x: int) -> Time:
         """Converts an X pixel coordinate to a Time value."""
-        if self.rect_f.width() == 0 or self.cum_durations:
+        if self.rect_f.width() == 0:
             return Time()
 
         if not self.cum_durations:
