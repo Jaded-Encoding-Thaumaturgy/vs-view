@@ -557,7 +557,7 @@ class Timeline(QWidget):
         if self.is_events_blocked:
             return
 
-        self.hover_x = int(max(0, min(event.position().x(), self.rect_f.width())))
+        self.hover_x = int(clamp(event.position().x(), 0, self.rect_f.width()))
         self.update()
 
         if not self.mousepressed:
@@ -573,7 +573,7 @@ class Timeline(QWidget):
         click_zone.setBottom(click_zone.bottom() + 10)
 
         if click_zone.contains(pos):
-            new_x = int(clamp(int(pos.x()), 0, self.rect_f.width()))
+            new_x = int(clamp(pos.x(), 0, self.rect_f.width()))
 
             self._cursor_val = new_x
             self.update()
