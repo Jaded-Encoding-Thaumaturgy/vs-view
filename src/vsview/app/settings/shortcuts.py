@@ -129,7 +129,8 @@ class ShortcutManager(Singleton):
         Returns:
             The created QShortcut instance.
         """
-        shortcut = QShortcut(parent, context=context)
+        shortcut = QShortcut(parent)
+        shortcut.setContext(context)
         shortcut.activated.connect(callback)
 
         # Add ambiguity detection for runtime conflicts
