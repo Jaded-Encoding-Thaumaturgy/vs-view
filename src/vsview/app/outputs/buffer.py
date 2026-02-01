@@ -55,9 +55,6 @@ class FrameBuffer:
         self._invalidated = False
         self._plugin_nodes = dict[str, vs.VideoNode]()
 
-        with self.env.use():
-            vs.register_on_destroy(self._plugin_nodes.clear)
-
     def register_plugin_node(self, identifier: str, node: vs.VideoNode) -> None:
         self._plugin_nodes[identifier] = node
         logger.debug("Registered plugin node: %s", identifier)
@@ -153,6 +150,8 @@ class FrameBuffer:
     @run_in_background(name="ClearBuffer")
     def clear(self) -> None:
         """Clear all buffered frames and trigger garbage collection."""
+        self._plugin_nodes.clear()
+
         bundles = list(self._bundles)
         self._bundles.clear()
 
