@@ -822,6 +822,10 @@ class LocalPlaybackSettings(BaseModel):
         self.audio_delay_raw = value
 
 
+class LocalTimelineSettings(BaseModel):
+    mode: Literal["frame", "time"] | None = None
+
+
 class SynchronizationSettings(BaseModel):
     __section__ = "Synchronization"
 
@@ -885,6 +889,7 @@ class LocalSettings(BaseSettings):
     last_frame: int = 0
     last_output_tab_index: int = 0
     playback: LocalPlaybackSettings = LocalPlaybackSettings()
+    timeline: LocalTimelineSettings = LocalTimelineSettings()
     synchronization: SynchronizationSettings = SynchronizationSettings()
     layout: LayoutSettings = LayoutSettings()
     plugins: dict[str, dict[str, Any] | BaseModel] = Field(default_factory=dict)

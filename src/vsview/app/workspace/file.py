@@ -94,6 +94,8 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.local_settings.playback.muted = self.tbar.playback_container.is_muted
         self.local_settings.playback.audio_delay = self.tbar.playback_container.audio_delay
 
+        self.local_settings.timeline.mode = self.tbar.timeline.mode
+
         # Save layout state
         self.local_settings.layout.plugin_splitter_sizes = self.plugin_splitter.sizes()
         self.local_settings.layout.plugin_tab_index = self.plugin_splitter.plugin_tabs.currentIndex()
@@ -112,6 +114,9 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.tbar.playback_container.settings.uncapped = self.local_settings.playback.uncapped
         self.tbar.playback_container.settings.zone_frames = self.local_settings.playback.zone_frames
         self.tbar.playback_container.settings.loop = self.local_settings.playback.loop
+
+        if self.local_settings.timeline.mode:
+            self.tbar.timeline.mode = self.local_settings.timeline.mode
 
         self.tbar.playback_container.volume = self.local_settings.playback.current_volume
         self.tbar.playback_container.is_muted = self.local_settings.playback.muted
