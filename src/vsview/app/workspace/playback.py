@@ -461,6 +461,9 @@ class PlaybackManager(QObject):
             self._play_next_frame()
             return
 
+        if not self.state.is_playing:
+            return
+
         # VFR path
         if self.state.frame_interval_ns == 0 and (voutput := self._outputs_manager.current_voutput):
             # If framedurs has been provided
