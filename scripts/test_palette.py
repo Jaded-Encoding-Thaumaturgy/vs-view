@@ -201,7 +201,7 @@ class PaletteVisualizer(QWidget):
         # Clear existing
         while self.swatch_grid.count():
             item = self.swatch_grid.takeAt(0)
-            if w := item.widget():
+            if (item := self.swatch_grid.takeAt(0)) and (w := item.widget()):
                 w.deleteLater()
 
         # Use the widget's palette (which captures the override or the app style)
