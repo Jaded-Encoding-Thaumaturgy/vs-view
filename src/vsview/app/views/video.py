@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QWidgetAction,
 )
+from shiboken6 import Shiboken
 
 from ...vsenv import run_in_background, run_in_loop
 from ..settings import ActionID, SettingsManager, ShortcutManager
@@ -50,8 +51,7 @@ class ViewState(NamedTuple):
                 Qt.TransformationMode.FastTransformation,
             )
 
-        view.pixmap_item.setPixmap(pixmap)
-        view.setSceneRect(view.pixmap_item.boundingRect())
+        view.set_pixmap(pixmap)
 
     @run_in_loop(return_future=False)
     def apply_frozen_state(self, view: GraphicsView) -> None:
@@ -209,7 +209,7 @@ class BaseGraphicsView(QGraphicsView):
         self.current_zoom = value / self.devicePixelRatio()
 
         if value == 0:
-            if (pixmap := self.pixmap_item.pixmap()).isNull():
+            if not Shiboken.isValid(self.pixmap_item) or (pixmap := self.pixmap_item.pixmap()).isNull():
                 return
 
             viewport = self.viewport()
@@ -253,6 +253,14 @@ class BaseGraphicsView(QGraphicsView):
         self.pixmap_item.setTransformationMode(Qt.TransformationMode.FastTransformation)
 
         self.setScene(self.graphics_scene)
+
+    def set_pixmap(self, pixmap: QPixmap) -> None:
+        self.pixmap_item.setPixmap(pixmap)
+
+    def update_scene_rect(self) -> None:
+        self.setSceneRect(self.pixmap_item.mapRectToScene(self.pixmap_item.boundingRect()))
+        self.viewport().resize(self.pixmap_item.pixmap().width(), self.pixmap_item.pixmap().height())
+        self.viewport().updateGeometry()
 
     def _slider_to_zoom(self, slider_val: int) -> float:
         num_factors = len(self.zoom_factors)

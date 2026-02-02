@@ -192,21 +192,10 @@ class TabManager(QWidget, IconReloadMixin):
         if self.tabs.currentIndex() == -1:
             return
 
-        try:
-            self.current_view.pixmap_item.setPixmap(
-                QPixmap.fromImage(image, Qt.ImageConversionFlag.NoFormatConversion),
-            )
-        except ValueError:
-            logger.warning("Failed to update view with new frame")
-            return
-
-        if skip_adjustments:
-            return
-
-        self.current_view.setSceneRect(self.current_view.pixmap_item.boundingRect())
+        self.current_view.set_pixmap(QPixmap.fromImage(image, Qt.ImageConversionFlag.NoFormatConversion))
 
         if self.current_view.autofit:
-            self.current_view.set_zoom(0)
+            self.current_view.set_autofit(True)
 
     @contextmanager
     def clear_voutputs_on_fail(self) -> Iterator[None]:
@@ -269,20 +258,14 @@ class TabManager(QWidget, IconReloadMixin):
         if checked:
             self._on_zoom_changed(self.current_view.current_zoom)
 
-    def _on_global_autofit_changed(self, enabled: bool) -> None:
+    def _on_global_autofit_changed(self, enabled: bool, under_reload: bool = False) -> None:
         for i, view in enumerate(self.tabs.views()):
             with QSignalBlocker(view):
-                view.set_autofit(enabled)
+                if under_reload and not enabled and view.autofit:
+                    self.tabs.get_tab_label(i).zoom = 0
+                    continue
 
-                if enabled:
-                    view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-                    view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-                    if view is self.current_view:
-                        view.set_zoom(0)
-                else:
-                    view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-                    view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-                    view.set_zoom(view._slider_to_zoom(view.slider.value()))
+                view.set_autofit(enabled, animated=not under_reload)
 
             self.tabs.get_tab_label(i).zoom = 0 if enabled else view.current_zoom
 
