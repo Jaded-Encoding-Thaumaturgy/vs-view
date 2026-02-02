@@ -188,7 +188,7 @@ class TabManager(QWidget, IconReloadMixin):
         self.tabs.setCurrentIndex(index)
 
     @run_in_loop
-    def update_current_view(self, image: QImage, skip_adjustments: bool = False, sar: float | None = None) -> None:
+    def update_current_view(self, image: QImage, sar: float | None = None) -> None:
         """Update the view with a new rendered frame."""
 
         if self.tabs.currentIndex() == -1:
