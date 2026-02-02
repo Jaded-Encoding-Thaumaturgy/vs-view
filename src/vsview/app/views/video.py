@@ -36,8 +36,8 @@ class ViewState(NamedTuple):
     pixmap: QPixmap
     zoom: float
     autofit: bool
-    h_ratio: float
-    v_ratio: float
+    scene_x: float
+    scene_y: float
     slider_value: int
 
     @run_in_loop
@@ -66,10 +66,10 @@ class ViewState(NamedTuple):
 
     def restore_view_state(self, view: GraphicsView) -> None:
         if not self.autofit:
-            if (h_bar := view.horizontalScrollBar()).maximum() > 0:
-                h_bar.setValue(int(self.h_ratio * h_bar.maximum()))
-            if (v_bar := view.verticalScrollBar()).maximum() > 0:
-                v_bar.setValue(int(self.v_ratio * v_bar.maximum()))
+            # Compensate for centerOn's 1-pixel rounding drift
+            zoom = view.transform().m11() or 1.0
+            half_pixel = 0.5 / zoom
+            view.centerOn(self.scene_x + half_pixel, self.scene_y + half_pixel)
 
 
 class BaseGraphicsView(QGraphicsView):
@@ -156,15 +156,14 @@ class BaseGraphicsView(QGraphicsView):
 
     @property
     def state(self) -> ViewState:
-        h_bar = self.horizontalScrollBar()
-        v_bar = self.verticalScrollBar()
+        center = self.mapToScene(self.viewport().rect().center())
 
         return ViewState(
             self.pixmap_item.pixmap().copy(),
             self.current_zoom,
             self.autofit,
-            h_bar.value() / h_bar.maximum() if h_bar.maximum() > 0 else 0.5,
-            v_bar.value() / v_bar.maximum() if v_bar.maximum() > 0 else 0.5,
+            center.x(),
+            center.y(),
             self.slider.value(),
         )
 
