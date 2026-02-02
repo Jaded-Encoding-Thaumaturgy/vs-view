@@ -167,23 +167,17 @@ class TabManager(QWidget, IconReloadMixin):
         new_tabs.setCornerWidget(self.sync_container, Qt.Corner.TopRightCorner)
         self.sync_container.show()
 
+        new_tabs.recent_tabs[tab_index] = None
+        new_tabs.setCurrentIndex(tab_index)
+        new_tabs.currentChanged.connect(new_tabs._on_current_changed)
+        new_tabs.currentChanged.connect(self._on_tab_changed)
+
         self.current_layout.replaceWidget(old_tabs, new_tabs)
         new_tabs.show()
 
         self.tabs = new_tabs
 
-        self.tabs.currentChanged.connect(self._on_tab_changed)
-
         old_tabs.deleteLater()
-
-        if self.tabs.count() > 0:
-            target_index = tab_index
-
-            if target_index != self.tabs.currentIndex():
-                self.tabs.setCurrentIndex(target_index)
-            else:
-                # setCurrentIndex won't emit if index is already current, so call handler manually
-                self._on_tab_changed(target_index)
 
     def switch_tab(self, index: int) -> None:
         if self.disable_switch:

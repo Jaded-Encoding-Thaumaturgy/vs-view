@@ -24,7 +24,6 @@ class TabViewWidget(QTabWidget):
         super().__init__(parent)
 
         self.recent_tabs = OrderedDict[int, None]()
-        self.currentChanged.connect(self._on_current_changed)
 
     @property
     def previous_tab_index(self) -> int:
