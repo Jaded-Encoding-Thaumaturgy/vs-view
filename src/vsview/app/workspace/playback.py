@@ -4,7 +4,6 @@ from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future, wait
 from logging import getLogger
-from math import copysign
 from time import perf_counter_ns
 from typing import TYPE_CHECKING
 
@@ -641,16 +640,17 @@ class PlaybackManager(QObject):
         if not (voutput := self._outputs_manager.current_voutput):
             return
 
-        start_frame = self.state.current_frame
+        direction = 1 if step > 0 else -1
+
         end_frame = clamp(
-            self.state.current_frame + int(copysign(zone_frames, step)),
+            self.state.current_frame + (zone_frames * direction),
             0,
             voutput.vs_output.clip.num_frames - 1,
         )
-        play_range = range(start_frame, end_frame + 1, step)
+
+        play_range = range(self.state.current_frame, end_frame + direction, step)
 
         self._tbar.playback_container.play_pause_btn.setChecked(True)
-
         self._start_playback(play_range=play_range, loop=loop)
 
     def _on_audio_delay_changed(self, delay_s: float) -> None:
