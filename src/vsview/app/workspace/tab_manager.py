@@ -229,9 +229,9 @@ class TabManager(QWidget, IconReloadMixin):
             new_v_bar = new_view.verticalScrollBar()
 
             if new_h_bar.maximum() > 0:
-                new_h_bar.setValue(int(h_ratio * new_h_bar.maximum()))
+                new_h_bar.setValue(round(h_ratio * new_h_bar.maximum()))
             if new_v_bar.maximum() > 0:
-                new_v_bar.setValue(int(v_ratio * new_v_bar.maximum()))
+                new_v_bar.setValue(round(v_ratio * new_v_bar.maximum()))
 
         self.tabChanged.emit(index)
 
