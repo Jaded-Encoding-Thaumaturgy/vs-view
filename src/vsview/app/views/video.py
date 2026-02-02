@@ -56,16 +56,12 @@ class ViewState(NamedTuple):
     @run_in_loop(return_future=False)
     def apply_frozen_state(self, view: GraphicsView) -> None:
         if self.autofit:
-            view.autofit = True
-            view.autofit_action.setChecked(True)
-            view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            view.set_zoom(0)
+            view.set_autofit(True, animated=False)
         else:
             with QSignalBlocker(view.slider):
                 view.slider.setValue(self.slider_value)
 
-            view.set_zoom(self.zoom)
+            view.set_zoom(self.zoom, animated=False)
             self.restore_view_state(view)
 
     def restore_view_state(self, view: GraphicsView) -> None:
@@ -207,7 +203,7 @@ class BaseGraphicsView(QGraphicsView):
 
         super().wheelEvent(event)
 
-    def set_zoom(self, value: float) -> None:
+    def set_zoom(self, value: float, *, animated: bool = True) -> None:
         target_zoom = value
 
         self.current_zoom = value / self.devicePixelRatio()
@@ -224,12 +220,15 @@ class BaseGraphicsView(QGraphicsView):
         if current_scale == target_zoom:
             return
 
-        self._zoom_animation.stop()
-        self._zoom_animation.setStartValue(current_scale)
-        self._zoom_animation.setEndValue(target_zoom)
-        self._zoom_animation.start()
+        if animated and min(current_scale, target_zoom) >= self.zoom_factors[0]:
+            self._zoom_animation.stop()
+            self._zoom_animation.setStartValue(current_scale)
+            self._zoom_animation.setEndValue(target_zoom)
+            self._zoom_animation.start()
+        else:
+            self._apply_zoom_value(target_zoom)
 
-    def set_autofit(self, enabled: bool) -> None:
+    def set_autofit(self, enabled: bool, *, animated: bool = True) -> None:
         self.autofit = enabled
         self.autofit_action.setChecked(self.autofit)
 
@@ -237,12 +236,12 @@ class BaseGraphicsView(QGraphicsView):
             self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self.slider_container.setDisabled(True)
-            self.set_zoom(0)
+            self.set_zoom(0, animated=animated)
         else:
             self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self.slider_container.setDisabled(False)
-            self.set_zoom(self._slider_to_zoom(self.slider.value()))
+            self.set_zoom(self._slider_to_zoom(self.slider.value()), animated=animated)
 
     def clear_scene(self) -> None:
         self.graphics_scene.clear()
@@ -348,8 +347,8 @@ class GraphicsView(BaseGraphicsView):
     zoomChanged = Signal(float)
     autofitChanged = Signal(bool)
 
-    def set_zoom(self, value: float) -> None:
-        super().set_zoom(value)
+    def set_zoom(self, value: float, *, animated: bool = True) -> None:
+        super().set_zoom(value, animated=animated)
 
         if value:
             self.zoomChanged.emit(self.current_zoom)
