@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QDockWidget,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QPushButton,
     QStackedWidget,
@@ -335,7 +336,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.playback.can_reload = False
         self.statusLoadingStarted.emit("Reloading Content...")
 
-        with self.tbar.disabled(), self.tab_manager.clear_voutputs_on_fail():
+        with self.tbar.disabled(), self.tab_manager.clear_voutputs_on_fail(), self.freeze_viewport():
             self.loop.from_thread(self.content_area.setDisabled, True)
             self.tab_manager.disable_switch = True
             self.playback.state.wait_for_cleanup(
@@ -343,18 +344,11 @@ class LoaderWorkspace[T](BaseWorkspace):
                 stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
             )
 
-            # 1. Capture and Preserve State
+            # 1. Capture state
             saved_state = self.tab_manager.current_view.state
 
-            @run_in_loop(return_future=False)
-            def preserve_ui() -> None:
-                self.tab_manager.current_view.pixmap_item.setPixmap(saved_state.pixmap)
-
-                for view in self.tab_manager.tabs.views():
-                    if view is not self.tab_manager.current_view:
-                        view.clear_scene()
-
-            preserve_ui()
+            for view in self.tab_manager.tabs.views():
+                self.loop.from_thread(view.clear_scene).result()
 
             # 2. Reset Environment
             self.clear_environment()
@@ -379,8 +373,6 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             with QSignalBlocker(self.tab_manager):
                 self.tab_manager.swap_tabs(tabs, self.tab_manager.tabs.currentIndex())
-
-            saved_state.restore_view_state(self.tab_manager.current_view)
 
             self.loop.from_thread(
                 self.tab_manager._on_global_autofit_changed,
@@ -407,6 +399,30 @@ class LoaderWorkspace[T](BaseWorkspace):
                 raise
 
             logger.info("Content reloaded successfully: %r", self.content)
+
+    @contextmanager
+    def freeze_viewport(self) -> Iterator[None]:
+        @run_in_loop(return_future=False)
+        def show_screenshot() -> QLabel:
+            viewport = self.tab_manager.current_view.viewport()
+
+            screenshot = QLabel(self)
+            screenshot.setPixmap(viewport.grab())  # Grab just the viewport, no frame/scrollbars
+
+            pos = viewport.mapTo(self, viewport.rect().topLeft())
+            screenshot.setGeometry(pos.x(), pos.y(), viewport.width(), viewport.height())
+            screenshot.raise_()
+            screenshot.show()
+            return screenshot
+
+        screenshot = show_screenshot()
+
+        try:
+            yield
+        finally:
+            self.loop.from_thread(screenshot.setVisible, False)
+            self.loop.from_thread(screenshot.deleteLater)
+            del screenshot
 
     @run_in_loop(return_future=False)
     def clear_failed_load(self) -> None:
