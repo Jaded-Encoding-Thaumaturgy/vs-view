@@ -172,8 +172,10 @@ class BaseGraphicsView(QGraphicsView):
         self.context_menu.exec(event.globalPos())
 
     def resizeEvent(self, event: QResizeEvent) -> None:
+        if event.type() == QResizeEvent.Type.Resize:
+            self.set_zoom(self.current_zoom)
+
         super().resizeEvent(event)
-        self.set_zoom(self.current_zoom)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         if self.autofit:
