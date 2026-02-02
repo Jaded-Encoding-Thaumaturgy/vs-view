@@ -57,9 +57,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.tab_manager.autofit_btn.toggled.connect(
             lambda checked: setattr(self.local_settings.synchronization, "autofit_all_views", checked)
         )
-        self.tbar.playback_container.settingsChanged.connect(
-            lambda seek_step, speed, uncapped: setattr(self.local_settings.playback, "seek_step", seek_step)
-        )
+        self.tbar.playback_container.settingsChanged.connect(self._on_playback_settings_changed)
         SettingsManager.signals.localChanged.connect(self._on_local_settings_changed)
 
     def deleteLater(self) -> None:
@@ -200,6 +198,11 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
             return
 
         self.load_content(Path(file_path_str))
+
+    def _on_playback_settings_changed(self, seek_step: int, speed: float, uncapped: bool) -> None:
+        self.local_settings.playback.seek_step = seek_step
+        self.local_settings.playback.speed = speed
+        self.local_settings.playback.uncapped = uncapped
 
     def _on_local_settings_changed(self) -> None:
         if hasattr(self, "content"):
