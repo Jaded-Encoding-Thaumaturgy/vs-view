@@ -6,7 +6,7 @@ from functools import partial
 from logging import getLogger
 from typing import Any
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon, QImage, QPalette, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
@@ -211,32 +211,19 @@ class TabManager(QWidget, IconReloadMixin):
             return
 
         new_view = self.tabs.view(index)
+        prev_view = self.previous_view
 
         if (
             self.sync_scroll_btn.isChecked()
-            and self.previous_view is not new_view
-            and not self.previous_view.autofit
-            and not self.previous_view.pixmap_item.pixmap().isNull()
+            and prev_view is not new_view
+            and not prev_view.autofit
+            and not prev_view.pixmap_item.pixmap().isNull()
         ):
-            prev_h_bar = self.previous_view.horizontalScrollBar()
-            prev_v_bar = self.previous_view.verticalScrollBar()
+            # If the new view is currently empty, give it a dummy pixmap so update_center works
+            if new_view.pixmap_item.pixmap().isNull():
+                new_view.set_pixmap(QPixmap(prev_view.pixmap_item.pixmap().size()))
 
-            h_ratio = prev_h_bar.value() / prev_h_bar.maximum() if prev_h_bar.maximum() > 0 else 0.0
-            v_ratio = prev_v_bar.value() / prev_v_bar.maximum() if prev_v_bar.maximum() > 0 else 0.0
-
-            # Apply scroll immediately
-            new_h_bar = new_view.horizontalScrollBar()
-            new_v_bar = new_view.verticalScrollBar()
-
-            if max(new_h_bar.maximum(), new_v_bar.maximum()) <= 0 and new_view.pixmap_item.pixmap().isNull():
-                previous_pixmap = self.previous_view.pixmap_item.pixmap()
-                new_view.set_pixmap(QPixmap(previous_pixmap.width(), previous_pixmap.height()))
-                new_view.update_center(self.previous_view)
-
-            if new_h_bar.maximum() > 0:
-                new_h_bar.setValue(round(h_ratio * new_h_bar.maximum()))
-            if new_v_bar.maximum() > 0:
-                new_v_bar.setValue(round(v_ratio * new_v_bar.maximum()))
+            QTimer.singleShot(0, lambda: new_view.update_center(prev_view))
 
         self.tabChanged.emit(index)
 

@@ -277,8 +277,11 @@ class BaseGraphicsView(QGraphicsView):
         old_size = self.pixmap_item.pixmap().size()
         self.pixmap_item.setPixmap(pixmap)
 
-        if self.autofit and old_size != pixmap.size():
-            self.set_zoom(0, animated=False)
+        if old_size != pixmap.size():
+            self.update_scene_rect()
+
+            if self.autofit:
+                self.set_zoom(0, animated=False)
 
     def update_scene_rect(self) -> None:
         self.setSceneRect(self.pixmap_item.mapRectToScene(self.pixmap_item.boundingRect()))
