@@ -149,7 +149,7 @@ class PlaybackManager(QObject):
     """
 
     # Signals for UI communication
-    frameRendered = Signal(QImage)  # image
+    frameRendered = Signal(QImage, float)  # image, sar
     timelineCursorChanged = Signal(int)  # frame number
 
     audioOutputChanged = Signal(int)  # index
@@ -265,7 +265,7 @@ class PlaybackManager(QObject):
                 self._api._on_current_frame_changed(n, None)
                 self.statusLoadingFinished.emit("Completed")
 
-        self.frameRendered.emit(image)
+        self.frameRendered.emit(image, self._get_sar_from_props(n))
         self.timelineCursorChanged.emit(n)
         self.can_reload = True
 
@@ -422,7 +422,7 @@ class PlaybackManager(QObject):
                     with self._env.use(), frame:
                         image = voutput.packer.frame_to_qimage(frame)
 
-                    self.frameRendered.emit(image)
+                    self.frameRendered.emit(image, self._get_sar_from_props(frame_n))
                     self.timelineCursorChanged.emit(frame_n)
 
                     self._api._on_current_frame_changed(frame_n, plugin_frames)
@@ -614,6 +614,19 @@ class PlaybackManager(QObject):
             self.state.audio_timer.start(cround(delay_ns / 1_000_000))
         else:
             self._play_next_audio_frame()
+
+    def _get_sar_from_props(self, n: int) -> float:
+        if TYPE_CHECKING:
+            assert self._outputs_manager.current_voutput
+
+        props = self._outputs_manager.current_voutput.props[n]
+
+        sar_num, sar_den = props.get("_SARNum"), props.get("_SARDen")
+
+        if isinstance(sar_num, int) and isinstance(sar_den, int):
+            return sar_num / sar_den
+
+        return 1.0
 
     # Signals
     @Slot(int, float, bool)

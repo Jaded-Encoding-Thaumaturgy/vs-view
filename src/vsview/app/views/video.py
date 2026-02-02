@@ -78,12 +78,17 @@ class BaseGraphicsView(QGraphicsView):
     statusSavingImageStarted = Signal(str)  # message
     statusSavingImageFinished = Signal(str)  # completed message
 
+    displayTransformChanged = Signal(QTransform)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
         self.angle_remainder = 0
         self.current_zoom = 1.0
         self.autofit = False
+
+        self._sar = 1.0
+        self._sar_applied = False
 
         self.zoom_factors = SettingsManager.global_settings.view.zoom_factors.copy()
         SettingsManager.signals.globalChanged.connect(self._on_settings_changed)
@@ -132,6 +137,12 @@ class BaseGraphicsView(QGraphicsView):
         self.autofit_action.setChecked(self.autofit)
         self.autofit_action.triggered.connect(self._on_autofit_action)
 
+        self.apply_sar_action = self.context_menu.addAction("Toggle SAR")
+        self.apply_sar_action.setCheckable(True)
+        self.apply_sar_action.setChecked(self._sar_applied)
+        self.apply_sar_action.setEnabled(False)  # Disabled until SAR != 1.0
+        self.apply_sar_action.triggered.connect(self._set_sar_applied)
+
         self.save_image_action = self.context_menu.addAction("Save Current Image")
         self.save_image_action.triggered.connect(self._on_save_image_action)
 
@@ -144,12 +155,13 @@ class BaseGraphicsView(QGraphicsView):
         sm = ShortcutManager()
         sm.register_shortcut(ActionID.RESET_ZOOM, lambda: self.set_zoom(1.0), self)
 
+        sm.register_action(ActionID.TOGGLE_SAR, self.apply_sar_action)
         sm.register_action(ActionID.AUTOFIT, self.autofit_action)
         sm.register_action(ActionID.SAVE_CURRENT_IMAGE, self.save_image_action)
         sm.register_action(ActionID.COPY_IMAGE_TO_CLIPBOARD, self.copy_image_action)
 
         # Add actions to the widget so shortcuts work even when context menu is hidden
-        self.addActions([self.autofit_action, self.save_image_action, self.copy_image_action])
+        self.addActions([self.autofit_action, self.apply_sar_action, self.save_image_action, self.copy_image_action])
 
     @property
     def state(self) -> ViewState:
@@ -169,7 +181,7 @@ class BaseGraphicsView(QGraphicsView):
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         if event.type() == QResizeEvent.Type.Resize:
-            self.set_zoom(self.current_zoom)
+            self.set_zoom(self.current_zoom if not self.autofit else 0)
 
         super().resizeEvent(event)
 
@@ -204,14 +216,16 @@ class BaseGraphicsView(QGraphicsView):
     def set_zoom(self, value: float, *, animated: bool = True) -> None:
         target_zoom = value
 
-        self.current_zoom = value / self.devicePixelRatio()
+        if value:
+            self.current_zoom = value
 
         if value == 0:
-            if not Shiboken.isValid(self.pixmap_item) or (pixmap := self.pixmap_item.pixmap()).isNull():
+            if not Shiboken.isValid(self.pixmap_item) or self.pixmap_item.pixmap().isNull():
                 return
 
             viewport = self.viewport()
-            target_zoom = min(viewport.width() / pixmap.width(), viewport.height() / pixmap.height())
+            rect = self.pixmap_item.mapRectToScene(self.pixmap_item.boundingRect())
+            target_zoom = min(viewport.width() / rect.width(), viewport.height() / rect.height())
 
         current_scale = self.transform().m11()
 
@@ -250,14 +264,20 @@ class BaseGraphicsView(QGraphicsView):
         self.pixmap_item = self.graphics_scene.addPixmap(QPixmap())
         self.pixmap_item.setTransformationMode(Qt.TransformationMode.FastTransformation)
 
+        # Re-apply SAR transform if it was enabled
+        self._update_sar_transform()
+
         self.setScene(self.graphics_scene)
 
     def set_pixmap(self, pixmap: QPixmap) -> None:
+        old_size = self.pixmap_item.pixmap().size()
         self.pixmap_item.setPixmap(pixmap)
+
+        if self.autofit and old_size != pixmap.size():
+            self.set_zoom(0, animated=False)
 
     def update_scene_rect(self) -> None:
         self.setSceneRect(self.pixmap_item.mapRectToScene(self.pixmap_item.boundingRect()))
-        self.viewport().resize(self.pixmap_item.pixmap().width(), self.pixmap_item.pixmap().height())
         self.viewport().updateGeometry()
 
     def update_center(self, ref: QGraphicsView | tuple[float, float], /) -> None:
@@ -271,6 +291,45 @@ class BaseGraphicsView(QGraphicsView):
         zoom = self.transform().m11() or 1.0
         half_pixel = 0.5 / zoom
         self.centerOn(center_x + half_pixel, center_y + half_pixel)
+
+    def set_sar(self, sar: float | None = None) -> None:
+        sar = sar or 1.0
+
+        if self._sar == sar:
+            return
+
+        self._sar = sar
+        has_sar = sar != 1.0
+
+        if self.apply_sar_action.isEnabled() != has_sar:
+            self.apply_sar_action.setEnabled(has_sar)
+
+        if not has_sar:
+            self._set_sar_applied(False)
+        else:
+            self._update_sar_transform()
+
+    @Slot(bool)
+    def _set_sar_applied(self, applied: bool) -> None:
+        if self._sar_applied == applied:
+            return
+
+        self._sar_applied = applied
+
+        if self.apply_sar_action.isChecked() != applied:
+            self.apply_sar_action.setChecked(applied)
+
+        self._update_sar_transform()
+
+    def _update_sar_transform(self) -> None:
+        scale = self._sar if self._sar_applied else 1.0
+        transform = QTransform().scale(scale, 1.0)
+
+        if self.pixmap_item.transform() != transform:
+            self.pixmap_item.setTransform(transform)
+            self.displayTransformChanged.emit(transform)
+            self.update_scene_rect()
+            self.set_zoom(0 if self.autofit else self.current_zoom, animated=False)
 
     def _slider_to_zoom(self, slider_val: int) -> float:
         num_factors = len(self.zoom_factors)

@@ -25,6 +25,7 @@ class TabManager(QWidget, IconReloadMixin):
 
     # Signals
     tabChanged = Signal(int)  # index
+    sarTransformed = Signal(float)  # sar value
 
     # Status bar signals
     statusLoadingStarted = Signal(str)  # message
@@ -144,6 +145,7 @@ class TabManager(QWidget, IconReloadMixin):
             view.autofitChanged.connect(partial(self._on_autofit_changed, view))
             view.statusSavingImageStarted.connect(self.statusLoadingStarted.emit)
             view.statusSavingImageFinished.connect(self.statusLoadingFinished.emit)
+            view.displayTransformChanged.connect(lambda transform: self.sarTransformed.emit(transform.m11()))
 
             tab_label = TabLabel(voutput.vs_name, voutput.vs_index, new_tabs)
 
@@ -186,16 +188,14 @@ class TabManager(QWidget, IconReloadMixin):
         self.tabs.setCurrentIndex(index)
 
     @run_in_loop
-    def update_current_view(self, image: QImage, skip_adjustments: bool = False) -> None:
+    def update_current_view(self, image: QImage, skip_adjustments: bool = False, sar: float | None = None) -> None:
         """Update the view with a new rendered frame."""
 
         if self.tabs.currentIndex() == -1:
             return
 
         self.current_view.set_pixmap(QPixmap.fromImage(image, Qt.ImageConversionFlag.NoFormatConversion))
-
-        if self.current_view.autofit:
-            self.current_view.set_autofit(True)
+        self.current_view.set_sar(sar)
 
     @contextmanager
     def clear_voutputs_on_fail(self) -> Iterator[None]:

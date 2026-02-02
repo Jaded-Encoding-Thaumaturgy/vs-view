@@ -23,6 +23,7 @@ class OutputInfo(NamedTuple):
     height: int  # 1080
     format_name: str  # "YUV420P16"
     fps: str  # "23.976"
+    sar: float = 1.0
 
 
 class StatusWidget(IconReloadMixin, QWidget):
@@ -216,7 +217,9 @@ class StatusWidget(IconReloadMixin, QWidget):
         self.frames_label.setText(f"{info.total_frames} frames")
 
         # Output info: "1920x1080 YUV420P16 @23.976fps"
-        self.output_info_label.setText(f"{info.width}x{info.height} {info.format_name} @{info.fps}fps")
+        sar_info = "" if info.sar == 1.0 else f"({round(info.sar * info.width)}x{info.height})"
+
+        self.output_info_label.setText(f"{info.width}x{info.height} {sar_info} {info.format_name} @{info.fps}fps")
 
     @Slot(str)
     def set_plugin_message(self, message: str) -> None:

@@ -10,7 +10,7 @@ These features are present in VSPreview and need to be brought over.
 - [ ] Scening (+ API for custom notches on the timeline)
 - [ ] Pipette
 - [ ] Benchmark (Likely a wrapper for `vspipe`)
-- [ ] SAR/DAR support
+- [x] SAR/DAR support
 - [ ] Cropping assistant
 - [ ] Alpha support
 
