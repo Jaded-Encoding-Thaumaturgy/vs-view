@@ -176,6 +176,10 @@ class BaseGraphicsView(QGraphicsView):
             self.slider.value(),
         )
 
+    @property
+    def display_sar(self) -> float:
+        return self._sar if self._sar_applied else 1.0
+
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         self.context_menu.exec(event.globalPos())
 

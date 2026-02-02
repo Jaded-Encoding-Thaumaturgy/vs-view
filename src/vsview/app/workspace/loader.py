@@ -123,7 +123,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         # Video Area (Tabs)
         self.tab_manager = TabManager(self.plugin_splitter)
         self.tab_manager.tabChanged.connect(self._on_tab_changed)
-        self.tab_manager.sarTransformed.connect(self._emit_output_info)
+        self.tab_manager.sarTransformed.connect(lambda _: self._emit_output_info())
         self.plugin_splitter.insert_main_widget(self.tab_manager)
 
         # Connect plugin visibility signals
@@ -595,7 +595,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         )
         return target_frame
 
-    def _emit_output_info(self, sar: float = 1.0) -> None:
+    def _emit_output_info(self) -> None:
         if not (voutput := self.outputs_manager.current_voutput):
             logger.warning("No current video output, ignoring")
             return
@@ -623,7 +623,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             height=voutput.vs_output.clip.height,
             format_name=voutput.vs_output.clip.format.name if voutput.vs_output.clip.format else "NONE",
             fps=f"{fps:.3f}",
-            sar=sar,
+            sar=self.tab_manager.current_view.display_sar,
         )
 
         self.statusOutputChanged.emit(info)
