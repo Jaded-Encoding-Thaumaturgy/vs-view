@@ -762,6 +762,16 @@ class TimeEdit(QTimeEdit):
         self.old_time = self.time()
 
 
+class StepSpinBox(QSpinBox):
+    def stepBy(self, steps: int) -> None:
+        if self.value() == 1 and steps < 0:
+            self.setValue(-1)
+        elif self.value() == -1 and steps > 0:
+            self.setValue(1)
+        else:
+            super().stepBy(steps)
+
+
 @dataclass(slots=True, repr=False, eq=False, match_args=False)
 class PlaybackSettings:
     seek_step: int = 1
@@ -769,6 +779,7 @@ class PlaybackSettings:
     uncapped: bool = False
     zone_frames: int = 100
     loop: bool = False
+    step: int = 1
 
 
 class PlaybackContainer(QWidget, IconReloadMixin):
@@ -776,7 +787,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
     ICON_COLOR = QPalette.ColorRole.ToolTipText
 
     settingsChanged = Signal(int, float, bool)  # seek_step, speed, uncapped
-    playZone = Signal(int, bool)  # zone_frames, loop
+    playZone = Signal(int, bool, int)  # zone_frames, loop, int
     volumeChanged = Signal(float)  # volume 0.0-1.0
     muteChanged = Signal(bool)  # is_muted
     audioDelayChanged = Signal(float)  # seconds
@@ -969,6 +980,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.zone_frame_spinbox = FrameEdit(zone_widget)
         self.zone_frame_spinbox.setMinimum(1)
         self.zone_frame_spinbox.setMaximum(1_000_000)
+        self.zone_frame_spinbox.setFixedWidth(90)
         self.zone_frame_spinbox.frameChanged.connect(self._on_zone_frames_changed)
 
         # Row with both edits
@@ -979,13 +991,27 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         zone_edits_layout.addWidget(self.zone_time_edit)
         zone_edits_layout.addWidget(self.zone_frame_spinbox)
 
+        # Play zone button
+        self.play_zone_btn = self.make_tool_button(IconName.PLAY, "Play Zone", zone_widget)
+        self.play_zone_btn.clicked.connect(self._on_play_zone_clicked)
+
         # Loop checkbox
         self.loop_checkbox = QCheckBox("Loop")
         self.loop_checkbox.toggled.connect(self._on_loop_changed)
 
-        # Play zone button
-        self.play_zone_btn = self.make_tool_button(IconName.PLAY, "Play Zone", zone_widget)
-        self.play_zone_btn.clicked.connect(self._on_play_zone_clicked)
+        # Step spinbox
+        self.step_frame_spinbox = StepSpinBox(zone_widget, minimum=-1_000_000, maximum=1_000_000, value=1)
+        self.step_frame_spinbox.setFixedWidth(90)
+        self.step_frame_spinbox.setToolTip("Step size (negative values are allowed)")
+        self.step_frame_spinbox.valueChanged.connect(self._on_step_changed)
+
+        # Row with play step
+        zone_play_step_row = QWidget(zone_widget)
+        zone_play_step_layout = QHBoxLayout(zone_play_step_row)
+        zone_play_step_layout.setContentsMargins(0, 0, 0, 0)
+        zone_play_step_layout.setSpacing(4)
+        zone_play_step_layout.addStretch()
+        zone_play_step_layout.addWidget(self.step_frame_spinbox)
 
         # Row with loop and play button
         zone_controls_row = QWidget(zone_widget)
@@ -994,10 +1020,10 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         zone_controls_layout.setSpacing(4)
         zone_controls_layout.addStretch()
         zone_controls_layout.addWidget(self.play_zone_btn)
-        zone_controls_layout.addStretch()
         zone_controls_layout.addWidget(self.loop_checkbox)
 
         zone_layout.addRow("Zone Time/Frame", zone_edits_row)
+        zone_layout.addRow("Play Step", zone_play_step_row)
         zone_layout.addRow(zone_controls_row)
 
         zone_action = QWidgetAction(self.context_menu)
@@ -1124,7 +1150,6 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.speed_slider.setEnabled(not self.settings.uncapped)
         self.speed_reset_btn.setEnabled(not self.settings.uncapped)
 
-        # Sync zone settings
         with QSignalBlocker(self.zone_frame_spinbox):
             self.zone_frame_spinbox.setValue(self.settings.zone_frames)
 
@@ -1135,6 +1160,9 @@ class PlaybackContainer(QWidget, IconReloadMixin):
                     if self.settings.zone_frames > 0
                     else QTime()
                 )
+
+        with QSignalBlocker(self.step_frame_spinbox):
+            self.step_frame_spinbox.setValue(self.settings.step)
 
         with QSignalBlocker(self.loop_checkbox):
             self.loop_checkbox.setChecked(self.settings.loop)
@@ -1248,12 +1276,24 @@ class PlaybackContainer(QWidget, IconReloadMixin):
             with QSignalBlocker(self.zone_frame_spinbox):
                 self.zone_frame_spinbox.setValue(frames)
 
+    def _on_play_zone_clicked(self) -> None:
+        self.playZone.emit(self.settings.zone_frames, self.settings.loop, self.settings.step)
+        self.context_menu.close()
+
     def _on_loop_changed(self, checked: bool) -> None:
         self.settings.loop = checked
 
-    def _on_play_zone_clicked(self) -> None:
-        self.playZone.emit(self.settings.zone_frames, self.settings.loop)
-        self.context_menu.close()
+    def _on_step_changed(self, value: int) -> None:
+        if value == 0:
+            new_value = 1 if self.settings.step < 0 else -1
+
+            with QSignalBlocker(self.step_frame_spinbox):
+                self.step_frame_spinbox.setValue(new_value)
+
+            self.settings.step = new_value
+            return
+
+        self.settings.step = value
 
     def _on_mute_clicked(self, checked: bool) -> None:
         self._is_muted = checked

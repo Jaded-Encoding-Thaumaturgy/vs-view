@@ -4,6 +4,7 @@ from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future, wait
 from logging import getLogger
+from math import copysign
 from time import perf_counter_ns
 from typing import TYPE_CHECKING
 
@@ -42,8 +43,6 @@ class PlaybackState(QObject):
         last_fps_update_ns: Timestamp (ns) of last FPS display update.
         fps_history: Rolling window of frame timestamps for FPS averaging.
 
-        stop_at_frame: Frame number to stop playback at.
-
         buffer: Frame buffer for async pre-fetching during playback.
         frame_interval_ns: Target frame interval in nanoseconds for FPS limiting.
         next_frame_time_ns: Target time (ns) when next frame should start.
@@ -69,8 +68,6 @@ class PlaybackState(QObject):
         self.last_fps_update_ns = 0
         self.fps_history = deque[int](maxlen=25)
 
-        self.stop_at_frame: int | None = None
-
         # Video playback state
         self.buffer: FrameBuffer | None = None
         self.frame_interval_ns = 0
@@ -90,8 +87,6 @@ class PlaybackState(QObject):
     def reset(self) -> None:
         self.last_fps_update_ns = 0
         self.fps_history.clear()
-
-        self.stop_at_frame = None
 
         self.frame_interval_ns = 0
         self.next_frame_time_ns = 0
@@ -299,8 +294,11 @@ class PlaybackManager(QObject):
             self._stop_playback()
 
     @run_in_background(name="StartPlayback")
-    def _start_playback(self, loop_range: range | None = None, stop_at: int | None = None) -> None:
+    def _start_playback(self, play_range: range | None = None, loop: bool = False) -> None:
         logger.debug("Starting playback")
+
+        if not (voutput := self._outputs_manager.current_voutput):
+            return
 
         self._tbar.set_playback_controls_enabled(False)
         self._tbar.timeline.is_events_blocked = True
@@ -316,10 +314,17 @@ class PlaybackManager(QObject):
 
             self.state.is_playing = True
             self.state.reset()
-            self.state.stop_at_frame = stop_at
 
-            self._prepare_video(loop_range=loop_range)
-            self._prepare_audio(loop_range=loop_range)
+            play_range = (
+                play_range
+                if play_range
+                else range(
+                    self.state.current_frame,
+                    voutput.vs_output.clip.num_frames,
+                )
+            )
+            self._prepare_video(play_range=play_range, loop=loop)
+            self._prepare_audio(play_range=play_range, loop=loop)
 
             if self.state.audio_buffer:
                 self.state.audio_buffer.wait_for_first_frame(
@@ -409,10 +414,6 @@ class PlaybackManager(QObject):
             if result:
                 frame_n, frame, plugin_frames = result
 
-                if self.state.stop_at_frame is not None and frame_n >= self.state.stop_at_frame:
-                    self.toggle_playback()
-                    return
-
                 self._track_fps()
 
                 self.state.current_frame = frame_n
@@ -431,16 +432,8 @@ class PlaybackManager(QObject):
                         frame_to_close.close()
 
                 self._schedule_or_continue()
-                return
-
-        if self.state.current_frame + 1 >= voutput.vs_output.clip.num_frames:
-            self.toggle_playback()
-            return
-
-        if self._tbar.playback_container.settings.uncapped:
-            self._loop.from_thread(self._play_next_frame)
-        else:
-            self._schedule_or_continue()
+            else:
+                self.toggle_playback()
 
     def _track_fps(self) -> None:
         now = perf_counter_ns()
@@ -494,7 +487,7 @@ class PlaybackManager(QObject):
         else:
             self._play_next_frame()
 
-    def _prepare_video(self, loop_range: range | None = None) -> None:
+    def _prepare_video(self, play_range: range, loop: bool = False) -> None:
         if not (voutput := self._outputs_manager.current_voutput):
             raise RuntimeError("No video output available")
 
@@ -523,7 +516,7 @@ class PlaybackManager(QObject):
         self.state.buffer = FrameBuffer(video_output=voutput, env=self._env)
         self._api._register_plugin_nodes_to_buffer()
 
-        self.state.buffer.allocate(self.state.current_frame, loop_range=loop_range)
+        self.state.buffer.allocate(play_range=play_range, loop=loop)
 
         logger.debug(
             "Target frame interval: %d ns (fps=%s), buffer_size=%d",
@@ -532,7 +525,7 @@ class PlaybackManager(QObject):
             self.state.buffer._size,
         )
 
-    def _prepare_audio(self, loop_range: range | None = None) -> None:
+    def _prepare_audio(self, play_range: range, loop: bool = False) -> None:
         if (
             self._tbar.playback_container.is_muted
             or not (aoutput := self._outputs_manager.current_aoutput)
@@ -542,6 +535,10 @@ class PlaybackManager(QObject):
 
         if self._tbar.playback_container.settings.uncapped:
             logger.debug("Uncapped settings detected, no audio will be played")
+            return
+
+        if play_range.step != 1:
+            logger.debug("Audio skipped due to non-standard step")
             return
 
         if not aoutput.setup_sink(
@@ -561,17 +558,14 @@ class PlaybackManager(QObject):
         )
 
         # Convert video-frame-based loop_range to audio-frame-based loop_range
-        if loop_range:
-            a_loop_range = range(
-                aoutput.time_to_frame(voutput.frame_to_time(loop_range.start).total_seconds()),
-                aoutput.time_to_frame(voutput.frame_to_time(loop_range.stop).total_seconds()),
-            )
-        else:
-            a_loop_range = None
+        a_play_range = range(
+            aoutput.time_to_frame(voutput.frame_to_time(play_range.start).total_seconds()),
+            aoutput.time_to_frame(voutput.frame_to_time(play_range.stop - 1).total_seconds()),
+        )
 
         # Allocate audio buffer for async pre-fetching of subsequent frames
         self.state.audio_buffer = AudioBuffer(aoutput, self._env)
-        self.state.audio_buffer.allocate(self.state.current_audio_frame, loop_range=a_loop_range)
+        self.state.audio_buffer.allocate(play_range=a_play_range, loop=loop)
 
         self.state.audio_frame_interval_ns = cround(
             1_000_000_000
@@ -639,20 +633,22 @@ class PlaybackManager(QObject):
         if self.state.is_playing:
             self._restart_playback()
 
-    def _on_play_zone(self, zone_frames: int, loop: bool) -> None:
+    def _on_play_zone(self, zone_frames: int, loop: bool, step: int) -> None:
         """Play a specific zone of frames."""
         if not (voutput := self._outputs_manager.current_voutput):
             return
 
-        # Ensure zone doesn't exceed total frames
-        end_frame = min(self.state.current_frame + zone_frames, voutput.vs_output.clip.num_frames)
-
-        loop_range = range(self.state.current_frame, end_frame) if loop else None
-        stop_at = end_frame if not loop else None
+        start_frame = self.state.current_frame
+        end_frame = clamp(
+            self.state.current_frame + int(copysign(zone_frames, step)),
+            0,
+            voutput.vs_output.clip.num_frames - 1,
+        )
+        play_range = range(start_frame, end_frame + 1, step)
 
         self._tbar.playback_container.play_pause_btn.setChecked(True)
 
-        self._start_playback(loop_range=loop_range, stop_at=stop_at)
+        self._start_playback(play_range=play_range, loop=loop)
 
     def _on_audio_delay_changed(self, delay_s: float) -> None:
         """Handle audio delay change from UI."""

@@ -790,6 +790,7 @@ class LocalPlaybackSettings(BaseModel):
     uncapped: bool = False
     zone_frames: int = 100
     loop: bool = False
+    step: int = 1
 
     last_audio_index: int | None = None
     current_volume: float = 0.5

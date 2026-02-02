@@ -87,6 +87,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.local_settings.playback.uncapped = self.tbar.playback_container.settings.uncapped
         self.local_settings.playback.zone_frames = self.tbar.playback_container.settings.zone_frames
         self.local_settings.playback.loop = self.tbar.playback_container.settings.loop
+        self.local_settings.playback.step = self.tbar.playback_container.settings.step
 
         self.local_settings.playback.last_audio_index = self.outputs_manager.current_audio_index
         self.local_settings.playback.current_volume = self.tbar.playback_container.raw_volume
@@ -113,6 +114,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.tbar.playback_container.settings.uncapped = self.local_settings.playback.uncapped
         self.tbar.playback_container.settings.zone_frames = self.local_settings.playback.zone_frames
         self.tbar.playback_container.settings.loop = self.local_settings.playback.loop
+        self.tbar.playback_container.settings.step = self.local_settings.playback.step
 
         if self.local_settings.timeline.mode:
             self.tbar.timeline.mode = self.local_settings.timeline.mode
