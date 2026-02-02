@@ -613,7 +613,10 @@ class PlaybackManager(QObject):
         if TYPE_CHECKING:
             assert self._outputs_manager.current_voutput
 
-        props = self._outputs_manager.current_voutput.props[n]
+        props = self._outputs_manager.current_voutput.props.get(n)
+
+        if not props:
+            return 1.0
 
         sar_num, sar_den = props.get("_SARNum"), props.get("_SARDen")
 
