@@ -3,10 +3,10 @@ from collections.abc import Callable
 from copy import copy
 from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, Formatter, LogRecord, captureWarnings, getLogger
 from threading import main_thread
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TypeGuard
 
 from jetpytools import fallback
-from PySide6.QtCore import QtMsgType, qInstallMessageHandler
+from PySide6.QtCore import QMessageLogContext, QtMsgType, qInstallMessageHandler
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.text import Text
@@ -17,21 +17,6 @@ main_thread_name = main_thread().name
 
 def _is_lambda(obj: object) -> TypeGuard[Callable[[], object]]:
     return callable(obj) and getattr(obj, "__name__", None) == "<lambda>"
-
-
-# PySide6 doesn't have stubs for QMessageLogContext
-if TYPE_CHECKING:
-    from PySide6.QtCore import QMessageLogContext as QQMessageLogContext
-
-    class QMessageLogContext(QQMessageLogContext):
-        CurrentVersion: int
-        version: int
-        line: int
-        file: str | None
-        function: str | None
-        category: str
-else:
-    from PySide6.QtCore import QMessageLogContext
 
 
 def _qt_message_handler(mode: QtMsgType, context: QMessageLogContext, message: str) -> None:

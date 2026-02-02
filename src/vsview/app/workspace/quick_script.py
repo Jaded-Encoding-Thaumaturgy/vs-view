@@ -198,11 +198,10 @@ class CodeEditor(QPlainTextEdit):
 
         if not self.isReadOnly():
             selection = QTextEdit.ExtraSelection()
-            # Missings stubs from PySide6
-            selection.format.setBackground(self._current_line_color)  # type: ignore[attr-defined]
-            selection.format.setProperty(QTextCharFormat.Property.FullWidthSelection, True)  # type: ignore[attr-defined]
-            selection.cursor = self.textCursor()  # type: ignore[attr-defined]
-            selection.cursor.clearSelection()  # type: ignore[attr-defined]
+            selection.format.setBackground(self._current_line_color)
+            selection.format.setProperty(QTextCharFormat.Property.FullWidthSelection, True)
+            selection.cursor = self.textCursor()
+            selection.cursor.clearSelection()
             extra_selections.append(selection)
 
         self.setExtraSelections(extra_selections)

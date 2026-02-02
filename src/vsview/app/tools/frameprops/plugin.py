@@ -6,7 +6,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from contextlib import suppress
 from logging import getLogger
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, NamedTuple
+from typing import Annotated, Any, ClassVar, NamedTuple
 
 import pluggy
 import vapoursynth as vs
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QStyle,
     QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableView,
     QToolBar,
     QTreeView,
@@ -130,30 +131,14 @@ class FramePropsViewMixin:
         self.copyMessage.emit(f"Copied {description}: {text[:50]}{'...' if len(text) > 50 else ''}")
 
 
-# PySide6 stubs are missing
-if TYPE_CHECKING:
-    from PySide6.QtCore import QRect
-    from PySide6.QtGui import QFontMetrics
-    from PySide6.QtWidgets import QStyleOptionViewItem as QQStyleOptionViewItem
-
-    class QStyleOptionViewItem(QQStyleOptionViewItem):
-        widget: QWidget
-        rect: QRect
-        fontMetrics: QFontMetrics
-        features: QQStyleOptionViewItem.ViewItemFeature
-        textElideMode: Qt.TextElideMode
-else:
-    from PySide6.QtWidgets import QStyleOptionViewItem
-
-
 class WordWrapDelegate(QStyledItemDelegate):
-    def initStyleOption(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> None:  # type: ignore[override]
+    def initStyleOption(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> None:
         super().initStyleOption(option, index)
         if index.column() == 1:
             option.features |= QStyleOptionViewItem.ViewItemFeature.WrapText
             option.textElideMode = Qt.TextElideMode.ElideNone
 
-    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> QSize:  # type: ignore[override]
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> QSize:
         size = super().sizeHint(option, index)
 
         if index.column() != 1:

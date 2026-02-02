@@ -366,7 +366,7 @@ class MainWindow(QMainWindow):
 
         self.delete_workspace(btn)
 
-    def _update_status_connection(self, widget: QWidget) -> None:
+    def _update_status_connection(self, widget: QWidget | None) -> None:
         if self._connected_workspace is not None:
             self.status_widget.disconnect_workspace(self._connected_workspace)
             self._connected_workspace = None
