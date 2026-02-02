@@ -66,10 +66,7 @@ class ViewState(NamedTuple):
 
     def restore_view_state(self, view: GraphicsView) -> None:
         if not self.autofit:
-            # Compensate for centerOn's 1-pixel rounding drift
-            zoom = view.transform().m11() or 1.0
-            half_pixel = 0.5 / zoom
-            view.centerOn(self.scene_x + half_pixel, self.scene_y + half_pixel)
+            view.update_center((self.scene_x, self.scene_y))
 
 
 class BaseGraphicsView(QGraphicsView):
@@ -262,6 +259,18 @@ class BaseGraphicsView(QGraphicsView):
         self.setSceneRect(self.pixmap_item.mapRectToScene(self.pixmap_item.boundingRect()))
         self.viewport().resize(self.pixmap_item.pixmap().width(), self.pixmap_item.pixmap().height())
         self.viewport().updateGeometry()
+
+    def update_center(self, ref: QGraphicsView | tuple[float, float], /) -> None:
+        if isinstance(ref, QGraphicsView):
+            center = ref.mapToScene(ref.viewport().rect().center())
+            center_x, center_y = center.x(), center.y()
+        else:
+            center_x, center_y = ref
+
+        # Compensate for centerOn's 1-pixel rounding drift
+        zoom = self.transform().m11() or 1.0
+        half_pixel = 0.5 / zoom
+        self.centerOn(center_x + half_pixel, center_y + half_pixel)
 
     def _slider_to_zoom(self, slider_val: int) -> float:
         num_factors = len(self.zoom_factors)

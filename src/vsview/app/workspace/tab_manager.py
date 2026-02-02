@@ -228,6 +228,11 @@ class TabManager(QWidget, IconReloadMixin):
             new_h_bar = new_view.horizontalScrollBar()
             new_v_bar = new_view.verticalScrollBar()
 
+            if max(new_h_bar.maximum(), new_v_bar.maximum()) <= 0 and new_view.pixmap_item.pixmap().isNull():
+                previous_pixmap = self.previous_view.pixmap_item.pixmap()
+                new_view.set_pixmap(QPixmap(previous_pixmap.width(), previous_pixmap.height()))
+                new_view.update_center(self.previous_view)
+
             if new_h_bar.maximum() > 0:
                 new_h_bar.setValue(round(h_ratio * new_h_bar.maximum()))
             if new_v_bar.maximum() > 0:
