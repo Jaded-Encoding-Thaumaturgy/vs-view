@@ -349,6 +349,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             @run_in_loop(return_future=False)
             def preserve_ui() -> None:
                 self.tab_manager.current_view.pixmap_item.setPixmap(saved_state.pixmap)
+
                 for view in self.tab_manager.tabs.views():
                     if view is not self.tab_manager.current_view:
                         view.clear_scene()
@@ -374,15 +375,17 @@ class LoaderWorkspace[T](BaseWorkspace):
             # Apply saved pixmap
             for view, voutput in zip(tabs.views(), voutputs, strict=True):
                 saved_state.apply_pixmap(view, (voutput.vs_output.clip.width, voutput.vs_output.clip.height))
+                saved_state.apply_frozen_state(view)
 
             with QSignalBlocker(self.tab_manager):
                 self.tab_manager.swap_tabs(tabs, self.tab_manager.tabs.currentIndex())
 
-            saved_state.apply_frozen_state(self.tab_manager.current_view)
+            saved_state.restore_view_state(self.tab_manager.current_view)
 
             self.loop.from_thread(
                 self.tab_manager._on_global_autofit_changed,
                 self.tab_manager.autofit_btn.isChecked(),
+                under_reload=True,
             ).result()
 
             self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
@@ -391,7 +394,6 @@ class LoaderWorkspace[T](BaseWorkspace):
             def on_complete(f: Future[None]) -> None:
                 if f.exception():
                     return
-                saved_state.restore_view_state(self.tab_manager.current_view)
                 self.content_area.setEnabled(True)
                 self.tab_manager.tabs.setEnabled(True)
                 self.playback.can_reload = True
@@ -521,7 +523,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.debug("Invalid tab index %d, ignoring", index)
             return
 
-        logger.debug("Switched to video output: clip=%r", self.outputs_manager.current_voutput.vs_output.clip)
+        logger.debug("Switching to video output: clip=%r", self.outputs_manager.current_voutput.vs_output.clip)
 
         target_frame = self._calculate_target_frame()
         self.init_timeline()
