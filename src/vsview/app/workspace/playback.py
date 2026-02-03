@@ -299,6 +299,7 @@ class PlaybackManager(QObject):
 
         self._tbar.set_playback_controls_enabled(False)
         self._tbar.timeline.is_events_blocked = True
+        self._loop.from_thread(self._tbar.playback_container.play_pause_btn.setChecked, True)
         self.can_reload = False
 
         try:
