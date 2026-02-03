@@ -153,7 +153,7 @@ class IconReloadMixin:
             size: Target size for SVG rendering (for crisp output).
         """
         icon = QIcon()
-        render_size = size if size else QSize(256, 256)
+        render_size = size or QSize(256, 256)
 
         def _load_pixmap(name: IconName, color: QColor) -> QPixmap:
             return load_icon(name, render_size, color)

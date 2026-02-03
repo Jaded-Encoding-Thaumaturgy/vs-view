@@ -1186,7 +1186,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
             self.audio_output_combo.clear()
             self.audio_output_combo.addItems(
                 [
-                    f"{a.vs_index}: {a.vs_name if a.vs_name else f'Audio {a.vs_index}'} ({a.chanels_layout.pretty_name})"  # noqa: E501
+                    f"{a.vs_index}: {a.vs_name or f'Audio {a.vs_index}'} ({a.chanels_layout.pretty_name})"
                     for a in aoutputs
                 ]
             )

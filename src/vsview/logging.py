@@ -29,7 +29,7 @@ def _qt_message_handler(mode: QtMsgType, context: QMessageLogContext, message: s
         QtMsgType.QtSystemMsg: CRITICAL,
     }
 
-    category = context.category if context.category else "default"
+    category = context.category or "default"
 
     if not category.startswith("qt."):
         category = f"qt.{category}"
