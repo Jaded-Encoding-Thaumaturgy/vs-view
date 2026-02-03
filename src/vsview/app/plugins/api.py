@@ -7,7 +7,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
@@ -34,13 +34,13 @@ class VideoOutputProxy:
     vs_index: int
     """Index of the video output in the VapourSynth environment."""
 
-    vs_name: str | None
+    vs_name: str | None = field(hash=False, compare=False)
     """Name of the video output, if any, when using `vsview.set_output()`."""
 
-    vs_output: vs.VideoOutputTuple
+    vs_output: vs.VideoOutputTuple = field(hash=False, compare=False)
     """The object created by `vapoursynth.get_outputs()`."""
 
-    props: Mapping[int, Mapping[str, Any]]
+    props: Mapping[int, Mapping[str, Any]] = field(hash=False, compare=False)
     """
     Frame properties of the clip.
     """
@@ -53,10 +53,10 @@ class AudioOutputProxy:
     vs_index: int
     """Index of the audio output in the VapourSynth environment."""
 
-    vs_name: str | None
+    vs_name: str | None = field(hash=False, compare=False)
     """Name of the audio output, if any, when using `vsview.set_output()`."""
 
-    vs_output: vs.AudioNode
+    vs_output: vs.AudioNode = field(hash=False, compare=False)
     """The object created by `vapoursynth.get_outputs()`."""
 
 
