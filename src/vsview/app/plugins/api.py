@@ -119,6 +119,7 @@ class PluginAPI(_PluginAPI):
             for aoutput in self.__workspace.outputs_manager.aoutputs
         ]
 
+    @property
     def current_aoutput(self) -> AudioOutputProxy | None:
         if aoutput := self.__workspace.outputs_manager.current_aoutput:
             return AudioOutputProxy(aoutput.vs_index, aoutput.vs_name, aoutput.vs_output)
