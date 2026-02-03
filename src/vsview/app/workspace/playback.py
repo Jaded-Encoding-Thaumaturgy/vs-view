@@ -36,7 +36,6 @@ class PlaybackState(QObject):
 
     Attributes:
         current_frame: Current frame being played.
-        current_audio_frame: Current audio frame being played.
         is_playing: Whether playback is currently active.
 
         last_fps_update_ns: Timestamp (ns) of last FPS display update.
@@ -61,7 +60,6 @@ class PlaybackState(QObject):
         super().__init__(parent)
 
         self.current_frame = 0
-        self.current_audio_frame = 0
         self.is_playing = False
 
         self.last_fps_update_ns = 0
@@ -314,14 +312,9 @@ class PlaybackManager(QObject):
             self.state.is_playing = True
             self.state.reset()
 
-            play_range = (
-                play_range
-                if play_range
-                else range(
-                    self.state.current_frame,
-                    voutput.vs_output.clip.num_frames,
-                )
-            )
+            if not play_range:
+                play_range = range(self.state.current_frame, voutput.vs_output.clip.num_frames)
+
             self._prepare_video(play_range=play_range, loop=loop)
             self._prepare_audio(play_range=play_range, loop=loop)
 
@@ -551,32 +544,26 @@ class PlaybackManager(QObject):
             logger.warning("No frame durations available, audio will not be played")
             return
 
-        # Calculate starting audio frame from current video time
-        self.state.current_audio_frame = aoutput.time_to_frame(
-            voutput.frame_to_time(self.state.current_frame).total_seconds()
-        )
+        with self._env.use():
+            # Audio prepared from play_range.start + 1 to match video which skips its first frame
+            aoutput.prepare_playback_audio(
+                voutput.frame_to_time(play_range.start + 1).total_seconds(),
+                voutput.frame_to_time(play_range.stop).total_seconds(),
+            )
 
-        # Convert video-frame-based loop_range to audio-frame-based loop_range
-        a_play_range = range(
-            aoutput.time_to_frame(voutput.frame_to_time(play_range.start).total_seconds()),
-            aoutput.time_to_frame(voutput.frame_to_time(play_range.stop - 1).total_seconds()),
-        )
-
-        # Allocate audio buffer for async pre-fetching of subsequent frames
         self.state.audio_buffer = AudioBuffer(aoutput, self._env)
-        self.state.audio_buffer.allocate(play_range=a_play_range, loop=loop)
+        self.state.audio_buffer.allocate(play_range=range(aoutput.playback_audio.num_frames), loop=loop)
 
+        # Calculate interval so that (num_frames x interval) = actual audio duration
+        # This ensures timer and audio content stay in sync, especially for partial last frames
+        audio_duration_ns = cround(
+            1_000_000_000 * aoutput.playback_audio.num_samples / aoutput.prepared_audio.sample_rate
+        )
         self.state.audio_frame_interval_ns = cround(
-            1_000_000_000
-            * aoutput.fps.denominator
-            / (aoutput.fps.numerator * self._tbar.playback_container.settings.speed)
+            audio_duration_ns / (aoutput.playback_audio.num_frames * self._tbar.playback_container.settings.speed)
         )
 
-        logger.debug(
-            "Audio prepared: prefilled to frame %d, interval=%d ns",
-            self.state.current_audio_frame,
-            self.state.audio_frame_interval_ns,
-        )
+        logger.debug("Audio prepared: interval=%d ns", self.state.audio_frame_interval_ns)
 
     @run_in_loop
     def _play_next_audio_frame(self) -> None:
@@ -597,10 +584,8 @@ class PlaybackManager(QObject):
             and self.state.audio_buffer
             and (result := self.state.audio_buffer.get_next_frame())
         ):
-            frame_n, frame = result
-            with frame:
+            with (frame := result[1]):
                 aoutput.render_raw_audio_frame(frame)
-                self.state.current_audio_frame = frame_n
 
         # Audio uses strict 0 to minimize jitter; any lag must be processed immediately
         if (delay_ns := self.state.next_audio_frame_time_ns - perf_counter_ns()) > 0:

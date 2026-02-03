@@ -5,6 +5,7 @@ from contextlib import suppress
 from enum import Enum, auto
 from fractions import Fraction
 from logging import getLogger
+from math import ceil
 from typing import TYPE_CHECKING, Any
 
 import vapoursynth as vs
@@ -21,6 +22,7 @@ from ..utils import LRUCache
 if TYPE_CHECKING:
     from ...api._helpers import AudioMetadata
     from ..plugins import PluginAPI
+    from ..views.timeline import Frame, Time
 
 logger = getLogger(__name__)
 
@@ -153,6 +155,15 @@ class AudioOutput:
 
         self.sink = AudioSink(self.qformat)
 
+    def prepare_playback_audio(self, start_seconds: float, stop_seconds: float) -> None:
+        duration_samples = ceil((stop_seconds - start_seconds) * self.prepared_audio.sample_rate)
+
+        # Truncate for start to avoid cutting into the first sample
+        start = max(0, int(start_seconds * self.prepared_audio.sample_rate))
+        end = min(self.prepared_audio.num_samples, start + duration_samples)
+
+        self.playback_audio = self.prepared_audio[start:end]
+
     def clear(self) -> None:
         """Clear VapourSynth resources."""
         if hasattr(self, "sink"):
@@ -160,7 +171,7 @@ class AudioOutput:
             self.sink.deleteLater()
             del self.sink
 
-        for name in ["prepared_audio", "vs_output"]:
+        for name in ["prepared_audio", "vs_output", "playback_audio"]:
             with suppress(AttributeError):
                 delattr(self, name)
 
@@ -266,11 +277,31 @@ class AudioOutput:
 
         return audio.std.AudioMix(matrix=final_matrix, channels_out=[vs.FRONT_LEFT, vs.FRONT_RIGHT])
 
-    def time_to_frame(self, seconds: float, *, eps: float = 1e-6) -> int:
-        return cround(seconds * self.fps, eps=eps)
+    def time_to_frame(self, seconds: float, *, eps: float = 1e-6) -> Frame:
+        from ..views.timeline import Frame
 
-    def frame_to_time(self, frame_num: int) -> float:
-        return float(frame_num / self.fps)
+        return Frame(cround(seconds * self.fps, eps=eps))
+
+    def frame_to_time(self, frame_num: int) -> Time:
+        from ..views.timeline import Time
+
+        return Time(seconds=float(frame_num / self.fps))
+
+    def frame_to_sample(self, frame_num: int) -> int:
+        return frame_num * self.SAMPLES_PER_FRAME
+
+    def sample_to_frame(self, sample_num: int, *, eps: float = 1e-6) -> Frame:
+        from ..views.timeline import Frame
+
+        return Frame(cround(sample_num / self.SAMPLES_PER_FRAME, eps=eps))
+
+    def time_to_sample(self, seconds: float, *, eps: float = 1e-6) -> int:
+        return cround(seconds * self.prepared_audio.sample_rate, eps=eps)
+
+    def sample_to_time(self, sample_num: int) -> Time:
+        from ..views.timeline import Time
+
+        return Time(seconds=sample_num / self.prepared_audio.sample_rate)
 
     def __del__(self) -> None:
         self.clear()

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import Future, wait
+from itertools import cycle, islice
 from logging import getLogger
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -30,19 +31,13 @@ class AudioBundle(NamedTuple):
     future: Future[vs.AudioFrame]
 
 
-def create_iterator(play_range: range) -> Iterator[int]:
-    return iter(range(play_range.start + 1, play_range.stop, play_range.step))
-
-
 class FrameBuffer:
     """Manages async pre-fetching of video frames during playback."""
 
     __slots__ = (
         "_bundles",
         "_invalidated",
-        "_iterator",
-        "_loop",
-        "_play_range",
+        "_play_frames",
         "_plugin_nodes",
         "_size",
         "env",
@@ -55,9 +50,7 @@ class FrameBuffer:
 
         self._size = SettingsManager.global_settings.playback.buffer_size
         self._bundles = deque[FrameBundle]()
-        self._play_range: range | None = None
-        self._iterator: Iterator[int] | None = None
-        self._loop = False
+        self._play_frames: Iterator[int] | None = None
         self._invalidated = False
         self._plugin_nodes = dict[str, vs.VideoNode]()
 
@@ -66,15 +59,11 @@ class FrameBuffer:
         logger.debug("Registered plugin node: %s", identifier)
 
     def allocate(self, play_range: range, loop: bool = False) -> None:
-        self._play_range = play_range
-        self._loop = loop
-
-        self._iterator = create_iterator(play_range)
+        self._play_frames = self._create_play_frames(play_range, loop)
 
         logger.debug(
-            "Allocating buffer: start=%d, step=%d, buffering up to %d frames, %d plugins",
-            self._play_range.start + 1,
-            self._play_range.step,
+            "Allocating buffer: %s, buffering up to %d frames, %d plugins",
+            play_range,
             self._size,
             len(self._plugin_nodes),
         )
@@ -83,7 +72,7 @@ class FrameBuffer:
             if self._invalidated:
                 break
 
-            if (next_frame := next(self._iterator, None)) is None:
+            if (next_frame := next(self._play_frames, None)) is None:
                 break
 
             self._bundles.appendleft(self._request_bundle(next_frame))
@@ -144,11 +133,8 @@ class FrameBuffer:
                 logger.exception("Failed to get plugin frame %s for frame %d", identifier, bundle.n)
 
         # Request next frame set at the front of the buffer (if not invalidated)
-        if not self._invalidated:
-            next_frame = self._calculate_next_frame()
-
-            if next_frame is not None:
-                self._bundles.appendleft(self._request_bundle(next_frame))
+        if not self._invalidated and self._play_frames and (next_frame := next(self._play_frames, None)) is not None:
+            self._bundles.appendleft(self._request_bundle(next_frame))
 
         return bundle.n, main_frame, plugin_frames
 
@@ -202,19 +188,15 @@ class FrameBuffer:
 
         return FrameBundle(n, main_future, plugin_futures)
 
-    def _calculate_next_frame(self) -> int | None:
-        if self._iterator:
-            next_frame = next(self._iterator, None)
+    @staticmethod
+    def _create_play_frames(play_range: Iterable[int], loop: bool) -> Iterator[int]:
+        # Skip the first frame (already displayed)
+        play_range = islice(play_range, 1, None)
 
-            if next_frame is not None:
-                return next_frame
+        if loop:
+            play_range = cycle(play_range)
 
-            if next_frame is None and self._loop and self._play_range:
-                self._iterator = create_iterator(self._play_range)
-
-                return next(self._iterator)
-
-        return None
+        yield from play_range
 
 
 class AudioBuffer:
@@ -223,9 +205,7 @@ class AudioBuffer:
     __slots__ = (
         "_bundles",
         "_invalidated",
-        "_iterator",
-        "_loop",
-        "_play_range",
+        "_play_frames",
         "_size",
         "audio_output",
         "env",
@@ -237,35 +217,26 @@ class AudioBuffer:
 
         self._size = SettingsManager.global_settings.playback.audio_buffer_size
         self._bundles = deque[AudioBundle]()
-        self._play_range: range | None = None
-        self._iterator: Iterator[int] | None = None
-        self._loop = False
+        self._play_frames: Iterator[int] | None = None
         self._invalidated = False
 
     def allocate(self, play_range: range, loop: bool = False) -> None:
-        self._play_range = play_range
-        self._loop = loop
+        self._play_frames = self._create_play_frames(play_range, loop)
 
-        self._iterator = create_iterator(play_range)
-
-        logger.debug(
-            "Allocating audio buffer: start=%d, buffering up to %d frames",
-            self._play_range.start + 1,
-            self._size,
-        )
+        logger.debug("Allocating audio buffer: %s, buffering up to %d frames", play_range, self._size)
 
         with self.env.use():
             for _ in range(self._size):
                 if self._invalidated:
                     break
 
-                if (next_frame := next(self._iterator, None)) is None:
+                if (next_frame := next(self._play_frames, None)) is None:
                     break
 
                 self._bundles.appendleft(
                     AudioBundle(
                         next_frame,
-                        self.audio_output.prepared_audio.get_frame_async(next_frame),
+                        self.audio_output.playback_audio.get_frame_async(next_frame),
                     )
                 )
 
@@ -304,14 +275,11 @@ class AudioBuffer:
             return None
 
         # Request next frame at the front of the buffer
-        if not self._invalidated:
-            next_frame = self._calculate_next_frame()
-
-            if next_frame is not None:
-                with self.env.use():
-                    self._bundles.appendleft(
-                        AudioBundle(next_frame, self.audio_output.prepared_audio.get_frame_async(next_frame))
-                    )
+        if not self._invalidated and self._play_frames and (next_frame := next(self._play_frames, None)) is not None:
+            with self.env.use():
+                self._bundles.appendleft(
+                    AudioBundle(next_frame, self.audio_output.playback_audio.get_frame_async(next_frame))
+                )
 
         return bundle.n, frame
 
@@ -344,16 +312,10 @@ class AudioBuffer:
 
         logger.debug("Audio buffer cleared")
 
-    def _calculate_next_frame(self) -> int | None:
-        if self._iterator:
-            next_frame = next(self._iterator, None)
+    @staticmethod
+    def _create_play_frames(play_range: Iterable[int], loop: bool) -> Iterator[int]:
+        # Do NOT skip the first frame
+        if loop:
+            play_range = cycle(play_range)
 
-            if next_frame is not None:
-                return next_frame
-
-            if next_frame is None and self._loop and self._play_range:
-                self._iterator = create_iterator(self._play_range)
-
-                return next(self._iterator)
-
-        return None
+        yield from play_range
