@@ -306,7 +306,9 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
-        self.api._init_plugin(self)
+
+        with self.api.vs_context():
+            self.api._init_plugin(self)
 
     @property
     def settings(self) -> PluginSettings[TGlobalSettings, TLocalSettings]:
