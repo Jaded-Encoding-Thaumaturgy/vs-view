@@ -38,6 +38,8 @@ class IconName(StrEnum):
     VOLUME_LOW = "speaker-none"
     VOLUME_OFF = "speaker-x"
     VOLUME_MUTE = "speaker-slash"
+    #
+    PIPETTE = "eyedropper"
 
 
 class IconProvider(ABC):
@@ -179,6 +181,7 @@ class LucideProvider(IconProvider):
         IconName.VOLUME_LOW: "volume",
         IconName.VOLUME_OFF: "volume-x",
         IconName.VOLUME_MUTE: "volume-off",
+        IconName.PIPETTE: "pipette",
     }
 
     @property
