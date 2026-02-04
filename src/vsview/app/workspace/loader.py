@@ -388,7 +388,12 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.tab_manager.disable_switch = False
 
             try:
-                self._on_tab_changed(self.tab_manager.tabs.currentIndex(), seamless=True, cb_render=on_complete)
+                self._on_tab_changed(
+                    self.tab_manager.tabs.currentIndex(),
+                    seamless=True,
+                    cb_render=on_complete,
+                    refresh_plugins=True,
+                )
             except Exception:
                 logger.error("Failed to reload content: %r", self.content)
                 self.clear_failed_load()
@@ -526,7 +531,11 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.api._init_plugin(plugin)
 
     def _on_tab_changed(
-        self, index: int, seamless: bool = False, cb_render: Callable[[Future[None]], None] | None = None
+        self,
+        index: int,
+        seamless: bool = False,
+        cb_render: Callable[[Future[None]], None] | None = None,
+        refresh_plugins: bool = False,
     ) -> None:
         self.playback.stop()
         self.outputs_manager.current_video_index = index
@@ -561,13 +570,13 @@ class LoaderWorkspace[T](BaseWorkspace):
                         cb_render(f)
 
                     with self.env.use():
-                        self.api._on_current_voutput_changed()
+                        self.api._on_current_voutput_changed(refresh_plugins)
 
             logger.debug("Requesting frame %d", target_frame)
             self.playback.request_frame(target_frame, on_complete)
         else:
             with self.env.use():
-                self.api._on_current_voutput_changed()
+                self.api._on_current_voutput_changed(refresh_plugins)
 
     def _calculate_target_frame(self) -> int:
         if not (voutput := self.outputs_manager.current_voutput):

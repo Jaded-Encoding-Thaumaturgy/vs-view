@@ -192,13 +192,13 @@ class _PluginAPI(QObject):
                         plugin.identifier, view.outputs[view.current_tab]
                     )
 
-    def _on_current_voutput_changed(self) -> None:
+    def _on_current_voutput_changed(self, refresh: bool = False) -> None:
         # Notify all visible plugin views of output change.
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                self._init_plugin(plugin)
+                self._init_plugin(plugin, refresh)
 
-    def _init_plugin(self, plugin: WidgetPluginBase[Any, Any]) -> None:
+    def _init_plugin(self, plugin: WidgetPluginBase[Any, Any], refresh: bool = False) -> None:
         # Initialize plugin for the current output and render initial frame if needed.
         from .api import PluginGraphicsView
 
@@ -222,7 +222,7 @@ class _PluginAPI(QObject):
 
         for view in plugin.findChildren(PluginGraphicsView):
             try:
-                self._init_view(view, plugin)
+                self._init_view(view, plugin, refresh)
             except Exception:
                 logger.exception("Failed to initialize view %r", view)
 
