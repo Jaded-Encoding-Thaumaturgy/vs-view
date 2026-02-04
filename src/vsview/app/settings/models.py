@@ -28,7 +28,7 @@ from jetpytools import SupportsRichComparison
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_serializer, field_validator
 from PySide6.QtCore import QTime
 from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QPlainTextEdit, QSpinBox, QTimeEdit, QWidget
+from PySide6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QPlainTextEdit, QSpinBox, QTimeEdit, QWidget
 
 from .enums import Resizer
 
@@ -122,6 +122,22 @@ class Checkbox(WidgetMetadata[QCheckBox]):
         value = widget.isChecked()
         return self.from_ui(value) if self.from_ui else value
 
+@dataclass(frozen=True, slots=True)
+class LineEdit(WidgetMetadata[QLineEdit]):
+    """LineEdit widget metadata."""
+
+    def create_widget(self, parent: QWidget | None = None) -> QLineEdit:
+        widget = QLineEdit(parent)
+        return widget
+
+    def load_value(self, widget: QLineEdit, value: Any) -> None:
+        if self.to_ui:
+            value = self.to_ui(value)
+        widget.setText(value)
+
+    def get_value(self, widget: QLineEdit) -> Any:
+        value = widget.text()
+        return self.from_ui(value) if self.from_ui else value
 
 @dataclass(frozen=True, slots=True)
 class Dropdown(WidgetMetadata[QComboBox]):
