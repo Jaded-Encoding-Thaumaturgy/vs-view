@@ -5,14 +5,13 @@ from typing import Self
 
 from jetpytools import cachedproperty, classproperty
 from pygments.styles import get_all_styles
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QFrame,
     QHBoxLayout,
     QKeySequenceEdit,
     QLabel,
@@ -24,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...assets import ICON_PROVIDERS, IconName, IconReloadMixin
+from ..views.components import Accordion
 from .models import GlobalSettings, LocalSettings, SettingEntry, ShortcutConfig, extract_settings
 
 # Style for shortcut editors with conflicts
@@ -37,84 +37,16 @@ QWIDGETSIZE_MAX = 16777215
 logger = getLogger(__name__)
 
 
-class SettingsSection(QFrame):
-    HEADER_STYLE = """
-    QToolButton {
-        border: none;
-        padding: 8px 12px;
-        font-weight: bold;
-        text-align: left;
-    }
-    QToolButton:hover {
-        background-color: palette(midlight);
-    }
-    """
-
-    def __init__(self, title: str, parent: QWidget | None = None, collapsed: bool = False) -> None:
-        super().__init__(parent)
-
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setFrameShadow(QFrame.Shadow.Raised)
-
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-
-        self._header = QToolButton(self)
-        self._header.setText(f"  {title}")
-        self._header.setCheckable(True)
-        self._header.setChecked(not collapsed)
-        self._header.setArrowType(Qt.ArrowType.DownArrow if not collapsed else Qt.ArrowType.RightArrow)
-        self._header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self._header.setSizePolicy(
-            self._header.sizePolicy().horizontalPolicy(),
-            self._header.sizePolicy().verticalPolicy(),
-        )
-        self._header.setStyleSheet(self.HEADER_STYLE)
-        self._header.toggled.connect(self._on_toggle)
-        main_layout.addWidget(self._header)
-
-        self._content = QWidget(self)
-        self._content_layout = QVBoxLayout(self._content)
-        self._content_layout.setContentsMargins(12, 8, 12, 12)
-        self._content_layout.setSpacing(8)
-        main_layout.addWidget(self._content)
-
-        self._animation = QPropertyAnimation(self._content, b"maximumHeight")
-        # FIXME: A larger duration just seems to increase flickering and ghosting during collapsing
-        # I've tried many things to fix that but alas
-        self._animation.setDuration(80)
-        self._animation.setEasingCurve(QEasingCurve.Type.Linear)
-
-        if collapsed:
-            self._content.setMaximumHeight(0)
-
-    def _on_toggle(self, checked: bool) -> None:
-        self._header.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
-
-        self._animation.stop()
-
-        if checked:
-            self._content.setMaximumHeight(0)
-            self._animation.setStartValue(0)
-            self._animation.setEndValue(self._content.sizeHint().height())
-        else:
-            # Collapse
-            self._content.setMaximumHeight(self._content.sizeHint().height())
-            self._animation.setStartValue(self._content.sizeHint().height())
-            self._animation.setEndValue(0)
-
-        self._animation.start()
-
+class SettingsSection(Accordion):
     def add_widget(self, widget: QWidget) -> None:
-        self._content_layout.addWidget(widget)
+        self.content_layout.addWidget(widget)
 
     def add_form_layout(self) -> QFormLayout:
         # This form has to be without parent, otherwise we're getting an error
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(8)
-        self._content_layout.addLayout(form)
+        self.content_layout.addLayout(form)
         return form
 
 

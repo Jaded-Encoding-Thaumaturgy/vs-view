@@ -1,11 +1,24 @@
 from collections.abc import Sequence
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal, Slot
+from PySide6.QtCore import (
+    QEasingCurve,
+    QPoint,
+    QPointF,
+    QPropertyAnimation,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+    QVariantAnimation,
+    Signal,
+    Slot,
+)
 from PySide6.QtGui import QBrush, QColor, QPainter, QPaintEvent, QPalette, QShowEvent
 from PySide6.QtWidgets import (
     QBoxLayout,
     QButtonGroup,
     QCheckBox,
+    QFrame,
     QLabel,
     QProgressBar,
     QPushButton,
@@ -247,3 +260,72 @@ class AnimatedToggle(QCheckBox):
             round(c1.blue() + (c2.blue() - c1.blue()) * t),
             round(c1.alpha() + (c2.alpha() - c1.alpha()) * t),
         )
+
+
+class Accordion(QFrame):
+    HEADER_STYLE = """
+    QToolButton {
+        border: none;
+        padding: 8px 12px;
+        font-weight: bold;
+        text-align: left;
+    }
+    QToolButton:hover {
+        background-color: palette(midlight);
+    }
+    """
+
+    def __init__(self, title: str, parent: QWidget | None = None, collapsed: bool = False) -> None:
+        super().__init__(parent)
+
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setFrameShadow(QFrame.Shadow.Raised)
+
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
+
+        self.header = QToolButton(self)
+        self.header.setText(f"  {title}")
+        self.header.setCheckable(True)
+        self.header.setChecked(not collapsed)
+        self.header.setArrowType(Qt.ArrowType.DownArrow if not collapsed else Qt.ArrowType.RightArrow)
+        self.header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.header.setSizePolicy(
+            self.header.sizePolicy().horizontalPolicy(),
+            self.header.sizePolicy().verticalPolicy(),
+        )
+        self.header.setStyleSheet(self.HEADER_STYLE)
+        self.header.toggled.connect(self.on_toggle)
+        self.main_layout.addWidget(self.header)
+
+        self.content = QWidget(self)
+        self.content_layout = QVBoxLayout(self.content)
+        self.content_layout.setContentsMargins(12, 8, 12, 12)
+        self.content_layout.setSpacing(8)
+        self.main_layout.addWidget(self.content)
+
+        self.animation = QPropertyAnimation(self.content, b"maximumHeight")
+        # FIXME: A larger duration just seems to increase flickering and ghosting during collapsing
+        self.animation.setDuration(80)
+        self.animation.setEasingCurve(QEasingCurve.Type.Linear)
+
+        if collapsed:
+            self.content.setMaximumHeight(0)
+
+    def on_toggle(self, checked: bool) -> None:
+        self.header.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
+
+        self.animation.stop()
+
+        if checked:
+            self.content.setMaximumHeight(0)
+            self.animation.setStartValue(0)
+            self.animation.setEndValue(self.content.sizeHint().height())
+        else:
+            # Collapse
+            self.content.setMaximumHeight(self.content.sizeHint().height())
+            self.animation.setStartValue(self.content.sizeHint().height())
+            self.animation.setEndValue(0)
+
+        self.animation.start()
