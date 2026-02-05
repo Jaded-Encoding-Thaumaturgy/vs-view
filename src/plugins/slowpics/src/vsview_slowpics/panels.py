@@ -1,7 +1,16 @@
 
-from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QPoint, QSignalBlocker, QSize, Qt, QThread, QTimer, Signal, QUrl
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+import logging
+
+import httpx
+from PySide6.QtCore import (
+    QSize,
+    Qt,
+    QTimer,
+    QUrl,
+    Signal,
+)
 from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QDialog,
     QLabel,
@@ -11,13 +20,14 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QVBoxLayout,
-    QWidget
+    QWidget,
 )
 
-import httpx
-
 from vsview.assets.utils import IconReloadMixin
+
 from .utils import get_slowpics_headers
+
+logger = logging.getLogger("vsview-slowpics")
 
 class TMDBPopup(QDialog, IconReloadMixin):
 
@@ -109,8 +119,8 @@ class TMDBPopup(QDialog, IconReloadMixin):
                 ).raise_for_status().json()
 
                 self.add_response(tv, True, False)
-            except:
-                pass
+            except Exception as e:
+                logger.error(e)
 
             try:
                 movie = self.client.get(f"https://api.themoviedb.org/3/movie/{query}",
@@ -122,14 +132,12 @@ class TMDBPopup(QDialog, IconReloadMixin):
 
                 self.add_response(movie, False, False)
             except Exception as e:
-                print(e)
+                logger.error(e)
 
 
     def add_response(self, data, is_tv: bool, is_list: bool = True):
 
         values = []
-        
-
 
         for result in (data["results"] if is_list else [data]):
             print(result)
@@ -140,7 +148,9 @@ class TMDBPopup(QDialog, IconReloadMixin):
                 label += f"{result["title"]} [{(result["release_date"] or "0000")[:4]}] [MOVIE]"
 
             if is_list:
-                label += f" [{", ".join([(self.tv_genre if is_tv else self.movie_genre)[genre] for genre in result["genre_ids"]])}]"
+                label += f" [{", ".join([
+                    (self.tv_genre if is_tv else self.movie_genre)[genre] for genre in result["genre_ids"]
+                ])}]"
             else:
                 label += f" [{", ".join([genre["name"] for genre in result["genres"]])}]"
 
@@ -152,12 +162,12 @@ class TMDBPopup(QDialog, IconReloadMixin):
 
             item.setData(Qt.ItemDataRole.UserRole, value)
 
-            self.results_list.addItem(item)            
+            self.results_list.addItem(item)
 
             if value["result"]["poster_path"]:
                 request = QNetworkRequest(QUrl(f"https://image.tmdb.org/t/p/w92{value["result"]["poster_path"]}"))
                 reply = self.net.get(request)
-                self._icon_requests[reply] = item 
+                self._icon_requests[reply] = item
 
     def on_icon_downloaded(self, reply: QNetworkReply):
         item: QListWidgetItem = self._icon_requests.pop(reply, None)
@@ -188,7 +198,7 @@ class TMDBPopup(QDialog, IconReloadMixin):
         data = item.data(Qt.ItemDataRole.UserRole)
         self.item_selected.emit(data)
         self.close()
-    
+
 
 class TagPopup(QDialog, IconReloadMixin):
 

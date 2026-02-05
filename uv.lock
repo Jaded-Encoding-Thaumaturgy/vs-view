@@ -8,6 +8,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "vspackrgb",
     "vsview",
     "vsview-audio-convert",
     "vsview-fftspectrum",
@@ -643,29 +644,30 @@ dependencies = [
 
 [[package]]
 name = "vspackrgb"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "src/vspackrgb" }
 dependencies = [
     { name = "vapoursynth" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/42/23/a3e80f0d6f7470b43b053391968597a080bd36e193669e07bd511660dbe0/vspackrgb-1.0.0.tar.gz", hash = "sha256:cdc78681b059298f338374cd328ca86ec822700881737b1f109708f6655e6dea", size = 6640, upload-time = "2026-01-21T23:43:26.839Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9a/09/d1230ee9d6f5ea3e50b295be31ed01f8ccf3bcc1e077c80bcd92b5753ba7/vspackrgb-1.0.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:26850eab9adfc2d7a1b61b22834ef83eec0fddb14372d5a931a5bfffdd38e4c0", size = 82027, upload-time = "2026-01-21T23:43:06.626Z" },
-    { url = "https://files.pythonhosted.org/packages/55/32/c6d60d64af13a2bed973830c09a8d5a81da67037493045b719a76e996da6/vspackrgb-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:759e44184c5dfd6368a8e2e0eea035de0f67e8285413ffe4bd3d0e093000a19c", size = 80104, upload-time = "2026-01-21T23:43:07.945Z" },
-    { url = "https://files.pythonhosted.org/packages/d4/97/5a9f9e758a8a91dd57deac5e4c4db31e38717915722e8549a674f29f1f3e/vspackrgb-1.0.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5e3faa9d71dfb11bcb7124b20d8e4be4f6faffb3b1d8913f4a8f53a77228548f", size = 468903, upload-time = "2026-01-21T23:43:09.249Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/4f/ab19964cb445d0c03252983a532849bb35311db30f7a73c848337b687010/vspackrgb-1.0.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:733a0b17256170e1d4ebd104595da7f36bce85686ab68bd0924c1d4b00d1e5bf", size = 475923, upload-time = "2026-01-21T23:43:10.703Z" },
-    { url = "https://files.pythonhosted.org/packages/26/6d/448c59a604ed623effac83800d0b9c16edbb27c84b0462b023d7ca53b256/vspackrgb-1.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:dcfba969812c70169786f25a07c7440fafcbd129877ab7238fa47070b22cbee6", size = 70758, upload-time = "2026-01-21T23:43:12.296Z" },
-    { url = "https://files.pythonhosted.org/packages/40/25/8ac1f412f56d9de7bce410f9472c3e1c38bcbce96fb5a6f2d4d8a38eb4fe/vspackrgb-1.0.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:b233e59d717dd846153d1be8af7ce148a49c54935946383cc4db24fa8efc7e6d", size = 81276, upload-time = "2026-01-21T23:43:13.517Z" },
-    { url = "https://files.pythonhosted.org/packages/7f/4b/f6b0516ae3b67478136f7cd2112259824c5775010dcad10fbc729f0b667f/vspackrgb-1.0.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:82a57df4aaee760909b8663dd060050e585bfa67d11b182f08761739bc4ee346", size = 79314, upload-time = "2026-01-21T23:43:14.739Z" },
-    { url = "https://files.pythonhosted.org/packages/8d/3f/6d127e4d0ce45bd956eb231c24677d7e6463b98110a1c279a13c961e07e8/vspackrgb-1.0.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a7bf2ed439f76e72b749dcea4f66b45f731bd3ff7abd46beaaaaae9eea155396", size = 462097, upload-time = "2026-01-21T23:43:15.928Z" },
-    { url = "https://files.pythonhosted.org/packages/2d/b9/752c34660130b83daa9f8935f09d8c9b2d052767bcb5822254fe5ba6966c/vspackrgb-1.0.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f9715929ddc12084b721521229deb63ebac3fc8b5c75171a84f4a4a67874e91a", size = 470246, upload-time = "2026-01-21T23:43:17.646Z" },
-    { url = "https://files.pythonhosted.org/packages/53/6f/4df353c7011e2725c51f5cb1ccd1a56d705ccd8af280de98d535ee8dbfe5/vspackrgb-1.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:a6d4b3e3282c1e6a39081244ab0e1da3ea5373cbc5daf9300b9f36c9b690eaf1", size = 70502, upload-time = "2026-01-21T23:43:19.355Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/3e/7d4d49ca8142d0051842995d5dacc78b6fb8f5a9c0bfb8272eedb7ec6ed4/vspackrgb-1.0.0-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:19bbec251d8beb68f2cfa143b91d591685a03cbd4682ba6b82fc681425096c87", size = 81629, upload-time = "2026-01-21T23:43:20.431Z" },
-    { url = "https://files.pythonhosted.org/packages/5e/a7/410cde9ad9a34192caef4a4ac25ebbe928e1b52e6474b7d6e1d1a62c003a/vspackrgb-1.0.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:3a1fcd6e62a32295f285c3a3a8388b74de3c73cec03ae263168dac9baac51d28", size = 80133, upload-time = "2026-01-21T23:43:21.453Z" },
-    { url = "https://files.pythonhosted.org/packages/50/a4/c8ce82aacb38780b76617ab2a7671550d2f1dc84cb3a592cef4e45ea5e58/vspackrgb-1.0.0-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:2ff1373a1ae1f3d21a01bd937c2d07e4fa9756c923360b48e8080c5a746eb1b3", size = 460596, upload-time = "2026-01-21T23:43:23.235Z" },
-    { url = "https://files.pythonhosted.org/packages/d1/63/c5535397d8c474ebf98b1235af8bd1bd7d3ac5fc37557d4ae58220bdbc44/vspackrgb-1.0.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f24bbf92d3aaba19c3331574169e0724d8be99be7cef6afc6c93c38f67b3a842", size = 465652, upload-time = "2026-01-21T23:43:24.607Z" },
-    { url = "https://files.pythonhosted.org/packages/28/98/262ed7ee0cdef7a69cf1754cbc0b80101f40ac1c9ce671f9e4e97b116e67/vspackrgb-1.0.0-cp314-cp314-win_amd64.whl", hash = "sha256:6292789833522bb2d3e5389441797c187c8b6117ad713aff354de025917bfc2a", size = 72730, upload-time = "2026-01-21T23:43:25.843Z" },
+
+[package.optional-dependencies]
+numpy = [
+    { name = "numpy" },
 ]
+
+[package.dev-dependencies]
+dev = [
+    { name = "cython" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", marker = "extra == 'numpy'", specifier = ">=2.0.0" },
+    { name = "vapoursynth" },
+]
+provides-extras = ["numpy"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "cython", specifier = ">=3.0.0" }]
 
 [[package]]
 name = "vsstubs"
@@ -731,7 +733,7 @@ requires-dist = [
     { name = "typing-extensions", marker = "python_full_version < '3.13'", specifier = ">=4.15.0" },
     { name = "vapoursynth", specifier = ">=69" },
     { name = "vsjetengine", specifier = ">=1.0.0" },
-    { name = "vspackrgb", specifier = ">=1.0.0" },
+    { name = "vspackrgb", editable = "src/vspackrgb" },
     { name = "vsview-frameprops-extended", marker = "extra == 'essential'", editable = "src/plugins/frameprops-extended" },
     { name = "vsview-slowpics", marker = "extra == 'essential'", editable = "src/plugins/slowpics" },
     { name = "vsview-split-planes", marker = "extra == 'essential'", editable = "src/plugins/split-planes" },

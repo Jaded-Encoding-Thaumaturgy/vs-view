@@ -1,64 +1,64 @@
 import asyncio
 import logging
-from math import copysign
-import random
-from typing import Annotated, Any, Literal, assert_never
 import webbrowser
+from math import copysign
+from typing import Annotated, Any
 
 from jetpytools import fallback
 from pydantic import BaseModel
-from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QPoint, QSignalBlocker, QSize, Qt, QThread, QTimer, Signal, QUrl
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import (
+    QModelIndex,
+    QPersistentModelIndex,
+    QPoint,
+    QSignalBlocker,
+    QSize,
+    Qt,
+    QThread,
+    QTimer,
+    QUrl,
+    Signal,
+)
+from PySide6.QtGui import QPixmap
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
-    QListView,
-    QListWidget,
-    QListWidgetItem,
-    QMenu,
-    QPushButton,
     QProgressBar,
+    QPushButton,
     QSizePolicy,
     QSpinBox,
-    QSplitter,
-    QStackedWidget,
-    QStyle,
-    QStyledItemDelegate,
-    QTableView,
-    QToolBar,
-    QTreeView,
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtGui import QCloseEvent
-from vapoursynth import VideoNode, VideoFrame, core
+from vapoursynth import VideoFrame, VideoNode, core
 from vstools import get_prop, scale_mask, stack_planes
-import vapoursynth as vs
 
 from vsview.api import (
     Checkbox,
-    Dropdown,
     LineEdit,
     LocalSettingsModel,
     PluginAPI,
     WidgetPluginBase,
-    PluginGraphicsView,
-    PluginSettings,
-    SegmentedControl,
-    Spin,
     hookimpl,
 )
 from vsview.app.settings.models import ActionDefinition, ActionID
 from vsview.app.settings.shortcuts import ShortcutManager
-from .extract import SPFrame, SPFrameSource, SlowPicsUploadData, SlowPicsUploadInfo, SlowPicsWorker, SlowPicsFramesData, SlowPicsImageData
-from .panels import FramePopup, TMDBPopup, TagPopup
+
+from .extract import (
+    SlowPicsFramesData,
+    SlowPicsImageData,
+    SlowPicsUploadData,
+    SlowPicsUploadInfo,
+    SlowPicsWorker,
+    SPFrame,
+    SPFrameSource,
+)
+from .panels import FramePopup, TagPopup, TMDBPopup
 
 logger = logging.getLogger("vsview-slowpics")
 
@@ -82,13 +82,13 @@ class GlobalSettings(BaseModel):
         LineEdit(
             "TMDB API Key",
         ),
-    ] = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxYTczNzMzMDE5NjFkMDNmOTdmODUzYTg3NmRkMTIxMiIsInN1YiI6IjU4NjRmNTkyYzNhMzY4MGFiNjAxNzUzNCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.gh1BwogCCKOda6xj9FRMgAAj_RYKMMPC3oNlcBtlmwk"
+    ] = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxYTczNzMzMDE5NjFkMDNmOTdmODUzYTg3NmRkMTIxMiIsInN1YiI6IjU4NjRmNTkyYzNhMzY4MGFiNjAxNzUzNCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.gh1BwogCCKOda6xj9FRMgAAj_RYKMMPC3oNlcBtlmwk"  # noqa: E501
     p_picttype_default: Annotated[
         bool,
         Checkbox(
             label="P PictType Default",
             text="",
-            tooltip='If checked it will enable this PictType by default.',
+            tooltip="If checked it will enable this PictType by default.",
         ),
     ] = True
     b_picttype_default: Annotated[
@@ -96,7 +96,7 @@ class GlobalSettings(BaseModel):
         Checkbox(
             label="B PictType Default",
             text="",
-            tooltip='If checked it will enable this PictType by default.',
+            tooltip="If checked it will enable this PictType by default.",
         ),
     ] = True
     i_picttype_default: Annotated[
@@ -104,7 +104,7 @@ class GlobalSettings(BaseModel):
         Checkbox(
             label="I PictType Default",
             text="",
-            tooltip='If checked it will enable this PictType by default.',
+            tooltip="If checked it will enable this PictType by default.",
         ),
     ] = True
     current_frame_default: Annotated[
@@ -112,7 +112,7 @@ class GlobalSettings(BaseModel):
         Checkbox(
             label="Current Frame Default",
             text="",
-            tooltip='If checked it will enable current frame by default.',
+            tooltip="If checked it will enable current frame by default.",
         ),
     ] = True
     public_comp_default: Annotated[
@@ -120,7 +120,7 @@ class GlobalSettings(BaseModel):
         Checkbox(
             label="Public Comp Default",
             text="",
-            tooltip='If checked it will enable public comps by default.',
+            tooltip="If checked it will enable public comps by default.",
         ),
     ] = True
     open_comp_automatically: Annotated[
@@ -128,7 +128,7 @@ class GlobalSettings(BaseModel):
         Checkbox(
             label="Open comp links automatically",
             text="",
-            tooltip='Will open the link to the comp once it has finished automatically.',
+            tooltip="Will open the link to the comp once it has finished automatically.",
         ),
     ] = False
 
@@ -151,7 +151,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         self.extracted_sources = None
         self.frames: list[SPFrame] = []
         self.manual_frames: set[SPFrame] = set()
-        
+
         main_layout = QVBoxLayout(self)
         main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
@@ -207,7 +207,10 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         pubnsfw_row = QHBoxLayout()
         self.public_check = QCheckBox("Public", checked=self.settings.global_.public_comp_default)
         self.nsfw_check = QCheckBox("NSFW")
-        self.current_frame_check = QCheckBox("Include Current Frame", checked=self.settings.global_.current_frame_default)
+        self.current_frame_check = QCheckBox(
+            "Include Current Frame",
+            checked=self.settings.global_.current_frame_default
+        )
         pubnsfw_row.addWidget(self.public_check)
         pubnsfw_row.addWidget(self.nsfw_check)
         pubnsfw_row.addWidget(self.current_frame_check)
@@ -287,12 +290,16 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         main_layout.addWidget(self.progress_bar)
 
         self.init_worker()
-       
         self._setup_shortcuts()
 
 
     def _setup_shortcuts(self) -> None:
-        self.api.register_shortcut("jet_vsview_slowpics.add_current_frame", lambda: self.add_manual_frame(self.api.current_frame), self, context=Qt.ShortcutContext.WindowShortcut)
+        self.api.register_shortcut(
+            "jet_vsview_slowpics.add_current_frame",
+            lambda: self.add_manual_frame(self.api.current_frame),
+            self,
+            context=Qt.ShortcutContext.WindowShortcut
+        )
 
 
     def on_current_frame_changed(self, n: int) -> None:
@@ -330,7 +337,15 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
             if self.i_frame.isChecked():
                 pict_types.add("I")
 
-            data = SlowPicsFramesData(int(self.random_frames.value()), 0, None, self.dark_frames.value(), self.light_frames.value(), pict_types, self.current_frame_check.isChecked())
+            data = SlowPicsFramesData(
+                int(self.random_frames.value()),
+                0,
+                None,
+                self.dark_frames.value(),
+                self.light_frames.value(),
+                pict_types,
+                self.current_frame_check.isChecked()
+            )
 
             self.extracted_sources = None
             self.frames = []
@@ -340,9 +355,8 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
             if not self.frames:
                 logger.debug("Trying to extract with no frames.")
                 return
-            
 
-            extract = SlowPicsImageData(self.api.get_local_storage(self), self.frames)            
+            extract = SlowPicsImageData(self.api.get_local_storage(self), self.frames)
             self.extracted_sources = None
             self.start_job.emit("extract", extract, do_next)
 
@@ -350,8 +364,15 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
             if not self.extracted_sources:
                 logger.debug("Trying to upload without any images")
                 return
-            
-            data = SlowPicsUploadInfo(self.comp_title.text(), self.public_check.isChecked(), self.nsfw_check.isChecked(), self.tmdb.get("id", None), self.remove_after.value(), self.tags)
+
+            data = SlowPicsUploadInfo(
+                self.comp_title.text(),
+                self.public_check.isChecked(),
+                self.nsfw_check.isChecked(),
+                self.tmdb.get("id", None),
+                self.remove_after.value(),
+                self.tags
+            )
             upload = SlowPicsUploadData(data, self.extracted_sources)
             self.start_job.emit("upload", upload, do_next)
 
@@ -373,14 +394,14 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
     def handle_do_next(self, job_name:str, do_next:bool):
         # Do next job if clicked all 3
-        if not do_next: return
+        if not do_next:
+            return
 
         if job_name == "frames":
             self.do_job("extract", True)
         elif job_name == "extract":
             self.do_job("upload", True)
-    
-            
+
 
     def kill_worker(self) -> None:
         if self.thread_handle.isRunning():
@@ -389,15 +410,16 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
     def add_frames(self) -> None:
         self.frames_dropdown.clear()
-        frames: list[SPFrame] = list(sorted(self.frames + list(self.manual_frames), key=lambda x: x.frame))
+        frames: list[SPFrame] = sorted(self.frames + list(self.manual_frames), key=lambda x: x.frame)
         for frame in frames:
             self.frames_dropdown.addItem(f"{frame.frame} {frame.frame_type}", frame)
 
 
     def _frame_selected(self, index:int) -> None:
-        data: SPFrame = self.frames_dropdown.itemData(index)
+        # data: SPFrame = self.frames_dropdown.itemData(index)
 
         # self.api.__workspace._seek_frame(data.frame)
+        pass
 
     def _open_tmdb_search_popup(self):
         self.popup = TMDBPopup(self, self.settings.global_.tmdb_api_key)
@@ -407,7 +429,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
     def _handle_tmdb_selected(self, data):
         self.tmdb = data
-        
+
         self.handle_comp_title()
 
 
@@ -424,8 +446,11 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
             comp_title = comp_title.replace("{tmdb_title}", result["title"])
             comp_title = comp_title.replace("{tmdb_year}", (result["release_date"] or "0000")[:4])
 
-        
-        comp_title = comp_title.replace("{video_nodes}", " vs ".join([source.vs_name or f"Node {i}" for i, source in self.api.voutputs.items()]))
+
+        comp_title = comp_title.replace(
+            "{video_nodes}",
+            " vs ".join([source.vs_name or f"Node {i+1}" for i, source in enumerate(self.api.voutputs)])
+        )
 
         self.comp_title.setText(comp_title)
         if result["poster_path"]:
@@ -469,7 +494,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
             self.manual_frames.add(mframe)
 
         self.add_frames()
-    
+
     def handle_frame_ui(self, checked:bool):
         dialog = FramePopup(self)
 

@@ -1,25 +1,26 @@
 import asyncio
-from collections import defaultdict
-from enum import IntEnum, auto
-import time
-from uuid import uuid4
-import httpx
-from itertools import chain, islice
 import logging
 import math
-from pathlib import Path
-from PySide6.QtCore import Signal, QObject, Slot
-import string
-from typing import Iterable, NamedTuple
-from jetpytools import ndigits
-from vstools import clip_data_gather, get_prop, remap_frames
-from vsview.app.plugins.api import PluginAPI, VideoOutputProxy
 import random
+import string
+from collections import defaultdict
+from collections.abc import Iterable
+from enum import IntEnum, auto
+from itertools import chain, islice
+from pathlib import Path
+from typing import NamedTuple
+from uuid import uuid4
 
-from vsview.app.views.timeline import Time
-from .utils import get_slowpics_headers
-
+import httpx
 import vapoursynth as vs
+from jetpytools import ndigits
+from PySide6.QtCore import QObject, Signal, Slot
+from vstools import clip_data_gather, get_prop, remap_frames
+
+from vsview.app.plugins.api import PluginAPI, VideoOutputProxy
+from vsview.app.views.timeline import Time
+
+from .utils import get_slowpics_headers
 
 logger = logging.getLogger("vsview-slowpics")
 
@@ -32,7 +33,7 @@ class SPFrameSource(IntEnum):
     MANUAL = auto()
     CURRENT = auto()
 
-class SPFrame():
+class SPFrame:
     frame: int
     frame_type: SPFrameSource
 
@@ -42,7 +43,6 @@ class SPFrame():
 
     def __repr__(self):
         return f"SPFrame(frame={self.frame}, frame_type={self.frame_type})"
-    
     def __eq__(self, other):
         if not isinstance(other, SPFrame):
             return NotImplemented
@@ -91,7 +91,6 @@ class SlowPicsUploadData(NamedTuple):
     sources: Iterable[SlowPicsUploadSource]
 
 class SlowPicsWorker(QObject):
-    
     ALLOWED_FRAME_SEARCHES = 150
 
     progress = Signal(int)
@@ -128,7 +127,7 @@ class SlowPicsWorker(QObject):
 
         self.checked = []
 
-        random_max = frame_info.random_max or min([source.vs_output.clip.num_frames-1 for source in self.api.voutputs.values()])
+        random_max = frame_info.random_max or min([source.vs_output.clip.num_frames-1 for source in self.api.voutputs])
 
         if (random_max - frame_info.random_min) < frame_info.random_frames:
             raise ValueError("Cannot generate enough frames with this range of frames.")
@@ -141,16 +140,30 @@ class SlowPicsWorker(QObject):
 
 
         if len(frame_info.pict_types) != 3:
-            found_frames.extend(self._get_random_frames(frame_info.random_frames, frame_info.pict_types, frame_info.random_min, random_max))
+            found_frames.extend(
+                self._get_random_frames(
+                    frame_info.random_frames,
+                    frame_info.pict_types,
+                    frame_info.random_min,
+                    random_max
+                )
+            )
 
         if frame_info.random_light or frame_info.random_dark:
-            found_frames.extend(self._get_random_by_light_level(frame_info.random_light, frame_info.random_dark, frame_info.random_min, random_max))
+            found_frames.extend(
+                self._get_random_by_light_level(
+                    frame_info.random_light,
+                    frame_info.random_dark,
+                    frame_info.random_min,
+                    random_max
+                )
+            )
 
         self.range.emit(0, len(found_frames))
         self.progress.emit(len(found_frames))
         self.format.emit("Extracted images %v / %m")
-        
-        return list(sorted(set(found_frames), key=lambda x: x.frame))
+
+        return sorted(set(found_frames), key=lambda x: x.frame)
 
 
     def _get_random_number(self, min:int, max:int) -> int:
@@ -160,25 +173,23 @@ class SlowPicsWorker(QObject):
 
         self.checked.append(rnum)
         return rnum
-    
 
     def _get_random_number_interval(self, min:int, max:int, random_count: int, index:int) -> int:
         if random_count < index or index < 0:
             raise ValueError(f"{index} is out of range of 0-{random_count-1}")
 
         interval = math.floor((max-min) / random_count)
-        return min + self._get_random_number(interval * index, interval * (index + 1)) 
+        return min + self._get_random_number(interval * index, interval * (index + 1))
 
 
-        
-
-    def _get_random_frames(self, random_count: int, pict_types: set[str], random_min: int, random_max: int) -> list[SPFrame]:
+    def _get_random_frames(self, random_count: int, pict_types: set[str],
+                           random_min: int, random_max: int) -> list[SPFrame]:
 
         self.format.emit("Random Frames by Pict %v / %m")
         self.range.emit(0, random_count)
 
         pict_types_b = [pict_type.encode() for pict_type in pict_types]
-        
+
         should_check_pict = len(pict_types) != 3
 
         random_frames = []
@@ -187,9 +198,12 @@ class SlowPicsWorker(QObject):
             attempts = 0
             while True:
                 if attempts > self.ALLOWED_FRAME_SEARCHES:
-                    logging.warning(
-                        f"{self.ALLOWED_FRAME_SEARCHES} attempts were made and only found {len(random_frames)} frames "
-                        f"and no match found for {pict_types}; stopping iteration..."
+                    logger.warning(
+                        "%s attempts were made and only found %s frames "
+                        "and no match found for %s; stopping iteration...",
+                        self.ALLOWED_FRAME_SEARCHES,
+                        len(random_frames),
+                        pict_types
                     )
                     break
 
@@ -198,7 +212,8 @@ class SlowPicsWorker(QObject):
 
 
                 for f in vs.core.std.Splice(frames, True).frames(close=True):
-                    if should_check_pict and get_prop(f.props, "_PictType", str, default="", func="__vsview__").encode() not in pict_types_b:
+                    pict_type = get_prop(f.props, "_PictType", str, default="", func="__vsview__")
+                    if should_check_pict and pict_type.encode() not in pict_types_b:
                         break
 
                     # Bad for vivtc/interlaced sources
@@ -213,7 +228,7 @@ class SlowPicsWorker(QObject):
                 attempts += 1
 
         return random_frames
-    
+
     def _get_random_by_light_level(self, light: int, dark:int, random_min: int, random_max: int) -> list[SPFrame]:
 
         frame_level: dict[float, list[int]] = defaultdict(list)
@@ -230,19 +245,30 @@ class SlowPicsWorker(QObject):
             self.progress.emit(checked)
 
         decimated = remap_frames(clip.std.PlaneStats(), frames)
-        image_types = clip_data_gather(decimated, _progress, lambda a, f: get_prop(f.props, "PlaneStatsAverage", float, default=0, func="__vspreview__"))
+        image_types = clip_data_gather(
+            decimated,
+            _progress,
+            lambda a, f: get_prop(f.props, "PlaneStatsAverage", float, default=0, func="__vspreview__")
+        )
 
         for i, f in enumerate(image_types):
             frame_level[f].append(frames[i])
 
         print(frame_level)
 
-        return list(SPFrame(i, SPFrameSource.RANDOM_LIGHT) for i in islice(chain.from_iterable(frame_level[k] for k in sorted(frame_level)), light)) + list(SPFrame(i, SPFrameSource.RANDOM_DARK) for i in islice(chain.from_iterable(frame_level[k] for k in sorted(frame_level, reverse=True)), dark))
-        
+        return [
+            SPFrame(i, SPFrameSource.RANDOM_LIGHT)
+            for i in islice(chain.from_iterable(frame_level[k] for k in sorted(frame_level)), light)
+        ] + \
+        [
+            SPFrame(i, SPFrameSource.RANDOM_DARK)
+            for i in islice(chain.from_iterable(frame_level[k] for k in sorted(frame_level, reverse=True)), dark)
+        ]
+
     def get_upload_data(self, data: SlowPicsImageData) -> list[SlowPicsUploadSource]:
         base_path = data.path / "".join(random.choices(string.ascii_uppercase + string.digits, k=16))
 
-        frames_n = list(f.frame for f in data.frames)
+        frames_n = [f.frame for f in data.frames]
 
 
         self.range.emit(0, len(frames_n))
@@ -252,7 +278,13 @@ class SlowPicsWorker(QObject):
 
         def _handle_image_info( source: VideoOutputProxy, frame: int, image_type:str, path:Path) -> SlowPicsUploadImage:
             clip = source.vs_output.clip
-            return SlowPicsUploadImage(path, image_type, frame, Time(seconds=frame * clip.fps_den / clip.fps_num if clip.fps_num > 0 else 0).to_ts("{M:02d}:{S:02d}.{ms:03d}"))
+            seconds = frame * clip.fps_den / clip.fps_num if clip.fps_num > 0 else 0
+            return SlowPicsUploadImage(
+                path,
+                image_type,
+                frame,
+                Time(seconds=seconds).to_ts("{M:02d}:{S:02d}.{ms:03d}")
+            )
 
         def _handle_source_info( i: int, source: VideoOutputProxy) -> SlowPicsUploadSource:
             name = source.vs_name or f"Node {i}"
@@ -266,7 +298,9 @@ class SlowPicsWorker(QObject):
                 self.progress.emit(images)
 
 
-            safe_folder= ("".join(x for x in name if x.isalnum() or x.isspace())) or "".join(random.choices(string.ascii_uppercase + string.digits, k=16))
+            safe_folder= ("".join(x for x in name if x.isalnum() or x.isspace()))
+            if not safe_folder:
+                safe_folder = "".join(random.choices(string.ascii_uppercase + string.digits, k=16))
 
             image_path = (base_path / safe_folder) / f"%0{ndigits(max(frames_n))}d.png"
 
@@ -281,11 +315,14 @@ class SlowPicsWorker(QObject):
             logger.debug("Saving images to: %s", image_path.parent)
 
             return SlowPicsUploadSource(name,
-                [_handle_image_info(source, frame, image_types[framec], Path(str(image_path)%frame)) for framec, frame in enumerate(frames_n)]
+                [
+                    _handle_image_info(source, frame, image_types[framec], Path(str(image_path)%frame))
+                    for framec, frame in enumerate(frames_n)
+                ]
             )
 
         return [
-            _handle_source_info(i, source) for i, source in self.api.voutputs.items()
+            _handle_source_info(i+1, source) for i, source in enumerate(self.api.voutputs)
         ]
 
 
@@ -296,7 +333,7 @@ class SlowPicsWorker(QObject):
 
         total_images = sum(len(source.images) for source in data.sources)
 
-        comp_upload = {}    
+        comp_upload = {}
 
         for (i, source) in enumerate(data.sources):
             for (j, image) in enumerate(source.images):
@@ -308,8 +345,6 @@ class SlowPicsWorker(QObject):
                 else:
                     comp_upload[f"imageNames[{j}]"] = f"{time_str} - {source.name}"
 
-        
-        # Maybe we should attach this session to the plugin class and set it up there so we only have one session open and headers.
         async with httpx.AsyncClient(limits=httpx.Limits(max_connections=20, max_keepalive_connections=5)) as client:
 
             # TODO: Make version based on dynamic package version
@@ -351,21 +386,21 @@ class SlowPicsWorker(QObject):
 
             reqs = []
             count = 0
-            sem = asyncio.Semaphore(5) # How many images to upload at once 
+            sem = asyncio.Semaphore(5) # How many images to upload at once
 
             self.range.emit(0, total_images)
             self.format.emit("Uploading images %v / %m")
 
             for (i, source) in enumerate(data.sources):
                 for (j, image) in enumerate(source.images):
-                    image_uuid = image_ids[j][i] if is_comparison else image_ids[0][j]    
+                    image_uuid = image_ids[j][i] if is_comparison else image_ids[0][j]
 
                     async def limited_post(image_uuid:str, image: SlowPicsUploadImage):
                         async with sem:
                             nonlocal count
                             count += 1
                             self.progress.emit(count)
-                            return await client.post(f"https://slow.pics/upload/image/{image_uuid}", 
+                            return await client.post(f"https://slow.pics/upload/image/{image_uuid}",
                                 data={
                                     "collectionUuid": collection,
                                     "imageUuid": image_uuid,
@@ -380,7 +415,7 @@ class SlowPicsWorker(QObject):
                         limited_post(image_uuid, image)
                     )
 
-            responses: list[httpx.Response] = await asyncio.gather(*reqs)
+            await asyncio.gather(*reqs)
 
             self.format.emit("Finished uploading %v images")
 

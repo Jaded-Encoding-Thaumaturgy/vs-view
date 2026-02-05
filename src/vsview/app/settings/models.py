@@ -28,7 +28,16 @@ from jetpytools import SupportsRichComparison
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_serializer, field_validator
 from PySide6.QtCore import QTime
 from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QPlainTextEdit, QSpinBox, QTimeEdit, QWidget
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QLineEdit,
+    QPlainTextEdit,
+    QSpinBox,
+    QTimeEdit,
+    QWidget,
+)
 
 from .enums import Resizer
 
