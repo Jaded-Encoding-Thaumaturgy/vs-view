@@ -4,10 +4,9 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from functools import partial
 from logging import getLogger
-from typing import Any
 
 from PySide6.QtCore import QSignalBlocker, Qt, QTimer, Signal
-from PySide6.QtGui import QIcon, QImage, QPalette, QPixmap
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from ...assets import IconName, IconReloadMixin
@@ -44,19 +43,13 @@ class TabManager(QWidget, IconReloadMixin):
         self.sync_layout.setContentsMargins(4, 0, 4, 0)
         self.sync_layout.setSpacing(2)
 
-        icon_states: dict[Any, Any] = {
-            (QIcon.Mode.Normal, QIcon.State.Off): QPalette.ColorRole.ButtonText,
-            (QIcon.Mode.Normal, QIcon.State.On): QPalette.ColorRole.Base,
-            (QIcon.Mode.Disabled, QIcon.State.Off): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText),
-            (QIcon.Mode.Disabled, QIcon.State.On): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base),
-        }
         self.sync_playhead_btn = self.make_tool_button(
             IconName.LINK,
             "Sync Playhead",
             self,
             checkable=True,
             checked=True,
-            icon_states=icon_states,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.sync_zoom_btn = self.make_tool_button(
             IconName.MAGNIFYING_GLASS,
@@ -64,7 +57,7 @@ class TabManager(QWidget, IconReloadMixin):
             self,
             checkable=True,
             checked=True,
-            icon_states=icon_states,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.sync_scroll_btn = self.make_tool_button(
             IconName.ARROWS_OUT_CARDINAL,
@@ -72,7 +65,7 @@ class TabManager(QWidget, IconReloadMixin):
             self,
             checkable=True,
             checked=True,
-            icon_states=icon_states,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.autofit_btn = self.make_tool_button(
             IconName.FRAME_CORNERS,
@@ -80,7 +73,7 @@ class TabManager(QWidget, IconReloadMixin):
             self,
             checkable=True,
             checked=False,
-            icon_states=icon_states,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.sync_zoom_btn.toggled.connect(self._on_sync_zoom_changed)
         self.autofit_btn.toggled.connect(self._on_global_autofit_changed)
