@@ -5,9 +5,9 @@ Graphics view widget for displaying video frames.
 from __future__ import annotations
 
 from logging import getLogger
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
-from jetpytools import clamp
+from jetpytools import clamp, copy_signature
 from PySide6.QtCore import QEasingCurve, QSignalBlocker, Qt, QVariantAnimation, Signal, Slot
 from PySide6.QtGui import QContextMenuEvent, QCursor, QImage, QPixmap, QResizeEvent, QTransform, QWheelEvent
 from PySide6.QtWidgets import (
@@ -80,8 +80,9 @@ class BaseGraphicsView(QGraphicsView):
 
     displayTransformChanged = Signal(QTransform)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+    @copy_signature(QGraphicsView.__init__)
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
 
         self.angle_remainder = 0
         self.current_zoom = 1.0
