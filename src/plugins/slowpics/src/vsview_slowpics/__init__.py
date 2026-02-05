@@ -54,6 +54,7 @@ from .extract import (
     SlowPicsImageData,
     SlowPicsUploadData,
     SlowPicsUploadInfo,
+    SlowPicsUploadSource,
     SlowPicsWorker,
     SPFrame,
     SPFrameSource,
@@ -146,9 +147,9 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent, api)
-        self.tmdb = {}
-        self.tags = []
-        self.extracted_sources = None
+        self.tmdb: dict[str, Any] = {}
+        self.tags: list[str] = []
+        self.extracted_sources: list[SlowPicsUploadSource] = []
         self.frames: list[SPFrame] = []
         self.manual_frames: set[SPFrame] = set()
 
@@ -194,9 +195,12 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         pictype_layout = QVBoxLayout()
         pictype_layout.addWidget(QLabel("Picture Types"))
         pictype_row = QHBoxLayout()
-        self.i_frame = QCheckBox("I", checked=self.settings.global_.i_picttype_default)
-        self.p_frame = QCheckBox("P", checked=self.settings.global_.p_picttype_default)
-        self.b_frame = QCheckBox("B", checked=self.settings.global_.b_picttype_default)
+        self.i_frame = QCheckBox("I")
+        self.p_frame = QCheckBox("P")
+        self.b_frame = QCheckBox("B")
+        self.i_frame.setChecked(self.settings.global_.i_picttype_default)
+        self.p_frame.setChecked(self.settings.global_.p_picttype_default)
+        self.b_frame.setChecked(self.settings.global_.b_picttype_default)
         pictype_row.addWidget(self.i_frame)
         pictype_row.addWidget(self.p_frame)
         pictype_row.addWidget(self.b_frame)
@@ -205,12 +209,11 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
 
         pubnsfw_row = QHBoxLayout()
-        self.public_check = QCheckBox("Public", checked=self.settings.global_.public_comp_default)
+        self.public_check = QCheckBox("Public")
+        self.public_check.setChecked(self.settings.global_.public_comp_default)
         self.nsfw_check = QCheckBox("NSFW")
-        self.current_frame_check = QCheckBox(
-            "Include Current Frame",
-            checked=self.settings.global_.current_frame_default
-        )
+        self.current_frame_check = QCheckBox("Include Current Frame")
+        self.current_frame_check.setChecked(self.settings.global_.current_frame_default)
         pubnsfw_row.addWidget(self.public_check)
         pubnsfw_row.addWidget(self.nsfw_check)
         pubnsfw_row.addWidget(self.current_frame_check)
@@ -305,7 +308,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
     def on_current_frame_changed(self, n: int) -> None:
         pass
 
-    def init_worker(self):
+    def init_worker(self) -> None:
         self.thread_handle = QThread()
         self.worker = SlowPicsWorker()
         self.worker.setApi(self.api)
@@ -327,7 +330,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         self.net.finished.connect(self.on_icon_downloaded)
 
 
-    def do_job(self, job_name:str, do_next:bool=False):
+    def do_job(self, job_name:str, do_next:bool=False) -> None:
         if job_name == "frames":
             pict_types = set()
             if self.p_frame.isChecked():
@@ -347,7 +350,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
                 self.current_frame_check.isChecked()
             )
 
-            self.extracted_sources = None
+            self.extracted_sources = []
             self.frames = []
 
             self.start_job.emit("frames", data, do_next)
@@ -356,8 +359,14 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
                 logger.debug("Trying to extract with no frames.")
                 return
 
-            extract = SlowPicsImageData(self.api.get_local_storage(self), self.frames)
-            self.extracted_sources = None
+            plugin_path = self.api.get_local_storage(self)
+
+            if not plugin_path:
+                logger.debug("No plugin path")
+                return
+
+            extract = SlowPicsImageData(plugin_path, self.frames)
+            self.extracted_sources = []
             self.start_job.emit("extract", extract, do_next)
 
         elif job_name == "upload":
@@ -365,7 +374,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
                 logger.debug("Trying to upload without any images")
                 return
 
-            data = SlowPicsUploadInfo(
+            upload_data = SlowPicsUploadInfo(
                 self.comp_title.text(),
                 self.public_check.isChecked(),
                 self.nsfw_check.isChecked(),
@@ -373,10 +382,10 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
                 self.remove_after.value(),
                 self.tags
             )
-            upload = SlowPicsUploadData(data, self.extracted_sources)
+            upload = SlowPicsUploadData(upload_data, self.extracted_sources)
             self.start_job.emit("upload", upload, do_next)
 
-    def handle_finish(self, job_name:str, result: object, do_next:bool):
+    def handle_finish(self, job_name:str, result: Any, do_next:bool) -> None:
         # print(job_name, result)
 
         if job_name == "frames":
@@ -392,7 +401,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
         self.handle_do_next(job_name, do_next)
 
-    def handle_do_next(self, job_name:str, do_next:bool):
+    def handle_do_next(self, job_name:str, do_next:bool) -> None:
         # Do next job if clicked all 3
         if not do_next:
             return
@@ -421,19 +430,19 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         # self.api.__workspace._seek_frame(data.frame)
         pass
 
-    def _open_tmdb_search_popup(self):
+    def _open_tmdb_search_popup(self) -> None:
         self.popup = TMDBPopup(self, self.settings.global_.tmdb_api_key)
         self.popup.item_selected.connect(self._handle_tmdb_selected)
         self.popup.exec()
         self.popup.search_input.setFocus()
 
-    def _handle_tmdb_selected(self, data):
+    def _handle_tmdb_selected(self, data: dict[str, Any]) -> None:
         self.tmdb = data
 
         self.handle_comp_title()
 
 
-    def handle_comp_title(self):
+    def handle_comp_title(self) -> None:
         is_tv = self.tmdb["is_tv"]
         result = self.tmdb["result"]
 
@@ -457,7 +466,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
             request = QNetworkRequest(QUrl(f"https://image.tmdb.org/t/p/w92{result["poster_path"]}"))
             self.net.get(request)
 
-    def on_icon_downloaded(self, reply: QNetworkReply):
+    def on_icon_downloaded(self, reply: QNetworkReply) -> None:
 
         if reply.error() != QNetworkReply.NetworkError.NoError:
             reply.deleteLater()
@@ -476,16 +485,16 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
         reply.deleteLater()
 
-    def _open_tag_menu(self):
-        self.popup = TagPopup(self, self.tags)
-        self.popup.item_selected.connect(self.handle_tag_selection)
-        self.popup.exec()
-        self.popup.search.setFocus()
+    def _open_tag_menu(self) -> None:
+        self.tag_popup = TagPopup(self, self.tags)
+        self.tag_popup.item_selected.connect(self.handle_tag_selection)
+        self.tag_popup.exec()
+        self.tag_popup.search.setFocus()
 
-    def handle_tag_selection(self, tags: list[str]):
+    def handle_tag_selection(self, tags: list[str]) -> None:
         self.tags = tags
 
-    def add_manual_frame(self, frame:int):
+    def add_manual_frame(self, frame:int) -> None:
         mframe = SPFrame(frame, SPFrameSource.MANUAL)
 
         if mframe in self.manual_frames:
@@ -495,7 +504,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
         self.add_frames()
 
-    def handle_frame_ui(self, checked:bool):
+    def handle_frame_ui(self, checked:bool) -> None:
         dialog = FramePopup(self)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:

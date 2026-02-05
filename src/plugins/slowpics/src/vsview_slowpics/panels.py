@@ -1,5 +1,6 @@
 
 import logging
+from typing import Any
 
 import httpx
 from PySide6.QtCore import (
@@ -62,7 +63,7 @@ class TMDBPopup(QDialog, IconReloadMixin):
 
         self.net = QNetworkAccessManager(self)
         self.net.finished.connect(self.on_icon_downloaded)
-        self._icon_requests = {}
+        self._icon_requests: dict[QNetworkReply, Any] = {}
 
         self.client = httpx.Client()
         self.client.headers.update(
@@ -76,11 +77,11 @@ class TMDBPopup(QDialog, IconReloadMixin):
         tvg = self.client.get("https://api.themoviedb.org/3/genre/tv/list").raise_for_status().json()
         self.tv_genre = {genre["id"]: genre["name"] for genre in tvg["genres"] }
 
-    def on_text_changed(self, text):
+    def on_text_changed(self, text: str) -> None:
         self.status_label.setText("Typing…")
         self.debounce_timer.start()
 
-    def perform_search(self):
+    def perform_search(self) -> None:
         query = self.search_input.text().strip()
         self.results_list.clear()
 
@@ -135,10 +136,9 @@ class TMDBPopup(QDialog, IconReloadMixin):
                 logger.error(e)
 
 
-    def add_response(self, data, is_tv: bool, is_list: bool = True):
+    def add_response(self, data: dict[str,Any], is_tv: bool, is_list: bool = True) -> None:
 
         values = []
-
         for result in (data["results"] if is_list else [data]):
             print(result)
             label = ""
@@ -156,7 +156,7 @@ class TMDBPopup(QDialog, IconReloadMixin):
 
 
             values.append({"label": label, "result": result, "is_tv": is_tv })
-        print(values)
+
         for value in values:
             item = QListWidgetItem(value["label"])
 
@@ -169,7 +169,7 @@ class TMDBPopup(QDialog, IconReloadMixin):
                 reply = self.net.get(request)
                 self._icon_requests[reply] = item
 
-    def on_icon_downloaded(self, reply: QNetworkReply):
+    def on_icon_downloaded(self, reply: QNetworkReply) -> None:
         item: QListWidgetItem = self._icon_requests.pop(reply, None)
         if not item:
             reply.deleteLater()
@@ -194,7 +194,7 @@ class TMDBPopup(QDialog, IconReloadMixin):
 
         reply.deleteLater()
 
-    def handle_item_selected(self, item: QListWidgetItem):
+    def handle_item_selected(self, item: QListWidgetItem) -> None:
         data = item.data(Qt.ItemDataRole.UserRole)
         self.item_selected.emit(data)
         self.close()
@@ -231,7 +231,7 @@ class TagPopup(QDialog, IconReloadMixin):
 
         self.populate_list()
 
-    def populate_list(self):
+    def populate_list(self) -> None:
         self.list_widget.clear()
         for tag in self.tags:
             item = QListWidgetItem(tag["label"])
@@ -240,13 +240,13 @@ class TagPopup(QDialog, IconReloadMixin):
             item.setCheckState(Qt.CheckState.Checked if tag["value"] in self.selected else Qt.CheckState.Unchecked)
             self.list_widget.addItem(item)
 
-    def filter_items(self, text:str):
+    def filter_items(self, text:str) -> None:
         text = text.lower()
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
             item.setHidden(text not in item.text().lower())
 
-    def get_checked_items(self):
+    def get_checked_items(self) -> None:
         checked = []
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
@@ -273,9 +273,9 @@ class FramePopup(QDialog, IconReloadMixin):
         self.ok_button.clicked.connect(self.validate_and_accept)
         self.vlayout.addWidget(self.ok_button)
 
-        self.frames = None
+        self.frames: list[int] = []
 
-    def validate_and_accept(self):
+    def validate_and_accept(self) -> None:
         text = self.line_edit.text().strip()
 
         if not text:

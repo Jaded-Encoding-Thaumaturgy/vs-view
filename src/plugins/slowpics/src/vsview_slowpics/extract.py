@@ -4,11 +4,10 @@ import math
 import random
 import string
 from collections import defaultdict
-from collections.abc import Iterable
 from enum import IntEnum, auto
 from itertools import chain, islice
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from uuid import uuid4
 
 import httpx
@@ -41,14 +40,15 @@ class SPFrame:
         self.frame = value
         self.frame_type = source
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"SPFrame(frame={self.frame}, frame_type={self.frame_type})"
-    def __eq__(self, other):
+
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, SPFrame):
-            return NotImplemented
+            return False
         return self.frame == other.frame
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.frame)
 
 # For extraction
@@ -57,8 +57,8 @@ class SlowPicsFramesData(NamedTuple):
     random_frames: int
     random_min: int
     random_max: int | None
-    random_dark: int | None
-    random_light: int | None
+    random_dark: int
+    random_light: int
     pict_types: set[str]
     current_frame: bool
 
@@ -68,7 +68,7 @@ class SlowPicsUploadInfo(NamedTuple):
     nsfw: bool
     tmdb: str | None
     remove_after: int | None
-    tags: Iterable[str]
+    tags: list[str]
 
 class SlowPicsImageData(NamedTuple):
     path: Path
@@ -84,11 +84,11 @@ class SlowPicsUploadImage(NamedTuple):
 
 class SlowPicsUploadSource(NamedTuple):
     name: str
-    images: Iterable[SlowPicsUploadImage]
+    images: list[SlowPicsUploadImage]
 
 class SlowPicsUploadData(NamedTuple):
     info: SlowPicsUploadInfo
-    sources: Iterable[SlowPicsUploadSource]
+    sources: list[SlowPicsUploadSource]
 
 class SlowPicsWorker(QObject):
     ALLOWED_FRAME_SEARCHES = 150
@@ -99,14 +99,14 @@ class SlowPicsWorker(QObject):
     finished = Signal(str, object, bool)
 
 
-    api: PluginAPI = None
+    api: PluginAPI
 
     # Didn't like __init__ ?
-    def setApi(self, api: PluginAPI):
+    def setApi(self, api: PluginAPI) -> None:
         self.api = api
 
     @Slot(str, object)
-    def do_work(self, job_name:str, params:object, do_next:bool):
+    def do_work(self, job_name:str, params:Any, do_next:bool) -> None:
         with self.api.vs_context():
             if job_name == "frames":
                 frames = self.get_frames(params)
@@ -125,7 +125,7 @@ class SlowPicsWorker(QObject):
 
     def get_frames(self, frame_info: SlowPicsFramesData) -> list[SPFrame]:
 
-        self.checked = []
+        self.checked: list[int] = []
 
         random_max = frame_info.random_max or min([source.vs_output.clip.num_frames-1 for source in self.api.voutputs])
 
@@ -192,7 +192,7 @@ class SlowPicsWorker(QObject):
 
         should_check_pict = len(pict_types) != 3
 
-        random_frames = []
+        random_frames: list[SPFrame]  = []
 
         while len(random_frames) < random_count:
             attempts = 0
@@ -208,7 +208,7 @@ class SlowPicsWorker(QObject):
                     break
 
                 rnum = self._get_random_number_interval(random_min, random_max, random_count, len(random_frames))
-                frames = [source.vs_output.clip[rnum] for source in self.api.voutputs.values()]
+                frames = [source.vs_output.clip[rnum] for source in self.api.voutputs]
 
 
                 for f in vs.core.std.Splice(frames, True).frames(close=True):
@@ -239,7 +239,7 @@ class SlowPicsWorker(QObject):
         checked = 0
         self.format.emit("Checking frames light levels %v / %m")
         self.range.emit(0, len(frames))
-        def _progress(a, b):
+        def _progress(a: int, b:int) -> None:
             nonlocal checked
             checked += 1
             self.progress.emit(checked)
@@ -292,7 +292,7 @@ class SlowPicsWorker(QObject):
             images = 0
             self.format.emit(f"Extracting {name} %v / %m")
 
-            def _progress(a, b):
+            def _progress(a: int, b:int) -> None:
                 nonlocal images
                 images += 1
                 self.progress.emit(images)
@@ -307,7 +307,7 @@ class SlowPicsWorker(QObject):
             image_path.parent.mkdir(parents=True, exist_ok=True)
 
             clip = self.api.packer.to_rgb_planar(source.vs_output.clip, format=vs.RGB24)
-            clip = vs.core.fpng.Write(clip, filename=image_path, compression=1)
+            clip = vs.core.fpng.Write(clip, filename=str(image_path), compression=1)
 
             decimated = remap_frames(clip, frames_n)
             image_types = clip_data_gather(decimated, _progress, _frame_callback)
@@ -354,8 +354,10 @@ class SlowPicsWorker(QObject):
 
             (await client.get("https://slow.pics/comparison")).raise_for_status()
 
+            token = client.cookies.get("XSRF-TOKEN") or ""
+
             client.headers.update({
-                "X-XSRF-TOKEN": client.cookies.get("XSRF-TOKEN", None),
+                "X-XSRF-TOKEN": token,
             })
 
             # TODO: check if the cookies worked
@@ -395,7 +397,7 @@ class SlowPicsWorker(QObject):
                 for (j, image) in enumerate(source.images):
                     image_uuid = image_ids[j][i] if is_comparison else image_ids[0][j]
 
-                    async def limited_post(image_uuid:str, image: SlowPicsUploadImage):
+                    async def limited_post(image_uuid:str, image: SlowPicsUploadImage) -> httpx.Response:
                         async with sem:
                             nonlocal count
                             count += 1
