@@ -117,16 +117,17 @@ class PluginManager(Singleton):
         for path in (Path(__file__).parent.parent / "tools").glob("*"):
             if path.stem.startswith("_"):
                 continue
-            logger.debug("Registering %s", lambda: path.name)
+            logger.debug("Registering %s first party plugin", lambda: path.name)
             self.manager.register(import_module(f"vsview.app.tools.{path.stem}"))
 
         logger.debug("Loading entrypoints...")
         n = self.manager.load_setuptools_entrypoints("vsview")
+        logger.debug("Loaded %d second/third party plugins", n)
 
         self._register_shortcuts()
         self._construct_settings_registry()
 
-        logger.debug("Loaded %d third party plugins", n)
+        logger.debug("Plugin integration, finalized")
 
         # Fire signal
         self._notifier.notify()
