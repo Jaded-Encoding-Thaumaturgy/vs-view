@@ -148,6 +148,54 @@ class PluginAPI(_PluginAPI):
         """Return the packer used by the workspace."""
         return self.__workspace.outputs_manager.packer
 
+    @property
+    def current_view_pixmap(self) -> QPixmap:
+        """
+        Return a copy of the pixmap of the current view.
+        """
+        return self.__workspace.tab_manager.current_view.pixmap_item.pixmap().copy()
+
+    @property
+    def current_view_image(self) -> QImage:
+        """
+        Return a copy of the image of the current view.
+        """
+        return self.current_view_pixmap.toImage()
+
+    def current_viewport_map_from_global(self, pos: QPoint) -> QPoint:
+        """
+        Map global coordinates to the current view's local coordinates.
+        """
+        return self.__workspace.tab_manager.current_view.viewport().mapFromGlobal(pos)
+
+    @copy_signature(QGraphicsView().mapToScene if TYPE_CHECKING else None)
+    def current_viewport_map_to_scene(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Map coordinates to the current view's scene.
+        """
+        return self.__workspace.tab_manager.current_view.mapToScene(*args, **kwargs)
+
+    @copy_signature(QGraphicsView().mapFromScene if TYPE_CHECKING else None)
+    def current_viewport_map_from_scene(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Map coordinates from the current view's scene.
+        """
+        return self.__workspace.tab_manager.current_view.mapFromScene(*args, **kwargs)
+
+    def current_view_set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
+        """
+        Set the cursor for the current view's viewport.
+        """
+        viewport = self.__workspace.tab_manager.current_view.viewport()
+        viewport.setCursor(cursor)
+
+        def reset_cursor() -> None:
+            if Shiboken.isValid(viewport):
+                viewport.setCursor(Qt.CursorShape.OpenHandCursor)
+            self.__workspace.tab_manager.tabChanged.disconnect(reset_cursor)
+
+        self.__workspace.tab_manager.tabChanged.connect(reset_cursor)
+
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """
         Return a path to a local storage directory for the given plugin,
