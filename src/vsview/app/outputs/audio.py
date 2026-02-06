@@ -163,6 +163,7 @@ class AudioOutput:
         end = min(self.prepared_audio.num_samples, start + duration_samples)
 
         self.playback_audio = self.prepared_audio[start:end]
+        self.playback_audio.std.SetAudioCache(0)
 
     def clear(self) -> None:
         """Clear VapourSynth resources."""
@@ -200,6 +201,7 @@ class AudioOutput:
 
             data = buffer.tobytes()
 
+        # Handle cases where the sink is stopped between the initial check and writing
         with suppress(RuntimeError):
             self.sink.io.write(data)
 
@@ -219,8 +221,8 @@ class AudioOutput:
         if not self.sink.ready:
             logger.error(
                 "Failed to start audio sink - format may not be supported (%d Hz, speed=%.2fx)",
-                speed,
                 self.qformat.sampleRate(),
+                speed,
             )
             return False
 

@@ -73,6 +73,8 @@ class VideoOutput:
                 self.prepared_clip = cache_clip(self.prepared_clip, cache_size)
             except Exception as e:
                 raise RuntimeError(f"Failed to cache clip with the message: '{e}'") from e
+        else:
+            self.prepared_clip.std.SetVideoCache(0)
 
     def clear(self) -> None:
         """Clear VapourSynth resources."""

@@ -13,7 +13,7 @@ import vapoursynth as vs
 from jetpytools import fallback
 from pydantic import BaseModel
 from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QPoint, QSignalBlocker, QSize, Qt, Signal
-from PySide6.QtGui import QAction, QIcon, QImage, QPalette, QPixmap, QStandardItem, QStandardItemModel
+from PySide6.QtGui import QAction, QImage, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -487,17 +487,12 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.toolbar.addWidget(spacer)
 
-        nav_icon_states = {
-            (QIcon.Mode.Normal, QIcon.State.Off): QPalette.ColorRole.ButtonText,
-            (QIcon.Mode.Disabled, QIcon.State.Off): QPalette.ColorRole.PlaceholderText,
-        }
-
         self.prev_btn = self.make_tool_button(
             IconName.ARROW_LEFT,
             "Previous frame in history",
             self,
             icon_size=QSize(24, 24),
-            icon_states=nav_icon_states,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.prev_btn.clicked.connect(self._on_prev_clicked)
 
@@ -512,7 +507,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
             "Next frame in history",
             self,
             icon_size=QSize(24, 24),
-            icon_states=nav_icon_states,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.next_btn.clicked.connect(self._on_next_clicked)
 

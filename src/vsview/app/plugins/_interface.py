@@ -10,6 +10,7 @@ from weakref import WeakKeyDictionary
 import vapoursynth as vs
 from pydantic import BaseModel
 from PySide6.QtCore import QObject, Signal
+from PySide6.QtGui import QContextMenuEvent, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
 
 from vsview.app.settings import SettingsManager
@@ -274,7 +275,7 @@ class _PluginAPI(QObject):
                 logger.debug("Rendering initial frame %d for view", current_frame)
                 view.on_current_frame_changed(current_frame, frame)
 
-        view.setSceneRect(view.pixmap_item.boundingRect())
+        view.update_scene_rect()
         view.set_autofit(view.autofit)
 
     def _on_current_frame_changed(self, n: int, plugin_frames: dict[str, vs.VideoFrame] | None = None) -> None:
@@ -312,10 +313,41 @@ class _PluginAPI(QObject):
             if self._is_truly_visible(plugin):
                 plugin.on_playback_started()
 
+    # Already run in loop from caller
     def _on_playback_stopped(self) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
                 plugin.on_playback_stopped()
+
+    def _on_view_context_menu(self, event: QContextMenuEvent) -> None:
+        for plugin in self.__workspace.plugins:
+            if self._is_truly_visible(plugin):
+                plugin.on_view_context_menu(event)
+
+    def _on_view_mouse_moved(self, event: QMouseEvent) -> None:
+        for plugin in self.__workspace.plugins:
+            if self._is_truly_visible(plugin):
+                plugin.on_view_mouse_moved(event)
+
+    def _on_view_mouse_pressed(self, event: QMouseEvent) -> None:
+        for plugin in self.__workspace.plugins:
+            if self._is_truly_visible(plugin):
+                plugin.on_view_mouse_pressed(event)
+
+    def _on_view_mouse_released(self, event: QMouseEvent) -> None:
+        for plugin in self.__workspace.plugins:
+            if self._is_truly_visible(plugin):
+                plugin.on_view_mouse_released(event)
+
+    def _on_view_key_press(self, event: QKeyEvent) -> None:
+        for plugin in self.__workspace.plugins:
+            if self._is_truly_visible(plugin):
+                plugin.on_view_key_press(event)
+
+    def _on_view_key_release(self, event: QKeyEvent) -> None:
+        for plugin in self.__workspace.plugins:
+            if self._is_truly_visible(plugin):
+                plugin.on_view_key_release(event)
 
     def _on_global_settings_changed(self) -> None:
         self._settings_store.invalidate("global")

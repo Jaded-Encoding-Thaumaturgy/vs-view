@@ -13,10 +13,22 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
 
 import vapoursynth as vs
+from jetpytools import copy_signature
 from pydantic import BaseModel
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QPixmap, QShortcut, QShowEvent
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtGui import (
+    QAction,
+    QContextMenuEvent,
+    QCursor,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPixmap,
+    QShortcut,
+    QShowEvent,
+)
+from PySide6.QtWidgets import QGraphicsView, QWidget
+from shiboken6 import Shiboken
 
 from vsview.app.outputs import Packer
 from vsview.app.settings import SettingsManager, ShortcutManager
@@ -135,6 +147,54 @@ class PluginAPI(_PluginAPI):
     def packer(self) -> Packer:
         """Return the packer used by the workspace."""
         return self.__workspace.outputs_manager.packer
+
+    @property
+    def current_view_pixmap(self) -> QPixmap:
+        """
+        Return a copy of the pixmap of the current view.
+        """
+        return self.__workspace.tab_manager.current_view.pixmap_item.pixmap().copy()
+
+    @property
+    def current_view_image(self) -> QImage:
+        """
+        Return a copy of the image of the current view.
+        """
+        return self.current_view_pixmap.toImage()
+
+    def current_viewport_map_from_global(self, pos: QPoint) -> QPoint:
+        """
+        Map global coordinates to the current view's local coordinates.
+        """
+        return self.__workspace.tab_manager.current_view.viewport().mapFromGlobal(pos)
+
+    @copy_signature(QGraphicsView().mapToScene if TYPE_CHECKING else None)
+    def current_viewport_map_to_scene(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Map coordinates to the current view's scene.
+        """
+        return self.__workspace.tab_manager.current_view.mapToScene(*args, **kwargs)
+
+    @copy_signature(QGraphicsView().mapFromScene if TYPE_CHECKING else None)
+    def current_viewport_map_from_scene(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Map coordinates from the current view's scene.
+        """
+        return self.__workspace.tab_manager.current_view.mapFromScene(*args, **kwargs)
+
+    def current_view_set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
+        """
+        Set the cursor for the current view's viewport.
+        """
+        viewport = self.__workspace.tab_manager.current_view.viewport()
+        viewport.setCursor(cursor)
+
+        def reset_cursor() -> None:
+            if Shiboken.isValid(viewport):
+                viewport.setCursor(Qt.CursorShape.OpenHandCursor)
+            self.__workspace.tab_manager.tabChanged.disconnect(reset_cursor)
+
+        self.__workspace.tab_manager.tabChanged.connect(reset_cursor)
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """
@@ -351,6 +411,60 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
     def on_playback_stopped(self) -> None:
         """
         Called when playback stops.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_context_menu(self, event: QContextMenuEvent) -> None:
+        """
+        Called when a context menu of the current viewis requested.
+
+        The event is forwarded BEFORE the view processes it.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_mouse_moved(self, event: QMouseEvent) -> None:
+        """
+        Called when the mouse of the current view is moved.
+
+        The event is forwarded AFTER the view processes it.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_mouse_pressed(self, event: QMouseEvent) -> None:
+        """
+        Called when the mouse of the current view is pressed.
+
+        The event is forwarded AFTER the view processes it.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_mouse_released(self, event: QMouseEvent) -> None:
+        """
+        Called when the mouse of the current view is released.
+
+        The event is forwarded AFTER the view processes it.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_key_press(self, event: QKeyEvent) -> None:
+        """
+        Called when a key is pressed in the current view.
+
+        The event is forwarded AFTER the view processes it.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_key_release(self, event: QKeyEvent) -> None:
+        """
+        Called when a key is released in the current view.
+
+        The event is forwarded AFTER the view processes it.
 
         Execution Thread: **Main**.
         """

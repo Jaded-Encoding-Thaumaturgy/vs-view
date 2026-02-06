@@ -117,16 +117,17 @@ class PluginManager(Singleton):
         for path in (Path(__file__).parent.parent / "tools").glob("*"):
             if path.stem.startswith("_"):
                 continue
-            logger.debug("Registering %s", lambda: path.name)
+            logger.debug("Registering %s first party plugin", lambda: path.name)
             self.manager.register(import_module(f"vsview.app.tools.{path.stem}"))
 
         logger.debug("Loading entrypoints...")
         n = self.manager.load_setuptools_entrypoints("vsview")
+        logger.debug("Loaded %d second/third party plugins", n)
 
         self._register_shortcuts()
         self._construct_settings_registry()
 
-        logger.debug("Loaded %d third party plugins", n)
+        logger.debug("Plugin integration, finalized")
 
         # Fire signal
         self._notifier.notify()
@@ -189,6 +190,9 @@ class PluginManager(Singleton):
                 local_entries.extend(extract_plugin_settings(local_model, identifier, section))
 
         self.populate_default_settings("global")
+
+        global_entries.sort(key=lambda entry: entry.key)
+        local_entries.sort(key=lambda entry: entry.key)
 
         # Extend dialog registries
         SettingsDialog.global_settings_registry.extend(global_entries)

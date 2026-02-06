@@ -5,11 +5,21 @@ Graphics view widget for displaying video frames.
 from __future__ import annotations
 
 from logging import getLogger
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
-from jetpytools import clamp
+from jetpytools import clamp, copy_signature
 from PySide6.QtCore import QEasingCurve, QSignalBlocker, Qt, QVariantAnimation, Signal, Slot
-from PySide6.QtGui import QContextMenuEvent, QCursor, QImage, QPixmap, QResizeEvent, QTransform, QWheelEvent
+from PySide6.QtGui import (
+    QContextMenuEvent,
+    QCursor,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPixmap,
+    QResizeEvent,
+    QTransform,
+    QWheelEvent,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -79,9 +89,11 @@ class BaseGraphicsView(QGraphicsView):
     statusSavingImageFinished = Signal(str)  # completed message
 
     displayTransformChanged = Signal(QTransform)
+    contextMenuRequested = Signal(QContextMenuEvent)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+    @copy_signature(QGraphicsView.__init__)
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
 
         self.angle_remainder = 0
         self.current_zoom = 1.0
@@ -181,6 +193,11 @@ class BaseGraphicsView(QGraphicsView):
         return self._sar if self._sar_applied else 1.0
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        self.contextMenuRequested.emit(event)
+
+        if not event.isAccepted():
+            return
+
         self.context_menu.exec(event.globalPos())
 
     def resizeEvent(self, event: QResizeEvent) -> None:
@@ -430,6 +447,47 @@ class BaseGraphicsView(QGraphicsView):
 class GraphicsView(BaseGraphicsView):
     zoomChanged = Signal(float)
     autofitChanged = Signal(bool)
+
+    mouseMoved = Signal(QMouseEvent)
+    mousePressed = Signal(QMouseEvent)
+    mouseReleased = Signal(QMouseEvent)
+    keyPressed = Signal(QKeyEvent)
+    keyReleased = Signal(QKeyEvent)
+
+    @copy_signature(QGraphicsView.__init__)
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.setMouseTracking(True)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        super().mouseMoveEvent(event)
+
+        if self.hasMouseTracking() and self.isVisible():
+            self.mouseMoved.emit(event)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        super().mousePressEvent(event)
+
+        if self.isVisible():
+            self.mousePressed.emit(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        super().mouseReleaseEvent(event)
+
+        if self.isVisible():
+            self.mouseReleased.emit(event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        super().keyPressEvent(event)
+
+        if self.isVisible():
+            self.keyPressed.emit(event)
+
+    def keyReleaseEvent(self, event: QKeyEvent) -> None:
+        super().keyReleaseEvent(event)
+
+        if self.isVisible():
+            self.keyReleased.emit(event)
 
     def set_zoom(self, value: float, *, animated: bool = True) -> None:
         super().set_zoom(value, animated=animated)

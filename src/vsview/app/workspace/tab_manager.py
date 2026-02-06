@@ -4,15 +4,15 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from functools import partial
 from logging import getLogger
-from typing import Any
 
 from PySide6.QtCore import QSignalBlocker, Qt, QTimer, Signal
-from PySide6.QtGui import QIcon, QImage, QPalette, QPixmap
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from ...assets import IconName, IconReloadMixin
 from ...vsenv import run_in_loop
 from ..outputs import VideoOutput
+from ..plugins.api import PluginAPI
 from ..settings import ActionID, ShortcutManager
 from ..views import GraphicsView
 from ..views.tab import TabLabel, TabViewWidget
@@ -31,8 +31,10 @@ class TabManager(QWidget, IconReloadMixin):
     statusLoadingStarted = Signal(str)  # message
     statusLoadingFinished = Signal(str)  # completed message
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent)
+
+        self.api = api
 
         self.current_layout = QVBoxLayout(self)
         self.current_layout.setContentsMargins(0, 0, 0, 0)
@@ -44,19 +46,13 @@ class TabManager(QWidget, IconReloadMixin):
         self.sync_layout.setContentsMargins(4, 0, 4, 0)
         self.sync_layout.setSpacing(2)
 
-        icon_states: dict[Any, Any] = {
-            (QIcon.Mode.Normal, QIcon.State.Off): QPalette.ColorRole.ButtonText,
-            (QIcon.Mode.Normal, QIcon.State.On): QPalette.ColorRole.Base,
-            (QIcon.Mode.Disabled, QIcon.State.Off): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText),
-            (QIcon.Mode.Disabled, QIcon.State.On): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base),
-        }
         self.sync_playhead_btn = self.make_tool_button(
             IconName.LINK,
             "Sync Playhead",
             self,
             checkable=True,
             checked=True,
-            icon_states=icon_states,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.sync_zoom_btn = self.make_tool_button(
             IconName.MAGNIFYING_GLASS,
@@ -64,7 +60,7 @@ class TabManager(QWidget, IconReloadMixin):
             self,
             checkable=True,
             checked=True,
-            icon_states=icon_states,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.sync_scroll_btn = self.make_tool_button(
             IconName.ARROWS_OUT_CARDINAL,
@@ -72,7 +68,7 @@ class TabManager(QWidget, IconReloadMixin):
             self,
             checkable=True,
             checked=True,
-            icon_states=icon_states,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.autofit_btn = self.make_tool_button(
             IconName.FRAME_CORNERS,
@@ -80,7 +76,7 @@ class TabManager(QWidget, IconReloadMixin):
             self,
             checkable=True,
             checked=False,
-            icon_states=icon_states,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.sync_zoom_btn.toggled.connect(self._on_sync_zoom_changed)
         self.autofit_btn.toggled.connect(self._on_global_autofit_changed)
@@ -143,6 +139,12 @@ class TabManager(QWidget, IconReloadMixin):
             view = GraphicsView(self)
             view.zoomChanged.connect(self._on_zoom_changed)
             view.autofitChanged.connect(partial(self._on_autofit_changed, view))
+            view.contextMenuRequested.connect(self.api._on_view_context_menu)
+            view.mouseMoved.connect(self.api._on_view_mouse_moved)
+            view.mousePressed.connect(self.api._on_view_mouse_pressed)
+            view.mouseReleased.connect(self.api._on_view_mouse_released)
+            view.keyPressed.connect(self.api._on_view_key_press)
+            view.keyReleased.connect(self.api._on_view_key_release)
             view.statusSavingImageStarted.connect(self.statusLoadingStarted.emit)
             view.statusSavingImageFinished.connect(self.statusLoadingFinished.emit)
             view.displayTransformChanged.connect(lambda transform: self.sarTransformed.emit(transform.m11()))

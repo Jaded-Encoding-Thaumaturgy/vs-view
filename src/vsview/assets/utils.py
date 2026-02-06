@@ -6,7 +6,7 @@ from functools import cache, partial
 from importlib import resources
 from logging import DEBUG, getLogger
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from weakref import WeakKeyDictionary
 
 from PySide6.QtCore import QSize, Qt
@@ -36,6 +36,18 @@ class IconReloadMixin:
             self.btn = self.make_tool_button(IconName.LINK, "Link", self)
     ```
     """
+
+    DEFAULT_ICON_STATES: ClassVar[
+        Mapping[
+            tuple[QIcon.Mode, QIcon.State],
+            QPalette.ColorRole | tuple[QPalette.ColorGroup, QPalette.ColorRole],
+        ]
+    ] = {
+        (QIcon.Mode.Normal, QIcon.State.Off): QPalette.ColorRole.ButtonText,
+        (QIcon.Mode.Normal, QIcon.State.On): QPalette.ColorRole.Base,
+        (QIcon.Mode.Disabled, QIcon.State.Off): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText),
+        (QIcon.Mode.Disabled, QIcon.State.On): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base),
+    }
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

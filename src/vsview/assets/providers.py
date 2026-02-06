@@ -40,6 +40,7 @@ class IconName(StrEnum):
     VOLUME_MUTE = "speaker-slash"
     #
     PIPETTE = "eyedropper"
+    CLIPBOARD = "clipboard"
 
 
 class IconProvider(ABC):
