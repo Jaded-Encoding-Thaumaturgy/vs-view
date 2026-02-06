@@ -41,6 +41,8 @@ class IconName(StrEnum):
     #
     PIPETTE = "eyedropper"
     CLIPBOARD = "clipboard"
+    PLUS = "plus"
+    MINUS = "minus"
 
 
 class IconProvider(ABC):
