@@ -200,6 +200,7 @@ class AudioOutput:
 
             data = buffer.tobytes()
 
+        # Handle cases where the sink is stopped between the initial check and writing
         with suppress(RuntimeError):
             self.sink.io.write(data)
 
