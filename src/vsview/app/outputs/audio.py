@@ -163,6 +163,7 @@ class AudioOutput:
         end = min(self.prepared_audio.num_samples, start + duration_samples)
 
         self.playback_audio = self.prepared_audio[start:end]
+        self.playback_audio.std.SetAudioCache(0)
 
     def clear(self) -> None:
         """Clear VapourSynth resources."""
