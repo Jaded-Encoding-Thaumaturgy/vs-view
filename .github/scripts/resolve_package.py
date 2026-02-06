@@ -20,27 +20,33 @@ def main() -> None:
         if match:
             target = match.group(1)
 
+    # If a package needs special path or name handling, it would go there,
+    # Otherwise, we fallback to L39 and assumes we're publishing a plugin
     # fmt: off
     all_pkgs = [
         {"tag": "vsview", "package": "vsview", "path": "."},
-        {"tag": "audio-convert", "package": "vsview-audio-convert", "path": "src/plugins/audio-convert"},
-        {"tag": "fftspectrum", "package": "vsview-fftspectrum", "path": "src/plugins/fftspectrum"},
-        {"tag": "frameprops-extended", "package": "vsview-frameprops-extended", "path": "src/plugins/frameprops-extended"},  # noqa: E501
-        {"tag": "split-planes", "package": "vsview-split-planes", "path": "src/plugins/split-planes"},
     ]
     # fmt: on
 
     filtered = [p for p in all_pkgs if p["tag"] == target]
 
+    if target == "vspackrgb":
+        is_vspackrgb = "is-vspackrgb='true'"
+    else:
+        is_vspackrgb = "is-vspackrgb='false'"
+
+        if not filtered:
+            filtered.append({"tag": target, "package": f"vsview-{target}", "path": f"src/plugins/{target}"})
+
     output_file = os.getenv("GITHUB_OUTPUT")
     if not output_file:
         print("GITHUB_OUTPUT not set, printing results:")
-        print(f"is-vspackrgb={'true' if target == 'vspackrgb' else 'false'}")
+        print(is_vspackrgb)
         print(f"matrix={json.dumps(filtered)}")
         return
 
     with open(output_file, "a") as f:
-        f.write(f"is-vspackrgb={'true' if target == 'vspackrgb' else 'false'}\n")
+        f.write(f"{is_vspackrgb}\n")
         f.write(f"matrix={json.dumps(filtered)}\n")
 
 
