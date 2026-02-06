@@ -1,0 +1,44 @@
+name: Update Submodules & Icons
+
+on:
+  schedule:
+    # 1st and 15th of the month at 14:00
+    - cron: "0 14 1,15 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Update submodules
+        run: git submodule update --remote --merge
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Sync icons from submodules
+        run: python scripts/sync_icons.py
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: "chore: update submodules and sync icons"
+          title: "chore: update submodules and sync icons"
+          body: |
+            Automated bi-weekly update of icon submodules and synced SVG assets.
+          branch: auto/update-submodules
+          delete-branch: true
+          labels: dependencies

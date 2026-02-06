@@ -18,8 +18,6 @@
 
 ## Installation
 
-## Installation
-
 ```bash
 pip install vsview
 ```
