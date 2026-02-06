@@ -219,8 +219,8 @@ class AudioOutput:
         if not self.sink.ready:
             logger.error(
                 "Failed to start audio sink - format may not be supported (%d Hz, speed=%.2fx)",
-                speed,
                 self.qformat.sampleRate(),
+                speed,
             )
             return False
 
