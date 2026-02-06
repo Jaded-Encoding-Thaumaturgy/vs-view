@@ -1,4 +1,3 @@
-
 import logging
 from typing import Any
 
@@ -30,11 +29,11 @@ from .utils import get_slowpics_headers
 
 logger = logging.getLogger("vsview-slowpics")
 
-class TMDBPopup(QDialog, IconReloadMixin):
 
+class TMDBPopup(QDialog, IconReloadMixin):
     item_selected = Signal(object)
 
-    def __init__(self, parent:QWidget, api_key: str):
+    def __init__(self, parent: QWidget, api_key: str):
         super().__init__(parent)
 
         self.setWindowTitle("Search")
@@ -66,16 +65,12 @@ class TMDBPopup(QDialog, IconReloadMixin):
         self._icon_requests: dict[QNetworkReply, Any] = {}
 
         self.client = httpx.Client()
-        self.client.headers.update(
-            {
-                "Authorization": f"Bearer {api_key}"
-            }
-        )
+        self.client.headers.update({"Authorization": f"Bearer {api_key}"})
 
         movieg = self.client.get("https://api.themoviedb.org/3/genre/movie/list").raise_for_status().json()
-        self.movie_genre = {genre["id"]: genre["name"] for genre in movieg["genres"] }
+        self.movie_genre = {genre["id"]: genre["name"] for genre in movieg["genres"]}
         tvg = self.client.get("https://api.themoviedb.org/3/genre/tv/list").raise_for_status().json()
-        self.tv_genre = {genre["id"]: genre["name"] for genre in tvg["genres"] }
+        self.tv_genre = {genre["id"]: genre["name"] for genre in tvg["genres"]}
 
     def on_text_changed(self, text: str) -> None:
         self.status_label.setText("Typing…")
@@ -91,71 +86,75 @@ class TMDBPopup(QDialog, IconReloadMixin):
 
         self.status_label.setText(f"Searching for: {query}")
 
-        tv = self.client.get("https://api.themoviedb.org/3/search/tv",
-            params={
-                "include_adult": "false",
-                "query": query,
-                "language": "en-US"
-            }
-        ).raise_for_status().json()
+        tv = (
+            self.client.get(
+                "https://api.themoviedb.org/3/search/tv",
+                params={"include_adult": "false", "query": query, "language": "en-US"},
+            )
+            .raise_for_status()
+            .json()
+        )
 
         self.add_response(tv, True)
 
-        movie = self.client.get("https://api.themoviedb.org/3/search/movie",
-            params={
-                "include_adult": "false",
-                "query": query,
-                "language": "en-US"
-            }
-        ).raise_for_status().json()
+        movie = (
+            self.client.get(
+                "https://api.themoviedb.org/3/search/movie",
+                params={"include_adult": "false", "query": query, "language": "en-US"},
+            )
+            .raise_for_status()
+            .json()
+        )
         self.add_response(movie, False)
 
         if query.isnumeric():
             try:
-                tv = self.client.get(f"https://api.themoviedb.org/3/tv/{query}",
-                    params={
-                        "include_adult": "false",
-                        "language": "en-US"
-                    }
-                ).raise_for_status().json()
+                tv = (
+                    self.client.get(
+                        f"https://api.themoviedb.org/3/tv/{query}",
+                        params={"include_adult": "false", "language": "en-US"},
+                    )
+                    .raise_for_status()
+                    .json()
+                )
 
                 self.add_response(tv, True, False)
             except Exception as e:
                 logger.error(e)
 
             try:
-                movie = self.client.get(f"https://api.themoviedb.org/3/movie/{query}",
-                    params={
-                        "include_adult": "false",
-                        "language": "en-US"
-                    }
-                ).raise_for_status().json()
+                movie = (
+                    self.client.get(
+                        f"https://api.themoviedb.org/3/movie/{query}",
+                        params={"include_adult": "false", "language": "en-US"},
+                    )
+                    .raise_for_status()
+                    .json()
+                )
 
                 self.add_response(movie, False, False)
             except Exception as e:
                 logger.error(e)
 
-
-    def add_response(self, data: dict[str,Any], is_tv: bool, is_list: bool = True) -> None:
+    def add_response(self, data: dict[str, Any], is_tv: bool, is_list: bool = True) -> None:
 
         values = []
-        for result in (data["results"] if is_list else [data]):
+        for result in data["results"] if is_list else [data]:
             print(result)
             label = ""
             if is_tv:
-                label += f"{result["name"]} [{(result["first_air_date"] or "0000")[:4]}] [TV]"
+                label += f"{result['name']} [{(result['first_air_date'] or '0000')[:4]}] [TV]"
             else:
-                label += f"{result["title"]} [{(result["release_date"] or "0000")[:4]}] [MOVIE]"
+                label += f"{result['title']} [{(result['release_date'] or '0000')[:4]}] [MOVIE]"
 
             if is_list:
-                label += f" [{", ".join([
-                    (self.tv_genre if is_tv else self.movie_genre)[genre] for genre in result["genre_ids"]
-                ])}]"
+                label += f" [{
+                    ', '.join([(self.tv_genre if is_tv else self.movie_genre)[genre] for genre in result['genre_ids']])
+                }]"
             else:
-                label += f" [{", ".join([genre["name"] for genre in result["genres"]])}]"
+                label += f" [{', '.join([genre['name'] for genre in result['genres']])}]"
 
-
-            values.append({"label": label, "result": result, "is_tv": is_tv })
+            values.append({"label": label, "result": result, "is_tv": is_tv})
 
         for value in values:
             item = QListWidgetItem(value["label"])
@@ -165,7 +164,7 @@ class TMDBPopup(QDialog, IconReloadMixin):
             self.results_list.addItem(item)
 
             if value["result"]["poster_path"]:
-                request = QNetworkRequest(QUrl(f"https://image.tmdb.org/t/p/w92{value["result"]["poster_path"]}"))
+                request = QNetworkRequest(QUrl(f"https://image.tmdb.org/t/p/w92{value['result']['poster_path']}"))
                 reply = self.net.get(request)
                 self._icon_requests[reply] = item
 
@@ -187,7 +186,7 @@ class TMDBPopup(QDialog, IconReloadMixin):
             scaled = pixmap.scaled(
                 self.results_list.iconSize(),
                 Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
+                Qt.TransformationMode.SmoothTransformation,
             )
             icon = QIcon(scaled)
             item.setIcon(icon)
@@ -201,10 +200,9 @@ class TMDBPopup(QDialog, IconReloadMixin):
 
 
 class TagPopup(QDialog, IconReloadMixin):
-
     item_selected = Signal(object)
 
-    def __init__(self, parent:QWidget, selected: list[str] = []):
+    def __init__(self, parent: QWidget, selected: list[str] = []):
         super().__init__(parent)
 
         self.setWindowTitle("Tag Selection")
@@ -240,7 +238,7 @@ class TagPopup(QDialog, IconReloadMixin):
             item.setCheckState(Qt.CheckState.Checked if tag["value"] in self.selected else Qt.CheckState.Unchecked)
             self.list_widget.addItem(item)
 
-    def filter_items(self, text:str) -> None:
+    def filter_items(self, text: str) -> None:
         text = text.lower()
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
@@ -254,9 +252,9 @@ class TagPopup(QDialog, IconReloadMixin):
                 checked.append(item.data(Qt.ItemDataRole.UserRole)["value"])
         self.item_selected.emit(checked)
 
-class FramePopup(QDialog, IconReloadMixin):
 
-    def __init__(self, parent:QWidget):
+class FramePopup(QDialog, IconReloadMixin):
+    def __init__(self, parent: QWidget):
         super().__init__(parent)
         self.setWindowTitle("Enter Frames")
 
@@ -288,9 +286,4 @@ class FramePopup(QDialog, IconReloadMixin):
             self.frames = frames
             self.accept()
         except ValueError:
-            QMessageBox.critical(
-                self,
-                "Invalid Input",
-                "Frames must be comma-separated integers (e.g. 1, 5, 10)."
-            )
-
+            QMessageBox.critical(self, "Invalid Input", "Frames must be comma-separated integers (e.g. 1, 5, 10).")

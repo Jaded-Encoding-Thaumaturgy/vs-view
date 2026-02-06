@@ -7,7 +7,7 @@ def get_slowpics_headers() -> dict[str, str]:
         "Origin": "https://slow.pics/",
         "Referer": "https://slow.pics/comparison",
         "User-Agent": (
-            # f"vs-view (https://github.com/Jaded-Encoding-Thaumaturgy/vs-view {1.0})" # SlowBro asked for this
-            "vs-preview (https://github.com/Jaded-Encoding-Thaumaturgy/vs-preview 0.17.1" # SlowBro asked for this
+            # f"vs-view (https://github.com/Jaded-Encoding-Thaumaturgy/vs-view {1.0})"  # SlowBro asked for this
+            "vs-preview (https://github.com/Jaded-Encoding-Thaumaturgy/vs-preview 0.17.1"  # SlowBro asked for this
         ),
     }

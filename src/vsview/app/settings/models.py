@@ -131,6 +131,7 @@ class Checkbox(WidgetMetadata[QCheckBox]):
         value = widget.isChecked()
         return self.from_ui(value) if self.from_ui else value
 
+
 @dataclass(frozen=True, slots=True)
 class LineEdit(WidgetMetadata[QLineEdit]):
     """LineEdit widget metadata."""
@@ -147,6 +148,7 @@ class LineEdit(WidgetMetadata[QLineEdit]):
     def get_value(self, widget: QLineEdit) -> Any:
         value = widget.text()
         return self.from_ui(value) if self.from_ui else value
+
 
 @dataclass(frozen=True, slots=True)
 class Dropdown(WidgetMetadata[QComboBox]):

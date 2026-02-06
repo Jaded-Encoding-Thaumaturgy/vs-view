@@ -10,7 +10,16 @@ from ..app.plugins import (
     WidgetPluginBase,
     hookimpl,
 )
-from ..app.settings.models import ActionDefinition, Checkbox, DoubleSpin, Dropdown, LineEdit, PlainTextEdit, Spin, WidgetMetadata
+from ..app.settings.models import (
+    ActionDefinition,
+    Checkbox,
+    DoubleSpin,
+    Dropdown,
+    LineEdit,
+    PlainTextEdit,
+    Spin,
+    WidgetMetadata,
+)
 from ..app.views.components import AnimatedToggle, SegmentedControl
 from ..app.views.video import BaseGraphicsView
 from ..assets import IconName, IconReloadMixin

@@ -61,22 +61,19 @@ from .extract import (
 )
 from .panels import FramePopup, TagPopup, TMDBPopup
 
-logger = logging.getLogger("vsview-slowpics")
+logger = logging.getLogger(__name__)
 
 __version__ = "1.0.0"
+
 
 class GlobalSettings(BaseModel):
     tmdb_movie_format: Annotated[
         str,
-        LineEdit(
-            "Format to use when selecting a Movie from TMDB"
-        ),
+        LineEdit("Format to use when selecting a Movie from TMDB"),
     ] = "{tmdb_title} ({tmdb_year}) - {video_nodes}"
     tmdb_tv_format: Annotated[
         str,
-        LineEdit(
-            "Format to use when selecting a Movie from TMDB"
-        ),
+        LineEdit("Format to use when selecting a Movie from TMDB"),
     ] = "{tmdb_title} ({tmdb_year}) - S01E01 - {video_nodes}"
     tmdb_api_key: Annotated[
         str,
@@ -133,11 +130,8 @@ class GlobalSettings(BaseModel):
         ),
     ] = False
 
-class LocalSettings(LocalSettingsModel):
-    pass
 
-
-class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
+class SlowPicsPlugin(WidgetPluginBase[GlobalSettings]):
     identifier = "jet_vsview_slowpics"
     display_name = "Slow.pics Uploader"
 
@@ -207,7 +201,6 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         pictype_layout.addLayout(pictype_row)
         main_layout.addLayout(pictype_layout)
 
-
         pubnsfw_row = QHBoxLayout()
         self.public_check = QCheckBox("Public")
         self.public_check.setChecked(self.settings.global_.public_comp_default)
@@ -218,8 +211,6 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         pubnsfw_row.addWidget(self.nsfw_check)
         pubnsfw_row.addWidget(self.current_frame_check)
         main_layout.addLayout(pubnsfw_row)
-
-
 
         random_remove_layout = QHBoxLayout()
 
@@ -295,24 +286,20 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         self.init_worker()
         self._setup_shortcuts()
 
-
     def _setup_shortcuts(self) -> None:
         self.api.register_shortcut(
             "jet_vsview_slowpics.add_current_frame",
             lambda: self.add_manual_frame(self.api.current_frame),
             self,
-            context=Qt.ShortcutContext.WindowShortcut
+            context=Qt.ShortcutContext.WindowShortcut,
         )
-
 
     def on_current_frame_changed(self, n: int) -> None:
         pass
 
     def init_worker(self) -> None:
         self.thread_handle = QThread()
-        self.worker = SlowPicsWorker()
-        self.worker.setApi(self.api)
-
+        self.worker = SlowPicsWorker(self.api)
         self.worker.moveToThread(self.thread_handle)
 
         self.thread_handle.start()
@@ -329,8 +316,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         self.net = QNetworkAccessManager(self)
         self.net.finished.connect(self.on_icon_downloaded)
 
-
-    def do_job(self, job_name:str, do_next:bool=False) -> None:
+    def do_job(self, job_name: str, do_next: bool = False) -> None:
         if job_name == "frames":
             pict_types = set()
             if self.p_frame.isChecked():
@@ -347,7 +333,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
                 self.dark_frames.value(),
                 self.light_frames.value(),
                 pict_types,
-                self.current_frame_check.isChecked()
+                self.current_frame_check.isChecked(),
             )
 
             self.extracted_sources = []
@@ -380,12 +366,12 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
                 self.nsfw_check.isChecked(),
                 self.tmdb.get("id", None),
                 self.remove_after.value(),
-                self.tags
+                self.tags,
             )
             upload = SlowPicsUploadData(upload_data, self.extracted_sources)
             self.start_job.emit("upload", upload, do_next)
 
-    def handle_finish(self, job_name:str, result: Any, do_next:bool) -> None:
+    def handle_finish(self, job_name: str, result: Any, do_next: bool) -> None:
         # print(job_name, result)
 
         if job_name == "frames":
@@ -401,7 +387,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
         self.handle_do_next(job_name, do_next)
 
-    def handle_do_next(self, job_name:str, do_next:bool) -> None:
+    def handle_do_next(self, job_name: str, do_next: bool) -> None:
         # Do next job if clicked all 3
         if not do_next:
             return
@@ -410,7 +396,6 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
             self.do_job("extract", True)
         elif job_name == "extract":
             self.do_job("upload", True)
-
 
     def kill_worker(self) -> None:
         if self.thread_handle.isRunning():
@@ -423,8 +408,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
         for frame in frames:
             self.frames_dropdown.addItem(f"{frame.frame} {frame.frame_type}", frame)
 
-
-    def _frame_selected(self, index:int) -> None:
+    def _frame_selected(self, index: int) -> None:
         # data: SPFrame = self.frames_dropdown.itemData(index)
 
         # self.api.__workspace._seek_frame(data.frame)
@@ -441,7 +425,6 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
         self.handle_comp_title()
 
-
     def handle_comp_title(self) -> None:
         is_tv = self.tmdb["is_tv"]
         result = self.tmdb["result"]
@@ -455,15 +438,14 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
             comp_title = comp_title.replace("{tmdb_title}", result["title"])
             comp_title = comp_title.replace("{tmdb_year}", (result["release_date"] or "0000")[:4])
 
-
         comp_title = comp_title.replace(
             "{video_nodes}",
-            " vs ".join([source.vs_name or f"Node {i+1}" for i, source in enumerate(self.api.voutputs)])
+            " vs ".join([source.vs_name or f"Node {i + 1}" for i, source in enumerate(self.api.voutputs)]),
         )
 
         self.comp_title.setText(comp_title)
         if result["poster_path"]:
-            request = QNetworkRequest(QUrl(f"https://image.tmdb.org/t/p/w92{result["poster_path"]}"))
+            request = QNetworkRequest(QUrl(f"https://image.tmdb.org/t/p/w92{result['poster_path']}"))
             self.net.get(request)
 
     def on_icon_downloaded(self, reply: QNetworkReply) -> None:
@@ -494,7 +476,7 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
     def handle_tag_selection(self, tags: list[str]) -> None:
         self.tags = tags
 
-    def add_manual_frame(self, frame:int) -> None:
+    def add_manual_frame(self, frame: int) -> None:
         mframe = SPFrame(frame, SPFrameSource.MANUAL)
 
         if mframe in self.manual_frames:
@@ -504,14 +486,13 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
         self.add_frames()
 
-    def handle_frame_ui(self, checked:bool) -> None:
+    def handle_frame_ui(self, checked: bool) -> None:
         dialog = FramePopup(self)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             for frame in dialog.frames:
                 self.manual_frames.add(SPFrame(frame, SPFrameSource.MANUAL))
             self.add_frames()
-
 
 
 @hookimpl
