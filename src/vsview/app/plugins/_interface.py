@@ -274,7 +274,7 @@ class _PluginAPI(QObject):
                 logger.debug("Rendering initial frame %d for view", current_frame)
                 view.on_current_frame_changed(current_frame, frame)
 
-        view.setSceneRect(view.pixmap_item.boundingRect())
+        view.update_scene_rect()
         view.set_autofit(view.autofit)
 
     def _on_current_frame_changed(self, n: int, plugin_frames: dict[str, vs.VideoFrame] | None = None) -> None:
