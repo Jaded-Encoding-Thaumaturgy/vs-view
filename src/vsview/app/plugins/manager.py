@@ -191,9 +191,12 @@ class PluginManager(Singleton):
 
         self.populate_default_settings("global")
 
+        global_entries.sort(key=lambda entry: entry.key)
+        local_entries.sort(key=lambda entry: entry.key)
+
         # Extend dialog registries
-        SettingsDialog.global_settings_registry.extend(sorted(global_entries, key=lambda entry: entry.key))
-        SettingsDialog.local_settings_registry.extend(sorted(local_entries, key=lambda entry: entry.key))
+        SettingsDialog.global_settings_registry.extend(global_entries)
+        SettingsDialog.local_settings_registry.extend(local_entries)
 
         logger.debug("Plugin settings extracted")
 
