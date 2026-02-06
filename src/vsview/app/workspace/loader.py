@@ -63,6 +63,13 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.stack = QStackedWidget(self)
         self.current_layout.addWidget(self.stack)
 
+        # API & plugins
+        self.api = PluginAPI(self)
+        self.cbs_on_destroy = list[Callable[[], Any]]()
+        self.plugins = list[WidgetPluginBase]()
+        self.docks = list[QDockWidget]()
+        self.plugins_loaded = False
+
         # Empty State
         self.empty_page = QWidget(self)
         self.empty_layout = QVBoxLayout(self.empty_page)
@@ -121,7 +128,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.plugin_splitter = PluginSplitter(self.dock_container)
 
         # Video Area (Tabs)
-        self.tab_manager = TabManager(self.plugin_splitter)
+        self.tab_manager = TabManager(self.plugin_splitter, self.api)
         self.tab_manager.tabChanged.connect(self._on_tab_changed)
         self.tab_manager.sarTransformed.connect(lambda _: self._emit_output_info())
         self.plugin_splitter.insert_main_widget(self.tab_manager)
@@ -142,13 +149,6 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.tbar = TimelineControlBar(self)
         self.loaded_layout.addWidget(self.tbar)
         self.stack.addWidget(self.loaded_page)
-
-        # API & plugins
-        self.api = PluginAPI(self)
-        self.cbs_on_destroy = list[Callable[[], Any]]()
-        self.plugins = list[WidgetPluginBase]()
-        self.docks = list[QDockWidget]()
-        self.plugins_loaded = False
 
         self.outputs_manager = OutputsManager()
 

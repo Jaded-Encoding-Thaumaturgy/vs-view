@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from ...assets import IconName, IconReloadMixin
 from ...vsenv import run_in_loop
 from ..outputs import VideoOutput
+from ..plugins.api import PluginAPI
 from ..settings import ActionID, ShortcutManager
 from ..views import GraphicsView
 from ..views.tab import TabLabel, TabViewWidget
@@ -30,8 +31,10 @@ class TabManager(QWidget, IconReloadMixin):
     statusLoadingStarted = Signal(str)  # message
     statusLoadingFinished = Signal(str)  # completed message
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent)
+
+        self.api = api
 
         self.current_layout = QVBoxLayout(self)
         self.current_layout.setContentsMargins(0, 0, 0, 0)
@@ -136,6 +139,12 @@ class TabManager(QWidget, IconReloadMixin):
             view = GraphicsView(self)
             view.zoomChanged.connect(self._on_zoom_changed)
             view.autofitChanged.connect(partial(self._on_autofit_changed, view))
+            view.contextMenuRequested.connect(self.api._on_view_context_menu)
+            view.mouseMoved.connect(self.api._on_view_mouse_moved)
+            view.mousePressed.connect(self.api._on_view_mouse_pressed)
+            view.mouseReleased.connect(self.api._on_view_mouse_released)
+            view.keyPressed.connect(self.api._on_view_key_press)
+            view.keyReleased.connect(self.api._on_view_key_release)
             view.statusSavingImageStarted.connect(self.statusLoadingStarted.emit)
             view.statusSavingImageFinished.connect(self.statusLoadingFinished.emit)
             view.displayTransformChanged.connect(lambda transform: self.sarTransformed.emit(transform.m11()))

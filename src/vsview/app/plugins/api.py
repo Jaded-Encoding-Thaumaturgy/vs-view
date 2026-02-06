@@ -13,10 +13,22 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
 
 import vapoursynth as vs
+from jetpytools import copy_signature
 from pydantic import BaseModel
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QPixmap, QShortcut, QShowEvent
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtGui import (
+    QAction,
+    QContextMenuEvent,
+    QCursor,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPixmap,
+    QShortcut,
+    QShowEvent,
+)
+from PySide6.QtWidgets import QGraphicsView, QWidget
+from shiboken6 import Shiboken
 
 from vsview.app.outputs import Packer
 from vsview.app.settings import SettingsManager, ShortcutManager
@@ -351,6 +363,60 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
     def on_playback_stopped(self) -> None:
         """
         Called when playback stops.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_context_menu(self, event: QContextMenuEvent) -> None:
+        """
+        Called when a context menu of the current viewis requested.
+
+        The event is forwarded BEFORE the view processes it.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_mouse_moved(self, event: QMouseEvent) -> None:
+        """
+        Called when the mouse of the current view is moved.
+
+        The event is forwarded AFTER the view processes it.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_mouse_pressed(self, event: QMouseEvent) -> None:
+        """
+        Called when the mouse of the current view is pressed.
+
+        The event is forwarded AFTER the view processes it.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_mouse_released(self, event: QMouseEvent) -> None:
+        """
+        Called when the mouse of the current view is released.
+
+        The event is forwarded AFTER the view processes it.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_key_press(self, event: QKeyEvent) -> None:
+        """
+        Called when a key is pressed in the current view.
+
+        The event is forwarded AFTER the view processes it.
+
+        Execution Thread: **Main**.
+        """
+
+    def on_view_key_release(self, event: QKeyEvent) -> None:
+        """
+        Called when a key is released in the current view.
+
+        The event is forwarded AFTER the view processes it.
 
         Execution Thread: **Main**.
         """
