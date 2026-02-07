@@ -659,7 +659,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             plugin_obj = plugin_type(dock, self.api)
 
             dock.setWidget(plugin_obj)
-            dock.visibilityChanged.connect(lambda visible, p=plugin_obj: self._on_dock_visibility_changed(visible, p))
+            dock.visibilityChanged.connect(lambda visible, d=dock: self._on_dock_visibility_changed(visible, d))
 
             self.plugins.append(plugin_obj)
             self.docks.append(dock)
@@ -687,12 +687,18 @@ class LoaderWorkspace[T](BaseWorkspace):
             if self.global_settings.view_tools.docks.get(dock.objectName(), True):
                 dock.setVisible(checked)
 
-    def _on_dock_visibility_changed(self, visible: bool, p: WidgetPluginBase) -> None:
+    def _on_dock_visibility_changed(self, visible: bool, dock: PluginDock) -> None:
+        if not isinstance(w := dock.widget(), WidgetPluginBase):
+            return
+
         if visible:
             with self.env.use():
-                self.api._init_plugin(p)
-        else:
-            p.on_hide()
+                self.api._init_plugin(w)
+
+            dock.truly_visible = True
+        elif dock.truly_visible:
+            w.on_hide()
+            dock.truly_visible = False
 
     def _on_splitter_visible(self) -> None:
         if (

@@ -111,3 +111,5 @@ class PluginDock(QDockWidget):
             QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
         self.setVisible(False)
+
+        self.truly_visible = False
