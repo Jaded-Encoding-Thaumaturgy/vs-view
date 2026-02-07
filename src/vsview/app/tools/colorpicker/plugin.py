@@ -220,7 +220,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
         if self.tracking == TrackingState.ACTIVE:
             # Force cursor shape & refresh current cursor position
-            self.api.current_view_set_cursor(Qt.CursorShape.CrossCursor)
+            self.api.current_viewport_set_cursor(Qt.CursorShape.CrossCursor)
             self.update_labels(self.api.current_viewport_map_from_global(QCursor.pos()))
 
     def on_view_context_menu(self, event: QContextMenuEvent) -> None:
@@ -235,12 +235,12 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     def on_view_mouse_pressed(self, event: QMouseEvent) -> None:
         if self.tracking == TrackingState.ACTIVE and event.button() == Qt.MouseButton.RightButton:
             self.tracking = TrackingState.DEACTIVATING
-            self.api.current_view_set_cursor(Qt.CursorShape.OpenHandCursor)
+            self.api.current_viewport_set_cursor(Qt.CursorShape.OpenHandCursor)
             event.accept()
 
     def on_view_mouse_released(self, event: QMouseEvent) -> None:
         if self.tracking == TrackingState.ACTIVE and event.button() == Qt.MouseButton.LeftButton:
-            self.api.current_view_set_cursor(Qt.CursorShape.CrossCursor)
+            self.api.current_viewport_set_cursor(Qt.CursorShape.CrossCursor)
 
     # Plugin methods
     def setup_grid_rows(
@@ -435,10 +435,10 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     def on_eyedropper_toggle(self, checked: bool) -> None:
         if checked:
             self.tracking = TrackingState.ACTIVE
-            self.api.current_view_set_cursor(Qt.CursorShape.CrossCursor)
+            self.api.current_viewport_set_cursor(Qt.CursorShape.CrossCursor)
         else:
             self.tracking = TrackingState.INACTIVE
-            self.api.current_view_set_cursor(Qt.CursorShape.OpenHandCursor)
+            self.api.current_viewport_set_cursor(Qt.CursorShape.OpenHandCursor)
 
     def copy_row(
         self,

@@ -211,7 +211,7 @@ class PluginAPI(_PluginAPI):
         """
         return self.__workspace.tab_manager.current_view.mapFromScene(*args, **kwargs)
 
-    def current_view_set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
+    def current_viewport_set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
         """
         Set the cursor for the current view's viewport.
         """
@@ -500,6 +500,8 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
 
 
 class PluginGraphicsView(BaseGraphicsView):
+    """Graphics view for plugins."""
+
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent)
         self.api = api
