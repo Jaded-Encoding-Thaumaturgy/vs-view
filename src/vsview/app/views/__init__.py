@@ -1,4 +1,4 @@
-from .splitter import PluginSplitter
+from .plugins import PluginSplitter
 from .status import OutputInfo, StatusWidget
 from .timeline import Frame, Time
 from .video import GraphicsView
