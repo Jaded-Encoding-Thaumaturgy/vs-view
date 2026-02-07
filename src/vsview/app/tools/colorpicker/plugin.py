@@ -184,7 +184,14 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self.rgb_grid.setSpacing(2)
         self.groups_layout.addWidget(self.rgb_group)
 
-        # Initialize rendered group with fixed 3 columns (RGB never changes)
+        # Initialize rendered group with fixed 3 columns
+        self.setup_grid_rows(
+            self.src_grid,
+            self.src_labels,
+            self.src_copy_btns,
+            ["Dec", "Norm", "Hex"],
+            3,
+        )
         self.setup_grid_rows(
             self.rgb_grid,
             self.rgb_labels,
