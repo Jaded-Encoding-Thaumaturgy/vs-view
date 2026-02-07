@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
+from fractions import Fraction
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
 
@@ -30,9 +31,10 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QGraphicsView, QWidget
 from shiboken6 import Shiboken
 
-from vsview.app.outputs import Packer
+from vsview.app.outputs import Packer, VideoOutput
 from vsview.app.settings import SettingsManager, ShortcutManager
 from vsview.app.settings.models import ActionDefinition
+from vsview.app.views.timeline import Frame, Time
 from vsview.app.views.video import BaseGraphicsView
 from vsview.vsenv.loop import run_in_loop
 
@@ -56,6 +58,36 @@ class VideoOutputProxy:
     """
     Frame properties of the clip.
     """
+
+    framedurs: Sequence[float] | None = field(hash=False, compare=False)
+    """
+    Frame durations of the clip.
+    """
+
+    cum_durations: Sequence[float] | None = field(hash=False, compare=False)
+    """
+    Cumulative durations of the clip.
+    """
+
+    def time_to_frame(self, time: Time, fps: VideoOutputProxy | Fraction | None = None) -> Frame:
+        """
+        Convert a time to a frame number for this output.
+
+        Args:
+            time: The time to convert.
+            fps: Optional override for FPS/duration context.
+        """
+        return VideoOutput.time_to_frame(self, time, fps)  # type: ignore[arg-type]
+
+    def frame_to_time(self, frame: int, fps: VideoOutputProxy | Fraction | None = None) -> Time:
+        """
+        Convert a frame number to time for this output.
+
+        Args:
+            frame: The frame number to convert.
+            fps: Optional override for FPS/duration context.
+        """
+        return VideoOutput.frame_to_time(self, frame, fps)  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,15 +140,12 @@ class PluginAPI(_PluginAPI):
         """Return the index of the currently selected tab."""
         return self.__workspace.outputs_manager.current_video_index
 
-    @property
-    def voutputs(self) -> list[VideoOutputProxy]:
-        """Return a dictionary of VideoOutputProxy objects for all tabs."""
-        return [
-            VideoOutputProxy(voutput.vs_index, voutput.vs_name, voutput.vs_output, voutput.props)
-            for voutput in self.__workspace.outputs_manager.voutputs
-        ]
-
     if TYPE_CHECKING:
+
+        @property
+        def voutputs(self) -> list[VideoOutputProxy]:
+            """Return a dictionary of VideoOutputProxy objects for all tabs."""
+            ...
 
         @property
         def current_voutput(self) -> VideoOutputProxy:

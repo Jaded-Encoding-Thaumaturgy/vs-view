@@ -87,7 +87,8 @@ class VideoOutput:
     def time_to_frame(self, time: Time, fps: VideoOutput | Fraction | None = None) -> Frame:
         from ..views.timeline import Frame
 
-        fps, cum_durations = self._get_fps_and_durations(fps)
+        # So VideoOutputProxy can get this method
+        fps, cum_durations = VideoOutput._get_fps_and_durations(self, fps)
 
         if fps == 0 and cum_durations:
             return Frame(bisect_right(cum_durations, time.total_seconds()))
@@ -97,7 +98,8 @@ class VideoOutput:
     def frame_to_time(self, frame: int, fps: VideoOutput | Fraction | None = None) -> Time:
         from ..views.timeline import Time
 
-        fps, cum_durations = self._get_fps_and_durations(fps)
+        # So VideoOutputProxy can get this method
+        fps, cum_durations = VideoOutput._get_fps_and_durations(self, fps)
 
         if fps == 0 and cum_durations:
             return Time(seconds=cum_durations[frame - 1] if frame > 0 else 0)
@@ -108,10 +110,10 @@ class VideoOutput:
         if fps is None:
             return self.vs_output.clip.fps, self.cum_durations
 
-        if isinstance(fps, VideoOutput):
-            return fps.vs_output.clip.fps, fps.cum_durations
+        if isinstance(fps, Fraction):
+            return fps, self.cum_durations
 
-        return fps, self.cum_durations
+        return fps.vs_output.clip.fps, fps.cum_durations
 
     def _get_props_on_render(self, n: int, f: vs.VideoFrame) -> vs.VideoFrame:
         self.props[n] = f.props
