@@ -34,7 +34,7 @@ from ..outputs import AudioOutput, OutputsManager, VideoOutput
 from ..plugins.api import PluginAPI, WidgetPluginBase
 from ..plugins.manager import PluginManager
 from ..settings import ActionID, ShortcutManager
-from ..views import OutputInfo, PluginSplitter
+from ..views import OutputInfo, PluginDock, PluginSplitter
 from ..views.components import CustomLoadingPage, DockButton
 from ..views.timeline import Frame, Time, TimelineControlBar
 from .base import BaseWorkspace
@@ -540,6 +540,13 @@ class LoaderWorkspace[T](BaseWorkspace):
         if isinstance(w := self.plugin_splitter.plugin_tabs.widget(old_index), WidgetPluginBase):
             w.on_hide()
 
+    def _on_dock_visibility_changed(self, visible: bool, p: WidgetPluginBase) -> None:
+        if visible:
+            with self.env.use():
+                self.api._init_plugin(p)
+        else:
+            p.on_hide()
+
     def _on_tab_changed(
         self,
         index: int,
@@ -680,16 +687,11 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     def _setup_docks(self) -> None:
         for plugin_type in PluginManager.tooldocks:
-            dock = QDockWidget(plugin_type.display_name, self.dock_container)
-            dock.setObjectName(plugin_type.identifier)
-            dock.setFeatures(
-                QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
-            )
-            dock.setVisible(False)
-
+            dock = PluginDock(plugin_type.display_name, plugin_type.identifier, self.dock_container)
             plugin_obj = plugin_type(dock, self.api)
+
             dock.setWidget(plugin_obj)
-            dock.visibilityChanged.connect(lambda visible: self._init_visible_plugins() if visible else None)
+            dock.visibilityChanged.connect(lambda visible, p=plugin_obj: self._on_dock_visibility_changed(visible, p))
 
             self.plugins.append(plugin_obj)
             self.docks.append(dock)

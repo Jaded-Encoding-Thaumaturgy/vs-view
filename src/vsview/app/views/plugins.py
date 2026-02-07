@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QSplitter, QTabBar, QTabWidget, QWidget
+from PySide6.QtWidgets import QDockWidget, QHBoxLayout, QLabel, QSplitter, QTabBar, QTabWidget, QWidget
 
 from ...assets import IconName, IconReloadMixin
 
@@ -99,3 +99,15 @@ class PluginSplitter(QSplitter, IconReloadMixin):
         if self.is_right_panel_visible:
             self.pluginTabChanged.emit(index, self.old_tab_index)
             self.old_tab_index = index
+
+
+class PluginDock(QDockWidget):
+    """A dock widget for a plugin."""
+
+    def __init__(self, title: str, identifier: str, parent: QWidget) -> None:
+        super().__init__(title, parent)
+        self.setObjectName(identifier)
+        self.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        self.setVisible(False)
