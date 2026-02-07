@@ -137,7 +137,7 @@ class PluginAPI(_PluginAPI):
 
     @property
     def current_timeline_mode(self) -> Literal["frame", "time"]:
-        """Return the current timeline mode."""
+        """Return the current timeline display mode."""
         return self.__workspace.tbar.timeline.mode
 
     @property
