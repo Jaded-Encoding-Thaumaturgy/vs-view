@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -633,13 +633,17 @@ wheels = [
 
 [[package]]
 name = "vsjetpack"
-version = "1.2.0.dev3+g7ee2a536"
-source = { git = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack?branch=main#7ee2a536a5b949b3c7250183f381aad56e2c9bdb" }
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jetpytools" },
     { name = "numpy" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'" },
     { name = "vapoursynth" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/40/04/4ed916c3a59c409f465950169d741d6182aa4e46782a65873a08e5ad6d18/vsjetpack-1.1.0.tar.gz", hash = "sha256:922dc9b16d4942cda4d80d540af61ee6d5ce2704ee2af02cf8c07d01b94fc6a3", size = 370282, upload-time = "2026-01-27T19:47:03.832Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/1c/8dac7e6b551f5cbe36bdad25e658c393c46988db2af43bb3be0be6bd2c49/vsjetpack-1.1.0-py3-none-any.whl", hash = "sha256:8d3885de680990141e8e9942629ef60a3170eb2b424779edd47a12635e788989", size = 406573, upload-time = "2026-01-27T19:47:02.1Z" },
 ]
 
 [[package]]
@@ -796,7 +800,6 @@ requires-dist = [
 
 [[package]]
 name = "vsview-slowpics"
-version = "1.0"
 source = { editable = "src/plugins/slowpics" }
 dependencies = [
     { name = "httpx" },
@@ -807,7 +810,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "vsjetpack", git = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack?branch=main" },
+    { name = "vsjetpack", specifier = ">=1.0.0" },
     { name = "vsview", editable = "." },
 ]
 

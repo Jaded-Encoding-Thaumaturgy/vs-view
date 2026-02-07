@@ -5,7 +5,7 @@ import random
 import string
 from collections import defaultdict
 from enum import IntEnum, auto
-from itertools import chain, islice
+from itertools import chain
 from pathlib import Path
 from typing import Any, NamedTuple
 from uuid import uuid4
@@ -105,7 +105,7 @@ class SlowPicsWorker(QObject):
     progress = Signal(int)
     format = Signal(str)
     range = Signal(int, int)
-    finished = Signal(str, object, bool)
+    jobFinished = Signal(str, object, bool)
 
     def __init__(self, api: PluginAPI, parent: QObject | None = None):
         super().__init__(parent)
@@ -117,17 +117,17 @@ class SlowPicsWorker(QObject):
         with self.api.vs_context():
             if job_name == "frames":
                 frames = self.get_frames(params)
-                self.finished.emit(job_name, frames, do_next)
+                self.jobFinished.emit(job_name, frames, do_next)
             elif job_name == "extract":
                 extract = self.get_upload_data(params)
-                self.finished.emit(job_name, extract, do_next)
+                self.jobFinished.emit(job_name, extract, do_next)
             elif job_name == "upload":
                 slow = asyncio.run(self.upload_slowpics(params))
-                self.finished.emit(job_name, slow, do_next)
+                self.jobFinished.emit(job_name, slow, do_next)
             else:
                 logger.warning("Running unknown job %s", job_name)
                 self.format.emit(f"Unknown job: {job_name}")
-                self.finished.emit(job_name, None, do_next)
+                self.jobFinished.emit(job_name, None, do_next)
 
     def get_frames(self, frame_info: SlowPicsFramesData) -> list[SPFrame]:
 
@@ -210,10 +210,12 @@ class SlowPicsWorker(QObject):
                 for f in vs.core.std.Splice(frames, True).frames(close=True):
                     pict_type = get_prop(f.props, "_PictType", str, default="", func="__vsview__")
                     if should_check_pict and pict_type.encode() not in pict_types_b:
+                        logger.debug("Ignoring frame %s due to %s PictType not in %s", rnum, pict_types)
                         break
 
                     # Bad for vivtc/interlaced sources
                     if get_prop(f.props, "_Combed", int, default=0, func="__vsview__"):
+                        logger.debug("Ignoring frame %s due to being combed", rnum)
                         break
                 else:
                     # This will only be hit if the above for loop didn't break
@@ -251,15 +253,11 @@ class SlowPicsWorker(QObject):
         for i, f in enumerate(image_types):
             frame_level[f].append(frames[i])
 
-        print(frame_level)
+        dark_to_light = list(chain.from_iterable(frame_level[k] for k in sorted(frame_level)))
+        darkest = [SPFrame(frame, SPFrameSource.RANDOM_DARK) for frame in dark_to_light[:dark]]
+        lightest = [SPFrame(frame, SPFrameSource.RANDOM_LIGHT) for frame in dark_to_light[-light:]]
 
-        return [
-            SPFrame(i, SPFrameSource.RANDOM_LIGHT)
-            for i in islice(chain.from_iterable(frame_level[k] for k in sorted(frame_level)), light)
-        ] + [
-            SPFrame(i, SPFrameSource.RANDOM_DARK)
-            for i in islice(chain.from_iterable(frame_level[k] for k in sorted(frame_level, reverse=True)), dark)
-        ]
+        return lightest + darkest
 
     def get_upload_data(self, data: SlowPicsImageData) -> list[SlowPicsUploadSource]:
         base_path = data.path / "".join(random.choices(string.ascii_uppercase + string.digits, k=16))
@@ -276,8 +274,8 @@ class SlowPicsWorker(QObject):
             seconds = frame * clip.fps_den / clip.fps_num if clip.fps_num > 0 else 0
             return SlowPicsUploadImage(path, pict_type, frame, Time(seconds=seconds).to_ts("{M:02d}:{S:02d}.{ms:03d}"))
 
-        def _handle_source_info(i: int, source: VideoOutputProxy) -> SlowPicsUploadSource:
-            name = source.vs_name or f"Node {i}"
+        def _handle_source_info(source: VideoOutputProxy) -> SlowPicsUploadSource:
+            name = source.vs_name or f"Node {source.vs_index}"
 
             images = 0
             self.format.emit(f"Extracting {name} %v / %m")
@@ -311,7 +309,7 @@ class SlowPicsWorker(QObject):
                 ],
             )
 
-        return [_handle_source_info(i + 1, source) for i, source in enumerate(self.api.voutputs)]
+        return [_handle_source_info(source) for source in self.api.voutputs]
 
     async def upload_slowpics(self, data: SlowPicsUploadData) -> str:
         """Takes SlowPicsUploadData and uploads to slow.pics based on parameters"""
@@ -344,7 +342,7 @@ class SlowPicsWorker(QObject):
 
             client.headers.update(
                 {
-                    "X-XSRF-TOKEN": token,
+                    "X-XSRF-TOKEN": token
                 }
             )
 

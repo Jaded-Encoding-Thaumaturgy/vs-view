@@ -23,17 +23,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from vsview.assets.utils import IconReloadMixin
-
 from .utils import get_slowpics_headers
 
 logger = logging.getLogger("vsview-slowpics")
 
 
-class TMDBPopup(QDialog, IconReloadMixin):
-    item_selected = Signal(object)
+class TMDBPopup(QDialog):
+    itemSelected = Signal(object)
 
-    def __init__(self, parent: QWidget, api_key: str):
+    def __init__(self, parent: QWidget, api_key: str) -> None:
         super().__init__(parent)
 
         self.setWindowTitle("Search")
@@ -121,6 +119,7 @@ class TMDBPopup(QDialog, IconReloadMixin):
                 self.add_response(tv, True, False)
             except Exception as e:
                 logger.error(e)
+                logger.debug("Full traceback",  exc_info=True)
 
             try:
                 movie = (
@@ -135,12 +134,12 @@ class TMDBPopup(QDialog, IconReloadMixin):
                 self.add_response(movie, False, False)
             except Exception as e:
                 logger.error(e)
+                logger.debug("Full traceback",  exc_info=True)
 
     def add_response(self, data: dict[str, Any], is_tv: bool, is_list: bool = True) -> None:
 
         values = []
         for result in data["results"] if is_list else [data]:
-            print(result)
             label = ""
             if is_tv:
                 label += f"{result['name']} [{(result['first_air_date'] or '0000')[:4]}] [TV]"
@@ -148,8 +147,9 @@ class TMDBPopup(QDialog, IconReloadMixin):
                 label += f"{result['title']} [{(result['release_date'] or '0000')[:4]}] [MOVIE]"
 
             if is_list:
+                genres = self.tv_genre if is_tv else self.movie_genre
                 label += f" [{
-                    ', '.join([(self.tv_genre if is_tv else self.movie_genre)[genre] for genre in result['genre_ids']])
+                    ', '.join([genres[genre] for genre in result['genre_ids']])
                 }]"
             else:
                 label += f" [{', '.join([genre['name'] for genre in result['genres']])}]"
@@ -195,14 +195,14 @@ class TMDBPopup(QDialog, IconReloadMixin):
 
     def handle_item_selected(self, item: QListWidgetItem) -> None:
         data = item.data(Qt.ItemDataRole.UserRole)
-        self.item_selected.emit(data)
+        self.itemSelected.emit(data)
         self.close()
 
 
-class TagPopup(QDialog, IconReloadMixin):
-    item_selected = Signal(object)
+class TagPopup(QDialog):
+    itemSelected = Signal(object)
 
-    def __init__(self, parent: QWidget, selected: list[str] = []):
+    def __init__(self, parent: QWidget, selected: list[str]) -> None:
         super().__init__(parent)
 
         self.setWindowTitle("Tag Selection")
@@ -250,11 +250,11 @@ class TagPopup(QDialog, IconReloadMixin):
             item = self.list_widget.item(i)
             if item.checkState() == Qt.CheckState.Checked:
                 checked.append(item.data(Qt.ItemDataRole.UserRole)["value"])
-        self.item_selected.emit(checked)
+        self.itemSelected.emit(checked)
 
 
-class FramePopup(QDialog, IconReloadMixin):
-    def __init__(self, parent: QWidget):
+class FramePopup(QDialog):
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self.setWindowTitle("Enter Frames")
 
