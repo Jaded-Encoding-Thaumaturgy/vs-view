@@ -9,7 +9,7 @@ from weakref import WeakKeyDictionary
 
 import vapoursynth as vs
 from pydantic import BaseModel
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QMetaObject, QObject, Signal
 from PySide6.QtGui import QContextMenuEvent, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
 
@@ -442,3 +442,4 @@ class _ViewportProxy(QObject):
         super().__init__()
         self.__workspace = workspace
         self.__viewport = viewport
+        self.__cursor_reset_conn: QMetaObject.Connection | None = None

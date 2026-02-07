@@ -133,12 +133,18 @@ class GraphicsViewProxy(_GraphicsViewProxy):
             v = self.__viewport
             v.setCursor(cursor)
 
+            if self.__cursor_reset_conn:
+                self.__workspace.tab_manager.tabChanged.disconnect(self.__cursor_reset_conn)
+
             def reset_cursor() -> None:
                 if Shiboken.isValid(v):
                     v.setCursor(Qt.CursorShape.OpenHandCursor)
-                self.__workspace.tab_manager.tabChanged.disconnect(reset_cursor)
+                self.__cursor_reset_conn = None
 
-            self.__workspace.tab_manager.tabChanged.connect(reset_cursor)
+            self.__cursor_reset_conn = self.__workspace.tab_manager.tabChanged.connect(
+                reset_cursor,
+                Qt.ConnectionType.SingleShotConnection,  # Auto-disconnects after first emit
+            )
 
     @property
     def viewport(self) -> GraphicsViewProxy.ViewportProxy:
