@@ -134,7 +134,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.plugin_splitter.insert_main_widget(self.tab_manager)
 
         # Connect plugin visibility signals
-        self.plugin_splitter.rightPanelBecameVisible.connect(self._init_visible_plugins)
+        self.plugin_splitter.rightPanelBecameVisible.connect(self._on_splitter_visible)
         self.plugin_splitter.rightPanelBecameCollapsed.connect(self._on_splitter_closed)
         self.plugin_splitter.pluginTabChanged.connect(self._on_splitter_tab_changed)
 
@@ -694,13 +694,13 @@ class LoaderWorkspace[T](BaseWorkspace):
         else:
             p.on_hide()
 
-    def _init_visible_plugins(self, refresh: bool = False) -> None:
-        if not self.outputs_manager.current_voutput:
-            return  # No content loaded yet
-
-        with self.env.use():
-            for plugin in self.plugins:
-                self.api._init_plugin(plugin, refresh=refresh)
+    def _on_splitter_visible(self) -> None:
+        if (
+            isinstance(w := self.plugin_splitter.plugin_tabs.currentWidget(), WidgetPluginBase)
+            and self.outputs_manager.current_voutput
+        ):
+            with self.env.use():
+                self.api._init_plugin(w)
 
     def _on_splitter_closed(self) -> None:
         if isinstance(w := self.plugin_splitter.plugin_tabs.currentWidget(), WidgetPluginBase):
