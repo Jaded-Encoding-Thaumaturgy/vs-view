@@ -46,6 +46,7 @@ dev = [
 ]
 plugins = [
     "vsview-split-planes",
+    "vsview-slowpics",
     "vsview-fftspectrum",
     "vsview-frameprops-extended",
     "vsview-audio-convert",
@@ -55,7 +56,7 @@ plugins = [
 vsview = "vsview.cli:app"
 
 [project.optional-dependencies]
-essential = ["vsview-split-planes", "vsview-frameprops-extended"]
+essential = ["vsview-split-planes", "vsview-frameprops-extended", "vsview-slowpics"]
 
 [project.urls]
 # Documentation = ""
@@ -88,6 +89,7 @@ members = ["src/vspackrgb", "src/plugins/*"]
 vspackrgb = { workspace = true }
 vsview-fftspectrum = { workspace = true }
 vsview-split-planes = { workspace = true }
+vsview-slowpics = { workspace = true }
 vsview-frameprops-extended = { workspace = true }
 vsview-audio-convert = { workspace = true }
 
