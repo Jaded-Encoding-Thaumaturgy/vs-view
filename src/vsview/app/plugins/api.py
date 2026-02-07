@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from fractions import Fraction
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar
 
 import vapoursynth as vs
 from jetpytools import copy_signature
