@@ -135,7 +135,8 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         # Connect plugin visibility signals
         self.plugin_splitter.rightPanelBecameVisible.connect(self._init_visible_plugins)
-        self.plugin_splitter.pluginTabChanged.connect(lambda _: self._init_visible_plugins())
+        self.plugin_splitter.rightPanelBecameCollapsed.connect(self._on_splitter_closed)
+        self.plugin_splitter.pluginTabChanged.connect(self._on_splitter_tab_changed)
 
         self.dock_container.setCentralWidget(self.plugin_splitter)
         self.content_layout.addWidget(self.dock_container)
@@ -526,6 +527,18 @@ class LoaderWorkspace[T](BaseWorkspace):
         with self.env.use():
             for plugin in self.plugins:
                 self.api._init_plugin(plugin, refresh=refresh)
+
+    def _on_splitter_closed(self) -> None:
+        if isinstance(w := self.plugin_splitter.plugin_tabs.currentWidget(), WidgetPluginBase):
+            w.on_hide()
+
+    def _on_splitter_tab_changed(self, new_index: int, old_index: int) -> None:
+        if isinstance(w := self.plugin_splitter.plugin_tabs.widget(new_index), WidgetPluginBase):
+            with self.env.use():
+                self.api._init_plugin(w)
+
+        if isinstance(w := self.plugin_splitter.plugin_tabs.widget(old_index), WidgetPluginBase):
+            w.on_hide()
 
     def _on_tab_changed(
         self,

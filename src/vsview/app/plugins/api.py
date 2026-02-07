@@ -506,6 +506,13 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
         Execution Thread: **Main**.
         """
 
+    def on_hide(self) -> None:
+        """
+        Called when the plugin is hidden.
+
+        Execution Thread: **Main**.
+        """
+
 
 class PluginGraphicsView(BaseGraphicsView):
     """Graphics view for plugins."""

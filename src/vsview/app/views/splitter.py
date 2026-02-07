@@ -13,15 +13,15 @@ __all__ = ["PluginSplitter"]
 class PluginSplitter(QSplitter, IconReloadMixin):
     """
     A horizontal splitter that manages the main content area and a collapsible plugin panel.
-
-    Emits signals when the plugin panel becomes visible or when the active plugin tab changes,
-    allowing the parent (typically the workspace) to initialize plugins only when they become truly visible.
     """
 
     rightPanelBecameVisible = Signal()
     """Emitted when the right panel transitions from collapsed to visible."""
 
-    pluginTabChanged = Signal(int)
+    rightPanelBecameCollapsed = Signal()
+    """Emitted when the right panel transitions from visible to collapsed."""
+
+    pluginTabChanged = Signal(int, int)  # new_index, old_index
     """Emitted when the plugin tab changes (index of new tab)."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -32,6 +32,7 @@ class PluginSplitter(QSplitter, IconReloadMixin):
         self.plugin_tabs.setTabPosition(QTabWidget.TabPosition.North)
         self.plugin_tabs.setDocumentMode(True)
         self.plugin_tabs.currentChanged.connect(self._on_plugin_tab_changed)
+        self.old_tab_index = self.plugin_tabs.currentIndex()
 
         # Sync container to match TabManager layout alignment
         self.right_corner_container = QWidget(self)
@@ -88,10 +89,13 @@ class PluginSplitter(QSplitter, IconReloadMixin):
         # Only emit on transition from collapsed to visible
         if right_panel_visible and self.right_panel_collapsed:
             self.rightPanelBecameVisible.emit()
+        elif not right_panel_visible and not self.right_panel_collapsed:
+            self.rightPanelBecameCollapsed.emit()
 
         self.right_panel_collapsed = not right_panel_visible
 
     def _on_plugin_tab_changed(self, index: int) -> None:
         # Only emit if right panel is visible
         if self.is_right_panel_visible:
-            self.pluginTabChanged.emit(index)
+            self.pluginTabChanged.emit(index, self.old_tab_index)
+            self.old_tab_index = index
