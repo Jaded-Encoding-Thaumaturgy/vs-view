@@ -13,6 +13,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QContextMenuEvent, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
 
+from vsview.app.outputs import VideoOutput
 from vsview.app.settings import SettingsManager
 from vsview.app.utils import ObjectType
 from vsview.vsenv.loop import run_in_loop
@@ -112,6 +113,21 @@ class _PluginSettingsStore:
         return model.model_validate(self._get_raw_settings(plugin.identifier, scope))
 
 
+def _make_voutput_proxy(voutput: VideoOutput) -> VideoOutputProxy:
+    from .api import VideoOutputProxy
+
+    proxy = VideoOutputProxy(
+        voutput.vs_index,
+        voutput.vs_name,
+        voutput.vs_output,
+        voutput.props,
+        tuple(voutput.framedurs) if voutput.framedurs is not None else None,
+        tuple(voutput.cum_durations) if voutput.cum_durations is not None else None,
+    )
+
+    return proxy
+
+
 class _PluginAPI(QObject):
     statusMessage = Signal(str)
     globalSettingsChanged = Signal()
@@ -126,12 +142,15 @@ class _PluginAPI(QObject):
         SettingsManager.signals.localChanged.connect(self._on_local_settings_changed)
 
     @property
+    def voutputs(self) -> list[VideoOutputProxy]:
+        """Return a dictionary of VideoOutputProxy objects for all tabs."""
+        return [_make_voutput_proxy(voutput) for voutput in self.__workspace.outputs_manager.voutputs]
+
+    @property
     def current_voutput(self) -> VideoOutputProxy:
         """Return the VideoOutput for the currently selected tab."""
-        from .api import VideoOutputProxy
-
         if voutput := self.__workspace.outputs_manager.current_voutput:
-            return VideoOutputProxy(voutput.vs_index, voutput.vs_name, voutput.vs_output, voutput.props)
+            return _make_voutput_proxy(voutput)
 
         # This shouldn't happen
         raise NotImplementedError
