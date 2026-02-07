@@ -1,4 +1,4 @@
-from ._version import __version__
+# from ._version import __version__
 
 def get_slowpics_headers() -> dict[str, str]:
     return {
