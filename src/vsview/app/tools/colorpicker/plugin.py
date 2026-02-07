@@ -285,6 +285,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
                 )
                 val_lbl.setFont(get_monospace_font(10))
                 val_lbl.setMinimumWidth(65)
+                val_lbl.setCursor(Qt.CursorShape.IBeamCursor)
                 val_labels.append(val_lbl)
                 grid.addWidget(val_lbl, row_idx, self.COL_VALUES_START + col)
 
