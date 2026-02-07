@@ -77,7 +77,7 @@ class VideoOutputProxy:
             time: The time to convert.
             fps: Optional override for FPS/duration context.
         """
-        return VideoOutput.time_to_frame(self, time, fps)  # pyright: ignore[reportArgumentType]
+        return VideoOutput.time_to_frame(self, time, fps)  # type: ignore[arg-type]
 
     def frame_to_time(self, frame: int, fps: VideoOutputProxy | Fraction | None = None) -> Time:
         """
@@ -87,7 +87,7 @@ class VideoOutputProxy:
             frame: The frame number to convert.
             fps: Optional override for FPS/duration context.
         """
-        return VideoOutput.frame_to_time(self, frame, fps)  # pyright: ignore[reportArgumentType]
+        return VideoOutput.frame_to_time(self, frame, fps)  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True, slots=True)
