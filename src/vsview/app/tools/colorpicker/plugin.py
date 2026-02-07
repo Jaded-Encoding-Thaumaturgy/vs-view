@@ -216,7 +216,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
         # Add the voutput to the `outputs` dict and call `on_current_frame_changed` again
         if (voutput := self.api.current_voutput) not in self.outputs:
-            return self.on_current_voutput_changed(voutput, -1)
+            return self.on_current_voutput_changed(voutput, self.api.current_video_index)
 
         if self.tracking == TrackingState.ACTIVE:
             # Force cursor shape & refresh current cursor position
