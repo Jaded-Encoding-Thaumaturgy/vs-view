@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from fractions import Fraction
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar
 
 import vapoursynth as vs
 from jetpytools import copy_signature
@@ -136,6 +136,11 @@ class PluginAPI(_PluginAPI):
         raise NotImplementedError
 
     @property
+    def current_timeline_mode(self) -> Literal["frame", "time"]:
+        """Return the current timeline display mode."""
+        return self.__workspace.tbar.timeline.mode
+
+    @property
     def current_video_index(self) -> int:
         """Return the index of the currently selected tab."""
         return self.__workspace.outputs_manager.current_video_index
@@ -211,7 +216,7 @@ class PluginAPI(_PluginAPI):
         """
         return self.__workspace.tab_manager.current_view.mapFromScene(*args, **kwargs)
 
-    def current_view_set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
+    def current_viewport_set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
         """
         Set the cursor for the current view's viewport.
         """
@@ -500,6 +505,8 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
 
 
 class PluginGraphicsView(BaseGraphicsView):
+    """Graphics view for plugins."""
+
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent)
         self.api = api
