@@ -220,8 +220,8 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
         if self.tracking == TrackingState.ACTIVE:
             # Force cursor shape & refresh current cursor position
-            self.api.current_viewport_set_cursor(Qt.CursorShape.CrossCursor)
-            self.update_labels(self.api.current_viewport_map_from_global(QCursor.pos()))
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.CrossCursor)
+            self.update_labels(self.api.current_view.viewport.map_from_global(QCursor.pos()))
 
     def on_view_context_menu(self, event: QContextMenuEvent) -> None:
         if self.tracking == TrackingState.DEACTIVATING or self.eyedropper_btn.isChecked():
@@ -235,12 +235,12 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     def on_view_mouse_pressed(self, event: QMouseEvent) -> None:
         if self.tracking == TrackingState.ACTIVE and event.button() == Qt.MouseButton.RightButton:
             self.tracking = TrackingState.DEACTIVATING
-            self.api.current_viewport_set_cursor(Qt.CursorShape.OpenHandCursor)
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.OpenHandCursor)
             event.accept()
 
     def on_view_mouse_released(self, event: QMouseEvent) -> None:
         if self.tracking == TrackingState.ACTIVE and event.button() == Qt.MouseButton.LeftButton:
-            self.api.current_viewport_set_cursor(Qt.CursorShape.CrossCursor)
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.CrossCursor)
 
     # Plugin methods
     def setup_grid_rows(
@@ -295,9 +295,9 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         with self.outputs[self.api.current_voutput].get_frame(self.api.current_frame) as vsframe:
             self.update_format_strings(vsframe)
 
-        pos = self.api.current_viewport_map_to_scene(local_pos).toPoint()
+        pos = self.api.current_view.map_to_scene(local_pos).toPoint()
 
-        if (image := self.api.current_view_image).isNull() or not image.valid(pos):
+        if (image := self.api.current_view.image).isNull() or not image.valid(pos):
             return
 
         self._update_source_labels(pos)
@@ -435,10 +435,10 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     def on_eyedropper_toggle(self, checked: bool) -> None:
         if checked:
             self.tracking = TrackingState.ACTIVE
-            self.api.current_viewport_set_cursor(Qt.CursorShape.CrossCursor)
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.CrossCursor)
         else:
             self.tracking = TrackingState.INACTIVE
-            self.api.current_viewport_set_cursor(Qt.CursorShape.OpenHandCursor)
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.OpenHandCursor)
 
     def copy_row(
         self,

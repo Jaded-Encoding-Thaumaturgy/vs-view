@@ -1,6 +1,7 @@
 """API for vsview"""
 
 from ..app.plugins import (
+    GraphicsViewProxy,
     LocalSettingsModel,
     NodeProcessor,
     PluginAPI,
@@ -25,6 +26,7 @@ __all__ = [
     "Checkbox",
     "DoubleSpin",
     "Dropdown",
+    "GraphicsViewProxy",
     "IconName",
     "IconReloadMixin",
     "LocalSettingsModel",

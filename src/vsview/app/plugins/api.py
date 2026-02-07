@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from fractions import Fraction
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar, cast
 
 import vapoursynth as vs
 from jetpytools import copy_signature
@@ -38,7 +38,7 @@ from vsview.app.views.timeline import Frame, Time
 from vsview.app.views.video import BaseGraphicsView
 from vsview.vsenv.loop import run_in_loop
 
-from ._interface import _PluginAPI, _PluginBaseMeta
+from ._interface import _GraphicsViewProxy, _PluginAPI, _PluginBaseMeta, _ViewportProxy
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +102,62 @@ class AudioOutputProxy:
 
     vs_output: vs.AudioNode = field(hash=False, compare=False)
     """The object created by `vapoursynth.get_outputs()`."""
+
+
+class GraphicsViewProxy(_GraphicsViewProxy):
+    """Proxy for a graphics view."""
+
+    @property
+    def pixmap(self) -> QPixmap:
+        """Return a copy of the pixmap"""
+        return self.__view.pixmap_item.pixmap().copy()
+
+    @property
+    def image(self) -> QImage:
+        """Return a copy of the image."""
+        return self.pixmap.toImage()
+
+    class ViewportProxy(_ViewportProxy):
+        """Proxy for a viewport."""
+
+        def map_from_global(self, pos: QPoint) -> QPoint:
+            """
+            Map global coordinates to the current view's local coordinates.
+            """
+            return self.__viewport.mapFromGlobal(pos)
+
+        def set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
+            """
+            Set the cursor for the current view's viewport.
+            """
+            v = self.__viewport
+            v.setCursor(cursor)
+
+            def reset_cursor() -> None:
+                if Shiboken.isValid(v):
+                    v.setCursor(Qt.CursorShape.OpenHandCursor)
+                self.__workspace.tab_manager.tabChanged.disconnect(reset_cursor)
+
+            self.__workspace.tab_manager.tabChanged.connect(reset_cursor)
+
+    @property
+    def viewport(self) -> GraphicsViewProxy.ViewportProxy:
+        """Return a proxy for the viewport."""
+        return GraphicsViewProxy.ViewportProxy(self.__workspace, self.__view.viewport())
+
+    @copy_signature(QGraphicsView().mapToScene if TYPE_CHECKING else lambda *args, **kwargs: cast(Any, None))
+    def map_to_scene(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Map coordinates to this view's scene.
+        """
+        return self.__view.mapToScene(*args, **kwargs)
+
+    @copy_signature(QGraphicsView().mapFromScene if TYPE_CHECKING else lambda *args, **kwargs: cast(Any, None))
+    def map_from_scene(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Map coordinates from view's scene.
+        """
+        return self.__view.mapFromScene(*args, **kwargs)
 
 
 class PluginAPI(_PluginAPI):
@@ -183,52 +239,9 @@ class PluginAPI(_PluginAPI):
         return self.__workspace.outputs_manager.packer
 
     @property
-    def current_view_pixmap(self) -> QPixmap:
-        """
-        Return a copy of the pixmap of the current view.
-        """
-        return self.__workspace.tab_manager.current_view.pixmap_item.pixmap().copy()
-
-    @property
-    def current_view_image(self) -> QImage:
-        """
-        Return a copy of the image of the current view.
-        """
-        return self.current_view_pixmap.toImage()
-
-    def current_viewport_map_from_global(self, pos: QPoint) -> QPoint:
-        """
-        Map global coordinates to the current view's local coordinates.
-        """
-        return self.__workspace.tab_manager.current_view.viewport().mapFromGlobal(pos)
-
-    @copy_signature(QGraphicsView().mapToScene if TYPE_CHECKING else None)
-    def current_viewport_map_to_scene(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Map coordinates to the current view's scene.
-        """
-        return self.__workspace.tab_manager.current_view.mapToScene(*args, **kwargs)
-
-    @copy_signature(QGraphicsView().mapFromScene if TYPE_CHECKING else None)
-    def current_viewport_map_from_scene(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Map coordinates from the current view's scene.
-        """
-        return self.__workspace.tab_manager.current_view.mapFromScene(*args, **kwargs)
-
-    def current_viewport_set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
-        """
-        Set the cursor for the current view's viewport.
-        """
-        viewport = self.__workspace.tab_manager.current_view.viewport()
-        viewport.setCursor(cursor)
-
-        def reset_cursor() -> None:
-            if Shiboken.isValid(viewport):
-                viewport.setCursor(Qt.CursorShape.OpenHandCursor)
-            self.__workspace.tab_manager.tabChanged.disconnect(reset_cursor)
-
-        self.__workspace.tab_manager.tabChanged.connect(reset_cursor)
+    def current_view(self) -> GraphicsViewProxy:
+        """Return a proxy for the current view."""
+        return GraphicsViewProxy(self.__workspace, self.__workspace.tab_manager.current_view)
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """

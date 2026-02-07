@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
 from vsview.app.outputs import VideoOutput
 from vsview.app.settings import SettingsManager
 from vsview.app.utils import ObjectType
+from vsview.app.views.video import GraphicsView
 from vsview.vsenv.loop import run_in_loop
 
 if TYPE_CHECKING:
@@ -427,3 +428,17 @@ class _PluginBaseMeta(ObjectType):
             cls.global_settings_model, cls.local_settings_model = None, None
 
         return cls
+
+
+class _GraphicsViewProxy(QObject):
+    def __init__(self, workspace: LoaderWorkspace[Any], view: GraphicsView) -> None:
+        super().__init__()
+        self.__workspace = workspace
+        self.__view = view
+
+
+class _ViewportProxy(QObject):
+    def __init__(self, workspace: LoaderWorkspace[Any], viewport: QWidget) -> None:
+        super().__init__()
+        self.__workspace = workspace
+        self.__viewport = viewport
