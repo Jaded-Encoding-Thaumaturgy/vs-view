@@ -272,10 +272,11 @@ class _PluginAPI(QObject):
         current_frame = self.__workspace.playback.state.current_frame
 
         # Detect if we are actually changing tabs or forcing a refresh
-        output_changed = view.current_tab != tab_index
+        image_changed = view.current_tab != tab_index or view.last_frame != current_frame
         view.current_tab = tab_index
+        view.last_frame = current_frame
 
-        logger.debug("Initializing view: %s, tab=%d (changed=%s), refresh=%s", view, tab_index, output_changed, refresh)
+        logger.debug("Initializing view: %s, tab=%d (changed=%s), refresh=%s", view, tab_index, image_changed, refresh)
 
         if refresh:
             view.outputs.clear()
@@ -290,7 +291,7 @@ class _PluginAPI(QObject):
         with self.__workspace.env.use():
             view.on_current_voutput_changed(self.current_voutput, tab_index)
 
-        if view.pixmap_item.pixmap().isNull() or output_changed or refresh:
+        if view.pixmap_item.pixmap().isNull() or image_changed or refresh:
             with self.__workspace.env.use(), view.outputs[tab_index].get_frame(current_frame) as frame:
                 logger.debug("Rendering initial frame %d for view", current_frame)
                 view.on_current_frame_changed(current_frame, frame)

@@ -17,17 +17,7 @@ import vapoursynth as vs
 from jetpytools import copy_signature
 from pydantic import BaseModel
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import (
-    QAction,
-    QContextMenuEvent,
-    QCursor,
-    QImage,
-    QKeyEvent,
-    QMouseEvent,
-    QPixmap,
-    QShortcut,
-    QShowEvent,
-)
+from PySide6.QtGui import QAction, QContextMenuEvent, QCursor, QImage, QKeyEvent, QMouseEvent, QPixmap, QShortcut
 from PySide6.QtWidgets import QGraphicsView, QWidget
 from shiboken6 import Shiboken
 
@@ -418,12 +408,6 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
         self.api = api
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-    def showEvent(self, event: QShowEvent) -> None:
-        super().showEvent(event)
-
-        with self.api.vs_context():
-            self.api._init_plugin(self)
-
     @property
     def settings(self) -> PluginSettings[TGlobalSettings, TLocalSettings]:
         """Get the settings wrapper for lazy, always-fresh access."""
@@ -532,6 +516,7 @@ class PluginGraphicsView(BaseGraphicsView):
 
         self.outputs = dict[int, vs.VideoNode]()
         self.current_tab = -1
+        self.last_frame = -1
 
         self.api.register_on_destroy(self.outputs.clear)
 

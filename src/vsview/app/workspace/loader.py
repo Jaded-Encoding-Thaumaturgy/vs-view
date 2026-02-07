@@ -137,9 +137,6 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.plugin_splitter.rightPanelBecameVisible.connect(self._init_visible_plugins)
         self.plugin_splitter.pluginTabChanged.connect(lambda _: self._init_visible_plugins())
 
-        # Connect dock tab activation signal for tabified docks
-        self.dock_container.tabifiedDockWidgetActivated.connect(lambda _: self._init_visible_plugins())
-
         self.dock_container.setCentralWidget(self.plugin_splitter)
         self.content_layout.addWidget(self.dock_container)
 
@@ -522,13 +519,13 @@ class LoaderWorkspace[T](BaseWorkspace):
             if self.global_settings.view_tools.docks.get(dock.objectName(), True):
                 dock.setVisible(checked)
 
-    def _init_visible_plugins(self) -> None:
+    def _init_visible_plugins(self, refresh: bool = False) -> None:
         if not self.outputs_manager.current_voutput:
             return  # No content loaded yet
 
         with self.env.use():
             for plugin in self.plugins:
-                self.api._init_plugin(plugin)
+                self.api._init_plugin(plugin, refresh=refresh)
 
     def _on_tab_changed(
         self,
