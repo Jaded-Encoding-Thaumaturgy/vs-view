@@ -515,38 +515,6 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         return voutputs, aoutputs
 
-    def _on_dock_toggle(self, checked: bool) -> None:
-        for dock in self.docks:
-            if self.global_settings.view_tools.docks.get(dock.objectName(), True):
-                dock.setVisible(checked)
-
-    def _init_visible_plugins(self, refresh: bool = False) -> None:
-        if not self.outputs_manager.current_voutput:
-            return  # No content loaded yet
-
-        with self.env.use():
-            for plugin in self.plugins:
-                self.api._init_plugin(plugin, refresh=refresh)
-
-    def _on_splitter_closed(self) -> None:
-        if isinstance(w := self.plugin_splitter.plugin_tabs.currentWidget(), WidgetPluginBase):
-            w.on_hide()
-
-    def _on_splitter_tab_changed(self, new_index: int, old_index: int) -> None:
-        if isinstance(w := self.plugin_splitter.plugin_tabs.widget(new_index), WidgetPluginBase):
-            with self.env.use():
-                self.api._init_plugin(w)
-
-        if isinstance(w := self.plugin_splitter.plugin_tabs.widget(old_index), WidgetPluginBase):
-            w.on_hide()
-
-    def _on_dock_visibility_changed(self, visible: bool, p: WidgetPluginBase) -> None:
-        if visible:
-            with self.env.use():
-                self.api._init_plugin(p)
-        else:
-            p.on_hide()
-
     def _on_tab_changed(
         self,
         index: int,
@@ -713,6 +681,38 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.plugin_splitter.plugin_tabs.setTabVisible(
                 i, self.global_settings.view_tools.panels.get(plugin_type.identifier, True)
             )
+
+    def _on_dock_toggle(self, checked: bool) -> None:
+        for dock in self.docks:
+            if self.global_settings.view_tools.docks.get(dock.objectName(), True):
+                dock.setVisible(checked)
+
+    def _on_dock_visibility_changed(self, visible: bool, p: WidgetPluginBase) -> None:
+        if visible:
+            with self.env.use():
+                self.api._init_plugin(p)
+        else:
+            p.on_hide()
+
+    def _init_visible_plugins(self, refresh: bool = False) -> None:
+        if not self.outputs_manager.current_voutput:
+            return  # No content loaded yet
+
+        with self.env.use():
+            for plugin in self.plugins:
+                self.api._init_plugin(plugin, refresh=refresh)
+
+    def _on_splitter_closed(self) -> None:
+        if isinstance(w := self.plugin_splitter.plugin_tabs.currentWidget(), WidgetPluginBase):
+            w.on_hide()
+
+    def _on_splitter_tab_changed(self, new_index: int, old_index: int) -> None:
+        if isinstance(w := self.plugin_splitter.plugin_tabs.widget(new_index), WidgetPluginBase):
+            with self.env.use():
+                self.api._init_plugin(w)
+
+        if isinstance(w := self.plugin_splitter.plugin_tabs.widget(old_index), WidgetPluginBase):
+            w.on_hide()
 
 
 class VSEngineWorkspace[T](LoaderWorkspace[T]):
