@@ -136,6 +136,11 @@ class PluginAPI(_PluginAPI):
         raise NotImplementedError
 
     @property
+    def current_timeline_mode(self) -> Literal["frame", "time"]:
+        """Return the current timeline mode."""
+        return self.__workspace.tbar.timeline.mode
+
+    @property
     def current_video_index(self) -> int:
         """Return the index of the currently selected tab."""
         return self.__workspace.outputs_manager.current_video_index
