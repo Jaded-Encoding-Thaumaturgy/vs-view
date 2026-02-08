@@ -485,7 +485,7 @@ class TimelineSettings(BaseModel):
         DoubleSpin(
             label="Display Scale",
             min=1.0,
-            max=10.0,
+            max=2.5,
             suffix="x",
             decimals=2,
             tooltip="Display scale for the timeline",
