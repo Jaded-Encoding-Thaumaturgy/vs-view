@@ -250,7 +250,7 @@ class PlaybackManager(QObject):
             else:
                 self.statusLoadingStarted.emit(f"Rendering frame {n}...")
 
-                with voutput.prepared_clip.get_frame(n) as frame:
+                with self._tbar.timeline.block_events(), voutput.prepared_clip.get_frame(n) as frame:
                     logger.debug("Frame %d rendered", n)
                     image = voutput.packer.frame_to_qimage(frame)
 
