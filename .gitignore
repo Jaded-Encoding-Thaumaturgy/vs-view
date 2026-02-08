@@ -217,4 +217,4 @@ __marimo__/
 
 # vsjet
 .vsjet/
-src/vsview/global_settings.json
+# src/vsview/global_settings.json

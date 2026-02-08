@@ -70,6 +70,7 @@ include = ["README.md", "LICENSE", "pyproject.toml"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/vsview"]
 exclude = ["README.md"]
+artifacts = ["src/vsview/global_settings.json"]
 
 [tool.hatch.version]
 source = "versioningit"
