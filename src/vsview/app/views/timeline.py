@@ -9,7 +9,7 @@ from datetime import timedelta
 from functools import cache
 from logging import getLogger
 from math import floor
-from typing import Any, Literal, NamedTuple, Protocol, Self
+from typing import Any, Literal, NamedTuple, Self
 
 from jetpytools import clamp, cround
 from PySide6.QtCore import QEvent, QLineF, QRectF, QSignalBlocker, QSize, Qt, QTime, Signal
@@ -153,8 +153,6 @@ class Notch[T: (Time, Frame)]:
     Represents a notch marker on the timeline.
 
     The color attribute is used for custom/provider notches (bookmarks, keyframes, etc.) that need to stand out.
-
-    Main timeline notches use the palette's WindowText color instead.
     """
 
     def __init__(
@@ -169,13 +167,13 @@ class Notch[T: (Time, Frame)]:
         self.line = line if line is not None else QLineF()
         self.label = label
 
+    def __hash__(self) -> int:
+        return hash(self.data)
 
-class NotchProvider(Protocol):
-    """Protocol defining what a provider of notches must implement."""
-
-    @property
-    def is_notches_visible(self) -> bool: ...
-    def get_notches(self) -> list[Notch[Any]]: ...
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Notch):
+            return NotImplemented
+        return self.data == other.data
 
 
 class NotchesCacheKey(NamedTuple):
@@ -223,6 +221,7 @@ class Timeline(QWidget):
         self.setAutoFillBackground(True)
 
         self.rect_f = QRectF()
+        self.scroll_rect = QRectF()
 
         # Visual Metrics (scaled by display_scale)
         self.display_scale = SettingsManager.global_settings.timeline.display_scale
@@ -237,7 +236,7 @@ class Timeline(QWidget):
         # Internal cursor state (can be Frame, Time, or raw int pixels)
         self._cursor_val: int | Frame | Time = 0
 
-        self.notches = dict[NotchProvider, list[Notch[Any]]]()
+        self.notches = dict[str, set[Notch[Any]]]()
 
         # Optimization attributes
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
@@ -331,7 +330,7 @@ class Timeline(QWidget):
         cache_entry = self.notches_cache[self.mode]
 
         # Unpack value components from the cache
-        scroll_rect, labels_notches, rects_to_draw = cache_entry.value
+        self.scroll_rect, labels_notches, rects_to_draw = cache_entry.value
 
         # Check if cache needs regeneration (if size or total frames changed)
         if setup_key != cache_entry.key:
@@ -388,7 +387,7 @@ class Timeline(QWidget):
                 raise NotImplementedError
 
             # Define the scrollable area rectangle
-            scroll_rect = QRectF(
+            self.scroll_rect = QRectF(
                 self.rect_f.left(), lnotch_y + self.notch_scroll_interval, self.rect_f.width(), self.scroll_height
             )
 
@@ -451,19 +450,13 @@ class Timeline(QWidget):
             # Update the cache with the new values
             self.notches_cache[self.mode] = NotchesCacheEntry(
                 setup_key,
-                NotchesCacheValue(scroll_rect, labels_notches, rects_to_draw),
+                NotchesCacheValue(self.scroll_rect, labels_notches, rects_to_draw),
             )
 
         # Define the cursor line position
         cursor_line = QLineF(
-            self.cursor_x, scroll_rect.top(), self.cursor_x, scroll_rect.top() + scroll_rect.height() - 1
+            self.cursor_x, self.scroll_rect.top(), self.cursor_x, self.scroll_rect.top() + self.scroll_rect.height() - 1
         )
-
-        # TODO: Normalize lines for external notch providers
-        for provider, provider_notches in self.notches.items():
-            if not provider.is_notches_visible:
-                continue
-            # provider_notches.norm_lines(self, scroll_rect)
 
         # DRAWING START
 
@@ -483,13 +476,10 @@ class Timeline(QWidget):
             painter.drawLine(notch.line)
 
         # Draw scroll bar area
-        painter.fillRect(scroll_rect, self.palette().color(self.SCROLL_BAR_COLOR))
+        painter.fillRect(self.scroll_rect, self.palette().color(self.SCROLL_BAR_COLOR))
 
-        # TODO: Draw custom notches from providers (e.g. bookmarks, keyframes)
-        for provider, provider_notches in self.notches.items():
-            if not provider.is_notches_visible:
-                continue
-
+        # Draw custom notches from providers (e.g. bookmarks, keyframes)
+        for provider_notches in self.notches.values():
             for p_notch in provider_notches:
                 painter.setPen(p_notch.color)
                 painter.drawLine(p_notch.line)
@@ -659,6 +649,20 @@ class Timeline(QWidget):
 
         except (ZeroDivisionError, ValueError):
             return 0
+
+    def add_notch(self, key: str, data: Frame | Time, color: Qt.GlobalColor | QColor | QRgba64 | str | int) -> None:
+        cursor_x = self.cursor_to_x(data)
+        cursor_line = QLineF(
+            cursor_x,
+            self.scroll_rect.top(),
+            cursor_x,
+            self.scroll_rect.top() + self.scroll_rect.height() - 1,
+        )
+
+        self.notches.setdefault(key, set()).add(Notch(data, color, cursor_line))  # pyright: ignore[reportArgumentType]
+
+    def discard_notch(self, key: str, data: Frame | Time) -> None:
+        self.notches.get(key, set()).discard(Notch(data))  # pyright: ignore[reportArgumentType]
 
     @contextmanager
     def block_events(self) -> Iterator[None]:

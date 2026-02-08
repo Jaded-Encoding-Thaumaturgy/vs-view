@@ -5,7 +5,7 @@ Plugin API for VSView.
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -17,7 +17,18 @@ import vapoursynth as vs
 from jetpytools import copy_signature
 from pydantic import BaseModel
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QAction, QContextMenuEvent, QCursor, QImage, QKeyEvent, QMouseEvent, QPixmap, QShortcut
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QContextMenuEvent,
+    QCursor,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPixmap,
+    QRgba64,
+    QShortcut,
+)
 from PySide6.QtWidgets import QGraphicsView, QWidget
 from shiboken6 import Shiboken
 
@@ -28,7 +39,7 @@ from vsview.app.views.timeline import Frame, Time
 from vsview.app.views.video import BaseGraphicsView
 from vsview.vsenv.loop import run_in_loop
 
-from ._interface import _GraphicsViewProxy, _PluginAPI, _PluginBaseMeta, _ViewportProxy
+from ._interface import _GraphicsViewProxy, _PluginAPI, _PluginBaseMeta, _TimelineProxy, _ViewportProxy
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +167,46 @@ class GraphicsViewProxy(_GraphicsViewProxy):
         return self.__view.mapFromScene(*args, **kwargs)
 
 
+class TimelineProxy(_TimelineProxy):
+    """Proxy for the timeline."""
+
+    def add_notch(
+        self,
+        identifier: str,
+        data: timedelta | int | Iterable[timedelta | int],
+        color: Qt.GlobalColor | QColor | QRgba64 | str | int,
+    ) -> None:
+        """
+        Add notch(es) to the timeline.
+
+        Args:
+            identifier: The identifier of the notch.
+            data: The data of the notch.
+            color: The color of the notch.
+        """
+        data = [data] if isinstance(data, (timedelta, int)) else data
+
+        for d in data:
+            self.__timeline.add_notch(identifier, Frame(d) if isinstance(d, int) else Time(seconds=d.seconds), color)
+
+        self.__timeline.update()
+
+    def discard_notch(self, identifier: str, data: timedelta | int | Iterable[timedelta | int]) -> None:
+        """
+        Discard notch(es) from the timeline.
+
+        Args:
+            identifier: The identifier of the notch.
+            data: The data of the notch.
+        """
+        data = [data] if isinstance(data, (timedelta, int)) else data
+
+        for d in data:
+            self.__timeline.discard_notch(identifier, Frame(d) if isinstance(d, int) else Time(seconds=d.seconds))
+
+        self.__timeline.update()
+
+
 class PluginAPI(_PluginAPI):
     """API for plugins to interact with the workspace."""
 
@@ -238,6 +289,11 @@ class PluginAPI(_PluginAPI):
     def current_view(self) -> GraphicsViewProxy:
         """Return a proxy for the current view."""
         return GraphicsViewProxy(self.__workspace, self.__workspace.tab_manager.current_view)
+
+    @property
+    def timeline(self) -> TimelineProxy:
+        """Return a proxy for the timeline."""
+        return TimelineProxy(self.__workspace, self.__workspace.tbar.timeline)
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """

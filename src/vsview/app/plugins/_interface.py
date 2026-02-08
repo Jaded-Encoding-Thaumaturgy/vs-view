@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
 from vsview.app.outputs import VideoOutput
 from vsview.app.settings import SettingsManager
 from vsview.app.utils import ObjectType
+from vsview.app.views.timeline import Timeline
 from vsview.app.views.video import GraphicsView
 from vsview.vsenv.loop import run_in_loop
 
@@ -444,3 +445,10 @@ class _ViewportProxy(QObject):
         self.__workspace = workspace
         self.__viewport = viewport
         self.__cursor_reset_conn: QMetaObject.Connection | None = None
+
+
+class _TimelineProxy(QObject):
+    def __init__(self, workspace: LoaderWorkspace[Any], timeline: Timeline) -> None:
+        super().__init__()
+        self.__workspace = workspace
+        self.__timeline = timeline
