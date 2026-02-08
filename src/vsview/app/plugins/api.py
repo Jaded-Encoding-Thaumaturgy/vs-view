@@ -610,7 +610,7 @@ class PluginGraphicsView(BaseGraphicsView):
     @run_in_loop(return_future=False)
     def update_display(self, image: QPixmap) -> None:
         """Update the UI with the new image on the main thread."""
-        self.pixmap_item.setPixmap(image)
+        self.set_pixmap(image)
 
     def refresh(self) -> None:
         """Refresh the view."""
