@@ -5,7 +5,7 @@ Plugin API for VSView.
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -170,39 +170,63 @@ class GraphicsViewProxy(_GraphicsViewProxy):
 class TimelineProxy(_TimelineProxy):
     """Proxy for the timeline."""
 
+    @staticmethod
+    def _norm_data(
+        data: timedelta | int | Sequence[timedelta | int | tuple[timedelta | int, timedelta | int]],
+    ) -> Iterator[tuple[Frame | Time, Frame | Time | None]]:
+        data = [data] if isinstance(data, (timedelta, int)) else data
+
+        for d in data:
+            if isinstance(d, (timedelta, int)):
+                start, end = d, None
+            else:
+                start, end = d
+
+            start, end = (
+                Frame(start) if isinstance(start, int) else Time(seconds=start.seconds),
+                Frame(end)
+                if isinstance(end, int)
+                else Time(seconds=end.seconds)
+                if isinstance(end, timedelta)
+                else None,
+            )
+            yield start, end
+
     def add_notch(
         self,
         identifier: str,
-        data: timedelta | int | Iterable[timedelta | int],
-        color: Qt.GlobalColor | QColor | QRgba64 | str | int,
+        data: timedelta | int | Sequence[timedelta | int | tuple[timedelta | int, timedelta | int]],
+        color: Qt.GlobalColor | QColor | QRgba64 | str | int = Qt.GlobalColor.black,
+        label: str = "",
     ) -> None:
         """
         Add notch(es) to the timeline.
 
         Args:
             identifier: The identifier of the notch.
-            data: The data of the notch.
+            data: The data of the notch (frame number or timedelta or range notches).
             color: The color of the notch.
+            label: The label of the notch.
         """
-        data = [data] if isinstance(data, (timedelta, int)) else data
-
-        for d in data:
-            self.__timeline.add_notch(identifier, Frame(d) if isinstance(d, int) else Time(seconds=d.seconds), color)
+        for start, end in self._norm_data(data):
+            self.__timeline.add_notch(identifier, start, end, color=color, label=label)
 
         self.__timeline.update()
 
-    def discard_notch(self, identifier: str, data: timedelta | int | Iterable[timedelta | int]) -> None:
+    def discard_notch(
+        self,
+        identifier: str,
+        data: timedelta | int | Sequence[timedelta | int | tuple[timedelta | int, timedelta | int]],
+    ) -> None:
         """
         Discard notch(es) from the timeline.
 
         Args:
             identifier: The identifier of the notch.
-            data: The data of the notch.
+            data: The data of the notch (frame number or timedelta or range notches).
         """
-        data = [data] if isinstance(data, (timedelta, int)) else data
-
-        for d in data:
-            self.__timeline.discard_notch(identifier, Frame(d) if isinstance(d, int) else Time(seconds=d.seconds))
+        for start, end in self._norm_data(data):
+            self.__timeline.discard_notch(identifier, start, end)
 
         self.__timeline.update()
 

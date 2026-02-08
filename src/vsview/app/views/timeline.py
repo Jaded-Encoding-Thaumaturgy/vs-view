@@ -158,38 +158,26 @@ class Notch[T: (Time, Frame)]:
     def __init__(
         self,
         data: T,
+        end_data: T | None = None,
         color: Qt.GlobalColor | QColor | QRgba64 | str | int | None = None,
         line: QLineF | None = None,
+        end_line: QLineF | None = None,
         label: str = "",
     ) -> None:
         self.data: T = data
+        self.end_data: T | None = end_data
         self.color = QColor(color) if color is not None else QColor(Qt.GlobalColor.black)
         self.line = line if line is not None else QLineF()
+        self.end_line = end_line
         self.label = label
 
     def __hash__(self) -> int:
-        return hash(self.data)
+        return hash((self.data, self.end_data))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Notch):
             return NotImplemented
-        return self.data == other.data
-
-
-class NotchesCacheKey(NamedTuple):
-    rect: QRectF
-    total_frames: int
-
-
-class NotchesCacheValue[T: (Time, Frame)](NamedTuple):
-    scroll_rect: QRectF
-    labels_notches: list[Notch[T]]
-    rects_to_draw: list[tuple[QRectF, str]]
-
-
-class NotchesCacheEntry[T: (Time, Frame)](NamedTuple):
-    key: NotchesCacheKey
-    value: NotchesCacheValue[T]
+        return (self.data, self.end_data) == (other.data, other.end_data)
 
 
 class Timeline(QWidget):
@@ -650,7 +638,14 @@ class Timeline(QWidget):
         except (ZeroDivisionError, ValueError):
             return 0
 
-    def add_notch(self, key: str, data: Frame | Time, color: Qt.GlobalColor | QColor | QRgba64 | str | int) -> None:
+    def add_notch(
+        self,
+        key: str,
+        data: Frame | Time,
+        end_data: Frame | Time | None = None,
+        color: Qt.GlobalColor | QColor | QRgba64 | str | int = Qt.GlobalColor.black,
+        label: str = "",
+    ) -> None:
         cursor_x = self.cursor_to_x(data)
         cursor_line = QLineF(
             cursor_x,
@@ -659,10 +654,28 @@ class Timeline(QWidget):
             self.scroll_rect.top() + self.scroll_rect.height() - 1,
         )
 
-        self.notches.setdefault(key, set()).add(Notch(data, color, cursor_line))  # pyright: ignore[reportArgumentType]
+        if end_data is not None:
+            end_x = self.cursor_to_x(end_data)
+            end_line = QLineF(
+                end_x,
+                self.scroll_rect.top(),
+                end_x,
+                self.scroll_rect.top() + self.scroll_rect.height() - 1,
+            )
+        else:
+            end_line = None
 
-    def discard_notch(self, key: str, data: Frame | Time) -> None:
-        self.notches.get(key, set()).discard(Notch(data))  # pyright: ignore[reportArgumentType]
+        self.notches.setdefault(key, set()).add(
+            Notch(data, end_data, color, cursor_line, end_line, label)  # pyright: ignore[reportArgumentType]
+        )
+
+    def discard_notch(
+        self,
+        key: str,
+        data: Frame | Time,
+        end_data: Frame | Time | None = None,
+    ) -> None:
+        self.notches.get(key, set()).discard(Notch(data, end_data))  # pyright: ignore[reportArgumentType]
 
     @contextmanager
     def block_events(self) -> Iterator[None]:
