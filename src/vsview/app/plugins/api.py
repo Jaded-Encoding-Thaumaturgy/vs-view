@@ -110,13 +110,13 @@ class GraphicsViewProxy(_GraphicsViewProxy):
 
     @property
     def pixmap(self) -> QPixmap:
-        """Return a copy of the pixmap"""
-        return self.__view.pixmap_item.pixmap().copy()
+        """Return the pixmap (implicitly shared)."""
+        return self.__view.pixmap_item.pixmap()
 
     @property
     def image(self) -> QImage:
         """Return a copy of the image."""
-        return self.pixmap.toImage()
+        return self.__view.pixmap_item.pixmap().toImage()
 
     class ViewportProxy(_ViewportProxy):
         """Proxy for a viewport."""
