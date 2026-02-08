@@ -188,6 +188,25 @@ class Notch[T: (Time, Frame)]:
             return NotImplemented
         return (self.data, self.end_data) == (other.data, other.end_data)
 
+    def draw(self, painter: QPainter, scroll_rect: QRectF, range_alpha: int = 80, cosmetic: bool = False) -> None:
+        pen = QPen(self.color, 1)
+
+        if cosmetic:
+            pen.setCosmetic(True)
+
+        painter.setPen(pen)
+
+        if self.end_line is not None:
+            x1, x2 = self.line.x1(), self.end_line.x1()
+            fill_color = QColor(self.color)
+            fill_color.setAlpha(range_alpha)
+            painter.fillRect(QRectF(min(x1, x2), scroll_rect.top(), abs(x2 - x1), scroll_rect.height()), fill_color)
+            painter.drawLine(self.line)
+            painter.drawLine(self.end_line)
+        else:
+            painter.drawLine(self.line)
+
+
 
 class Timeline(QWidget):
     # Signal emits (Frame, Time) when the user clicks on the timeline
@@ -478,8 +497,7 @@ class Timeline(QWidget):
         # Draw custom notches from providers (e.g. bookmarks, keyframes)
         for provider_notches in self.notches.values():
             for p_notch in provider_notches:
-                painter.setPen(p_notch.color)
-                painter.drawLine(p_notch.line)
+                p_notch.draw(painter, self.scroll_rect)
 
         # Draw current frame cursor
         painter.setPen(self.palette().color(self.BACKGROUND_COLOR))
