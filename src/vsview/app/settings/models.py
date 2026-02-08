@@ -514,6 +514,38 @@ class TimelineSettings(BaseModel):
         ),
     ] = 24
 
+    view_hover_zoom: Annotated[
+        bool,
+        Checkbox(
+            label="Hover Preview",
+            text="Show zoomed preview on hover",
+            tooltip="Show a zoomed preview of the timeline and notch labels when hovering.",
+        ),
+    ] = True
+
+    hover_zoom_factor: Annotated[
+        float,
+        DoubleSpin(
+            label="Hover Zoom Factor",
+            min=1.0,
+            max=20.0,
+            suffix="x",
+            decimals=1,
+            tooltip="Magnification factor for the hover preview.",
+        ),
+    ] = 8.0
+
+    hover_zoom_radius: Annotated[
+        int,
+        Spin(
+            label="Hover Zoom Radius",
+            min=10,
+            max=500,
+            suffix=" px",
+            tooltip="Radius of the zoomed area in pixels.",
+        ),
+    ] = 100
+
 
 class PlaybackSettings(BaseModel):
     """Settings for the video playback stuff"""
