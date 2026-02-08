@@ -165,7 +165,7 @@ class BaseGraphicsView(QGraphicsView):
 
     def _setup_shortcuts(self) -> None:
         sm = ShortcutManager()
-        sm.register_shortcut(ActionID.RESET_ZOOM, lambda: self.set_zoom(1.0), self)
+        sm.register_shortcut(ActionID.RESET_ZOOM, lambda: self.slider.setValue(self._zoom_to_slider(1.0)), self)
 
         sm.register_action(ActionID.TOGGLE_SAR, self.apply_sar_action)
         sm.register_action(ActionID.AUTOFIT, self.autofit_action)
