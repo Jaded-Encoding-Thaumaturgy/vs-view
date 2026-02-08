@@ -372,6 +372,8 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         is_rgb30 = image.format() == QImage.Format.Format_RGB30
         max_val = 1023 if is_rgb30 else 255
 
+        self.rgb_group.setTitle(f"Rendered ({self.api.packer.vs_format.name})")
+
         r_f, g_f, b_f = color.redF(), color.greenF(), color.blueF()
         r, g, b = round(r_f * max_val), round(g_f * max_val), round(b_f * max_val)
 
