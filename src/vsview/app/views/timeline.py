@@ -495,7 +495,7 @@ class Timeline(QWidget):
             else:
                 text = self.x_to_time(self.hover_x).to_ts("{H:02d}:{M:02d}:{S:02d}.{ms:03d}")
 
-            painter.setPen(QPen(self.palette().color(self.TEXT_COLOR), 1, Qt.PenStyle.DashLine))
+            painter.setPen(QPen(self.palette().color(self.BACKGROUND_COLOR), 1, Qt.PenStyle.DashLine))
             painter.drawLine(QLineF(self.hover_x, self.rect_f.top(), self.hover_x, self.rect_f.bottom()))
 
             fm = painter.fontMetrics()
