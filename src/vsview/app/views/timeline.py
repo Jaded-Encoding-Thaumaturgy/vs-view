@@ -469,10 +469,8 @@ class Timeline(QWidget):
                 Notch.CacheValue(self.scroll_rect, labels_notches, rects_to_draw),
             )
 
-        # Define the cursor line position
-        cursor_line = QLineF(
-            self.cursor_x, self.scroll_rect.top(), self.cursor_x, self.scroll_rect.top() + self.scroll_rect.height() - 1
-        )
+        # Define the cursor line position (contained within scroll_rect)
+        cursor_line = QLineF(self.cursor_x, self.scroll_rect.top(), self.cursor_x, self.scroll_rect.bottom())
 
         # DRAWING START
 
@@ -511,7 +509,7 @@ class Timeline(QWidget):
                 text = self.x_to_time(self.hover_x).to_ts("{H:02d}:{M:02d}:{S:02d}.{ms:03d}")
 
             painter.setPen(QPen(self.palette().color(self.BACKGROUND_COLOR), 1, Qt.PenStyle.DashLine))
-            painter.drawLine(QLineF(self.hover_x, self.rect_f.top(), self.hover_x, self.rect_f.bottom()))
+            painter.drawLine(QLineF(self.hover_x, self.scroll_rect.top(), self.hover_x, self.scroll_rect.bottom()))
 
             fm = painter.fontMetrics()
             text_width = fm.horizontalAdvance(text)
