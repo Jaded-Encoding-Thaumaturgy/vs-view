@@ -65,6 +65,8 @@ class PositionLabel(QLabel):
     def __init__(self, parent: QWidget, font_size: int = 12) -> None:
         super().__init__("Pos: —, —", parent)
         self.setFont(get_monospace_font(font_size))
+        self.setCursor(Qt.CursorShape.IBeamCursor)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._cursor_pos = QPoint(0, 0)
 
     @property
