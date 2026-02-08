@@ -227,6 +227,9 @@ class Timeline(QWidget):
     TEXT_COLOR = QPalette.ColorRole.WindowText
     SCROLL_BAR_COLOR = QPalette.ColorRole.WindowText
 
+    HOVER_TIME_FORMAT = "{H:02d}:{M:02d}:{S:02d}.{ms:03d}"
+    HOVER_PADDING_H = 6
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
@@ -506,7 +509,7 @@ class Timeline(QWidget):
             if self.mode == "frame":
                 text = str(self.x_to_frame(self.hover_x))
             else:
-                text = self.x_to_time(self.hover_x).to_ts("{H:02d}:{M:02d}:{S:02d}.{ms:03d}")
+                text = self.x_to_time(self.hover_x).to_ts(self.HOVER_TIME_FORMAT)
 
             painter.setPen(QPen(self.palette().color(self.BACKGROUND_COLOR), 1, Qt.PenStyle.DashLine))
             painter.drawLine(QLineF(self.hover_x, self.scroll_rect.top(), self.hover_x, self.scroll_rect.bottom()))
@@ -515,15 +518,15 @@ class Timeline(QWidget):
             text_width = fm.horizontalAdvance(text)
             text_height = fm.height()
 
-            rect_x = self.hover_x - (text_width / 2) - 3
+            rect_x = self.hover_x - (text_width / 2) - (self.HOVER_PADDING_H / 2)
             if rect_x < 0:
                 rect_x = 0
-            elif rect_x + text_width + 6 > self.rect_f.width():
-                rect_x = self.rect_f.width() - text_width - 6
+            elif rect_x + text_width + self.HOVER_PADDING_H > self.rect_f.width():
+                rect_x = self.rect_f.width() - text_width - self.HOVER_PADDING_H
 
             rect_y = self.rect_f.top()
 
-            bg_rect = QRectF(rect_x, rect_y, text_width + 6, text_height)
+            bg_rect = QRectF(rect_x, rect_y, text_width + self.HOVER_PADDING_H, text_height)
             painter.fillRect(bg_rect, self.palette().color(self.BACKGROUND_COLOR))
             painter.setPen(self.palette().color(self.TEXT_COLOR))
             painter.drawText(bg_rect, Qt.AlignmentFlag.AlignCenter, text)
