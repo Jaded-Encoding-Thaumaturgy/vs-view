@@ -608,9 +608,9 @@ class PluginGraphicsView(BaseGraphicsView):
         self.api.register_on_destroy(self.outputs.clear)
 
     @run_in_loop(return_future=False)
-    def update_display(self, image: QPixmap) -> None:
+    def update_display(self, image: QImage) -> None:
         """Update the UI with the new image on the main thread."""
-        self.set_pixmap(image)
+        self.set_pixmap(QPixmap.fromImage(image))
 
     def refresh(self) -> None:
         """Refresh the view."""
@@ -638,7 +638,7 @@ class PluginGraphicsView(BaseGraphicsView):
         Execution Thread: **Main or Background**.
         If you need to update the UI, use the `@run_in_loop` decorator.
         """
-        self.update_display(QPixmap.fromImage(self.api.packer.frame_to_qimage(f)).copy())
+        self.update_display(self.api.packer.frame_to_qimage(f).copy())
 
     def get_node(self, clip: vs.VideoNode) -> vs.VideoNode:
         """
