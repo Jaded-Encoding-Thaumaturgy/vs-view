@@ -149,11 +149,20 @@ def generate_label_format(notch_interval_t: Time, end_time: Time) -> str:
 
 
 class Notch[T: (Time, Frame)]:
-    """
-    Represents a notch marker on the timeline.
+    """Represents a notch marker on the timeline."""
 
-    The color attribute is used for custom/provider notches (bookmarks, keyframes, etc.) that need to stand out.
-    """
+    class CacheKey(NamedTuple):
+        rect: QRectF
+        total_frames: int
+
+    class CacheValue[T0: (Time, Frame)](NamedTuple):
+        scroll_rect: QRectF
+        labels_notches: list[Notch[T0]]
+        rects_to_draw: list[tuple[QRectF, str]]
+
+    class CacheEntry[T1: (Time, Frame)](NamedTuple):
+        key: Notch.CacheKey
+        value: Notch.CacheValue[T1]
 
     def __init__(
         self,
@@ -312,7 +321,7 @@ class Timeline(QWidget):
             self._draw_widget(painter)
 
     def _draw_widget(self, painter: QPainter) -> None:
-        setup_key = NotchesCacheKey(self.rect_f, self.total_frames)
+        setup_key = Notch.CacheKey(self.rect_f, self.total_frames)
 
         # Current cache entry for the current mode (Frame or Time)
         cache_entry = self.notches_cache[self.mode]
@@ -436,9 +445,9 @@ class Timeline(QWidget):
                 rects_to_draw.append((rect, label))
 
             # Update the cache with the new values
-            self.notches_cache[self.mode] = NotchesCacheEntry(
+            self.notches_cache[self.mode] = Notch.CacheEntry(
                 setup_key,
-                NotchesCacheValue(self.scroll_rect, labels_notches, rects_to_draw),
+                Notch.CacheValue(self.scroll_rect, labels_notches, rects_to_draw),
             )
 
         # Define the cursor line position
@@ -686,10 +695,10 @@ class Timeline(QWidget):
         finally:
             self.is_events_blocked = False
 
-    def _init_notches_cache(self) -> dict[Literal["frame", "time"], NotchesCacheEntry[Any]]:
+    def _init_notches_cache(self) -> dict[Literal["frame", "time"], Notch.CacheEntry[Any]]:
         return {
-            "frame": NotchesCacheEntry(NotchesCacheKey(QRectF(), -1), NotchesCacheValue(QRectF(), [], [])),
-            "time": NotchesCacheEntry(NotchesCacheKey(QRectF(), -1), NotchesCacheValue(QRectF(), [], [])),
+            "frame": Notch.CacheEntry(Notch.CacheKey(QRectF(), -1), Notch.CacheValue(QRectF(), [], [])),
+            "time": Notch.CacheEntry(Notch.CacheKey(QRectF(), -1), Notch.CacheValue(QRectF(), [], [])),
         }
 
     def _on_settings_changed(self) -> None:
