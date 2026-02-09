@@ -12,7 +12,7 @@ These features are present in VSPreview and need to be brought over.
 - [ ] Benchmark (Likely a wrapper for `vspipe`)
 - [x] SAR/DAR support
 - [ ] Cropping assistant
-- [ ] Alpha support
+- [x] Alpha support
 
 ## Planned Plugins
 
