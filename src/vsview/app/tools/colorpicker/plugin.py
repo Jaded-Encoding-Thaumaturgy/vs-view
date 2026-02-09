@@ -310,7 +310,8 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         with self.outputs[self.api.current_voutput].get_frame(self.api.current_frame) as vsframe:
             self.update_format_strings(vsframe)
 
-        pos = self.api.current_view.map_to_scene(local_pos).toPoint()
+        pos_f = self.api.current_view.map_to_scene(local_pos)
+        pos = QPoint(int(pos_f.x()), int(pos_f.y()))
 
         if (image := self.api.current_view.image).isNull() or not image.valid(pos):
             return
