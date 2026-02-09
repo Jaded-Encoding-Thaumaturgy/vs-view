@@ -126,7 +126,7 @@ def get_packer(method: str | None = None, bit_depth: int | None = None) -> Packe
     match method:
         case "vszip":
             if not _is_vszip_available():
-                logger.error("vszip plugin is not available")
+                logger.warning("vszip plugin is not available, falling back to Cython (8-bit) packer")
                 return CythonPacker(8)
 
             return VszipPacker(bit_depth)
