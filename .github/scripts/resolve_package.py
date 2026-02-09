@@ -31,9 +31,9 @@ def main() -> None:
     filtered = [p for p in all_pkgs if p["tag"] == target]
 
     if target == "vspackrgb":
-        is_vspackrgb = "is-vspackrgb='true'"
+        is_vspackrgb = "is-vspackrgb=true"
     else:
-        is_vspackrgb = "is-vspackrgb='false'"
+        is_vspackrgb = "is-vspackrgb=false"
 
         if not filtered:
             filtered.append({"tag": target, "package": f"vsview-{target}", "path": f"src/plugins/{target}"})
