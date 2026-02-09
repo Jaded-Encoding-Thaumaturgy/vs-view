@@ -91,25 +91,21 @@ class VszipPacker(Packer):
         return clip.vszip.PackRGB()
 
 
-class CythonPacker(Packer):
+class VSPackRGB(Packer):
+    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
+        return packrgb(clip, alpha, self.name)  # type: ignore[arg-type]
+
+
+class CythonPacker(VSPackRGB):
     name = "cython"
 
-    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
-        return packrgb(clip, alpha=alpha, backend="cython")
 
-
-class NumpyPacker(Packer):
+class NumpyPacker(VSPackRGB):
     name = "numpy"
 
-    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
-        return packrgb(clip, alpha=alpha, backend="numpy")
 
-
-class PythonPacker(Packer):
+class PythonPacker(VSPackRGB):
     name = "python"
-
-    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
-        return packrgb(clip, alpha=alpha, backend="python")
 
 
 @cache
