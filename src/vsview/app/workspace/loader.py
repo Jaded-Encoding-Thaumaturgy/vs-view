@@ -237,9 +237,10 @@ class LoaderWorkspace[T](BaseWorkspace):
         return super().deleteLater()
 
     def clear_environment(self) -> None:
-        with self.env.use():
-            for cb in self.cbs_on_destroy:
-                self.loop.from_thread(cb)
+        if self._env and not self._env.disposed:
+            with self._env.use():
+                for cb in self.cbs_on_destroy:
+                    self.loop.from_thread(cb)
 
         self.outputs_manager.clear()
 
