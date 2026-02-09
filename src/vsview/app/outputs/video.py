@@ -14,7 +14,7 @@ from jetpytools import cround
 from ..plugins.manager import PluginManager
 from ..settings import SettingsManager
 from ..utils import LRUCache, cache_clip
-from .packing import Packer
+from .packing import AlphaNotImplementedError, CythonPacker, Packer
 
 if TYPE_CHECKING:
     from ...api._helpers import VideoMetadata
@@ -60,13 +60,17 @@ class VideoOutput:
         if PluginManager.video_processor:
             clip = PluginManager.video_processor(api).prepare(clip)
 
-        if clip.format.id != vs.GRAY32:
+        if clip.format.id == vs.GRAY32:
+            self.prepared_clip = clip
+        else:
             try:
-                self.prepared_clip = self.packer.pack_clip(clip)
+                try:
+                    self.prepared_clip = self.packer.pack_clip(clip, self.vs_output.alpha)
+                except AlphaNotImplementedError as e:
+                    logger.warning("%s, falling back to Cython 8-bit", e)
+                    self.prepared_clip = CythonPacker(8).pack_clip(clip, self.vs_output.alpha)
             except Exception as e:
                 raise RuntimeError(f"Failed to pack clip with the message: '{e}'") from e
-        else:
-            self.prepared_clip = clip
 
         if cache_size := SettingsManager.global_settings.playback.cache_size:
             try:

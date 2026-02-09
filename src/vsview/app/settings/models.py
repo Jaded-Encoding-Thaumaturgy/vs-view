@@ -721,6 +721,17 @@ class ViewSettings(BaseModel):
         ),
     ] = [0.25, 0.5, 0.75, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
 
+    checkerboard_size: Annotated[
+        int,
+        Spin(
+            label="Checkerboard Size",
+            min=2,
+            max=256,
+            suffix=" px",
+            tooltip="The size of the checkerboard when displaying a clip with an alpha plane",
+        ),
+    ] = 16
+
 
 class WindowGeometry(BaseModel):
     """Window position and size."""

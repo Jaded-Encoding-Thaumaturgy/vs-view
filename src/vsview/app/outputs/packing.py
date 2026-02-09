@@ -18,21 +18,32 @@ from ..settings import SettingsManager
 logger = getLogger(__name__)
 
 
+class AlphaNotImplementedError(NotImplementedError):
+    """Alpha packing hasn't been implemented for this packer"""
+
+    packer: Packer
+
+    def __init__(self, packer: Packer) -> None:
+        super().__init__(f"The packer '{packer.__class__.__name__}' can't pack clip with alpha plane")
+        self.packer = packer
+
+
 class Packer(ABC):
     """Abstract base class for RGB packers."""
 
-    FORMAT_CONFIG: Mapping[int, tuple[vs.PresetVideoFormat, QImage.Format]] = {
-        8: (vs.RGB24, QImage.Format.Format_RGB32),
-        10: (vs.RGB30, QImage.Format.Format_RGB30),
+    FORMAT_CONFIG: Mapping[int, tuple[vs.PresetVideoFormat, vs.PresetVideoFormat, QImage.Format, QImage.Format]] = {
+        8: (vs.RGB24, vs.GRAY8, QImage.Format.Format_RGB32, QImage.Format.Format_ARGB32),
+        10: (vs.RGB30, vs.GRAY10, QImage.Format.Format_RGB30, QImage.Format.Format_A2RGB30_Premultiplied),
     }
 
     name: ClassVar[str]
 
     def __init__(self, bit_depth: int) -> None:
         self.bit_depth = bit_depth
-        self.vs_format, self.qt_format = Packer.FORMAT_CONFIG[bit_depth]
+        self.vs_format, self.vs_aformat, self.qt_format, self.qt_aformat = Packer.FORMAT_CONFIG[bit_depth]
 
     def to_rgb_planar(self, clip: vs.VideoNode, **kwargs: Any) -> vs.VideoNode:
+        """Converts clip to planar vs.RGB24 or vs.RGB30."""
         params = dict[str, Any](
             format=self.vs_format,
             dither_type=SettingsManager.global_settings.view.dither_type,
@@ -44,12 +55,20 @@ class Packer(ABC):
         return clip.resize.Point(**params | kwargs)
 
     @abstractmethod
-    def to_rgb_packed(self, clip: vs.VideoNode) -> vs.VideoNode: ...
+    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
+        """Converts planar vs.RGB24 or vs.RGB30 to interleaved BGRA32 or RGB30 to packed A2R10G10B10"""
 
-    def pack_clip(self, clip: vs.VideoNode) -> vs.VideoNode:
+    def pack_clip(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
+        if alpha is not None:
+            alpha = alpha.resize.Point(
+                format=self.vs_aformat,
+                dither_type=SettingsManager.global_settings.view.dither_type,
+            )
+
         planar = self.to_rgb_planar(clip)
-        packed = self.to_rgb_packed(planar)
-        return packed
+        packed = self.to_rgb_packed(planar, alpha)
+
+        return packed.std.SetFrameProp("VSViewHasAlpha", True) if alpha else packed
 
     def frame_to_qimage(self, frame: vs.VideoFrame) -> QImage:
         # QImage supports Buffer inputs
@@ -58,36 +77,39 @@ class Packer(ABC):
             frame.width,
             frame.height,
             frame.get_stride(0),
-            self.qt_format,
+            self.qt_aformat if frame.props.get("VSViewHasAlpha") else self.qt_format,
         )
 
 
 class VszipPacker(Packer):
     name = "vszip"
 
-    def to_rgb_packed(self, clip: vs.VideoNode) -> vs.VideoNode:
+    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
+        if alpha:
+            raise AlphaNotImplementedError(self)
+
         return clip.vszip.PackRGB()
 
 
 class CythonPacker(Packer):
     name = "cython"
 
-    def to_rgb_packed(self, clip: vs.VideoNode) -> vs.VideoNode:
-        return packrgb(clip, backend="cython")
+    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
+        return packrgb(clip, alpha=alpha, backend="cython")
 
 
 class NumpyPacker(Packer):
     name = "numpy"
 
-    def to_rgb_packed(self, clip: vs.VideoNode) -> vs.VideoNode:
-        return packrgb(clip, backend="numpy")
+    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
+        return packrgb(clip, alpha=alpha, backend="numpy")
 
 
 class PythonPacker(Packer):
     name = "python"
 
-    def to_rgb_packed(self, clip: vs.VideoNode) -> vs.VideoNode:
-        return packrgb(clip, backend="python")
+    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
+        return packrgb(clip, alpha=alpha, backend="python")
 
 
 @cache

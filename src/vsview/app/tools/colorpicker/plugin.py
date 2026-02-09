@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from vsview.api import IconName, IconReloadMixin, PluginAPI, Spin, VideoOutputProxy, WidgetPluginBase, run_in_loop
+from vsview.app.outputs.packing import Packer
 from vsview.app.utils import cache_clip
 from vsview.assets.utils import get_monospace_font
 
@@ -99,6 +100,9 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     COL_LABEL = 0
     COL_VALUES_START = 1
 
+    RGB30_FORMATS: tuple[QImage.Format, ...] = Packer.FORMAT_CONFIG[10][2:]
+    RGBA_FORMATS: tuple[QImage.Format, ...] = tuple(zip(*Packer.FORMAT_CONFIG.values()))[3]
+
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent, api)
         IconReloadMixin.__init__(self)
@@ -107,6 +111,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self.outputs = dict[VideoOutputProxy, CachedVideoNode]()
 
         self.current_num_planes = 0
+        self.current_rgb_cols = 3  # Track RGB columns (3 for RGB, 4 for RGBA)
 
         # Format strings for source values
         self.src_hex_fmt = ""
@@ -186,7 +191,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self.rgb_grid.setSpacing(2)
         self.groups_layout.addWidget(self.rgb_group)
 
-        # Initialize rendered group with fixed 3 columns
+        # Initialize grids
         self.setup_grid_rows(
             self.src_grid,
             self.src_labels,
@@ -199,7 +204,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             self.rgb_labels,
             self.rgb_copy_btns,
             ["Dec", "Norm", "Hex", "HLS", "HSV"],
-            3,
+            self.current_rgb_cols,
         )
 
         self.main_layout.addStretch()
@@ -370,38 +375,62 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             self._set_row_values(self.src_labels, "Norm", [self.src_norm_fmt.format(v) for v in norm_vals])
 
     def _update_rgb_labels(self, pos: QPoint, image: QImage) -> None:
+        img_format = image.format()
         color = image.pixelColor(pos)
-        is_rgb30 = image.format() == QImage.Format.Format_RGB30
+
+        is_rgb30 = img_format in self.RGB30_FORMATS
+        has_alpha = img_format in self.RGBA_FORMATS
         max_val = 1023 if is_rgb30 else 255
 
-        self.rgb_group.setTitle(f"Rendered ({self.api.packer.vs_format.name})")
+        # Rebuild grid if alpha state changed
+        required_cols = 4 if has_alpha else 3
+        if required_cols != self.current_rgb_cols:
+            self.current_rgb_cols = required_cols
+            self.setup_grid_rows(
+                self.rgb_grid,
+                self.rgb_labels,
+                self.rgb_copy_btns,
+                ["Dec", "Norm", "Hex", "HLS", "HSV"],
+                self.current_rgb_cols,
+            )
 
-        r_f, g_f, b_f = color.redF(), color.greenF(), color.blueF()
-        r, g, b = round(r_f * max_val), round(g_f * max_val), round(b_f * max_val)
+        self.rgb_group.setTitle(f"Rendered ({self.api.packer.vs_format.name}{'A' if has_alpha else ''})")
+
+        r_f, g_f, b_f, a_f = color.redF(), color.greenF(), color.blueF(), color.alphaF()
+        r, g, b, a = round(r_f * max_val), round(g_f * max_val), round(b_f * max_val), round(a_f * max_val)
 
         self.position_label.cursor_pos = pos
 
         rgb_norm = f"{{:.{self.settings.global_.decimals_nb}f}}"
-
         hex_fmt = f"{{:0{3 if is_rgb30 else 2}X}}"
-        self._set_row_values(self.rgb_labels, "Hex", [hex_fmt.format(r), hex_fmt.format(g), hex_fmt.format(b)])
-        self._set_row_values(self.rgb_labels, "Dec", [f"{r}", f"{g}", f"{b}"])
-        self._set_row_values(
-            self.rgb_labels, "Norm", [rgb_norm.format(r_f), rgb_norm.format(g_f), rgb_norm.format(b_f)]
-        )
+
+        # Build value lists based on alpha presence
+        hex_vals = [hex_fmt.format(r), hex_fmt.format(g), hex_fmt.format(b)]
+        dec_vals = [f"{r}", f"{g}", f"{b}"]
+        norm_vals = [rgb_norm.format(r_f), rgb_norm.format(g_f), rgb_norm.format(b_f)]
+
+        if has_alpha:
+            hex_vals.append(hex_fmt.format(a))
+            dec_vals.append(f"{a}")
+            norm_vals.append(rgb_norm.format(a_f))
+
+        self._set_row_values(self.rgb_labels, "Hex", hex_vals)
+        self._set_row_values(self.rgb_labels, "Dec", dec_vals)
+        self._set_row_values(self.rgb_labels, "Norm", norm_vals)
 
         hls = rgb_to_hls(r_f, g_f, b_f)
         hsv = rgb_to_hsv(r_f, g_f, b_f)
-        self._set_row_values(
-            self.rgb_labels,
-            "HLS",
-            [f"{int(hls[0] * 360)}°", f"{int(hls[1] * 100)}%", f"{int(hls[2] * 100)}%"],
-        )
-        self._set_row_values(
-            self.rgb_labels,
-            "HSV",
-            [f"{int(hsv[0] * 360)}°", f"{int(hsv[1] * 100)}%", f"{int(hsv[2] * 100)}%"],
-        )
+
+        # HLS/HSV always 3 values. Pad with "—" for alpha column.
+        hls_vals = [f"{int(hls[0] * 360)}°", f"{int(hls[1] * 100)}%", f"{int(hls[2] * 100)}%"]
+        hsv_vals = [f"{int(hsv[0] * 360)}°", f"{int(hsv[1] * 100)}%", f"{int(hsv[2] * 100)}%"]
+
+        if has_alpha:
+            hls_vals.append("—")
+            hsv_vals.append("—")
+
+        self._set_row_values(self.rgb_labels, "HLS", hls_vals)
+        self._set_row_values(self.rgb_labels, "HSV", hsv_vals)
 
         preview_r, preview_g, preview_b = round(r_f * 255), round(g_f * 255), round(b_f * 255)
         self.color_preview.setStyleSheet(
