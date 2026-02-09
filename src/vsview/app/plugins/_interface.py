@@ -72,6 +72,7 @@ class _PluginSettingsStore:
         # For local settings, we need to update the raw (unresolved) settings,
         # not the resolved version with global fallbacks merged in.
         if (settings := self._get_unresolved_settings(plugin, scope)) is None:
+            logger.warning("No model is configured for the plugin %r with the scope %r", plugin.identifier, scope)
             return
 
         # Apply updates to the settings object
