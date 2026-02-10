@@ -68,8 +68,10 @@ class VideoOutput:
                 try:
                     self.prepared_clip = self.packer.pack_clip(clip, self.vs_output.alpha or self._alpha_prop)
                 except AlphaNotImplementedError as e:
-                    logger.warning("%s, falling back to Cython 8-bit", e)
-                    self.packer = CythonPacker(8)
+                    if SettingsManager.global_settings.view.packing_method != "auto":
+                        logger.warning("%s, falling back to Cython packer", e)
+
+                    self.packer = CythonPacker(SettingsManager.global_settings.view.bit_depth)
                     self.prepared_clip = self.packer.pack_clip(clip, self.vs_output.alpha or self._alpha_prop)
             except Exception as e:
                 raise RuntimeError(f"Failed to pack clip with the message: '{e}'") from e
