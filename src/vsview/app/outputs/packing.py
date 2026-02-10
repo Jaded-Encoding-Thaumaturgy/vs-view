@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from functools import cache
 from logging import getLogger
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import vapoursynth as vs
 from PySide6.QtGui import QImage
@@ -55,11 +55,11 @@ class Packer(ABC):
         return clip.resize.Point(**params | kwargs)
 
     @abstractmethod
-    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
+    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | Literal[True] | None = None) -> vs.VideoNode:
         """Converts planar vs.RGB24 or vs.RGB30 to interleaved BGRA32 or RGB30 to packed A2R10G10B10"""
 
-    def pack_clip(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
-        if alpha is not None:
+    def pack_clip(self, clip: vs.VideoNode, alpha: vs.VideoNode | Literal[True] | None = None) -> vs.VideoNode:
+        if isinstance(alpha, vs.VideoNode):
             alpha = alpha.resize.Point(
                 format=self.vs_aformat,
                 dither_type=SettingsManager.global_settings.view.dither_type,
@@ -71,20 +71,22 @@ class Packer(ABC):
         return packed.std.SetFrameProp("VSViewHasAlpha", True) if alpha else packed
 
     def frame_to_qimage(self, frame: vs.VideoFrame) -> QImage:
+        alpha = "VSViewHasAlpha" in frame.props or "_Alpha" in frame.props
+
         # QImage supports Buffer inputs
         return QImage(
             get_plane_buffer(frame, 0),  # type: ignore[call-overload]
             frame.width,
             frame.height,
             frame.get_stride(0),
-            self.qt_aformat if frame.props.get("VSViewHasAlpha") else self.qt_format,
+            self.qt_aformat if alpha else self.qt_format,
         )
 
 
 class VszipPacker(Packer):
     name = "vszip"
 
-    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
+    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | Literal[True] | None = None) -> vs.VideoNode:
         if alpha:
             raise AlphaNotImplementedError(self)
 
@@ -92,7 +94,7 @@ class VszipPacker(Packer):
 
 
 class VSPackRGB(Packer):
-    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | None = None) -> vs.VideoNode:
+    def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | Literal[True] | None = None) -> vs.VideoNode:
         return packrgb(clip, alpha, self.name)  # type: ignore[arg-type]
 
 

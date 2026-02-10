@@ -6,7 +6,7 @@ from contextlib import suppress
 from fractions import Fraction
 from itertools import accumulate
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import vapoursynth as vs
 from jetpytools import cround
@@ -38,6 +38,7 @@ class VideoOutput:
         self.packer = packer
         self.vs_name = metadata.name if metadata else None
         self.framedurs = metadata.framedurs if metadata else None
+        self._alpha_prop: Literal[True] | None = metadata.alpha_prop if metadata else None
 
         self.cum_durations = (
             list(accumulate(self.framedurs))
@@ -65,7 +66,7 @@ class VideoOutput:
         else:
             try:
                 try:
-                    self.prepared_clip = self.packer.pack_clip(clip, self.vs_output.alpha)
+                    self.prepared_clip = self.packer.pack_clip(clip, self.vs_output.alpha or self._alpha_prop)
                 except AlphaNotImplementedError as e:
                     logger.warning("%s, falling back to Cython 8-bit", e)
                     self.prepared_clip = CythonPacker(8).pack_clip(clip, self.vs_output.alpha)

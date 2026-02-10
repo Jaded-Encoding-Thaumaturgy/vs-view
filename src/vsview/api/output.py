@@ -9,7 +9,7 @@ from collections.abc import Iterable, Sequence
 from copy import deepcopy
 from logging import getLogger
 from types import FrameType
-from typing import Any, assert_never, overload
+from typing import Any, Literal, assert_never, overload
 
 import vapoursynth as vs
 from jetpytools import CustomValueError, flatten, to_arr
@@ -34,7 +34,7 @@ def set_output(
     index: int = ...,
     /,
     *,
-    alpha: vs.VideoNode | None = ...,
+    alpha: vs.VideoNode | Literal[True] | None = ...,
     framedurs: Sequence[float] | None = None,
     # scenes: ScenesT = None,
     **kwargs: Any,
@@ -47,7 +47,7 @@ def set_output(
     name: str | bool | None = ...,
     /,
     *,
-    alpha: vs.VideoNode | None = ...,
+    alpha: vs.VideoNode | Literal[True] | None = ...,
     framedurs: Sequence[float] | None = None,
     # scenes: ScenesT = None,
     **kwargs: Any,
@@ -60,7 +60,7 @@ def set_output(
     index: int = ...,
     name: str | bool | None = ...,
     /,
-    alpha: vs.VideoNode | None = ...,
+    alpha: vs.VideoNode | Literal[True] | None = ...,
     *,
     framedurs: Sequence[float] | None = None,
     # scenes: ScenesT = None,
@@ -130,7 +130,7 @@ def set_output(
     index_or_name: int | Sequence[int] | str | bool | None = None,
     name: str | bool | None = None,
     /,
-    alpha: vs.VideoNode | None = None,
+    alpha: vs.VideoNode | Literal[True] | None = None,
     *,
     framedurs: Sequence[float] | None = None,
     # scenes: ScenesT = None,
@@ -163,7 +163,7 @@ def set_output(
 
         name: Explicit name override. If provided when index_or_name is an int,
             this sets the display name for the output.
-        alpha: Optional alpha channel VideoNode (only for VideoNode outputs).
+        alpha: Optional alpha channel VideoNode or if True, fetch the `_Alpha` prop (only for VideoNode outputs).
         framedurs: Optional sequence of frame durations in seconds for VFR clips (only for VideoNode outputs).
         downmix: if None (default), follows the global settings downmix of vsview if previewed
             through vsview. Otherwise True or False forces the behavior.
@@ -192,7 +192,7 @@ def set_output(
 
         match n:
             case vs.VideoNode():
-                n.set_output(i, alpha)
+                n.set_output(i, alpha if alpha is not True else None)
                 title = "Clip"
             case vs.AudioNode():
                 n.set_output(i)
@@ -220,7 +220,11 @@ def set_output(
                         "framedurs length must match number of frames", kwargs.get("func", set_output)
                     )
 
-                _output_metadata[file][i] = VideoMetadata(effective_name or f"{title} {i}", deepcopy(framedurs))
+                _output_metadata[file][i] = VideoMetadata(
+                    effective_name or f"{title} {i}",
+                    deepcopy(framedurs),
+                    alpha is True or None,
+                )
             elif isinstance(n, vs.AudioNode):
                 _output_metadata[file][i] = AudioMetadata(effective_name or f"{title} {i}", downmix)
 
