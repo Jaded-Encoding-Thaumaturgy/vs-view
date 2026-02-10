@@ -206,7 +206,7 @@ class BaseGraphicsView(QGraphicsView):
         self.context_menu.exec(event.globalPos())
 
     def drawBackground(self, painter: QPainter, rect: QRectF | QRect) -> None:
-        if self.pixmap_item.pixmap().isNull():
+        if not Shiboken.isValid(self.pixmap_item) or self.pixmap_item.pixmap().isNull():
             return super().drawBackground(painter, rect)
 
         pixmap_rect = self.pixmap_item.mapRectToScene(self.pixmap_item.boundingRect())
