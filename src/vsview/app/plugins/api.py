@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar
 import vapoursynth as vs
 from jetpytools import copy_signature
 from pydantic import BaseModel
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -121,11 +121,12 @@ class GraphicsViewProxy(_GraphicsViewProxy):
     class ViewportProxy(_ViewportProxy):
         """Proxy for a viewport."""
 
-        def map_from_global(self, pos: QPoint) -> QPoint:
+        @copy_signature(QWidget().mapFromGlobal if TYPE_CHECKING else lambda *args, **kwargs: cast(Any, None))
+        def map_from_global(self, *args: Any, **kwargs: Any) -> Any:
             """
             Map global coordinates to the current view's local coordinates.
             """
-            return self.__viewport.mapFromGlobal(pos)
+            return self.__viewport.mapFromGlobal(*args, **kwargs)
 
         def set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
             """
