@@ -185,9 +185,9 @@ class Notch[T: (Time, Frame)]:
         return hash((self.data, self.end_data))
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Notch):
-            return NotImplemented
-        return (self.data, self.end_data) == (other.data, other.end_data)
+        return (
+            (self.data, self.end_data) == (other.data, other.end_data) if isinstance(other, Notch) else NotImplemented
+        )
 
     def draw(self, painter: QPainter, scroll_rect: QRectF, range_alpha: int = 80, cosmetic: bool = False) -> None:
         pen = QPen(self.color, 1)
@@ -392,12 +392,8 @@ class TimelineHoverPopup(QWidget):
             range_prefix = f"[{start_str}, {end_str}]"
             return f"{range_prefix} {base_label}" if base_label else range_prefix
 
-        if base_label:
             # Handle format strings in label
-            if "{" in base_label:
-                return base_label.format(self._format_data_value(notch.data))
-            return base_label
-        return ""
+        return base_label.format(self._format_data_value(notch.data)) if "{" in base_label else base_label
 
     def _format_data_value(self, data: Frame | Time) -> str:
         match data, self._timeline.mode:
@@ -950,9 +946,7 @@ class Timeline(QWidget):
 
     def x_to_frame(self, x: int) -> Frame:
         """Converts an X pixel coordinate to a Frame number."""
-        if self.rect_f.width() == 0:
-            return Frame(0)
-        return Frame(round(x / self.rect_f.width() * self.total_frames))
+        return Frame(0) if self.rect_f.width() == 0 else Frame(round(x / self.rect_f.width() * self.total_frames))
 
     def cursor_to_x(self, cursor: int | Frame | Time) -> int:
         """
@@ -962,10 +956,9 @@ class Timeline(QWidget):
             width = self.rect_f.width()
 
             if isinstance(cursor, Time):
-                if not self.cum_durations:
-                    return 0
-
-                return self.cursor_to_x(Frame(bisect_right(self.cum_durations, cursor)))
+                return (
+                    0 if not self.cum_durations else self.cursor_to_x(Frame(bisect_right(self.cum_durations, cursor)))
+                )
 
             if isinstance(cursor, Frame):
                 return floor(cursor / self.total_frames * width)
