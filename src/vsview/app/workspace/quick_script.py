@@ -29,7 +29,7 @@ from PySide6.QtWidgets import QDockWidget, QFileDialog, QHBoxLayout, QPlainTextE
 from ...api._helpers import output_metadata
 from ...assets import IconName, IconReloadMixin
 from ...vsenv import run_in_background, run_in_loop
-from ..settings import ActionID, ShortcutManager
+from ..settings import ActionID, SettingsManager, ShortcutManager
 from .loader import VSEngineWorkspace
 
 if TYPE_CHECKING:
@@ -321,10 +321,10 @@ class CodeEditorDock(QDockWidget, IconReloadMixin):
 
         self._apply_theme()
 
-        self._settings_manager.signals.globalChanged.connect(self._apply_theme)
+        SettingsManager.signals.globalChanged.connect(self._apply_theme)
 
     def _apply_theme(self) -> None:
-        style = get_style_by_name(self._settings_manager.global_settings.appearance.editor_theme)
+        style = get_style_by_name(SettingsManager.global_settings.appearance.editor_theme)
 
         # Get colors from Pygments style
         palette = self.editor.palette()

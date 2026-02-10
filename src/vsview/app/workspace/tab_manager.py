@@ -13,7 +13,7 @@ from ...assets import IconName, IconReloadMixin
 from ...vsenv import run_in_loop
 from ..outputs import VideoOutput
 from ..plugins.api import PluginAPI
-from ..settings import ActionID, ShortcutManager
+from ..settings import ActionID, SettingsManager, ShortcutManager
 from ..views import GraphicsView
 from ..views.tab import TabLabel, TabViewWidget
 
@@ -231,7 +231,7 @@ class TabManager(QWidget, IconReloadMixin):
 
     def _on_zoom_changed(self, zoom: float) -> None:
         """Handle zoom change events from GraphicsView widgets."""
-        if zoom not in self._settings_manager.global_settings.view.zoom_factors:
+        if zoom not in SettingsManager.global_settings.view.zoom_factors:
             raise ValueError(f"Invalid zoom factor: {zoom}")
 
         if (idx := self.tabs.indexOf(self.current_view)) >= 0:

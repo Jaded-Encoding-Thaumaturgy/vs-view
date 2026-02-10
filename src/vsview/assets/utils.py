@@ -56,8 +56,7 @@ class IconReloadMixin:
 
         from ..app.settings import SettingsManager
 
-        self._settings_manager = SettingsManager()
-        self._settings_manager.signals.globalChanged.connect(self._reload_all_icons)
+        SettingsManager.signals.globalChanged.connect(self._reload_all_icons)
 
     def deleteLater(self) -> None:
         self._button_reloaders.clear()

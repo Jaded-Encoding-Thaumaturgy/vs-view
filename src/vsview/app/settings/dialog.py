@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from ...assets import ICON_PROVIDERS, IconName, IconReloadMixin
 from ..views.components import Accordion
+from .manager import SettingsManager
 from .models import GlobalSettings, LocalSettings, SettingEntry, ShortcutConfig, extract_settings
 
 # Style for shortcut editors with conflicts
@@ -98,9 +99,9 @@ class SettingsDialog(QDialog, IconReloadMixin):
         self._script_path = script_path
 
         # Store original settings for cancel
-        self._original_global = self._settings_manager.global_settings.model_copy(deep=True)
+        self._original_global = SettingsManager.global_settings.model_copy(deep=True)
         self._original_local = (
-            self._settings_manager.get_local_settings(script_path).model_copy(deep=True) if script_path else None
+            SettingsManager.get_local_settings(script_path).model_copy(deep=True) if script_path else None
         )
 
         self._global_widgets = dict[str, QWidget]()
@@ -266,7 +267,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
                 # Create an editor for each shortcut action in this group
                 for aid in actions:
                     definition = ShortcutManager.definitions[aid]
-                    current_key = self._settings_manager.global_settings.get_key(aid)
+                    current_key = SettingsManager.global_settings.get_key(aid)
                     self._shortcut_widgets.original_shortcuts[aid] = current_key
 
                     row_widget = QWidget(self)
@@ -339,7 +340,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
         return tab
 
     def _load_settings_to_ui(self) -> None:
-        global_settings = self._settings_manager.global_settings
+        global_settings = SettingsManager.global_settings
 
         # Load registry-driven global settings
         for entry in self.global_settings_registry:
@@ -358,7 +359,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         # Load local settings if available
         if self._script_path:
-            local_settings = self._settings_manager.get_local_settings(self._script_path)
+            local_settings = SettingsManager.get_local_settings(self._script_path)
             for entry in self.local_settings_registry:
                 widget = self._local_widgets[entry.key]
                 value = local_settings.get_nested_value(entry.key)
@@ -372,7 +373,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
         ]
 
         # Use existing settings as base to preserve hidden fields
-        data = self._settings_manager.global_settings.model_dump()
+        data = SettingsManager.global_settings.model_dump()
 
         for entry in self.global_settings_registry:
             widget = self._global_widgets[entry.key]
@@ -388,7 +389,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
         if not self._script_path:
             raise ValueError("No script path provided")
 
-        local_settings = self._settings_manager.get_local_settings(self._script_path)
+        local_settings = SettingsManager.get_local_settings(self._script_path)
 
         # Use existing settings as base to preserve hidden fields
         data = local_settings.model_dump()
@@ -402,10 +403,10 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
     def _on_apply(self) -> None:
         global_settings = self._get_global_settings_from_ui()
-        self._settings_manager.save_global(global_settings)
+        SettingsManager.save_global(global_settings)
 
         if self._script_path:
-            self._settings_manager.save_local(self._script_path, self._get_local_settings_from_ui())
+            SettingsManager.save_local(self._script_path, self._get_local_settings_from_ui())
 
         self.accept()
 
