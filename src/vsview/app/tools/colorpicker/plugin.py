@@ -395,7 +395,8 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
                 self.current_rgb_cols,
             )
 
-        self.rgb_group.setTitle(f"Rendered ({self.api.packer.vs_format.name}{'A' if has_alpha else ''})")
+        fmt_name = self.api.packer.vs_format.name
+        self.rgb_group.setTitle(f"Rendered ({fmt_name[:3]}{'A' if has_alpha else ''}{fmt_name[3:]})")
 
         r_f, g_f, b_f, a_f = color.redF(), color.greenF(), color.blueF(), color.alphaF()
         r, g, b, a = round(r_f * max_val), round(g_f * max_val), round(b_f * max_val), round(a_f * max_val)
