@@ -13,6 +13,7 @@ from ..app.plugins import (
 )
 from ..app.settings.models import ActionDefinition, Checkbox, DoubleSpin, Dropdown, PlainTextEdit, Spin, WidgetMetadata
 from ..app.views.components import Accordion, AnimatedToggle, SegmentedControl
+from ..app.views.timeline import Frame, Time
 from ..app.views.video import BaseGraphicsView
 from ..assets import IconName, IconReloadMixin
 from ..vsenv import run_in_background, run_in_loop
@@ -26,6 +27,7 @@ __all__ = [
     "Checkbox",
     "DoubleSpin",
     "Dropdown",
+    "Frame",
     "GraphicsViewProxy",
     "IconName",
     "IconReloadMixin",
@@ -37,6 +39,7 @@ __all__ = [
     "PluginSettings",
     "SegmentedControl",
     "Spin",
+    "Time",
     "VideoOutputProxy",
     "WidgetMetadata",
     "WidgetPluginBase",
