@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC, ABCMeta, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import KW_ONLY, dataclass, field
 from datetime import time
 from enum import StrEnum
@@ -25,10 +25,31 @@ from typing import (
 )
 
 from jetpytools import SupportsRichComparison
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    PlainValidator,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    ValidationError,
+    field_serializer,
+    field_validator,
+    model_serializer,
+)
 from PySide6.QtCore import QTime
-from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QPlainTextEdit, QSpinBox, QTimeEdit, QWidget
+from PySide6.QtGui import QColor, QKeySequence
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QDoubleSpinBox,
+    QPlainTextEdit,
+    QSpinBox,
+    QTimeEdit,
+    QWidget,
+)
 
 from .enums import Resizer
 
@@ -748,6 +769,56 @@ class ViewTools(BaseModel):
     panels: dict[str, bool] = Field(default_factory=dict)
 
 
+def _deserialize_qcolor(v: Any) -> QColor:
+    if isinstance(v, QColor):
+        return v
+
+    if isinstance(v, Sequence):
+        return QColor.fromRgbF(*v)
+
+    raise ValueError("Invalid format for QColor")
+
+
+class QtSettings(BaseModel):
+    custom_colors: list[
+        Annotated[
+            QColor,
+            PlainValidator(_deserialize_qcolor),
+            PlainSerializer(lambda color: color.getRgbF(), return_type=tuple[float, float, float, float]),
+        ]
+    ] = Field(default_factory=list)
+    model_config = ConfigDict(validate_assignment=True)
+
+    def model_post_init(self, context: Any) -> None:
+        if self.custom_colors:
+            self.sync_to_dialog()
+        else:
+            self.sync_from_dialog()
+
+    def sync_to_dialog(self) -> None:
+        max_colors = QColorDialog.customCount()
+
+        for i, color in enumerate(self.custom_colors):
+            if i >= max_colors:
+                break
+
+            QColorDialog.setCustomColor(i, color.rgba())
+
+    def sync_from_dialog(self) -> None:
+        new_colors = list[QColor]()
+
+        for i in range(QColorDialog.customCount()):
+            if (color := QColorDialog.customColor(i)).isValid():
+                new_colors.append(color)
+
+        self.custom_colors = new_colors
+
+    @model_serializer(mode="wrap")
+    def sync_before_serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        self.sync_from_dialog()
+        return handler(self)
+
+
 class BaseSettings(BaseModel):
     def get_nested_value(self, key: str) -> Any:
         obj: Any = self
@@ -821,6 +892,7 @@ class GlobalSettings(BaseSettings):
     # Hidden
     window_geometry: WindowGeometry = WindowGeometry()
     view_tools: ViewTools = ViewTools()
+    qt_settings: QtSettings = QtSettings()
 
     def get_key(self, action_id: str) -> str:
         """Get the key sequence for a specific action."""
