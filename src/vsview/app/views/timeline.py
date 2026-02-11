@@ -73,7 +73,7 @@ class Time(timedelta):
         # Caps at 23:59:59.999. If delta > 24h, it wraps around.
         return QTime.fromMSecsSinceStartOfDay(total_ms)
 
-    def to_ts(self, fmt: str) -> str:
+    def to_ts(self, fmt: str = "{H:02d}:{M:02d}:{S:02d}.{ms:03d}") -> str:
         """
         Formats a timedelta object using standard Python formatting syntax.
 
