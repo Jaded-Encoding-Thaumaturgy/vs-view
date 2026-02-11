@@ -3,6 +3,7 @@ from __future__ import annotations
 from bisect import bisect_right
 from collections.abc import Mapping
 from contextlib import suppress
+from datetime import timedelta
 from fractions import Fraction
 from itertools import accumulate
 from logging import getLogger
@@ -92,7 +93,7 @@ class VideoOutput:
             with suppress(AttributeError):
                 delattr(self, attr)
 
-    def time_to_frame(self, time: Time, fps: VideoOutput | Fraction | None = None) -> Frame:
+    def time_to_frame(self, time: timedelta, fps: VideoOutput | Fraction | None = None) -> Frame:
         from ..views.timeline import Frame
 
         # So VideoOutputProxy can get this method

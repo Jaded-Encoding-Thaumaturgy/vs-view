@@ -70,7 +70,7 @@ class VideoOutputProxy:
     Cumulative durations of the clip.
     """
 
-    def time_to_frame(self, time: Time, fps: VideoOutputProxy | Fraction | None = None) -> Frame:
+    def time_to_frame(self, time: timedelta, fps: VideoOutputProxy | Fraction | None = None) -> Frame:
         """
         Convert a time to a frame number for this output.
 
