@@ -193,6 +193,11 @@ class TimelineProxy(_TimelineProxy):
             )
             yield start, end
 
+    @property
+    def mode(self) -> Literal["frame", "time"]:
+        """Returns the Timeline mode, "frame" or "time"."""
+        return self.__timeline.mode
+
     def add_notch(
         self,
         identifier: str,
