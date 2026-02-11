@@ -180,7 +180,10 @@ class ShortcutManager(Singleton):
         if hierarchies:
             return max(hierarchies)
 
-        raise ValueError("Unknown action_id")
+        context, value = max(self.SCOPE_HIERARCHY.items(), key=lambda k: k[1])
+        logger.info("Assuming '%s' context for '%s' until a shortcut is registered", context.name, action_id)
+
+        return value
 
     def _update_action(self, action_id: str, action: QAction) -> None:
         if Shiboken.isValid(action):
