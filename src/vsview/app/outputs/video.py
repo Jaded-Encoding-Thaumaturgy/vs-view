@@ -36,7 +36,7 @@ class VideoOutput:
         self.vs_output = vs_output
         self.vs_index = vs_index
         self.packer = packer
-        self.vs_name = metadata.name if metadata else None
+        self.vs_name = metadata.name if metadata else f"Clip {vs_index}"  # Matches vsview.set_output
         self.framedurs = metadata.framedurs if metadata else None
         self._alpha_prop: Literal[True] | None = metadata.alpha_prop if metadata else None
 

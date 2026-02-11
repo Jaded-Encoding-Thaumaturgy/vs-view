@@ -49,8 +49,8 @@ class VideoOutputProxy:
     vs_index: int
     """Index of the video output in the VapourSynth environment."""
 
-    vs_name: str | None = field(hash=False, compare=False)
-    """Name of the video output, if any, when using `vsview.set_output()`."""
+    vs_name: str = field(hash=False, compare=False)
+    """Name of the video output."""
 
     vs_output: vs.VideoOutputTuple = field(hash=False, compare=False)
     """The object created by `vapoursynth.get_outputs()`."""
@@ -98,8 +98,8 @@ class AudioOutputProxy:
     vs_index: int
     """Index of the audio output in the VapourSynth environment."""
 
-    vs_name: str | None = field(hash=False, compare=False)
-    """Name of the audio output, if any, when using `vsview.set_output()`."""
+    vs_name: str = field(hash=False, compare=False)
+    """Name of the audio output"""
 
     vs_output: vs.AudioNode = field(hash=False, compare=False)
     """The object created by `vapoursynth.get_outputs()`."""

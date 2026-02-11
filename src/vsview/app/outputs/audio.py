@@ -81,7 +81,7 @@ class AudioOutput:
     def __init__(self, vs_output: vs.AudioNode, vs_index: int, metadata: AudioMetadata | None) -> None:
         self.vs_output = vs_output
         self.vs_index = vs_index
-        self.vs_name = metadata.name if metadata else None
+        self.vs_name = metadata.name if metadata else f"Audio {vs_index}"  # Matches vsview.set_output
         self.downmix = (
             metadata.downmix
             if metadata and metadata.downmix is not None
