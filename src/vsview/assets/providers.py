@@ -44,6 +44,10 @@ class IconName(StrEnum):
     PLUS = "plus"
     MINUS = "minus"
     FILE_IMPORT = "file-arrow-down"
+    # Scening icons
+    SCENE_ADD = "selection-plus"
+    MARK_IN = "selection-background"
+    MARK_OUT = "selection-foreground"
 
 
 class IconProvider(ABC):
@@ -143,6 +147,9 @@ class MaterialProvider(IconProvider):
         IconName.VOLUME_OFF: "volume-mute",
         IconName.VOLUME_MUTE: "volume-off",
         IconName.FILE_IMPORT: "file-import",
+        IconName.SCENE_ADD: "plus-box",
+        IconName.MARK_IN: "step-backward",
+        IconName.MARK_OUT: "step-forward",
     }
 
     @property
@@ -188,6 +195,9 @@ class LucideProvider(IconProvider):
         IconName.VOLUME_MUTE: "volume-off",
         IconName.PIPETTE: "pipette",
         IconName.FILE_IMPORT: "file-down",
+        IconName.SCENE_ADD: "square-plus",
+        IconName.MARK_IN: "step-back",
+        IconName.MARK_OUT: "step-forward",
     }
 
     @property
