@@ -40,11 +40,13 @@ class IconReloadMixin:
     DEFAULT_ICON_STATES: ClassVar[
         Mapping[
             tuple[QIcon.Mode, QIcon.State],
-            QPalette.ColorRole | tuple[QPalette.ColorGroup, QPalette.ColorRole],
+            tuple[QPalette.ColorGroup, QPalette.ColorRole],
         ]
     ] = {
-        (QIcon.Mode.Normal, QIcon.State.Off): QPalette.ColorRole.ButtonText,
-        (QIcon.Mode.Normal, QIcon.State.On): QPalette.ColorRole.Base,
+        (QIcon.Mode.Normal, QIcon.State.Off): (QPalette.ColorGroup.Normal, QPalette.ColorRole.ButtonText),
+        (QIcon.Mode.Normal, QIcon.State.On): (QPalette.ColorGroup.Normal, QPalette.ColorRole.Base),
+        (QIcon.Mode.Active, QIcon.State.Off): (QPalette.ColorGroup.Normal, QPalette.ColorRole.ButtonText),
+        (QIcon.Mode.Active, QIcon.State.On): (QPalette.ColorGroup.Normal, QPalette.ColorRole.Base),
         (QIcon.Mode.Disabled, QIcon.State.Off): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText),
         (QIcon.Mode.Disabled, QIcon.State.On): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base),
     }
@@ -114,7 +116,8 @@ class IconReloadMixin:
                     size=icon_size,
                 )
             else:
-                icon = self.make_icon((icon_name, palette.color(color_role)), size=icon_size)
+                color = palette.color(QPalette.ColorGroup.Normal, color_role)
+                icon = self.make_icon((icon_name, color), size=icon_size)
             btn.setIcon(icon)
 
         self._button_reloaders[button] = partial(reload, button)
@@ -245,7 +248,7 @@ class IconReloadMixin:
                 q_icon = self.make_icon(state_icons, size=icon_size)
             else:
                 # Simple single-color icon
-                btn_color = color if color is not None else palette.color(color_role)
+                btn_color = color if color is not None else palette.color(QPalette.ColorGroup.Normal, color_role)
                 q_icon = self.make_icon((icon, btn_color), size=icon_size)
 
             btn.setIcon(q_icon)
