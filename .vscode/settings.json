@@ -1,0 +1,5 @@
+{
+    "python.analysis.stubPath": "stubs",
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "python.REPL.enableREPLSmartSend": false,
+}

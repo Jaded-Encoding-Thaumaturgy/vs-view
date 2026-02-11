@@ -119,7 +119,7 @@ class TMDBPopup(QDialog):
                 self.add_response(tv, True, False)
             except Exception as e:
                 logger.error(e)
-                logger.debug("Full traceback",  exc_info=True)
+                logger.debug("Full traceback", exc_info=True)
 
             try:
                 movie = (
@@ -134,7 +134,7 @@ class TMDBPopup(QDialog):
                 self.add_response(movie, False, False)
             except Exception as e:
                 logger.error(e)
-                logger.debug("Full traceback",  exc_info=True)
+                logger.debug("Full traceback", exc_info=True)
 
     def add_response(self, data: dict[str, Any], is_tv: bool, is_list: bool = True) -> None:
 
@@ -148,9 +148,7 @@ class TMDBPopup(QDialog):
 
             if is_list:
                 genres = self.tv_genre if is_tv else self.movie_genre
-                label += f" [{
-                    ', '.join([genres[genre] for genre in result['genre_ids']])
-                }]"
+                label += f" [{', '.join([genres[genre] for genre in result['genre_ids']])}]"
             else:
                 label += f" [{', '.join([genre['name'] for genre in result['genres']])}]"
 
@@ -287,3 +285,41 @@ class FramePopup(QDialog):
             self.accept()
         except ValueError:
             QMessageBox.critical(self, "Invalid Input", "Frames must be comma-separated integers (e.g. 1, 5, 10).")
+
+
+class LoginPopup(QDialog):
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Enter Frames")
+
+        self.vlayout = QVBoxLayout(self)
+
+        self.label = QLabel("Enter username & password")
+        self.vlayout.addWidget(self.label)
+
+        self.username_edit = QLineEdit()
+        self.username_edit.setPlaceholderText("Username")
+        self.vlayout.addWidget(self.username_edit)
+
+        self.password_edit = QLineEdit()
+        self.password_edit.setPlaceholderText("Password")
+        self.vlayout.addWidget(self.password_edit)
+
+        self.ok_button = QPushButton("OK")
+        self.ok_button.clicked.connect(self.validate_and_accept)
+        self.vlayout.addWidget(self.ok_button)
+
+        self.username = ""
+        self.password = ""
+
+    def validate_and_accept(self) -> None:
+        username = self.username_edit.text().strip()
+        password = self.password_edit.text().strip()
+
+        if not username or not password:
+            QMessageBox.warning(self, "Input Error", "Please fill out both boxes.")
+            return
+
+        self.username = username
+        self.password = password
+        self.accept()
