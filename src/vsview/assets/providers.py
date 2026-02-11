@@ -43,6 +43,7 @@ class IconName(StrEnum):
     CLIPBOARD = "clipboard"
     PLUS = "plus"
     MINUS = "minus"
+    FILE_IMPORT = "file-arrow-down"
 
 
 class IconProvider(ABC):
@@ -141,6 +142,7 @@ class MaterialProvider(IconProvider):
         IconName.VOLUME_LOW: "volume-low",
         IconName.VOLUME_OFF: "volume-mute",
         IconName.VOLUME_MUTE: "volume-off",
+        IconName.FILE_IMPORT: "file-import",
     }
 
     @property
@@ -185,6 +187,7 @@ class LucideProvider(IconProvider):
         IconName.VOLUME_OFF: "volume-x",
         IconName.VOLUME_MUTE: "volume-off",
         IconName.PIPETTE: "pipette",
+        IconName.FILE_IMPORT: "file-down",
     }
 
     @property
