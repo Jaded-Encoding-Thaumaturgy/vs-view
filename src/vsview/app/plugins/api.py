@@ -256,12 +256,12 @@ class PluginAPI(_PluginAPI):
         return self._settings_store.file_path
 
     @property
-    def current_frame(self) -> int:
+    def current_frame(self) -> Frame:
         """Return the current frame number."""
-        return self.__workspace.playback.state.current_frame
+        return Frame(self.__workspace.playback.state.current_frame)
 
     @property
-    def current_time(self) -> timedelta:
+    def current_time(self) -> Time:
         """Return the current time."""
         if voutput := self.__workspace.outputs_manager.current_voutput:
             return voutput.frame_to_time(self.current_frame)
