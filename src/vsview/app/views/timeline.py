@@ -17,10 +17,8 @@ from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
     QCursor,
-    QFocusEvent,
     QFontMetrics,
     QIcon,
-    QKeyEvent,
     QMouseEvent,
     QMoveEvent,
     QPainter,
@@ -29,6 +27,7 @@ from PySide6.QtGui import (
     QPen,
     QResizeEvent,
     QRgba64,
+    QValidator,
 )
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -1038,56 +1037,26 @@ class FrameEdit(QSpinBox):
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
-        super().valueChanged.connect(self._on_value_changed)
+        self.valueChanged.connect(self._on_value_changed)
 
         self.setMinimum(0)
         self.setKeyboardTracking(False)
 
         self.old_value = self.value()
-        self._pending_max_commit = False
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            if self._pending_max_commit:
-                self._commit_pending()
-            super().keyPressEvent(event)
-            return
+    def validate(self, input_text: str, pos: int) -> object:
+        if input_text.isdigit():
+            val = int(input_text)
 
-        if event.text().isdigit():
-            current_text = self.lineEdit().selectedText()
-            line_edit = self.lineEdit()
+            if val > self.maximum():
+                max_str = str(self.maximum())
+                return QValidator.State.Acceptable, max_str, len(max_str)
 
-            if current_text:
-                new_text = (
-                    line_edit.text()[: line_edit.selectionStart()]
-                    + event.text()
-                    + line_edit.text()[line_edit.selectionStart() + len(current_text) :]
-                )
-            else:
-                cursor_pos = line_edit.cursorPosition()
-                new_text = line_edit.text()[:cursor_pos] + event.text() + line_edit.text()[cursor_pos:]
-
-            if int(new_text) > self.maximum():
-                # Cap at maximum instead of blocking, without triggering valueChanged yet
-                with QSignalBlocker(self):
-                    self.setValue(self.maximum())
-                self._pending_max_commit = True
-                return
-
-        super().keyPressEvent(event)
-
-    def focusOutEvent(self, event: QFocusEvent) -> None:
-        if self._pending_max_commit:
-            self._commit_pending()
-        super().focusOutEvent(event)
-
-    def _commit_pending(self) -> None:
-        self._pending_max_commit = False
-        self._on_value_changed(self.value())
+        return super().validate(input_text, pos)
 
     def _on_value_changed(self, value: int) -> None:
-        self.frameChanged.emit(self.value(), self.old_value)
-        self.old_value = self.value()
+        self.frameChanged.emit(Frame(value), Frame(self.old_value))
+        self.old_value = value
 
 
 class TimeEdit(QTimeEdit):
