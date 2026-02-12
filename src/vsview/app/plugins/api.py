@@ -443,12 +443,12 @@ class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     @property
     def global_(self) -> TGlobalSettings:
         """Get the current global settings."""
-        return self._plugin.api._get_cached_settings(self._plugin, "global")
+        return self._plugin.api._get_cached_proxy_settings(self._plugin, "global")
 
     @property
     def local_(self) -> TLocalSettings:
         """Get the current local settings (resolved with global fallbacks)."""
-        return self._plugin.api._get_cached_settings(self._plugin, "local")
+        return self._plugin.api._get_cached_proxy_settings(self._plugin, "local")
 
 
 class _PluginBase(Generic[TGlobalSettings, TLocalSettings], metaclass=_PluginBaseMeta):  # noqa: UP046
@@ -493,19 +493,6 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
         QWidget.__init__(self, parent)
         self.api = api
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-
-    @property
-    def settings(self) -> PluginSettings[TGlobalSettings, TLocalSettings]:
-        """Get the settings wrapper for lazy, always-fresh access."""
-        return PluginSettings(self)
-
-    def update_global_settings(self, **updates: Any) -> None:
-        """Update specific global settings fields and trigger persistence."""
-        self.api._update_settings(self, "global", **updates)
-
-    def update_local_settings(self, **updates: Any) -> None:
-        """Update specific local settings fields and trigger persistence."""
-        self.api._update_settings(self, "local", **updates)
 
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
         """
