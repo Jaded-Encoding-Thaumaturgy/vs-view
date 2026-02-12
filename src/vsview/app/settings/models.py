@@ -769,22 +769,12 @@ class ViewTools(BaseModel):
     panels: dict[str, bool] = Field(default_factory=dict)
 
 
-def _deserialize_qcolor(v: Any) -> QColor:
-    if isinstance(v, QColor):
-        return v
-
-    if isinstance(v, Sequence):
-        return QColor.fromRgbF(*v)
-
-    raise ValueError("Invalid format for QColor")
-
-
 class QtSettings(BaseModel):
     custom_colors: list[
         Annotated[
             QColor,
-            PlainValidator(_deserialize_qcolor),
-            PlainSerializer(lambda color: color.getRgbF(), return_type=tuple[float, float, float, float]),
+            PlainValidator(lambda v: v if isinstance(v, QColor) else QColor(v)),
+            PlainSerializer(lambda color: color.name(), return_type=str),
         ]
     ] = Field(default_factory=list)
     model_config = ConfigDict(validate_assignment=True)
@@ -802,7 +792,7 @@ class QtSettings(BaseModel):
             if i >= max_colors:
                 break
 
-            QColorDialog.setCustomColor(i, color.rgba())
+            QColorDialog.setCustomColor(i, color)
 
     def sync_from_dialog(self) -> None:
         new_colors = list[QColor]()
