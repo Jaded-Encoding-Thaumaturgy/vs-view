@@ -332,7 +332,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.statusLoadingStarted.emit("Reloading Content...")
 
         with self.tbar.disabled(), self.tab_manager.clear_voutputs_on_fail(), self.freeze_viewport():
-            self.loop.from_thread(self.content_area.setDisabled, True)
+            self.loop.from_thread(self.content_area.setDisabled, True).result()
             self.tab_manager.disable_switch = True
             self.playback.state.wait_for_cleanup(
                 0.25,
