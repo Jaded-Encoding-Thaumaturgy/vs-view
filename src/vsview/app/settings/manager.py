@@ -78,8 +78,8 @@ class SettingsManager(Singleton):
             GLOBAL_SETTINGS_PATH.write_text(self._global_settings.model_dump_json(indent=2), encoding="utf-8")
             logger.debug("Saved global settings to: %s", GLOBAL_SETTINGS_PATH)
             self._signals.globalChanged.emit()
-        except OSError as e:
-            logger.exception("Failed to save global settings: %s", e)
+        except Exception:
+            logger.exception("Failed to save global settings")
 
     @inject_self.cached
     def save_local(self, script_path: Path, settings: LocalSettings) -> None:
@@ -104,7 +104,7 @@ class SettingsManager(Singleton):
             settings_path.write_text(settings.model_dump_json(indent=2), encoding="utf-8")
             logger.debug("Saved local settings for %s to: %s", script_path, settings_path)
             self._signals.localChanged.emit(str(settings_path))
-        except OSError:
+        except Exception:
             logger.exception("Failed to save local settings for %s", script_path)
 
     @staticmethod
@@ -137,13 +137,11 @@ class SettingsManager(Singleton):
             logger.debug("Loaded global settings")
             logger.log(DEBUG - 1, " %s", lambda: pretty_repr(self._global_settings))
         except ValidationError as e:
-            logger.error(
-                "Global settings file is malformed. Using defaults.\nFile: %s\nError: %s",
-                GLOBAL_SETTINGS_PATH.resolve(),
-                e,
-            )
+            logger.warning("Global settings file is malformed. Using defaults.\nError: %s", e)
+            logger.debug("Full traceback: %s", exc_info=True)
         except json.JSONDecodeError:
-            logger.exception("Failed to parse global settings JSON")
+            logger.warning("Global settings file is empty or corrupted. Using defaults.")
+            logger.debug("Full traceback: %s", exc_info=True)
 
     def _merge_default_shortcuts(self) -> None:
         existing_action_ids = {s.action_id for s in self._global_settings.shortcuts}
