@@ -1,14 +1,19 @@
 """Utility functions for vsview."""
 
 import hashlib
+import io
 import os
+import sys
 import weakref
 from collections import OrderedDict, UserDict
+from logging import getLogger
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import vapoursynth as vs
 from shiboken6 import Shiboken
+
+logger = getLogger(__name__)
 
 
 def path_to_hash(path: str | os.PathLike[str]) -> str:
@@ -24,6 +29,50 @@ def path_to_hash(path: str | os.PathLike[str]) -> str:
         A 16-character hexadecimal hash string.
     """
     return hashlib.md5(str(Path(path).resolve()).encode()).hexdigest()[:16]
+
+
+def check_leaks(stage: Literal["before", "after"]) -> None:
+    try:
+        import objgraph  # type: ignore[import-untyped]
+    except ImportError:
+        logger.exception("")
+        return
+
+    # Capture show_growth output
+    with io.StringIO() as buf:
+        original_stdout = sys.stdout
+        sys.stdout = buf
+        try:
+            objgraph.show_growth(limit=15)
+        finally:
+            sys.stdout = original_stdout
+        growth_info = buf.getvalue().strip()
+
+    if growth_info:
+        logger.debug("--- Leaks Check (%s) ---\n%s", stage, growth_info)
+
+    vs_types = ["Core", "VideoNode", "AudioNode", "VideoFrame", "AudioFrame"]
+
+    for type_name in vs_types:
+        objs = objgraph.by_type(type_name)
+        if not objs:
+            return
+
+        logger.debug("Lingering %s objects: %d", type_name, len(objs))
+
+        if stage == "after" and type_name in ["Core", "VideoNode"]:
+            try:
+                filename = f"leak_{type_name.lower()}_{stage.replace(' ', '_').lower()}.png"
+                # Generate backref graph using graphviz
+                objgraph.show_backrefs(
+                    objs[:1],
+                    max_depth=10,
+                    filename=filename,
+                    highlight=lambda x: x in objs,
+                )
+                logger.warning("Potential %s leak! Backref graph saved to %s", type_name, filename)
+            except Exception as e:
+                logger.debug("Could not generate leak graph for %s: %s", type_name, e)
 
 
 class LRUCache[K, V](OrderedDict[K, V]):
