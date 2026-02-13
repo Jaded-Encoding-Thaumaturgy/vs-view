@@ -208,10 +208,14 @@ class ShortcutManager(Singleton):
                 self._update_shortcut(aid, shortcut)
 
         logger.info("Shortcuts hot-reloaded")
-        self._check_conflicts()
+        # FIXME:
+        # self._check_conflicts()
 
     @inject_self
     def _check_conflicts(self) -> None:
+        # Unused
+        # This method is too fragile because two shortcuts could work with the same key sequence
+        # but with a difference parent context
         key_map = dict[str, list[str]]()
 
         for action_id in self._definitions:

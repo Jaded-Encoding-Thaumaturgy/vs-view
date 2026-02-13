@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from collections.abc import Iterator
+from collections.abc import Hashable, Iterator
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
@@ -11,7 +11,7 @@ from logging import getLogger
 from math import floor
 from typing import Any, Literal, NamedTuple, Self
 
-from jetpytools import clamp, cround
+from jetpytools import clamp, complex_hash, cround
 from PySide6.QtCore import QEvent, QLineF, QPoint, QPointF, QRectF, QSignalBlocker, QSize, Qt, QTime, Signal
 from PySide6.QtGui import (
     QColor,
@@ -180,14 +180,6 @@ class Notch[T: (Time, Frame)]:
         self.end_line = end_line
         self.label = label
 
-    def __hash__(self) -> int:
-        return hash((self.data, self.end_data))
-
-    def __eq__(self, other: object) -> bool:
-        return (
-            (self.data, self.end_data) == (other.data, other.end_data) if isinstance(other, Notch) else NotImplemented
-        )
-
     def draw(self, painter: QPainter, scroll_rect: QRectF, range_alpha: int = 80, cosmetic: bool = False) -> None:
         pen = QPen(self.color, 1)
 
@@ -205,6 +197,28 @@ class Notch[T: (Time, Frame)]:
             painter.drawLine(self.end_line)
         else:
             painter.drawLine(self.line)
+
+
+class CustomNotch[T: (Time, Frame)](Notch[T]):
+    def __init__(
+        self,
+        id: Hashable,
+        data: T,
+        end_data: T | None = None,
+        color: Qt.GlobalColor | QColor | QRgba64 | str | int | None = None,
+        line: QLineF | None = None,
+        end_line: QLineF | None = None,
+        label: str = "",
+    ) -> None:
+        # mypy bug
+        super().__init__(data, end_data, color, line, end_line, label)  # type: ignore[arg-type]
+        self.id = id
+
+    def __hash__(self) -> int:
+        return hash(self.id)
+
+    def __eq__(self, other: object) -> bool:
+        return self.id == other.id if isinstance(other, CustomNotch) else NotImplemented
 
 
 class HoverLabel(NamedTuple):
@@ -360,7 +374,7 @@ class TimelineHoverPopup(QWidget):
 
         # Collect labels with range support
         all_labels = list[HoverLabel]()
-        for provider_notches in self._timeline.notches.values():
+        for provider_notches in self._timeline.custom_notches.values():
             for p_notch in provider_notches:
                 if not (label_text := self._format_notch_label(p_notch)):
                     continue
@@ -377,7 +391,7 @@ class TimelineHoverPopup(QWidget):
             self._draw_label_pill(painter, lbl, popup_rect, y_offset, fm)
 
         # Draw notches and range fills in scaled space
-        for provider_notches in self._timeline.notches.values():
+        for provider_notches in self._timeline.custom_notches.values():
             for p_notch in provider_notches:
                 p_notch.draw(painter, self._timeline.scroll_rect, self.RANGE_FILL_ALPHA, cosmetic=True)
 
@@ -548,7 +562,7 @@ class Timeline(QWidget):
         # Internal cursor state (can be Frame, Time, or raw int pixels)
         self._cursor_val: int | Frame | Time = 0
 
-        self.notches = dict[str, set[Notch[Any]]]()
+        self.custom_notches = dict[str, set[CustomNotch[Any]]]()
 
         # Optimization attributes
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
@@ -792,7 +806,7 @@ class Timeline(QWidget):
         painter.fillRect(self.scroll_rect, self.palette().color(self.SCROLL_BAR_COLOR))
 
         # Draw custom notches from providers (e.g. bookmarks, keyframes)
-        for provider_notches in self.notches.values():
+        for provider_notches in self.custom_notches.values():
             for p_notch in provider_notches:
                 p_notch.draw(painter, self.scroll_rect)
 
@@ -974,6 +988,7 @@ class Timeline(QWidget):
         end_data: Frame | Time | None = None,
         color: Qt.GlobalColor | QColor | QRgba64 | str | int = Qt.GlobalColor.black,
         label: str = "",
+        id: Hashable | None = None,
     ) -> None:
         cursor_x = self.cursor_to_x(data)
         cursor_line = QLineF(
@@ -994,17 +1009,28 @@ class Timeline(QWidget):
         else:
             end_line = None
 
-        self.notches.setdefault(key, set()).add(
-            Notch(data, end_data, color, cursor_line, end_line, label)  # pyright: ignore[reportArgumentType]
+        self.custom_notches.setdefault(key, set()).add(
+            CustomNotch(
+                id or complex_hash.hash(key, data, end_data),
+                data,  # pyright: ignore[reportArgumentType]
+                end_data,  # pyright: ignore[reportArgumentType]
+                color,
+                cursor_line,
+                end_line,
+                label,
+            )
         )
 
     def discard_notch(
-        self,
-        key: str,
-        data: Frame | Time,
-        end_data: Frame | Time | None = None,
+        self, key: str, data: Frame | Time, end_data: Frame | Time | None = None, id: Hashable | None = None
     ) -> None:
-        self.notches.get(key, set()).discard(Notch(data, end_data))  # pyright: ignore[reportArgumentType]
+        self.custom_notches.get(key, set()).discard(
+            CustomNotch(
+                id or complex_hash.hash(key, data, end_data),
+                data,  # pyright: ignore[reportArgumentType]
+                end_data,  # pyright: ignore[reportArgumentType]
+            )
+        )
 
     @contextmanager
     def block_events(self) -> Iterator[None]:

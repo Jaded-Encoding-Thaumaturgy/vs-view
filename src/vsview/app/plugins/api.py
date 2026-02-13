@@ -5,16 +5,17 @@ Plugin API for VSView.
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from fractions import Fraction
+from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar, cast
 
 import vapoursynth as vs
-from jetpytools import copy_signature
+from jetpytools import copy_signature, to_arr
 from pydantic import BaseModel
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
@@ -39,7 +40,9 @@ from vsview.app.views.timeline import Frame, Time
 from vsview.app.views.video import BaseGraphicsView
 from vsview.vsenv.loop import run_in_loop
 
-from ._interface import _GraphicsViewProxy, _PluginAPI, _PluginBaseMeta, _TimelineProxy, _ViewportProxy
+from ._interface import _GraphicsViewProxy, _PlaybackProxy, _PluginAPI, _PluginBaseMeta, _TimelineProxy, _ViewportProxy
+
+logger = getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +198,7 @@ class TimelineProxy(_TimelineProxy):
 
     @property
     def mode(self) -> Literal["frame", "time"]:
-        """Returns the Timeline mode, "frame" or "time"."""
+        """Returns the current timeline display mode."""
         return self.__timeline.mode
 
     def add_notch(
@@ -204,37 +207,95 @@ class TimelineProxy(_TimelineProxy):
         data: timedelta | int | Sequence[timedelta | int | tuple[timedelta | int, timedelta | int]],
         color: Qt.GlobalColor | QColor | QRgba64 | str | int = Qt.GlobalColor.black,
         label: str = "",
+        notch_id: Hashable | None = None,
+        *,
+        update: bool = True,
     ) -> None:
         """
-        Add notch(es) to the timeline.
+        Add one or more notches to the timeline.
 
         Args:
-            identifier: The identifier of the notch.
-            data: The data of the notch (frame number or timedelta or range notches).
-            color: The color of the notch.
-            label: The label of the notch.
+            identifier: A string identifier for the group of notches.
+            data: The position(s) of the notch(es).
+            color: The color of the notch markers. Defaults to black.
+            label: An optional label to display with the notch.
+            notch_id: An optional hashable ID to uniquely identify this specific notch.
+            update: If True (default), triggers a visual update of the timeline.
         """
         for start, end in self._norm_data(data):
-            self.__timeline.add_notch(identifier, start, end, color=color, label=label)
+            self.__timeline.add_notch(identifier, start, end, color=color, label=label, id=notch_id)
 
-        self.__timeline.update()
+        if update:
+            self.__timeline.update()
 
     def discard_notch(
         self,
         identifier: str,
         data: timedelta | int | Sequence[timedelta | int | tuple[timedelta | int, timedelta | int]],
+        notch_id: Hashable | None = None,
+        *,
+        update: bool = True,
     ) -> None:
         """
-        Discard notch(es) from the timeline.
+        Remove specific notch(es) from the timeline that match the given criteria.
 
         Args:
-            identifier: The identifier of the notch.
-            data: The data of the notch (frame number or timedelta or range notches).
+            identifier: The group identifier of the notches to remove.
+            data: The position(s) of the notch(es) to remove.
+            notch_id: If provided, only removes notches matching this specific ID.
+            update: If True (default), triggers a visual update of the timeline.
         """
         for start, end in self._norm_data(data):
-            self.__timeline.discard_notch(identifier, start, end)
+            self.__timeline.discard_notch(identifier, start, end, notch_id)
 
+        if update:
+            self.__timeline.update()
+
+    def clear_notches(self, identifier: str | Iterable[str], *, update: bool = True) -> None:
+        """
+        Clear all notches associated with the given identifier(s).
+
+        Args:
+            identifier: A single identifier or an iterable of identifiers to clear.
+            update: If True (default), triggers a visual update of the timeline.
+        """
+        for i in to_arr(identifier):
+            self.__timeline.custom_notches.pop(i, None)
+
+        if update:
+            self.__timeline.update()
+
+    def update(self) -> None:
+        """
+        Manually trigger a visual refresh of the timeline.
+        """
         self.__timeline.update()
+
+
+class PlaybackProxy(_PlaybackProxy):
+    """Proxy for the playback."""
+
+    def seek(self, frame: int) -> bool:
+        """
+        Seek to the given frame.
+
+        Args:
+            frame: The frame number to seek to.
+
+        Returns:
+            bool: True if the seek was successful, False otherwise.
+        """
+        if self.__workspace.playback.state.is_playing:
+            logger.debug("Video is playing, skipping seek request")
+            return False
+
+        if not 0 <= frame < self.__workspace.api.current_voutput.vs_output.clip.num_frames:
+            logger.warning("Requested frame is out of bounds")
+            return False
+
+        self.__workspace.playback.request_frame(frame)
+
+        return True
 
 
 class PluginAPI(_PluginAPI):
@@ -319,6 +380,11 @@ class PluginAPI(_PluginAPI):
     def timeline(self) -> TimelineProxy:
         """Return a proxy for the timeline."""
         return TimelineProxy(self.__workspace, self.__workspace.tbar.timeline)
+
+    @property
+    def playback(self) -> PlaybackProxy:
+        """Return a proxy for the playback."""
+        return PlaybackProxy(self.__workspace, self.__workspace.playback)
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """
