@@ -50,6 +50,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libqt6gui6t64 \
+            libqt6multimedia6t64 \
+            libqt6svg6 \
             libxcb-cursor0 \
             xvfb
 
