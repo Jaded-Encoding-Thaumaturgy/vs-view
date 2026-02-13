@@ -157,7 +157,8 @@ class PluginManager(Singleton):
             if valid_definitions:
                 ShortcutManager.register_definitions(valid_definitions)
 
-        ShortcutManager._check_conflicts()
+        # FIXME
+        # ShortcutManager._check_conflicts()
 
     def _construct_settings_registry(self) -> None:
         from ..settings.dialog import SettingsDialog
