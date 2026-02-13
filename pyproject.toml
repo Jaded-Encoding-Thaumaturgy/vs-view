@@ -37,8 +37,8 @@ dependencies = [
 [dependency-groups]
 dev = [
     "vsstubs>=1.0.2; python_version>='3.13'",
-    "mypy>=1.19.0",
-    "ruff>=0.14.7",
+    "mypy>=1.19.0, <1.20.0",
+    "ruff>=0.15.0, <0.16.0",
     "objgraph>=3.6.2",
     "graphviz>=0.21",
     "cython>=3.0.0",

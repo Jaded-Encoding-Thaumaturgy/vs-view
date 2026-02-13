@@ -782,13 +782,13 @@ provides-extras = ["essential"]
 dev = [
     { name = "cython", specifier = ">=3.0.0" },
     { name = "graphviz", specifier = ">=0.21" },
-    { name = "mypy", specifier = ">=1.19.0" },
+    { name = "mypy", specifier = ">=1.19.0,<1.20.0" },
     { name = "objgraph", specifier = ">=3.6.2" },
     { name = "pytest", specifier = ">=9.0.0,<10.0.0" },
     { name = "pytest-mock", specifier = ">=3.15.0" },
     { name = "pytest-qt", specifier = ">=4.5.0" },
     { name = "pytest-xvfb", specifier = ">=3.1.1" },
-    { name = "ruff", specifier = ">=0.14.7" },
+    { name = "ruff", specifier = ">=0.15.0,<0.16.0" },
     { name = "types-pygments", specifier = ">=2.19.0.20251121" },
     { name = "vsstubs", marker = "python_full_version >= '3.13'", specifier = ">=1.0.2" },
 ]
