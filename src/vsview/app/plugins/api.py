@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from fractions import Fraction
+from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar, cast
 
@@ -39,7 +40,9 @@ from vsview.app.views.timeline import Frame, Time
 from vsview.app.views.video import BaseGraphicsView
 from vsview.vsenv.loop import run_in_loop
 
-from ._interface import _GraphicsViewProxy, _PluginAPI, _PluginBaseMeta, _TimelineProxy, _ViewportProxy
+from ._interface import _GraphicsViewProxy, _PlaybackProxy, _PluginAPI, _PluginBaseMeta, _TimelineProxy, _ViewportProxy
+
+logger = getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,6 +240,33 @@ class TimelineProxy(_TimelineProxy):
         self.__timeline.update()
 
 
+
+class PlaybackProxy(_PlaybackProxy):
+    """Proxy for the playback."""
+
+    def seek(self, frame: int) -> bool:
+        """
+        Seek to the given frame.
+
+        Args:
+            frame: The frame number to seek to.
+
+        Returns:
+            bool: True if the seek was successful, False otherwise.
+        """
+        if self.__workspace.playback.state.is_playing:
+            logger.debug("Video is playing, skipping seek request")
+            return False
+
+        if not 0 <= frame < self.__workspace.api.current_voutput.vs_output.clip.num_frames:
+            logger.warning("Requested frame is out of bounds")
+            return False
+
+        self.__workspace.playback.request_frame(frame)
+
+        return True
+
+
 class PluginAPI(_PluginAPI):
     """API for plugins to interact with the workspace."""
 
@@ -319,6 +349,11 @@ class PluginAPI(_PluginAPI):
     def timeline(self) -> TimelineProxy:
         """Return a proxy for the timeline."""
         return TimelineProxy(self.__workspace, self.__workspace.tbar.timeline)
+
+    @property
+    def playback(self) -> PlaybackProxy:
+        """Return a proxy for the playback."""
+        return PlaybackProxy(self.__workspace, self.__workspace.playback)
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """

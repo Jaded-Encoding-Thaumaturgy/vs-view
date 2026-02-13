@@ -23,6 +23,7 @@ from vsview.vsenv.loop import run_in_loop
 
 if TYPE_CHECKING:
     from vsview.app.workspace.loader import LoaderWorkspace
+    from vsview.app.workspace.playback import PlaybackManager
 
     from .api import PluginGraphicsView, VideoOutputProxy, WidgetPluginBase, _PluginBase
 
@@ -476,3 +477,10 @@ class _TimelineProxy(QObject):
         super().__init__()
         self.__workspace = workspace
         self.__timeline = timeline
+
+
+class _PlaybackProxy(QObject):
+    def __init__(self, workspace: LoaderWorkspace[Any], playback_manager: PlaybackManager) -> None:
+        super().__init__()
+        self.__workspace = workspace
+        self.__playback_manager = playback_manager
