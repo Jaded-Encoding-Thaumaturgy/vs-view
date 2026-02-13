@@ -7,7 +7,7 @@ These features are present in VSPreview and need to be brought over.
 - [x] VFR support
 - [ ] ~~timecode files loading~~
 - [x] Audio support
-- [ ] Scening (+ API for custom notches on the timeline)
+- [x] Scening (+ API for custom notches on the timeline)
 - [x] Pipette
 - [ ] Benchmark (Likely a wrapper for `vspipe`)
 - [x] SAR/DAR support
