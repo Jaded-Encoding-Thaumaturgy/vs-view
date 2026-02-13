@@ -140,10 +140,10 @@ class TabViewWidget(QTabWidget):
 class TabLabel(QWidget):
     """Custom widget for tab labels displaying output name and zoom."""
 
-    def __init__(self, vs_name: str | None, vs_index: int, parent: QWidget | None = None) -> None:
+    def __init__(self, vs_name: str, vs_index: int, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self._name = vs_name or "Node"
+        self._name = vs_name
         self._vs_index = vs_index
         self._zoom = 1.0
 

@@ -39,10 +39,12 @@ dev = [
     "vsstubs>=1.0.2; python_version>='3.13'",
     "mypy>=1.19.0",
     "ruff>=0.14.7",
-    # "objgraph>=3.6.2",
-    # "graphviz>=0.21",
+    "objgraph>=3.6.2",
+    "graphviz>=0.21",
     "cython>=3.0.0",
     "types-pygments>=2.19.0.20251121",
+    "pytest>=8.0.0",
+    "pytest-mock>=3.14.0",
 ]
 plugins = [
     "vsview-split-planes",
@@ -71,6 +73,7 @@ include = ["README.md", "LICENSE", "pyproject.toml"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/vsview"]
 exclude = ["README.md"]
+artifacts = ["src/vsview/global_settings.json"]
 
 [tool.hatch.version]
 source = "versioningit"

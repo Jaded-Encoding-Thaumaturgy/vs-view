@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from itertools import zip_longest
 from logging import getLogger
 from pathlib import Path
@@ -9,13 +10,15 @@ from weakref import WeakKeyDictionary
 
 import vapoursynth as vs
 from pydantic import BaseModel
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QMetaObject, QObject, Signal
 from PySide6.QtGui import QContextMenuEvent, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
 
 from vsview.app.outputs import VideoOutput
 from vsview.app.settings import SettingsManager
 from vsview.app.utils import ObjectType
+from vsview.app.views.timeline import Timeline
+from vsview.app.views.video import GraphicsView
 from vsview.vsenv.loop import run_in_loop
 
 if TYPE_CHECKING:
@@ -26,11 +29,43 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
+class _SettingsProxy[T: BaseModel]:
+    """
+    Proxy that intercepts `__setattr__` on a pydantic BaseModel and auto-persists the change via the supplied callback.
+    Reads are delegated transparently to the underlying model.
+    """
+
+    __slots__ = ("_model", "_on_update")
+
+    def __init__(self, model: T, on_update: Callable[[str, Any], None]) -> None:
+        object.__setattr__(self, "_model", model)
+        object.__setattr__(self, "_on_update", on_update)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._model, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in self.__slots__:
+            object.__setattr__(self, name, value)
+        elif hasattr(self._model, name):
+            self._on_update(name, value)
+        else:
+            raise AttributeError(f"{type(self._model).__name__!r} object has no attribute {name!r}")
+
+    def __repr__(self) -> str:
+        return repr(self._model)
+
+    def __eq__(self, other: object) -> bool:
+        return self._model == other._model if isinstance(other, _SettingsProxy) else self._model == other
+
+
 class _PluginSettingsStore:
     def __init__(self, workspace: LoaderWorkspace[Any]) -> None:
         self._workspace = workspace
-        self._global_cache: WeakKeyDictionary[_PluginBase[Any, Any], BaseModel] = WeakKeyDictionary()
-        self._local_cache: WeakKeyDictionary[_PluginBase[Any, Any], BaseModel] = WeakKeyDictionary()
+        self._caches: dict[str, WeakKeyDictionary[_PluginBase[Any, Any], BaseModel]] = {
+            "global": WeakKeyDictionary(),
+            "local": WeakKeyDictionary(),
+        }
 
     @property
     def file_path(self) -> Path | None:
@@ -39,52 +74,47 @@ class _PluginSettingsStore:
         return self._workspace.content if isinstance(self._workspace, GenericFileWorkspace) else None
 
     def get(self, plugin: _PluginBase[Any, Any], scope: str) -> BaseModel | None:
-        cache = self._global_cache if scope == "global" else self._local_cache
+        cache = self._caches[scope]
 
         if plugin in cache:
             return cache[plugin]
 
-        # Get the settings model for this scope
-        model: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model")
-
-        if model is None:
+        model_cls: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model")
+        if model_cls is None:
             return None
 
-        # Fetch raw data from storage + validate into model
-        settings = model.model_validate(self._get_raw_settings(plugin.identifier, scope))
+        # Fetch and validate
+        settings = model_cls.model_validate(self._get_raw_settings(plugin.identifier, scope))
 
         # Resolve local settings with global fallbacks
-        from .api import LocalSettingsModel
+        if scope == "local":
+            from .api import LocalSettingsModel
 
-        if (
-            scope == "local"
-            and isinstance(settings, LocalSettingsModel)
-            and (global_settings := self.get(plugin, "global")) is not None
-        ):
-            settings = settings.resolve(global_settings)
+            if isinstance(settings, LocalSettingsModel) and (global_settings := self.get(plugin, "global")):
+                settings = settings.resolve(global_settings)
 
         cache[plugin] = settings
         return settings
 
     def update(self, plugin: _PluginBase[Any, Any], scope: str, **updates: Any) -> None:
-        # For local settings, we need to update the raw (unresolved) settings,
-        # not the resolved version with global fallbacks merged in.
-        if (settings := self._get_unresolved_settings(plugin, scope)) is None:
+        model_cls: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model")
+
+        if model_cls is None:
+            logger.warning("No model for plugin %r scope %r", plugin.identifier, scope)
             return
 
-        # Apply updates to the settings object
+        # Always update against the raw (unresolved) state
+        raw_data = self._get_raw_settings(plugin.identifier, scope)
+        settings = model_cls.model_validate(raw_data)
+
         for key, value in updates.items():
             setattr(settings, key, value)
 
-        # Persist to storage
         self._set_raw_settings(plugin.identifier, scope, settings)
-
-        # Invalidate cache so next access re-validates
-        cache = self._global_cache if scope == "global" else self._local_cache
-        cache.pop(plugin, None)
+        self._caches[scope].pop(plugin, None)
 
     def invalidate(self, scope: str) -> None:
-        getattr(self, f"_{scope}_cache").clear()
+        self._caches[scope].clear()
 
     def _get_raw_settings(self, plugin_id: str, scope: str) -> dict[str, Any]:
         if scope == "global":
@@ -95,7 +125,6 @@ class _PluginSettingsStore:
             return {}
 
         raw = container.plugins.get(plugin_id, {})
-
         return raw if isinstance(raw, dict) else raw.model_dump()
 
     def _set_raw_settings(self, plugin_id: str, scope: str, settings: BaseModel) -> None:
@@ -103,14 +132,6 @@ class _PluginSettingsStore:
             SettingsManager.global_settings.plugins[plugin_id] = settings
         elif self.file_path is not None:
             SettingsManager.get_local_settings(self.file_path).plugins[plugin_id] = settings
-
-    def _get_unresolved_settings(self, plugin: _PluginBase[Any, Any], scope: str) -> BaseModel | None:
-        model: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model")
-
-        if model is None:
-            return None
-
-        return model.model_validate(self._get_raw_settings(plugin.identifier, scope))
 
 
 def _make_voutput_proxy(voutput: VideoOutput) -> VideoOutputProxy:
@@ -271,10 +292,11 @@ class _PluginAPI(QObject):
         current_frame = self.__workspace.playback.state.current_frame
 
         # Detect if we are actually changing tabs or forcing a refresh
-        output_changed = view.current_tab != tab_index
+        image_changed = view.current_tab != tab_index or view.last_frame != current_frame
         view.current_tab = tab_index
+        view.last_frame = current_frame
 
-        logger.debug("Initializing view: %s, tab=%d (changed=%s), refresh=%s", view, tab_index, output_changed, refresh)
+        logger.debug("Initializing view: %s, tab=%d (changed=%s), refresh=%s", view, tab_index, image_changed, refresh)
 
         if refresh:
             view.outputs.clear()
@@ -289,7 +311,7 @@ class _PluginAPI(QObject):
         with self.__workspace.env.use():
             view.on_current_voutput_changed(self.current_voutput, tab_index)
 
-        if view.pixmap_item.pixmap().isNull() or output_changed or refresh:
+        if view.pixmap_item.pixmap().isNull() or image_changed or refresh:
             with self.__workspace.env.use(), view.outputs[tab_index].get_frame(current_frame) as frame:
                 logger.debug("Rendering initial frame %d for view", current_frame)
                 view.on_current_frame_changed(current_frame, frame)
@@ -320,8 +342,13 @@ class _PluginAPI(QObject):
                     with self.__workspace.env.use(), view.outputs[view.current_tab].get_frame(n) as frame:
                         view.on_current_frame_changed(n, frame)
 
-    def _get_cached_settings(self, plugin: _PluginBase[Any, Any], scope: str) -> Any:
-        return self._settings_store.get(plugin, scope)
+    def _get_cached_proxy_settings(self, plugin: _PluginBase[Any, Any], scope: str) -> Any:
+        model = self._settings_store.get(plugin, scope)
+
+        if model is None:
+            return model
+
+        return _SettingsProxy(model, lambda k, v: self._settings_store.update(plugin, scope, **{k: v}))
 
     def _update_settings(self, plugin: _PluginBase[Any, Any], scope: str, **updates: Any) -> None:
         self._settings_store.update(plugin, scope, **updates)
@@ -427,3 +454,25 @@ class _PluginBaseMeta(ObjectType):
             cls.global_settings_model, cls.local_settings_model = None, None
 
         return cls
+
+
+class _GraphicsViewProxy(QObject):
+    def __init__(self, workspace: LoaderWorkspace[Any], view: GraphicsView) -> None:
+        super().__init__()
+        self.__workspace = workspace
+        self.__view = view
+
+
+class _ViewportProxy(QObject):
+    def __init__(self, workspace: LoaderWorkspace[Any], viewport: QWidget) -> None:
+        super().__init__()
+        self.__workspace = workspace
+        self.__viewport = viewport
+        self.__cursor_reset_conn: QMetaObject.Connection | None = None
+
+
+class _TimelineProxy(QObject):
+    def __init__(self, workspace: LoaderWorkspace[Any], timeline: Timeline) -> None:
+        super().__init__()
+        self.__workspace = workspace
+        self.__timeline = timeline

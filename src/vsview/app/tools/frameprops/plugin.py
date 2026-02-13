@@ -308,6 +308,8 @@ class FramePropsTreeView(QTreeView, FramePropsViewMixin):
         else:
             self.header().hideSection(FramePropsModel.FORMATTED_COLUMN)
 
+        self.doItemsLayout()
+
     def _on_section_resized(self, logical_index: int, old_size: int, new_size: int) -> None:
         if logical_index == 1 and old_size != new_size:
             self.doItemsLayout()

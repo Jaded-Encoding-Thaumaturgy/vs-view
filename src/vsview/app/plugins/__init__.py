@@ -1,4 +1,5 @@
 from .api import (
+    GraphicsViewProxy,
     LocalSettingsModel,
     NodeProcessor,
     PluginAPI,
@@ -10,6 +11,7 @@ from .api import (
 from .specs import hookimpl
 
 __all__ = [
+    "GraphicsViewProxy",
     "LocalSettingsModel",
     "NodeProcessor",
     "PluginAPI",

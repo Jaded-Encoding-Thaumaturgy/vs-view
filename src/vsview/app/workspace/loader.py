@@ -34,7 +34,7 @@ from ..outputs import AudioOutput, OutputsManager, VideoOutput
 from ..plugins.api import PluginAPI, WidgetPluginBase
 from ..plugins.manager import PluginManager
 from ..settings import ActionID, ShortcutManager
-from ..views import OutputInfo, PluginSplitter
+from ..views import OutputInfo, PluginDock, PluginSplitter
 from ..views.components import CustomLoadingPage, DockButton
 from ..views.timeline import Frame, Time, TimelineControlBar
 from .base import BaseWorkspace
@@ -134,11 +134,9 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.plugin_splitter.insert_main_widget(self.tab_manager)
 
         # Connect plugin visibility signals
-        self.plugin_splitter.rightPanelBecameVisible.connect(self._init_visible_plugins)
-        self.plugin_splitter.pluginTabChanged.connect(lambda _: self._init_visible_plugins())
-
-        # Connect dock tab activation signal for tabified docks
-        self.dock_container.tabifiedDockWidgetActivated.connect(lambda _: self._init_visible_plugins())
+        self.plugin_splitter.rightPanelBecameVisible.connect(self._on_splitter_visible)
+        self.plugin_splitter.rightPanelBecameCollapsed.connect(self._on_splitter_collapsed)
+        self.plugin_splitter.pluginTabChanged.connect(self._on_splitter_tab_changed)
 
         self.dock_container.setCentralWidget(self.plugin_splitter)
         self.content_layout.addWidget(self.dock_container)
@@ -239,9 +237,10 @@ class LoaderWorkspace[T](BaseWorkspace):
         return super().deleteLater()
 
     def clear_environment(self) -> None:
-        with self.env.use():
-            for cb in self.cbs_on_destroy:
-                self.loop.from_thread(cb)
+        if self._env and not self._env.disposed:
+            with self._env.use():
+                for cb in self.cbs_on_destroy:
+                    self.loop.from_thread(cb)
 
         self.outputs_manager.clear()
 
@@ -333,7 +332,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.statusLoadingStarted.emit("Reloading Content...")
 
         with self.tbar.disabled(), self.tab_manager.clear_voutputs_on_fail(), self.freeze_viewport():
-            self.loop.from_thread(self.content_area.setDisabled, True)
+            self.loop.from_thread(self.content_area.setDisabled, True).result()
             self.tab_manager.disable_switch = True
             self.playback.state.wait_for_cleanup(
                 0.25,
@@ -517,19 +516,6 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         return voutputs, aoutputs
 
-    def _on_dock_toggle(self, checked: bool) -> None:
-        for dock in self.docks:
-            if self.global_settings.view_tools.docks.get(dock.objectName(), True):
-                dock.setVisible(checked)
-
-    def _init_visible_plugins(self) -> None:
-        if not self.outputs_manager.current_voutput:
-            return  # No content loaded yet
-
-        with self.env.use():
-            for plugin in self.plugins:
-                self.api._init_plugin(plugin)
-
     def _on_tab_changed(
         self,
         index: int,
@@ -670,16 +656,11 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     def _setup_docks(self) -> None:
         for plugin_type in PluginManager.tooldocks:
-            dock = QDockWidget(plugin_type.display_name, self.dock_container)
-            dock.setObjectName(plugin_type.identifier)
-            dock.setFeatures(
-                QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
-            )
-            dock.setVisible(False)
-
+            dock = PluginDock(plugin_type.display_name, plugin_type.identifier, self.dock_container)
             plugin_obj = plugin_type(dock, self.api)
+
             dock.setWidget(plugin_obj)
-            dock.visibilityChanged.connect(lambda visible: self._init_visible_plugins() if visible else None)
+            dock.visibilityChanged.connect(lambda visible, d=dock: self._on_dock_visibility_changed(visible, d))
 
             self.plugins.append(plugin_obj)
             self.docks.append(dock)
@@ -701,6 +682,44 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.plugin_splitter.plugin_tabs.setTabVisible(
                 i, self.global_settings.view_tools.panels.get(plugin_type.identifier, True)
             )
+
+    def _on_dock_toggle(self, checked: bool) -> None:
+        for dock in self.docks:
+            if self.global_settings.view_tools.docks.get(dock.objectName(), True):
+                dock.setVisible(checked)
+
+    def _on_dock_visibility_changed(self, visible: bool, dock: PluginDock) -> None:
+        if not isinstance(w := dock.widget(), WidgetPluginBase):
+            return
+
+        if visible:
+            with self.env.use():
+                self.api._init_plugin(w)
+
+            dock.truly_visible = True
+        elif dock.truly_visible:
+            w.on_hide()
+            dock.truly_visible = False
+
+    def _on_splitter_visible(self) -> None:
+        if (
+            isinstance(w := self.plugin_splitter.plugin_tabs.currentWidget(), WidgetPluginBase)
+            and self.outputs_manager.current_voutput
+        ):
+            with self.env.use():
+                self.api._init_plugin(w)
+
+    def _on_splitter_collapsed(self) -> None:
+        if isinstance(w := self.plugin_splitter.plugin_tabs.currentWidget(), WidgetPluginBase):
+            w.on_hide()
+
+    def _on_splitter_tab_changed(self, new_index: int, old_index: int) -> None:
+        if isinstance(w := self.plugin_splitter.plugin_tabs.widget(new_index), WidgetPluginBase):
+            with self.env.use():
+                self.api._init_plugin(w)
+
+        if isinstance(w := self.plugin_splitter.plugin_tabs.widget(old_index), WidgetPluginBase):
+            w.on_hide()
 
 
 class VSEngineWorkspace[T](LoaderWorkspace[T]):

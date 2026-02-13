@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import pluggy
 from jetpytools import Singleton, inject_self
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from vapoursynth import AudioNode, VideoNode
 from vsengine.loops import EventLoop, get_loop
 
@@ -220,4 +220,10 @@ class PluginManager(Singleton):
                 existing = raw.model_dump() if isinstance(raw, BaseModel) else raw
 
                 # Validate existing settings (missing fields will be filled with defaults by Pydantic)
-                settings_container.plugins[plugin.identifier] = model.model_validate(existing)
+                try:
+                    validaded = model.model_validate(existing, extra="forbid")
+                except ValidationError:
+                    logger.exception("The plugin %r has invalid settings:", plugin.identifier)
+                    continue
+
+                settings_container.plugins[plugin.identifier] = validaded

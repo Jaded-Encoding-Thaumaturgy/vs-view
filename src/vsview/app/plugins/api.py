@@ -11,22 +11,23 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from fractions import Fraction
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar, cast
 
 import vapoursynth as vs
 from jetpytools import copy_signature
 from pydantic import BaseModel
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
     QAction,
+    QColor,
     QContextMenuEvent,
     QCursor,
     QImage,
     QKeyEvent,
     QMouseEvent,
     QPixmap,
+    QRgba64,
     QShortcut,
-    QShowEvent,
 )
 from PySide6.QtWidgets import QGraphicsView, QWidget
 from shiboken6 import Shiboken
@@ -38,7 +39,7 @@ from vsview.app.views.timeline import Frame, Time
 from vsview.app.views.video import BaseGraphicsView
 from vsview.vsenv.loop import run_in_loop
 
-from ._interface import _PluginAPI, _PluginBaseMeta
+from ._interface import _GraphicsViewProxy, _PluginAPI, _PluginBaseMeta, _TimelineProxy, _ViewportProxy
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,8 +49,8 @@ class VideoOutputProxy:
     vs_index: int
     """Index of the video output in the VapourSynth environment."""
 
-    vs_name: str | None = field(hash=False, compare=False)
-    """Name of the video output, if any, when using `vsview.set_output()`."""
+    vs_name: str = field(hash=False, compare=False)
+    """Name of the video output."""
 
     vs_output: vs.VideoOutputTuple = field(hash=False, compare=False)
     """The object created by `vapoursynth.get_outputs()`."""
@@ -69,7 +70,7 @@ class VideoOutputProxy:
     Cumulative durations of the clip.
     """
 
-    def time_to_frame(self, time: Time, fps: VideoOutputProxy | Fraction | None = None) -> Frame:
+    def time_to_frame(self, time: timedelta, fps: VideoOutputProxy | Fraction | None = None) -> Frame:
         """
         Convert a time to a frame number for this output.
 
@@ -97,11 +98,143 @@ class AudioOutputProxy:
     vs_index: int
     """Index of the audio output in the VapourSynth environment."""
 
-    vs_name: str | None = field(hash=False, compare=False)
-    """Name of the audio output, if any, when using `vsview.set_output()`."""
+    vs_name: str = field(hash=False, compare=False)
+    """Name of the audio output"""
 
     vs_output: vs.AudioNode = field(hash=False, compare=False)
     """The object created by `vapoursynth.get_outputs()`."""
+
+
+class GraphicsViewProxy(_GraphicsViewProxy):
+    """Proxy for a graphics view."""
+
+    @property
+    def pixmap(self) -> QPixmap:
+        """Return the pixmap (implicitly shared)."""
+        return self.__view.pixmap_item.pixmap()
+
+    @property
+    def image(self) -> QImage:
+        """Return a copy of the image."""
+        return self.__view.pixmap_item.pixmap().toImage()
+
+    class ViewportProxy(_ViewportProxy):
+        """Proxy for a viewport."""
+
+        @copy_signature(QWidget().mapFromGlobal if TYPE_CHECKING else lambda *args, **kwargs: cast(Any, None))
+        def map_from_global(self, *args: Any, **kwargs: Any) -> Any:
+            """
+            Map global coordinates to the current view's local coordinates.
+            """
+            return self.__viewport.mapFromGlobal(*args, **kwargs)
+
+        def set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
+            """
+            Set the cursor for the current view's viewport.
+            """
+            v = self.__viewport
+            v.setCursor(cursor)
+
+            if self.__cursor_reset_conn:
+                self.__workspace.tab_manager.tabChanged.disconnect(self.__cursor_reset_conn)
+
+            def reset_cursor() -> None:
+                if Shiboken.isValid(v):
+                    v.setCursor(Qt.CursorShape.OpenHandCursor)
+                self.__cursor_reset_conn = None
+
+            self.__cursor_reset_conn = self.__workspace.tab_manager.tabChanged.connect(
+                reset_cursor,
+                Qt.ConnectionType.SingleShotConnection,  # Auto-disconnects after first emit
+            )
+
+    @property
+    def viewport(self) -> GraphicsViewProxy.ViewportProxy:
+        """Return a proxy for the viewport."""
+        return GraphicsViewProxy.ViewportProxy(self.__workspace, self.__view.viewport())
+
+    @copy_signature(QGraphicsView().mapToScene if TYPE_CHECKING else lambda *args, **kwargs: cast(Any, None))
+    def map_to_scene(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Map coordinates to this view's scene.
+        """
+        return self.__view.mapToScene(*args, **kwargs)
+
+    @copy_signature(QGraphicsView().mapFromScene if TYPE_CHECKING else lambda *args, **kwargs: cast(Any, None))
+    def map_from_scene(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Map coordinates from view's scene.
+        """
+        return self.__view.mapFromScene(*args, **kwargs)
+
+
+class TimelineProxy(_TimelineProxy):
+    """Proxy for the timeline."""
+
+    @staticmethod
+    def _norm_data(
+        data: timedelta | int | Sequence[timedelta | int | tuple[timedelta | int, timedelta | int]],
+    ) -> Iterator[tuple[Frame | Time, Frame | Time | None]]:
+        data = [data] if isinstance(data, (timedelta, int)) else data
+
+        for d in data:
+            if isinstance(d, (timedelta, int)):
+                start, end = d, None
+            else:
+                start, end = d
+
+            start, end = (
+                Frame(start) if isinstance(start, int) else Time(seconds=start.seconds),
+                Frame(end)
+                if isinstance(end, int)
+                else Time(seconds=end.seconds)
+                if isinstance(end, timedelta)
+                else None,
+            )
+            yield start, end
+
+    @property
+    def mode(self) -> Literal["frame", "time"]:
+        """Returns the Timeline mode, "frame" or "time"."""
+        return self.__timeline.mode
+
+    def add_notch(
+        self,
+        identifier: str,
+        data: timedelta | int | Sequence[timedelta | int | tuple[timedelta | int, timedelta | int]],
+        color: Qt.GlobalColor | QColor | QRgba64 | str | int = Qt.GlobalColor.black,
+        label: str = "",
+    ) -> None:
+        """
+        Add notch(es) to the timeline.
+
+        Args:
+            identifier: The identifier of the notch.
+            data: The data of the notch (frame number or timedelta or range notches).
+            color: The color of the notch.
+            label: The label of the notch.
+        """
+        for start, end in self._norm_data(data):
+            self.__timeline.add_notch(identifier, start, end, color=color, label=label)
+
+        self.__timeline.update()
+
+    def discard_notch(
+        self,
+        identifier: str,
+        data: timedelta | int | Sequence[timedelta | int | tuple[timedelta | int, timedelta | int]],
+    ) -> None:
+        """
+        Discard notch(es) from the timeline.
+
+        Args:
+            identifier: The identifier of the notch.
+            data: The data of the notch (frame number or timedelta or range notches).
+        """
+        for start, end in self._norm_data(data):
+            self.__timeline.discard_notch(identifier, start, end)
+
+        self.__timeline.update()
 
 
 class PluginAPI(_PluginAPI):
@@ -123,22 +256,17 @@ class PluginAPI(_PluginAPI):
         return self._settings_store.file_path
 
     @property
-    def current_frame(self) -> int:
+    def current_frame(self) -> Frame:
         """Return the current frame number."""
-        return self.__workspace.playback.state.current_frame
+        return Frame(self.__workspace.playback.state.current_frame)
 
     @property
-    def current_time(self) -> timedelta:
+    def current_time(self) -> Time:
         """Return the current time."""
         if voutput := self.__workspace.outputs_manager.current_voutput:
             return voutput.frame_to_time(self.current_frame)
 
         raise NotImplementedError
-
-    @property
-    def current_timeline_mode(self) -> Literal["frame", "time"]:
-        """Return the current timeline display mode."""
-        return self.__workspace.tbar.timeline.mode
 
     @property
     def current_video_index(self) -> int:
@@ -183,52 +311,14 @@ class PluginAPI(_PluginAPI):
         return self.__workspace.outputs_manager.packer
 
     @property
-    def current_view_pixmap(self) -> QPixmap:
-        """
-        Return a copy of the pixmap of the current view.
-        """
-        return self.__workspace.tab_manager.current_view.pixmap_item.pixmap().copy()
+    def current_view(self) -> GraphicsViewProxy:
+        """Return a proxy for the current view."""
+        return GraphicsViewProxy(self.__workspace, self.__workspace.tab_manager.current_view)
 
     @property
-    def current_view_image(self) -> QImage:
-        """
-        Return a copy of the image of the current view.
-        """
-        return self.current_view_pixmap.toImage()
-
-    def current_viewport_map_from_global(self, pos: QPoint) -> QPoint:
-        """
-        Map global coordinates to the current view's local coordinates.
-        """
-        return self.__workspace.tab_manager.current_view.viewport().mapFromGlobal(pos)
-
-    @copy_signature(QGraphicsView().mapToScene if TYPE_CHECKING else None)
-    def current_viewport_map_to_scene(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Map coordinates to the current view's scene.
-        """
-        return self.__workspace.tab_manager.current_view.mapToScene(*args, **kwargs)
-
-    @copy_signature(QGraphicsView().mapFromScene if TYPE_CHECKING else None)
-    def current_viewport_map_from_scene(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Map coordinates from the current view's scene.
-        """
-        return self.__workspace.tab_manager.current_view.mapFromScene(*args, **kwargs)
-
-    def current_viewport_set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
-        """
-        Set the cursor for the current view's viewport.
-        """
-        viewport = self.__workspace.tab_manager.current_view.viewport()
-        viewport.setCursor(cursor)
-
-        def reset_cursor() -> None:
-            if Shiboken.isValid(viewport):
-                viewport.setCursor(Qt.CursorShape.OpenHandCursor)
-            self.__workspace.tab_manager.tabChanged.disconnect(reset_cursor)
-
-        self.__workspace.tab_manager.tabChanged.connect(reset_cursor)
+    def timeline(self) -> TimelineProxy:
+        """Return a proxy for the timeline."""
+        return TimelineProxy(self.__workspace, self.__workspace.tbar.timeline)
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """
@@ -348,12 +438,12 @@ class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     @property
     def global_(self) -> TGlobalSettings:
         """Get the current global settings."""
-        return self._plugin.api._get_cached_settings(self._plugin, "global")
+        return self._plugin.api._get_cached_proxy_settings(self._plugin, "global")
 
     @property
     def local_(self) -> TLocalSettings:
         """Get the current local settings (resolved with global fallbacks)."""
-        return self._plugin.api._get_cached_settings(self._plugin, "local")
+        return self._plugin.api._get_cached_proxy_settings(self._plugin, "local")
 
 
 class _PluginBase(Generic[TGlobalSettings, TLocalSettings], metaclass=_PluginBaseMeta):  # noqa: UP046
@@ -398,25 +488,6 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
         QWidget.__init__(self, parent)
         self.api = api
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-
-    def showEvent(self, event: QShowEvent) -> None:
-        super().showEvent(event)
-
-        with self.api.vs_context():
-            self.api._init_plugin(self)
-
-    @property
-    def settings(self) -> PluginSettings[TGlobalSettings, TLocalSettings]:
-        """Get the settings wrapper for lazy, always-fresh access."""
-        return PluginSettings(self)
-
-    def update_global_settings(self, **updates: Any) -> None:
-        """Update specific global settings fields and trigger persistence."""
-        self.api._update_settings(self, "global", **updates)
-
-    def update_local_settings(self, **updates: Any) -> None:
-        """Update specific local settings fields and trigger persistence."""
-        self.api._update_settings(self, "local", **updates)
 
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
         """
@@ -503,6 +574,13 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
         Execution Thread: **Main**.
         """
 
+    def on_hide(self) -> None:
+        """
+        Called when the plugin is hidden.
+
+        Execution Thread: **Main**.
+        """
+
 
 class PluginGraphicsView(BaseGraphicsView):
     """Graphics view for plugins."""
@@ -513,13 +591,14 @@ class PluginGraphicsView(BaseGraphicsView):
 
         self.outputs = dict[int, vs.VideoNode]()
         self.current_tab = -1
+        self.last_frame = -1
 
         self.api.register_on_destroy(self.outputs.clear)
 
     @run_in_loop(return_future=False)
-    def update_display(self, image: QPixmap) -> None:
+    def update_display(self, image: QImage) -> None:
         """Update the UI with the new image on the main thread."""
-        self.pixmap_item.setPixmap(image)
+        self.set_pixmap(QPixmap.fromImage(image))
 
     def refresh(self) -> None:
         """Refresh the view."""
@@ -547,7 +626,7 @@ class PluginGraphicsView(BaseGraphicsView):
         Execution Thread: **Main or Background**.
         If you need to update the UI, use the `@run_in_loop` decorator.
         """
-        self.update_display(QPixmap.fromImage(self.api.packer.frame_to_qimage(f)).copy())
+        self.update_display(self.api.packer.frame_to_qimage(f).copy())
 
     def get_node(self, clip: vs.VideoNode) -> vs.VideoNode:
         """

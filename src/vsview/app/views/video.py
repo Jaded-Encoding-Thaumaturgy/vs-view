@@ -8,13 +8,15 @@ from logging import getLogger
 from typing import Any, NamedTuple
 
 from jetpytools import clamp, copy_signature
-from PySide6.QtCore import QEasingCurve, QSignalBlocker, Qt, QVariantAnimation, Signal, Slot
+from PySide6.QtCore import QEasingCurve, QRect, QRectF, QSignalBlocker, Qt, QVariantAnimation, Signal, Slot
 from PySide6.QtGui import (
+    QBrush,
     QContextMenuEvent,
     QCursor,
     QImage,
     QKeyEvent,
     QMouseEvent,
+    QPainter,
     QPixmap,
     QResizeEvent,
     QTransform,
@@ -111,6 +113,9 @@ class BaseGraphicsView(QGraphicsView):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.graphics_scene = QGraphicsScene(self)
+
+        self._checkerboard = self._create_checkerboard_pixmap()
+
         self.pixmap_item = self.graphics_scene.addPixmap(QPixmap())
         self.pixmap_item.setTransformationMode(Qt.TransformationMode.FastTransformation)
         self.setScene(self.graphics_scene)
@@ -165,7 +170,7 @@ class BaseGraphicsView(QGraphicsView):
 
     def _setup_shortcuts(self) -> None:
         sm = ShortcutManager()
-        sm.register_shortcut(ActionID.RESET_ZOOM, lambda: self.set_zoom(1.0), self)
+        sm.register_shortcut(ActionID.RESET_ZOOM, lambda: self.slider.setValue(self._zoom_to_slider(1.0)), self)
 
         sm.register_action(ActionID.TOGGLE_SAR, self.apply_sar_action)
         sm.register_action(ActionID.AUTOFIT, self.autofit_action)
@@ -199,6 +204,21 @@ class BaseGraphicsView(QGraphicsView):
             return
 
         self.context_menu.exec(event.globalPos())
+
+    def drawBackground(self, painter: QPainter, rect: QRectF | QRect) -> None:
+        if not Shiboken.isValid(self.pixmap_item) or self.pixmap_item.pixmap().isNull():
+            return super().drawBackground(painter, rect)
+
+        pixmap_rect = self.pixmap_item.mapRectToScene(self.pixmap_item.boundingRect())
+
+        if (visible_rect := QRectF(rect).intersected(pixmap_rect)).isEmpty() or (zoom := self.transform().m11()) <= 0:
+            return super().drawBackground(painter, rect)
+
+        # Create brush with inverse zoom so the pattern stays fixed size on screen
+        brush = QBrush(self._checkerboard)
+        brush.setTransform(QTransform.fromScale(1.0 / zoom, 1.0 / zoom))
+
+        painter.fillRect(visible_rect, brush)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         if event.type() == QResizeEvent.Type.Resize:
@@ -332,6 +352,17 @@ class BaseGraphicsView(QGraphicsView):
             self._set_sar_applied(False)
         else:
             self._update_sar_transform()
+
+    @staticmethod
+    def _create_checkerboard_pixmap() -> QPixmap:
+        size = SettingsManager.global_settings.view.checkerboard_size
+        pixmap = QPixmap(size * 2, size * 2)
+        pixmap.fill(Qt.GlobalColor.white)
+
+        with QPainter(pixmap) as painter:
+            painter.fillRect(0, 0, size, size, Qt.GlobalColor.lightGray)
+            painter.fillRect(size, size, size, size, Qt.GlobalColor.lightGray)
+        return pixmap
 
     @Slot(bool)
     def _set_sar_applied(self, applied: bool) -> None:

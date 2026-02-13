@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC, ABCMeta, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import KW_ONLY, dataclass, field
 from datetime import time
 from enum import StrEnum
@@ -25,11 +25,24 @@ from typing import (
 )
 
 from jetpytools import SupportsRichComparison
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    PlainValidator,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    ValidationError,
+    field_serializer,
+    field_validator,
+    model_serializer,
+)
 from PySide6.QtCore import QTime
-from PySide6.QtGui import QKeySequence
+from PySide6.QtGui import QColor, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QDoubleSpinBox,
     QLineEdit,
@@ -512,7 +525,7 @@ class TimelineSettings(BaseModel):
         DoubleSpin(
             label="Display Scale",
             min=1.0,
-            max=10.0,
+            max=2.5,
             suffix="x",
             decimals=2,
             tooltip="Display scale for the timeline",
@@ -540,6 +553,38 @@ class TimelineSettings(BaseModel):
             tooltip="Default seek step for the timeline",
         ),
     ] = 24
+
+    view_hover_zoom: Annotated[
+        bool,
+        Checkbox(
+            label="Hover Preview",
+            text="Show zoomed preview on hover",
+            tooltip="Show a zoomed preview of the timeline and notch labels when hovering.",
+        ),
+    ] = True
+
+    hover_zoom_factor: Annotated[
+        float,
+        DoubleSpin(
+            label="Hover Zoom Factor",
+            min=1.0,
+            max=20.0,
+            suffix="x",
+            decimals=1,
+            tooltip="Magnification factor for the hover preview.",
+        ),
+    ] = 8.0
+
+    hover_zoom_radius: Annotated[
+        int,
+        Spin(
+            label="Hover Zoom Radius",
+            min=10,
+            max=500,
+            suffix=" px",
+            tooltip="Radius of the zoomed area in pixels.",
+        ),
+    ] = 100
 
 
 class PlaybackSettings(BaseModel):
@@ -716,6 +761,17 @@ class ViewSettings(BaseModel):
         ),
     ] = [0.25, 0.5, 0.75, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
 
+    checkerboard_size: Annotated[
+        int,
+        Spin(
+            label="Checkerboard Size",
+            min=2,
+            max=256,
+            suffix=" px",
+            tooltip="The size of the checkerboard when displaying a clip with an alpha plane",
+        ),
+    ] = 16
+
 
 class WindowGeometry(BaseModel):
     """Window position and size."""
@@ -730,6 +786,56 @@ class WindowGeometry(BaseModel):
 class ViewTools(BaseModel):
     docks: dict[str, bool] = Field(default_factory=dict)
     panels: dict[str, bool] = Field(default_factory=dict)
+
+
+def _deserialize_qcolor(v: Any) -> QColor:
+    if isinstance(v, QColor):
+        return v
+
+    if isinstance(v, Sequence):
+        return QColor.fromRgbF(*v)
+
+    raise ValueError("Invalid format for QColor")
+
+
+class QtSettings(BaseModel):
+    custom_colors: list[
+        Annotated[
+            QColor,
+            PlainValidator(_deserialize_qcolor),
+            PlainSerializer(lambda color: color.getRgbF(), return_type=tuple[float, float, float, float]),
+        ]
+    ] = Field(default_factory=list)
+    model_config = ConfigDict(validate_assignment=True)
+
+    def model_post_init(self, context: Any) -> None:
+        if self.custom_colors:
+            self.sync_to_dialog()
+        else:
+            self.sync_from_dialog()
+
+    def sync_to_dialog(self) -> None:
+        max_colors = QColorDialog.customCount()
+
+        for i, color in enumerate(self.custom_colors):
+            if i >= max_colors:
+                break
+
+            QColorDialog.setCustomColor(i, color.rgba())
+
+    def sync_from_dialog(self) -> None:
+        new_colors = list[QColor]()
+
+        for i in range(QColorDialog.customCount()):
+            if (color := QColorDialog.customColor(i)).isValid():
+                new_colors.append(color)
+
+        self.custom_colors = new_colors
+
+    @model_serializer(mode="wrap")
+    def sync_before_serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        self.sync_from_dialog()
+        return handler(self)
 
 
 class BaseSettings(BaseModel):
@@ -805,6 +911,7 @@ class GlobalSettings(BaseSettings):
     # Hidden
     window_geometry: WindowGeometry = WindowGeometry()
     view_tools: ViewTools = ViewTools()
+    qt_settings: QtSettings = QtSettings()
 
     def get_key(self, action_id: str) -> str:
         """Get the key sequence for a specific action."""

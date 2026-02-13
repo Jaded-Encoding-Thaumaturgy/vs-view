@@ -10,7 +10,7 @@ from typing import Any, ClassVar
 from weakref import WeakKeyDictionary
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPalette, QPixmap
+from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QToolButton, QWidget
 from shiboken6 import Shiboken
@@ -40,11 +40,13 @@ class IconReloadMixin:
     DEFAULT_ICON_STATES: ClassVar[
         Mapping[
             tuple[QIcon.Mode, QIcon.State],
-            QPalette.ColorRole | tuple[QPalette.ColorGroup, QPalette.ColorRole],
+            tuple[QPalette.ColorGroup, QPalette.ColorRole],
         ]
     ] = {
-        (QIcon.Mode.Normal, QIcon.State.Off): QPalette.ColorRole.ButtonText,
-        (QIcon.Mode.Normal, QIcon.State.On): QPalette.ColorRole.Base,
+        (QIcon.Mode.Normal, QIcon.State.Off): (QPalette.ColorGroup.Normal, QPalette.ColorRole.ButtonText),
+        (QIcon.Mode.Normal, QIcon.State.On): (QPalette.ColorGroup.Normal, QPalette.ColorRole.Base),
+        (QIcon.Mode.Active, QIcon.State.Off): (QPalette.ColorGroup.Normal, QPalette.ColorRole.ButtonText),
+        (QIcon.Mode.Active, QIcon.State.On): (QPalette.ColorGroup.Normal, QPalette.ColorRole.Base),
         (QIcon.Mode.Disabled, QIcon.State.Off): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText),
         (QIcon.Mode.Disabled, QIcon.State.On): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base),
     }
@@ -52,15 +54,16 @@ class IconReloadMixin:
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._button_reloaders = WeakKeyDictionary[QToolButton, Callable[[], None]]()
+        self._action_reloaders = WeakKeyDictionary[QAction, Callable[[], None]]()
         self._custom_callbacks = list[Callable[[], None]]()
 
         from ..app.settings import SettingsManager
 
-        self._settings_manager = SettingsManager()
-        self._settings_manager.signals.globalChanged.connect(self._reload_all_icons)
+        SettingsManager.signals.globalChanged.connect(self._reload_all_icons)
 
     def deleteLater(self) -> None:
         self._button_reloaders.clear()
+        self._action_reloaders.clear()
         self._custom_callbacks.clear()
 
         getattr(super(), "deleteLater", lambda: None)()
@@ -80,7 +83,6 @@ class IconReloadMixin:
         """
         Register a button for automatic icon reload when settings change.
 
-
         Args:
             button: The QToolButton to update.
             icon_name: The IconName to use for the button.
@@ -96,11 +98,6 @@ class IconReloadMixin:
         """
 
         def reload(btn: QToolButton) -> None:
-            # Qt can delete C++ object while Python wrapper still exists
-            if not Shiboken.isValid(btn):
-                del btn
-                return
-
             palette = btn.palette()
 
             if icon_states:
@@ -115,10 +112,47 @@ class IconReloadMixin:
                     size=icon_size,
                 )
             else:
-                icon = self.make_icon((icon_name, palette.color(color_role)), size=icon_size)
+                color = palette.color(QPalette.ColorGroup.Normal, color_role)
+                icon = self.make_icon((icon_name, color), size=icon_size)
             btn.setIcon(icon)
 
         self._button_reloaders[button] = partial(reload, button)
+
+    def register_icon_action(
+        self,
+        action: QAction,
+        icon_name: IconName,
+        icon_size: QSize = QSize(20, 20),
+        color_role: QPalette.ColorRole = QPalette.ColorRole.ToolTipText,
+        icon_states: Mapping[
+            tuple[QIcon.Mode, QIcon.State],
+            QPalette.ColorRole | tuple[QPalette.ColorGroup, QPalette.ColorRole],
+        ]
+        | None = None,
+    ) -> None:
+        """Register a QAction for automatic icon reload."""
+
+        def reload(act: QAction) -> None:
+            # Action doesn't have a palette, so we use the parent widget's palette (self)
+            palette = p.palette() if isinstance((p := action.parent()), QWidget) else getattr(self, "palette")()
+
+            if icon_states:
+                icon = self.make_icon(
+                    {
+                        (mode, state): (
+                            icon_name,
+                            palette.color(*role) if isinstance(role, tuple) else palette.color(role),
+                        )
+                        for (mode, state), role in icon_states.items()
+                    },
+                    size=icon_size,
+                )
+            else:
+                color = palette.color(QPalette.ColorGroup.Normal, color_role)
+                icon = self.make_icon((icon_name, color), size=icon_size)
+            act.setIcon(icon)
+
+        self._action_reloaders[action] = partial(reload, action)
 
     def register_icon_callback(self, callback: Callable[[], None]) -> None:
         """
@@ -133,9 +167,12 @@ class IconReloadMixin:
         self._custom_callbacks.append(callback)
 
     def _reload_all_icons(self) -> None:
-        """Reload all registered icons."""
-        for reload in self._button_reloaders.values():
-            reload()
+        for qobj, reload in (self._button_reloaders | self._action_reloaders).items():
+            if Shiboken.isValid(qobj):
+                reload()
+            else:
+                # Qt can delete C++ object while Python wrapper still exists
+                del qobj
 
         for cb in self._custom_callbacks.copy():
             with suppress(RuntimeError):
@@ -236,19 +273,7 @@ class IconReloadMixin:
             btn.setIcon(icon)
         elif isinstance(icon, IconName):
             palette = btn.palette()
-
-            if icon_states is not None:
-                state_icons = {}
-                for (mode, state), role in icon_states.items():
-                    c = palette.color(*role) if isinstance(role, tuple) else palette.color(role)
-                    state_icons[(mode, state)] = (icon, c)
-
-                q_icon = self.make_icon(state_icons, size=icon_size)
-            else:
-                # Simple single-color icon
-                btn_color = color if color is not None else palette.color(color_role)
-                q_icon = self.make_icon((icon, btn_color), size=icon_size)
-
+            q_icon = self._make_icon_from_iconname(icon, palette, icon_size, color, color_role, icon_states)
             btn.setIcon(q_icon)
 
             if register_icon:
@@ -257,6 +282,68 @@ class IconReloadMixin:
         btn.setIconSize(icon_size)
         btn.setAutoRaise(True)
         return btn
+
+    def make_action(
+        self,
+        icon: IconName | QIcon,
+        tooltip: str,
+        parent: QWidget | None = None,
+        *,
+        checkable: bool = False,
+        checked: bool = False,
+        register_icon: bool = True,
+        icon_size: QSize = QSize(20, 20),
+        color: QColor | None = None,
+        color_role: QPalette.ColorRole = QPalette.ColorRole.ToolTipText,
+        icon_states: Mapping[
+            tuple[QIcon.Mode, QIcon.State],
+            QPalette.ColorRole | tuple[QPalette.ColorGroup, QPalette.ColorRole],
+        ]
+        | None = None,
+    ) -> QAction:
+        """
+        Create a QAction with an icon and automatically register it for hot-reload when the icon is an IconName.
+        """
+        act = QAction(parent or self, toolTip=tooltip, checkable=checkable, checked=checked)  # type: ignore[arg-type]
+
+        if isinstance(icon, QIcon):
+            act.setIcon(icon)
+        elif isinstance(icon, IconName):
+            # Use self.palette() because QAction has no palette of its own
+            palette = p.palette() if isinstance((p := act.parent()), QWidget) else getattr(self, "palette")()
+            q_icon = self._make_icon_from_iconname(icon, palette, icon_size, color, color_role, icon_states)
+            act.setIcon(q_icon)
+
+            if register_icon:
+                self.register_icon_action(act, icon, icon_size, color_role, icon_states)
+
+        return act
+
+    def _make_icon_from_iconname(
+        self,
+        icon: IconName,
+        palette: QPalette,
+        icon_size: QSize = QSize(20, 20),
+        color: QColor | None = None,
+        color_role: QPalette.ColorRole = QPalette.ColorRole.ToolTipText,
+        icon_states: Mapping[
+            tuple[QIcon.Mode, QIcon.State],
+            QPalette.ColorRole | tuple[QPalette.ColorGroup, QPalette.ColorRole],
+        ]
+        | None = None,
+    ) -> QIcon:
+        if icon_states is not None:
+            state_icons = {}
+            for (mode, state), role in icon_states.items():
+                c = palette.color(*role) if isinstance(role, tuple) else palette.color(role)
+                state_icons[(mode, state)] = (icon, c)
+
+            q_icon = self.make_icon(state_icons, size=icon_size)
+        else:
+            act_color = color if color is not None else palette.color(QPalette.ColorGroup.Normal, color_role)
+            q_icon = self.make_icon((icon, act_color), size=icon_size)
+
+        return q_icon
 
 
 def load_svg(svg_data: bytes, size: QSize, color: QColor | None = None) -> QPixmap:

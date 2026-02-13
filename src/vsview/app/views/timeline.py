@@ -9,17 +9,16 @@ from datetime import timedelta
 from functools import cache
 from logging import getLogger
 from math import floor
-from typing import Any, Literal, NamedTuple, Protocol, Self
+from typing import Any, Literal, NamedTuple, Self
 
 from jetpytools import clamp, cround
-from PySide6.QtCore import QEvent, QLineF, QRectF, QSignalBlocker, QSize, Qt, QTime, Signal
+from PySide6.QtCore import QEvent, QLineF, QPoint, QPointF, QRectF, QSignalBlocker, QSize, Qt, QTime, Signal
 from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
     QCursor,
-    QFocusEvent,
+    QFontMetrics,
     QIcon,
-    QKeyEvent,
     QMouseEvent,
     QMoveEvent,
     QPainter,
@@ -28,6 +27,7 @@ from PySide6.QtGui import (
     QPen,
     QResizeEvent,
     QRgba64,
+    QValidator,
 )
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -72,7 +72,7 @@ class Time(timedelta):
         # Caps at 23:59:59.999. If delta > 24h, it wraps around.
         return QTime.fromMSecsSinceStartOfDay(total_ms)
 
-    def to_ts(self, fmt: str) -> str:
+    def to_ts(self, fmt: str = "{H:02d}:{M:02d}:{S:02d}.{ms:03d}") -> str:
         """
         Formats a timedelta object using standard Python formatting syntax.
 
@@ -149,49 +149,356 @@ def generate_label_format(notch_interval_t: Time, end_time: Time) -> str:
 
 
 class Notch[T: (Time, Frame)]:
-    """
-    Represents a notch marker on the timeline.
+    """Represents a notch marker on the timeline."""
 
-    The color attribute is used for custom/provider notches (bookmarks, keyframes, etc.) that need to stand out.
+    class CacheKey(NamedTuple):
+        rect: QRectF
+        total_frames: int
 
-    Main timeline notches use the palette's WindowText color instead.
-    """
+    class CacheValue[T0: (Time, Frame)](NamedTuple):
+        scroll_rect: QRectF
+        labels_notches: list[Notch[T0]]
+        rects_to_draw: list[tuple[QRectF, str]]
+
+    class CacheEntry[T1: (Time, Frame)](NamedTuple):
+        key: Notch.CacheKey
+        value: Notch.CacheValue[T1]
 
     def __init__(
         self,
         data: T,
+        end_data: T | None = None,
         color: Qt.GlobalColor | QColor | QRgba64 | str | int | None = None,
         line: QLineF | None = None,
+        end_line: QLineF | None = None,
         label: str = "",
     ) -> None:
         self.data: T = data
+        self.end_data: T | None = end_data
         self.color = QColor(color) if color is not None else QColor(Qt.GlobalColor.black)
         self.line = line if line is not None else QLineF()
+        self.end_line = end_line
         self.label = label
 
+    def __hash__(self) -> int:
+        return hash((self.data, self.end_data))
 
-class NotchProvider(Protocol):
-    """Protocol defining what a provider of notches must implement."""
+    def __eq__(self, other: object) -> bool:
+        return (
+            (self.data, self.end_data) == (other.data, other.end_data) if isinstance(other, Notch) else NotImplemented
+        )
 
-    @property
-    def is_notches_visible(self) -> bool: ...
-    def get_notches(self) -> list[Notch[Any]]: ...
+    def draw(self, painter: QPainter, scroll_rect: QRectF, range_alpha: int = 80, cosmetic: bool = False) -> None:
+        pen = QPen(self.color, 1)
+
+        if cosmetic:
+            pen.setCosmetic(True)
+
+        painter.setPen(pen)
+
+        if self.end_line is not None:
+            x1, x2 = self.line.x1(), self.end_line.x1()
+            fill_color = QColor(self.color)
+            fill_color.setAlpha(range_alpha)
+            painter.fillRect(QRectF(min(x1, x2), scroll_rect.top(), abs(x2 - x1), scroll_rect.height()), fill_color)
+            painter.drawLine(self.line)
+            painter.drawLine(self.end_line)
+        else:
+            painter.drawLine(self.line)
 
 
-class NotchesCacheKey(NamedTuple):
-    rect: QRectF
-    total_frames: int
+class HoverLabel(NamedTuple):
+    text: str
+    x: float
+    color: QColor
+    y_offset: float = 0.0
 
 
-class NotchesCacheValue[T: (Time, Frame)](NamedTuple):
-    scroll_rect: QRectF
-    labels_notches: list[Notch[T]]
-    rects_to_draw: list[tuple[QRectF, str]]
+class TimelineHoverPopup(QWidget):
+    # Constants
+    NUM_LAYERS = 3
+    POPUP_CORNER_RADIUS = 5
+    PILL_CORNER_RADIUS = 4
+    LABEL_PADDING_H = 4
+    LABEL_PADDING_V = 2
+    LABEL_STAGGER_OFFSETS = (0, -20, -40)
+    LABEL_SPACING = 10
+    ZOOMED_NOTCH_SPACING = 75
+    RANGE_FILL_ALPHA = 80
 
+    def __init__(self, parent: Timeline) -> None:
+        super().__init__(None, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-class NotchesCacheEntry[T: (Time, Frame)](NamedTuple):
-    key: NotchesCacheKey
-    value: NotchesCacheValue[T]
+        self._timeline = parent
+        self.radius = 50
+        self.zoom_factor = 4.0
+        self.hover_x = -1
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        if self.hover_x < 0:
+            return
+
+        popup_rect = QRectF(self.rect())
+
+        with QPainter(self) as painter:
+            self._draw_background(painter, popup_rect)
+
+            # Setup clipping and base transform
+            painter.setClipRect(popup_rect)
+            y_offset = self.height() - self._timeline.height()
+            painter.translate(self.radius, y_offset)
+            painter.scale(self.zoom_factor, 1.0)
+            painter.translate(-self.hover_x, 0)
+
+            self._draw_zoomed_notches(painter)
+            self._draw_scroll_bar(painter)
+            self._draw_custom_notches(painter, popup_rect, y_offset)
+            self._draw_indicators(painter)
+
+    def update_state(self, hover_x: int) -> None:
+        self.zoom_factor = SettingsManager.global_settings.timeline.hover_zoom_factor
+        self.radius = SettingsManager.global_settings.timeline.hover_zoom_radius
+        self.hover_x = hover_x
+
+        popup_width = self.radius * 2
+        popup_height = round(self._timeline.height() * (1 + 0.33 * self.NUM_LAYERS))
+
+        global_pos = self._timeline.mapToGlobal(QPoint(hover_x, 0))
+
+        # Position popup above the timeline
+        x = global_pos.x() - self.radius
+        y = global_pos.y() - popup_height - 10
+
+        self.setGeometry(x, y, popup_width, popup_height)
+        self.update()
+
+    def _draw_background(self, painter: QPainter, popup_rect: QRectF) -> None:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillRect(popup_rect, self._timeline.palette().color(self._timeline.BACKGROUND_COLOR))
+        painter.setPen(QPen(self._timeline.palette().color(self._timeline.TEXT_COLOR), 1))
+        painter.drawRoundedRect(popup_rect, self.POPUP_CORNER_RADIUS, self.POPUP_CORNER_RADIUS)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, on=False)
+
+    def _draw_zoomed_notches(self, painter: QPainter) -> None:
+        # Generate and draw main timeline notches for the zoomed view.
+        fm = painter.fontMetrics()
+
+        # Calculate viewport in timeline X coordinates
+        half_view_x = self.radius / self.zoom_factor
+        view_start_x = self.hover_x - half_view_x
+        view_end_x = self.hover_x + half_view_x
+
+        # Target interval in original space
+        target_interval_x = self.ZOOMED_NOTCH_SPACING / self.zoom_factor
+
+        tmp_notches = list[tuple[int, str]]()
+        if self._timeline.mode == "frame":
+            interval_f = self._timeline.calculate_notch_interval_f(int(target_interval_x))
+            # Improved accuracy: clamp and extend by 1 to avoid rounding issues
+            start_f = max(0, self._timeline.x_to_frame(int(view_start_x)) - 1)
+            curr_f = Frame((start_f // interval_f) * interval_f)
+
+            while curr_f < self._timeline.total_frames:
+                x = self._timeline.cursor_to_x(curr_f)
+                if x > view_end_x + target_interval_x:
+                    break
+
+                if x >= view_start_x - target_interval_x:
+                    tmp_notches.append((x, str(curr_f)))
+
+                curr_f = Frame(curr_f + interval_f)
+        else:
+            interval_t = self._timeline.calculate_notch_interval_t(int(target_interval_x))
+            start_t = self._timeline.x_to_time(max(0, int(view_start_x)))
+            interval_secs = interval_t.total_seconds()
+
+            if interval_secs > 0:
+                curr_secs = max(0, (start_t.total_seconds() // interval_secs) * interval_secs)
+                curr_t = Time(seconds=curr_secs)
+                label_format = generate_label_format(interval_t, self._timeline.total_time)
+
+                while curr_t <= self._timeline.total_time:
+                    x = self._timeline.cursor_to_x(curr_t)
+                    if x > view_end_x + target_interval_x:
+                        break
+
+                    if x >= view_start_x - target_interval_x:
+                        tmp_notches.append((x, curr_t.to_ts(label_format)))
+
+                    curr_t = Time(seconds=curr_t.total_seconds() + interval_secs)
+
+        # Draw notches and labels
+        notch_pen = QPen(self._timeline.palette().color(self._timeline.TEXT_COLOR), 1)
+        notch_pen.setCosmetic(True)
+        painter.setPen(notch_pen)
+
+        lnotch_y = self._timeline.rect_f.top() + self._timeline.font_height + self._timeline.notch_height + 5
+        lnotch_top = lnotch_y - self._timeline.notch_height
+
+        for nx, ntext in tmp_notches:
+            painter.drawLine(QLineF(nx, lnotch_y, nx, lnotch_top))
+
+            # Map to zoomed space for 1:1 text
+            zoomed_pos = painter.transform().map(QPointF(nx, lnotch_top))
+
+            painter.save()
+            painter.resetTransform()
+            painter.setPen(self._timeline.palette().color(self._timeline.TEXT_COLOR))
+            text_width = fm.horizontalAdvance(ntext)
+            painter.drawText(QPointF(zoomed_pos.x() - text_width / 2, zoomed_pos.y() - fm.descent()), ntext)
+            painter.restore()
+
+    def _draw_scroll_bar(self, painter: QPainter) -> None:
+        painter.fillRect(self._timeline.scroll_rect, self._timeline.palette().color(self._timeline.SCROLL_BAR_COLOR))
+
+    def _draw_custom_notches(self, painter: QPainter, popup_rect: QRectF, y_offset: float) -> None:
+        # Draw provider notches (bookmarks, keyframes) with staggered labels.
+        fm = painter.fontMetrics()
+
+        # Collect labels with range support
+        all_labels = list[HoverLabel]()
+        for provider_notches in self._timeline.notches.values():
+            for p_notch in provider_notches:
+                if not (label_text := self._format_notch_label(p_notch)):
+                    continue
+
+                x_pos = painter.transform().map(QPointF(p_notch.line.x1(), 0)).x()
+                all_labels.append(HoverLabel(text=label_text, x=x_pos, color=p_notch.color))
+
+        # Sort and stagger
+        all_labels = sorted(all_labels, key=lambda lbl: lbl.x)
+        staggered_labels = self._apply_staggering(all_labels, fm)
+
+        # Draw labels with leader lines and pills
+        for lbl in staggered_labels:
+            self._draw_label_pill(painter, lbl, popup_rect, y_offset, fm)
+
+        # Draw notches and range fills in scaled space
+        for provider_notches in self._timeline.notches.values():
+            for p_notch in provider_notches:
+                p_notch.draw(painter, self._timeline.scroll_rect, self.RANGE_FILL_ALPHA, cosmetic=True)
+
+    def _format_notch_label(self, notch: Notch[Any]) -> str:
+        base_label = notch.label
+
+        if notch.end_data is not None:
+            # Format: [start, end] label
+            start_str = self._format_data_value(notch.data)
+            end_str = self._format_data_value(notch.end_data)
+            range_prefix = f"[{start_str}, {end_str}]"
+            return f"{range_prefix} {base_label}" if base_label else range_prefix
+
+            # Handle format strings in label
+        return base_label.format(self._format_data_value(notch.data)) if "{" in base_label else base_label
+
+    def _format_data_value(self, data: Frame | Time) -> str:
+        match data, self._timeline.mode:
+            case Time(), "time":
+                return data.to_ts("{H:02d}:{M:02d}:{S:02d}.{ms:03d}")
+            case Time(), "frame":
+                # In frame mode, convert time to frame for display
+                return str(self._timeline.x_to_frame(self._timeline.cursor_to_x(data)))
+            case _:
+                return str(data)
+
+    def _apply_staggering(self, labels: list[HoverLabel], fm: QFontMetrics) -> list[HoverLabel]:
+        if not labels:
+            return []
+
+        # Apply vertical staggering to overlapping labels.
+
+        staggered = list[HoverLabel]()
+        level_index = 0
+        last_x = -9999.0
+
+        for lbl in labels:
+            if lbl.x - last_x < fm.horizontalAdvance(lbl.text) + self.LABEL_SPACING:
+                level_index = (level_index + 1) % len(self.LABEL_STAGGER_OFFSETS)
+            else:
+                level_index = 0
+
+            staggered.append(lbl._replace(y_offset=self.LABEL_STAGGER_OFFSETS[level_index]))
+            last_x = lbl.x
+
+        return staggered
+
+    def _draw_label_pill(
+        self,
+        painter: QPainter,
+        lbl: HoverLabel,
+        popup_rect: QRectF,
+        y_offset: float,
+        fm: QFontMetrics,
+    ) -> None:
+        # Draw a single label with leader line and pill background.
+        text_width = fm.horizontalAdvance(lbl.text)
+        text_height = fm.height()
+
+        painter.save()
+        painter.resetTransform()
+
+        p_y = self._timeline.scroll_rect.top() + y_offset - text_height - 5 + lbl.y_offset
+        t_rect = QRectF(
+            lbl.x - text_width / 2 - self.LABEL_PADDING_H,
+            p_y - self.LABEL_PADDING_V,
+            text_width + self.LABEL_PADDING_H * 2,
+            text_height + self.LABEL_PADDING_V * 2,
+        )
+
+        if popup_rect.intersects(t_rect):
+            # Leader line
+            leader_pen = QPen(self._timeline.palette().color(self._timeline.TEXT_COLOR), 1)
+            leader_pen.setCosmetic(True)
+            painter.setPen(leader_pen)
+            painter.setOpacity(0.5)
+            painter.drawLine(QPointF(lbl.x, self._timeline.scroll_rect.top()), QPointF(lbl.x, t_rect.bottom()))
+            painter.setOpacity(1.0)
+
+            # Pill background
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            bg_color = self._timeline.palette().color(self._timeline.BACKGROUND_COLOR)
+            painter.setBrush(bg_color)
+            painter.setPen(QPen(lbl.color, 1))
+            painter.drawRoundedRect(t_rect, self.PILL_CORNER_RADIUS, self.PILL_CORNER_RADIUS)
+
+            # Label text
+            painter.setPen(self._timeline.palette().color(self._timeline.TEXT_COLOR))
+            painter.drawText(t_rect, Qt.AlignmentFlag.AlignCenter, lbl.text)
+
+        painter.restore()
+
+    def _draw_indicators(self, painter: QPainter) -> None:
+        # Draw hover dash and playback cursor.
+        hover_pen = QPen(
+            self._timeline.palette().color(self._timeline.BACKGROUND_COLOR),
+            1,
+            Qt.PenStyle.DashLine,
+        )
+        hover_pen.setCosmetic(True)
+        painter.setPen(hover_pen)
+        painter.drawLine(
+            QLineF(
+                self.hover_x,
+                self._timeline.scroll_rect.top(),
+                self.hover_x,
+                self._timeline.scroll_rect.bottom(),
+            )
+        )
+
+        cursor_pen = QPen(Qt.GlobalColor.black, 1)
+        cursor_pen.setCosmetic(True)
+        painter.setPen(cursor_pen)
+        painter.drawLine(
+            QLineF(
+                self._timeline.cursor_x,
+                self._timeline.scroll_rect.top(),
+                self._timeline.cursor_x,
+                self._timeline.scroll_rect.bottom(),
+            )
+        )
 
 
 class Timeline(QWidget):
@@ -213,6 +520,9 @@ class Timeline(QWidget):
     TEXT_COLOR = QPalette.ColorRole.WindowText
     SCROLL_BAR_COLOR = QPalette.ColorRole.WindowText
 
+    HOVER_TIME_FORMAT = "{H:02d}:{M:02d}:{S:02d}.{ms:03d}"
+    HOVER_PADDING_H = 6
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
@@ -223,6 +533,7 @@ class Timeline(QWidget):
         self.setAutoFillBackground(True)
 
         self.rect_f = QRectF()
+        self.scroll_rect = QRectF()
 
         # Visual Metrics (scaled by display_scale)
         self.display_scale = SettingsManager.global_settings.timeline.display_scale
@@ -237,7 +548,7 @@ class Timeline(QWidget):
         # Internal cursor state (can be Frame, Time, or raw int pixels)
         self._cursor_val: int | Frame | Time = 0
 
-        self.notches = dict[NotchProvider, list[Notch[Any]]]()
+        self.notches = dict[str, set[Notch[Any]]]()
 
         # Optimization attributes
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
@@ -250,6 +561,9 @@ class Timeline(QWidget):
 
         # Initialize cache
         self.notches_cache = self._init_notches_cache()
+
+        # Hover popup
+        self.hover_popup = TimelineHoverPopup(self)
 
         # Context menu for mode switching
         self.context_menu = QMenu(self)
@@ -319,19 +633,19 @@ class Timeline(QWidget):
         self.context_menu.exec(event.globalPos())
 
     def paintEvent(self, event: QPaintEvent) -> None:
-        self.rect_f = QRectF(event.rect())
+        self.rect_f = QRectF(self.rect())
 
         with QPainter(self) as painter:
             self._draw_widget(painter)
 
     def _draw_widget(self, painter: QPainter) -> None:
-        setup_key = NotchesCacheKey(self.rect_f, self.total_frames)
+        setup_key = Notch.CacheKey(self.rect_f, self.total_frames)
 
         # Current cache entry for the current mode (Frame or Time)
         cache_entry = self.notches_cache[self.mode]
 
         # Unpack value components from the cache
-        scroll_rect, labels_notches, rects_to_draw = cache_entry.value
+        self.scroll_rect, labels_notches, rects_to_draw = cache_entry.value
 
         # Check if cache needs regeneration (if size or total frames changed)
         if setup_key != cache_entry.key:
@@ -388,7 +702,7 @@ class Timeline(QWidget):
                 raise NotImplementedError
 
             # Define the scrollable area rectangle
-            scroll_rect = QRectF(
+            self.scroll_rect = QRectF(
                 self.rect_f.left(), lnotch_y + self.notch_scroll_interval, self.rect_f.width(), self.scroll_height
             )
 
@@ -449,21 +763,13 @@ class Timeline(QWidget):
                 rects_to_draw.append((rect, label))
 
             # Update the cache with the new values
-            self.notches_cache[self.mode] = NotchesCacheEntry(
+            self.notches_cache[self.mode] = Notch.CacheEntry(
                 setup_key,
-                NotchesCacheValue(scroll_rect, labels_notches, rects_to_draw),
+                Notch.CacheValue(self.scroll_rect, labels_notches, rects_to_draw),
             )
 
-        # Define the cursor line position
-        cursor_line = QLineF(
-            self.cursor_x, scroll_rect.top(), self.cursor_x, scroll_rect.top() + scroll_rect.height() - 1
-        )
-
-        # TODO: Normalize lines for external notch providers
-        for provider, provider_notches in self.notches.items():
-            if not provider.is_notches_visible:
-                continue
-            # provider_notches.norm_lines(self, scroll_rect)
+        # Define the cursor line position (contained within scroll_rect)
+        cursor_line = QLineF(self.cursor_x, self.scroll_rect.top(), self.cursor_x, self.scroll_rect.bottom())
 
         # DRAWING START
 
@@ -483,16 +789,12 @@ class Timeline(QWidget):
             painter.drawLine(notch.line)
 
         # Draw scroll bar area
-        painter.fillRect(scroll_rect, self.palette().color(self.SCROLL_BAR_COLOR))
+        painter.fillRect(self.scroll_rect, self.palette().color(self.SCROLL_BAR_COLOR))
 
-        # TODO: Draw custom notches from providers (e.g. bookmarks, keyframes)
-        for provider, provider_notches in self.notches.items():
-            if not provider.is_notches_visible:
-                continue
-
+        # Draw custom notches from providers (e.g. bookmarks, keyframes)
+        for provider_notches in self.notches.values():
             for p_notch in provider_notches:
-                painter.setPen(p_notch.color)
-                painter.drawLine(p_notch.line)
+                p_notch.draw(painter, self.scroll_rect)
 
         # Draw current frame cursor
         painter.setPen(self.palette().color(self.BACKGROUND_COLOR))
@@ -503,24 +805,24 @@ class Timeline(QWidget):
             if self.mode == "frame":
                 text = str(self.x_to_frame(self.hover_x))
             else:
-                text = self.x_to_time(self.hover_x).to_ts("{H:02d}:{M:02d}:{S:02d}.{ms:03d}")
+                text = self.x_to_time(self.hover_x).to_ts(self.HOVER_TIME_FORMAT)
 
-            painter.setPen(QPen(self.palette().color(self.TEXT_COLOR), 1, Qt.PenStyle.DashLine))
-            painter.drawLine(QLineF(self.hover_x, self.rect_f.top(), self.hover_x, self.rect_f.bottom()))
+            painter.setPen(QPen(self.palette().color(self.BACKGROUND_COLOR), 1, Qt.PenStyle.DashLine))
+            painter.drawLine(QLineF(self.hover_x, self.scroll_rect.top(), self.hover_x, self.scroll_rect.bottom()))
 
             fm = painter.fontMetrics()
             text_width = fm.horizontalAdvance(text)
             text_height = fm.height()
 
-            rect_x = self.hover_x - (text_width / 2) - 3
+            rect_x = self.hover_x - (text_width / 2) - (self.HOVER_PADDING_H / 2)
             if rect_x < 0:
                 rect_x = 0
-            elif rect_x + text_width + 6 > self.rect_f.width():
-                rect_x = self.rect_f.width() - text_width - 6
+            elif rect_x + text_width + self.HOVER_PADDING_H > self.rect_f.width():
+                rect_x = self.rect_f.width() - text_width - self.HOVER_PADDING_H
 
             rect_y = self.rect_f.top()
 
-            bg_rect = QRectF(rect_x, rect_y, text_width + 6, text_height)
+            bg_rect = QRectF(rect_x, rect_y, text_width + self.HOVER_PADDING_H, text_height)
             painter.fillRect(bg_rect, self.palette().color(self.BACKGROUND_COLOR))
             painter.setPen(self.palette().color(self.TEXT_COLOR))
             painter.drawText(bg_rect, Qt.AlignmentFlag.AlignCenter, text)
@@ -532,6 +834,7 @@ class Timeline(QWidget):
     def leaveEvent(self, event: QEvent) -> None:
         super().leaveEvent(event)
         self.hover_x = None
+        self.hover_popup.hide()
         self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
@@ -558,6 +861,13 @@ class Timeline(QWidget):
             return
 
         self.hover_x = int(clamp(event.position().x(), 0, self.rect_f.width()))
+
+        if SettingsManager.global_settings.timeline.view_hover_zoom:
+            self.hover_popup.update_state(self.hover_x)
+            self.hover_popup.show()
+        else:
+            self.hover_popup.hide()
+
         self.update()
 
         if not self.mousepressed:
@@ -635,9 +945,7 @@ class Timeline(QWidget):
 
     def x_to_frame(self, x: int) -> Frame:
         """Converts an X pixel coordinate to a Frame number."""
-        if self.rect_f.width() == 0:
-            return Frame(0)
-        return Frame(round(x / self.rect_f.width() * self.total_frames))
+        return Frame(0) if self.rect_f.width() == 0 else Frame(round(x / self.rect_f.width() * self.total_frames))
 
     def cursor_to_x(self, cursor: int | Frame | Time) -> int:
         """
@@ -647,10 +955,9 @@ class Timeline(QWidget):
             width = self.rect_f.width()
 
             if isinstance(cursor, Time):
-                if not self.cum_durations:
-                    return 0
-
-                return self.cursor_to_x(Frame(bisect_right(self.cum_durations, cursor)))
+                return (
+                    0 if not self.cum_durations else self.cursor_to_x(Frame(bisect_right(self.cum_durations, cursor)))
+                )
 
             if isinstance(cursor, Frame):
                 return floor(cursor / self.total_frames * width)
@@ -659,6 +966,45 @@ class Timeline(QWidget):
 
         except (ZeroDivisionError, ValueError):
             return 0
+
+    def add_notch(
+        self,
+        key: str,
+        data: Frame | Time,
+        end_data: Frame | Time | None = None,
+        color: Qt.GlobalColor | QColor | QRgba64 | str | int = Qt.GlobalColor.black,
+        label: str = "",
+    ) -> None:
+        cursor_x = self.cursor_to_x(data)
+        cursor_line = QLineF(
+            cursor_x,
+            self.scroll_rect.top(),
+            cursor_x,
+            self.scroll_rect.top() + self.scroll_rect.height() - 1,
+        )
+
+        if end_data is not None:
+            end_x = self.cursor_to_x(end_data)
+            end_line = QLineF(
+                end_x,
+                self.scroll_rect.top(),
+                end_x,
+                self.scroll_rect.top() + self.scroll_rect.height() - 1,
+            )
+        else:
+            end_line = None
+
+        self.notches.setdefault(key, set()).add(
+            Notch(data, end_data, color, cursor_line, end_line, label)  # pyright: ignore[reportArgumentType]
+        )
+
+    def discard_notch(
+        self,
+        key: str,
+        data: Frame | Time,
+        end_data: Frame | Time | None = None,
+    ) -> None:
+        self.notches.get(key, set()).discard(Notch(data, end_data))  # pyright: ignore[reportArgumentType]
 
     @contextmanager
     def block_events(self) -> Iterator[None]:
@@ -669,10 +1015,10 @@ class Timeline(QWidget):
         finally:
             self.is_events_blocked = False
 
-    def _init_notches_cache(self) -> dict[Literal["frame", "time"], NotchesCacheEntry[Any]]:
+    def _init_notches_cache(self) -> dict[Literal["frame", "time"], Notch.CacheEntry[Any]]:
         return {
-            "frame": NotchesCacheEntry(NotchesCacheKey(QRectF(), -1), NotchesCacheValue(QRectF(), [], [])),
-            "time": NotchesCacheEntry(NotchesCacheKey(QRectF(), -1), NotchesCacheValue(QRectF(), [], [])),
+            "frame": Notch.CacheEntry(Notch.CacheKey(QRectF(), -1), Notch.CacheValue(QRectF(), [], [])),
+            "time": Notch.CacheEntry(Notch.CacheKey(QRectF(), -1), Notch.CacheValue(QRectF(), [], [])),
         }
 
     def _on_settings_changed(self) -> None:
@@ -691,56 +1037,26 @@ class FrameEdit(QSpinBox):
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
-        super().valueChanged.connect(self._on_value_changed)
+        self.valueChanged.connect(self._on_value_changed)
 
         self.setMinimum(0)
         self.setKeyboardTracking(False)
 
         self.old_value = self.value()
-        self._pending_max_commit = False
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            if self._pending_max_commit:
-                self._commit_pending()
-            super().keyPressEvent(event)
-            return
+    def validate(self, input_text: str, pos: int) -> object:
+        if input_text.isdigit():
+            val = int(input_text)
 
-        if event.text().isdigit():
-            current_text = self.lineEdit().selectedText()
-            line_edit = self.lineEdit()
+            if val > self.maximum():
+                max_str = str(self.maximum())
+                return QValidator.State.Acceptable, max_str, len(max_str)
 
-            if current_text:
-                new_text = (
-                    line_edit.text()[: line_edit.selectionStart()]
-                    + event.text()
-                    + line_edit.text()[line_edit.selectionStart() + len(current_text) :]
-                )
-            else:
-                cursor_pos = line_edit.cursorPosition()
-                new_text = line_edit.text()[:cursor_pos] + event.text() + line_edit.text()[cursor_pos:]
-
-            if int(new_text) > self.maximum():
-                # Cap at maximum instead of blocking, without triggering valueChanged yet
-                with QSignalBlocker(self):
-                    self.setValue(self.maximum())
-                self._pending_max_commit = True
-                return
-
-        super().keyPressEvent(event)
-
-    def focusOutEvent(self, event: QFocusEvent) -> None:
-        if self._pending_max_commit:
-            self._commit_pending()
-        super().focusOutEvent(event)
-
-    def _commit_pending(self) -> None:
-        self._pending_max_commit = False
-        self._on_value_changed(self.value())
+        return super().validate(input_text, pos)
 
     def _on_value_changed(self, value: int) -> None:
-        self.frameChanged.emit(self.value(), self.old_value)
-        self.old_value = self.value()
+        self.frameChanged.emit(Frame(value), Frame(self.old_value))
+        self.old_value = value
 
 
 class TimeEdit(QTimeEdit):
@@ -1185,10 +1501,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         with QSignalBlocker(self.audio_output_combo):
             self.audio_output_combo.clear()
             self.audio_output_combo.addItems(
-                [
-                    f"{a.vs_index}: {a.vs_name or f'Audio {a.vs_index}'} ({a.chanels_layout.pretty_name})"
-                    for a in aoutputs
-                ]
+                [f"{a.vs_index}: {a.vs_name} ({a.chanels_layout.pretty_name})" for a in aoutputs]
             )
 
         if len(aoutputs) > 0:
@@ -1411,7 +1724,13 @@ class TimelineControlBar(QWidget):
         Use for single-frame renders, not for continuous playback (use set_playback_controls_enabled instead).
         """
         loop = get_loop()
-        loop.from_thread(self.setEnabled, False).result()
+
+        @run_in_loop(return_future=False)
+        def disable() -> None:
+            self.timeline.hover_popup.hide()
+            self.setEnabled(False)
+
+        disable()
 
         try:
             with self.timeline.block_events():

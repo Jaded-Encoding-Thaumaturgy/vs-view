@@ -8,6 +8,7 @@ from PySide6.QtGui import QPalette, QPixmap, QTransform
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
 
 from ...assets import IconName, IconReloadMixin, load_icon
+from ..settings import SettingsManager
 
 if TYPE_CHECKING:
     from ..workspace import LoaderWorkspace
@@ -37,7 +38,7 @@ class StatusWidget(IconReloadMixin, QWidget):
         super().__init__(parent)
 
         # Local settings signal connection (for showing "Settings saved" message)
-        self._settings_manager.signals.localChanged.connect(self._on_settings_changed)
+        SettingsManager.signals.localChanged.connect(self._on_settings_changed)
 
         self._reload_icons()  # Initial icon load
         self.register_icon_callback(self._reload_icons)
@@ -171,7 +172,7 @@ class StatusWidget(IconReloadMixin, QWidget):
         return separator
 
     def deleteLater(self) -> None:
-        self._settings_manager.signals.localChanged.disconnect(self._on_settings_changed)
+        SettingsManager.signals.localChanged.disconnect(self._on_settings_changed)
         super().deleteLater()
 
     def start_loading(self, message: str) -> None:
@@ -193,7 +194,7 @@ class StatusWidget(IconReloadMixin, QWidget):
         self._spinner_timer.stop()
         self.message_icon_label.setPixmap(self.error_pixmap if error else self.check_pixmap)
         self.message_text_label.setText(completed_message)
-        self._message_timer.start(self._settings_manager.global_settings.status_message_timeout)
+        self._message_timer.start(SettingsManager.global_settings.status_message_timeout)
 
     def error_loading(self, error_message: str) -> None:
         """
@@ -225,7 +226,7 @@ class StatusWidget(IconReloadMixin, QWidget):
     def set_plugin_message(self, message: str) -> None:
         """Display a message for a plugin."""
         self.plugins_label.setText(message)
-        self._plugin_message_timer.start(self._settings_manager.global_settings.status_message_timeout)
+        self._plugin_message_timer.start(SettingsManager.global_settings.status_message_timeout)
 
     @Slot()
     def _clear_plugin_message(self) -> None:
@@ -305,7 +306,7 @@ class StatusWidget(IconReloadMixin, QWidget):
             self._settings_saved_label.setToolTip("")
 
         self._settings_saved_container.setVisible(True)
-        self._settings_saved_timer.start(self._settings_manager.global_settings.status_message_timeout)
+        self._settings_saved_timer.start(SettingsManager.global_settings.status_message_timeout)
 
     @Slot()
     def _clear_settings_saved(self) -> None:

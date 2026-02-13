@@ -3,10 +3,11 @@ from __future__ import annotations
 from bisect import bisect_right
 from collections.abc import Mapping
 from contextlib import suppress
+from datetime import timedelta
 from fractions import Fraction
 from itertools import accumulate
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import vapoursynth as vs
 from jetpytools import cround
@@ -14,7 +15,7 @@ from jetpytools import cround
 from ..plugins.manager import PluginManager
 from ..settings import SettingsManager
 from ..utils import LRUCache, cache_clip
-from .packing import Packer
+from .packing import AlphaNotImplementedError, CythonPacker, Packer
 
 if TYPE_CHECKING:
     from ...api._helpers import VideoMetadata
@@ -36,8 +37,9 @@ class VideoOutput:
         self.vs_output = vs_output
         self.vs_index = vs_index
         self.packer = packer
-        self.vs_name = metadata.name if metadata else None
+        self.vs_name = metadata.name if metadata else f"Clip {vs_index}"  # Matches vsview.set_output
         self.framedurs = metadata.framedurs if metadata else None
+        self._alpha_prop: Literal[True] | None = metadata.alpha_prop if metadata else None
 
         self.cum_durations = (
             list(accumulate(self.framedurs))
@@ -60,13 +62,20 @@ class VideoOutput:
         if PluginManager.video_processor:
             clip = PluginManager.video_processor(api).prepare(clip)
 
-        if clip.format.id != vs.GRAY32:
+        if clip.format.id == vs.GRAY32:
+            self.prepared_clip = clip
+        else:
             try:
-                self.prepared_clip = self.packer.pack_clip(clip)
+                try:
+                    self.prepared_clip = self.packer.pack_clip(clip, self.vs_output.alpha or self._alpha_prop)
+                except AlphaNotImplementedError as e:
+                    if SettingsManager.global_settings.view.packing_method != "auto":
+                        logger.warning("%s, falling back to Cython packer", e)
+
+                    self.packer = CythonPacker(SettingsManager.global_settings.view.bit_depth)
+                    self.prepared_clip = self.packer.pack_clip(clip, self.vs_output.alpha or self._alpha_prop)
             except Exception as e:
                 raise RuntimeError(f"Failed to pack clip with the message: '{e}'") from e
-        else:
-            self.prepared_clip = clip
 
         if cache_size := SettingsManager.global_settings.playback.cache_size:
             try:
@@ -84,7 +93,7 @@ class VideoOutput:
             with suppress(AttributeError):
                 delattr(self, attr)
 
-    def time_to_frame(self, time: Time, fps: VideoOutput | Fraction | None = None) -> Frame:
+    def time_to_frame(self, time: timedelta, fps: VideoOutput | Fraction | None = None) -> Frame:
         from ..views.timeline import Frame
 
         # So VideoOutputProxy can get this method

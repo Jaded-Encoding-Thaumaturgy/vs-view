@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from vsview.api import IconName, IconReloadMixin, PluginAPI, Spin, VideoOutputProxy, WidgetPluginBase, run_in_loop
+from vsview.app.outputs.packing import Packer
 from vsview.app.utils import cache_clip
 from vsview.assets.utils import get_monospace_font
 
@@ -65,6 +66,8 @@ class PositionLabel(QLabel):
     def __init__(self, parent: QWidget, font_size: int = 12) -> None:
         super().__init__("Pos: —, —", parent)
         self.setFont(get_monospace_font(font_size))
+        self.setCursor(Qt.CursorShape.IBeamCursor)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._cursor_pos = QPoint(0, 0)
 
     @property
@@ -97,6 +100,9 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     COL_LABEL = 0
     COL_VALUES_START = 1
 
+    RGB30_FORMATS: tuple[QImage.Format, ...] = Packer.FORMAT_CONFIG[10][2:]
+    RGBA_FORMATS: tuple[QImage.Format, ...] = tuple(zip(*Packer.FORMAT_CONFIG.values()))[3]
+
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent, api)
         IconReloadMixin.__init__(self)
@@ -105,6 +111,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self.outputs = dict[VideoOutputProxy, CachedVideoNode]()
 
         self.current_num_planes = 0
+        self.current_rgb_cols = 3  # Track RGB columns (3 for RGB, 4 for RGBA)
 
         # Format strings for source values
         self.src_hex_fmt = ""
@@ -184,13 +191,20 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self.rgb_grid.setSpacing(2)
         self.groups_layout.addWidget(self.rgb_group)
 
-        # Initialize rendered group with fixed 3 columns (RGB never changes)
+        # Initialize grids
+        self.setup_grid_rows(
+            self.src_grid,
+            self.src_labels,
+            self.src_copy_btns,
+            ["Dec", "Norm", "Hex"],
+            3,
+        )
         self.setup_grid_rows(
             self.rgb_grid,
             self.rgb_labels,
             self.rgb_copy_btns,
             ["Dec", "Norm", "Hex", "HLS", "HSV"],
-            3,
+            self.current_rgb_cols,
         )
 
         self.main_layout.addStretch()
@@ -216,12 +230,12 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
         # Add the voutput to the `outputs` dict and call `on_current_frame_changed` again
         if (voutput := self.api.current_voutput) not in self.outputs:
-            return self.on_current_voutput_changed(voutput, -1)
+            return self.on_current_voutput_changed(voutput, self.api.current_video_index)
 
         if self.tracking == TrackingState.ACTIVE:
             # Force cursor shape & refresh current cursor position
-            self.api.current_viewport_set_cursor(Qt.CursorShape.CrossCursor)
-            self.update_labels(self.api.current_viewport_map_from_global(QCursor.pos()))
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.CrossCursor)
+            self.update_labels(self.api.current_view.viewport.map_from_global(QCursor.pos()))
 
     def on_view_context_menu(self, event: QContextMenuEvent) -> None:
         if self.tracking == TrackingState.DEACTIVATING or self.eyedropper_btn.isChecked():
@@ -235,12 +249,12 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     def on_view_mouse_pressed(self, event: QMouseEvent) -> None:
         if self.tracking == TrackingState.ACTIVE and event.button() == Qt.MouseButton.RightButton:
             self.tracking = TrackingState.DEACTIVATING
-            self.api.current_viewport_set_cursor(Qt.CursorShape.OpenHandCursor)
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.OpenHandCursor)
             event.accept()
 
     def on_view_mouse_released(self, event: QMouseEvent) -> None:
         if self.tracking == TrackingState.ACTIVE and event.button() == Qt.MouseButton.LeftButton:
-            self.api.current_viewport_set_cursor(Qt.CursorShape.CrossCursor)
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.CrossCursor)
 
     # Plugin methods
     def setup_grid_rows(
@@ -278,6 +292,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
                 )
                 val_lbl.setFont(get_monospace_font(10))
                 val_lbl.setMinimumWidth(65)
+                val_lbl.setCursor(Qt.CursorShape.IBeamCursor)
                 val_labels.append(val_lbl)
                 grid.addWidget(val_lbl, row_idx, self.COL_VALUES_START + col)
 
@@ -295,9 +310,10 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         with self.outputs[self.api.current_voutput].get_frame(self.api.current_frame) as vsframe:
             self.update_format_strings(vsframe)
 
-        pos = self.api.current_viewport_map_to_scene(local_pos).toPoint()
+        pos_f = self.api.current_view.map_to_scene(local_pos)
+        pos = QPoint(int(pos_f.x()), int(pos_f.y()))
 
-        if (image := self.api.current_view_image).isNull() or not image.valid(pos):
+        if (image := self.api.current_view.image).isNull() or not image.valid(pos):
             return
 
         self._update_source_labels(pos)
@@ -360,36 +376,63 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             self._set_row_values(self.src_labels, "Norm", [self.src_norm_fmt.format(v) for v in norm_vals])
 
     def _update_rgb_labels(self, pos: QPoint, image: QImage) -> None:
+        img_format = image.format()
         color = image.pixelColor(pos)
-        is_rgb30 = image.format() == QImage.Format.Format_RGB30
+
+        is_rgb30 = img_format in self.RGB30_FORMATS
+        has_alpha = img_format in self.RGBA_FORMATS
         max_val = 1023 if is_rgb30 else 255
 
-        r_f, g_f, b_f = color.redF(), color.greenF(), color.blueF()
-        r, g, b = round(r_f * max_val), round(g_f * max_val), round(b_f * max_val)
+        # Rebuild grid if alpha state changed
+        required_cols = 4 if has_alpha else 3
+        if required_cols != self.current_rgb_cols:
+            self.current_rgb_cols = required_cols
+            self.setup_grid_rows(
+                self.rgb_grid,
+                self.rgb_labels,
+                self.rgb_copy_btns,
+                ["Dec", "Norm", "Hex", "HLS", "HSV"],
+                self.current_rgb_cols,
+            )
+
+        fmt_name = self.api.packer.vs_format.name
+        self.rgb_group.setTitle(f"Rendered ({fmt_name[:3]}{'A' if has_alpha else ''}{fmt_name[3:]})")
+
+        r_f, g_f, b_f, a_f = color.redF(), color.greenF(), color.blueF(), color.alphaF()
+        r, g, b, a = round(r_f * max_val), round(g_f * max_val), round(b_f * max_val), round(a_f * max_val)
 
         self.position_label.cursor_pos = pos
 
         rgb_norm = f"{{:.{self.settings.global_.decimals_nb}f}}"
-
         hex_fmt = f"{{:0{3 if is_rgb30 else 2}X}}"
-        self._set_row_values(self.rgb_labels, "Hex", [hex_fmt.format(r), hex_fmt.format(g), hex_fmt.format(b)])
-        self._set_row_values(self.rgb_labels, "Dec", [f"{r}", f"{g}", f"{b}"])
-        self._set_row_values(
-            self.rgb_labels, "Norm", [rgb_norm.format(r_f), rgb_norm.format(g_f), rgb_norm.format(b_f)]
-        )
+
+        # Build value lists based on alpha presence
+        hex_vals = [hex_fmt.format(r), hex_fmt.format(g), hex_fmt.format(b)]
+        dec_vals = [f"{r}", f"{g}", f"{b}"]
+        norm_vals = [rgb_norm.format(r_f), rgb_norm.format(g_f), rgb_norm.format(b_f)]
+
+        if has_alpha:
+            hex_vals.append(hex_fmt.format(a))
+            dec_vals.append(f"{a}")
+            norm_vals.append(rgb_norm.format(a_f))
+
+        self._set_row_values(self.rgb_labels, "Hex", hex_vals)
+        self._set_row_values(self.rgb_labels, "Dec", dec_vals)
+        self._set_row_values(self.rgb_labels, "Norm", norm_vals)
 
         hls = rgb_to_hls(r_f, g_f, b_f)
         hsv = rgb_to_hsv(r_f, g_f, b_f)
-        self._set_row_values(
-            self.rgb_labels,
-            "HLS",
-            [f"{int(hls[0] * 360)}°", f"{int(hls[1] * 100)}%", f"{int(hls[2] * 100)}%"],
-        )
-        self._set_row_values(
-            self.rgb_labels,
-            "HSV",
-            [f"{int(hsv[0] * 360)}°", f"{int(hsv[1] * 100)}%", f"{int(hsv[2] * 100)}%"],
-        )
+
+        # HLS/HSV always 3 values. Pad with "—" for alpha column.
+        hls_vals = [f"{int(hls[0] * 360)}°", f"{int(hls[1] * 100)}%", f"{int(hls[2] * 100)}%"]
+        hsv_vals = [f"{int(hsv[0] * 360)}°", f"{int(hsv[1] * 100)}%", f"{int(hsv[2] * 100)}%"]
+
+        if has_alpha:
+            hls_vals.append("—")
+            hsv_vals.append("—")
+
+        self._set_row_values(self.rgb_labels, "HLS", hls_vals)
+        self._set_row_values(self.rgb_labels, "HSV", hsv_vals)
 
         preview_r, preview_g, preview_b = round(r_f * 255), round(g_f * 255), round(b_f * 255)
         self.color_preview.setStyleSheet(
@@ -435,10 +478,10 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     def on_eyedropper_toggle(self, checked: bool) -> None:
         if checked:
             self.tracking = TrackingState.ACTIVE
-            self.api.current_viewport_set_cursor(Qt.CursorShape.CrossCursor)
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.CrossCursor)
         else:
             self.tracking = TrackingState.INACTIVE
-            self.api.current_viewport_set_cursor(Qt.CursorShape.OpenHandCursor)
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.OpenHandCursor)
 
     def copy_row(
         self,
