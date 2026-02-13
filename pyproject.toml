@@ -43,8 +43,8 @@ dev = [
     "graphviz>=0.21",
     "cython>=3.0.0",
     "types-pygments>=2.19.0.20251121",
-    "pytest>=8.0.0",
-    "pytest-mock>=3.14.0",
+    "pytest>=9.0.0, <10.0.0",
+    "pytest-mock>=3.15.0",
 ]
 plugins = [
     "vsview-split-planes",
