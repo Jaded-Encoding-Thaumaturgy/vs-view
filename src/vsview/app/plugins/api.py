@@ -5,7 +5,7 @@ Plugin API for VSView.
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Self, TypeVar, cast
 
 import vapoursynth as vs
-from jetpytools import copy_signature
+from jetpytools import copy_signature, to_arr
 from pydantic import BaseModel
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
@@ -207,6 +207,9 @@ class TimelineProxy(_TimelineProxy):
         data: timedelta | int | Sequence[timedelta | int | tuple[timedelta | int, timedelta | int]],
         color: Qt.GlobalColor | QColor | QRgba64 | str | int = Qt.GlobalColor.black,
         label: str = "",
+        notch_id: Hashable | None = None,
+        *,
+        update: bool = True,
     ) -> None:
         """
         Add notch(es) to the timeline.
@@ -216,16 +219,22 @@ class TimelineProxy(_TimelineProxy):
             data: The data of the notch (frame number or timedelta or range notches).
             color: The color of the notch.
             label: The label of the notch.
+            notch_id: The ID of the notch.
+            update: Whether to update the timeline.
         """
         for start, end in self._norm_data(data):
-            self.__timeline.add_notch(identifier, start, end, color=color, label=label)
+            self.__timeline.add_notch(identifier, start, end, color=color, label=label, id=notch_id)
 
-        self.__timeline.update()
+        if update:
+            self.__timeline.update()
 
     def discard_notch(
         self,
         identifier: str,
         data: timedelta | int | Sequence[timedelta | int | tuple[timedelta | int, timedelta | int]],
+        notch_id: Hashable | None = None,
+        *,
+        update: bool = True,
     ) -> None:
         """
         Discard notch(es) from the timeline.
@@ -233,12 +242,34 @@ class TimelineProxy(_TimelineProxy):
         Args:
             identifier: The identifier of the notch.
             data: The data of the notch (frame number or timedelta or range notches).
+            notch_id: The ID of the notch.
+            update: Whether to update the timeline.
         """
         for start, end in self._norm_data(data):
-            self.__timeline.discard_notch(identifier, start, end)
+            self.__timeline.discard_notch(identifier, start, end, notch_id)
 
+        if update:
+            self.__timeline.update()
+
+    def clear_notches(self, identifier: str | Iterable[str], *, update: bool = True) -> None:
+        """
+        Clear all notches for a given identifier.
+
+        Args:
+            identifier: The identifier of the notches to clear.
+            update: Whether to update the timeline.
+        """
+        for i in to_arr(identifier):
+            self.__timeline.custom_notches.pop(i, None)
+
+        if update:
+            self.__timeline.update()
+
+    def update(self) -> None:
+        """
+        Update the timeline.
+        """
         self.__timeline.update()
-
 
 
 class PlaybackProxy(_PlaybackProxy):
