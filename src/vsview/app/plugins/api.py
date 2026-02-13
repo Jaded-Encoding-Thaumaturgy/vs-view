@@ -198,7 +198,7 @@ class TimelineProxy(_TimelineProxy):
 
     @property
     def mode(self) -> Literal["frame", "time"]:
-        """Returns the Timeline mode, "frame" or "time"."""
+        """Returns the current timeline display mode."""
         return self.__timeline.mode
 
     def add_notch(
@@ -212,15 +212,15 @@ class TimelineProxy(_TimelineProxy):
         update: bool = True,
     ) -> None:
         """
-        Add notch(es) to the timeline.
+        Add one or more notches to the timeline.
 
         Args:
-            identifier: The identifier of the notch.
-            data: The data of the notch (frame number or timedelta or range notches).
-            color: The color of the notch.
-            label: The label of the notch.
-            notch_id: The ID of the notch.
-            update: Whether to update the timeline.
+            identifier: A string identifier for the group of notches.
+            data: The position(s) of the notch(es).
+            color: The color of the notch markers. Defaults to black.
+            label: An optional label to display with the notch.
+            notch_id: An optional hashable ID to uniquely identify this specific notch.
+            update: If True (default), triggers a visual update of the timeline.
         """
         for start, end in self._norm_data(data):
             self.__timeline.add_notch(identifier, start, end, color=color, label=label, id=notch_id)
@@ -237,13 +237,13 @@ class TimelineProxy(_TimelineProxy):
         update: bool = True,
     ) -> None:
         """
-        Discard notch(es) from the timeline.
+        Remove specific notch(es) from the timeline that match the given criteria.
 
         Args:
-            identifier: The identifier of the notch.
-            data: The data of the notch (frame number or timedelta or range notches).
-            notch_id: The ID of the notch.
-            update: Whether to update the timeline.
+            identifier: The group identifier of the notches to remove.
+            data: The position(s) of the notch(es) to remove.
+            notch_id: If provided, only removes notches matching this specific ID.
+            update: If True (default), triggers a visual update of the timeline.
         """
         for start, end in self._norm_data(data):
             self.__timeline.discard_notch(identifier, start, end, notch_id)
@@ -253,11 +253,11 @@ class TimelineProxy(_TimelineProxy):
 
     def clear_notches(self, identifier: str | Iterable[str], *, update: bool = True) -> None:
         """
-        Clear all notches for a given identifier.
+        Clear all notches associated with the given identifier(s).
 
         Args:
-            identifier: The identifier of the notches to clear.
-            update: Whether to update the timeline.
+            identifier: A single identifier or an iterable of identifiers to clear.
+            update: If True (default), triggers a visual update of the timeline.
         """
         for i in to_arr(identifier):
             self.__timeline.custom_notches.pop(i, None)
@@ -267,7 +267,7 @@ class TimelineProxy(_TimelineProxy):
 
     def update(self) -> None:
         """
-        Update the timeline.
+        Manually trigger a visual refresh of the timeline.
         """
         self.__timeline.update()
 
