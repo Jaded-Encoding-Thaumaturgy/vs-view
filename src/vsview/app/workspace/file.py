@@ -116,8 +116,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.tbar.playback_container.settings.loop = self.local_settings.playback.loop
         self.tbar.playback_container.settings.step = self.local_settings.playback.step
 
-        if self.local_settings.timeline.mode:
-            self.tbar.timeline.mode = self.local_settings.timeline.mode
+        self.tbar.timeline.mode = self.local_settings.timeline.mode
 
         self.tbar.playback_container.volume = self.local_settings.playback.current_volume
         self.tbar.playback_container.is_muted = self.local_settings.playback.muted

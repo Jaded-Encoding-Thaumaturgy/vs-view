@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 from abc import ABC, ABCMeta, abstractmethod
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable
 from dataclasses import KW_ONLY, dataclass, field
 from datetime import time
 from enum import StrEnum
 from functools import wraps
 from logging import getLogger
+from operator import attrgetter
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -27,6 +28,7 @@ from typing import (
 from jetpytools import SupportsRichComparison
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     PlainSerializer,
@@ -889,8 +891,32 @@ class GlobalSettings(BaseSettings):
         return next((s.key_sequence for s in self.shortcuts if s.action_id == action_id), "")
 
 
+# Global settings file location is inside the package directory
+GLOBAL_SETTINGS_PATH = Path(__file__).parent.parent.parent / "global_settings.json"
+DEFAULT_GLOBAL_SETTINGS = GlobalSettings()
+
+
+def fallback_global[R](getter: attrgetter[R]) -> Callable[[Any | None], R]:
+    """Fallback to global settings if the value is None."""
+
+    def validator(v: Any | None) -> R:
+        if v is not None:
+            return v
+
+        try:
+            from .manager import SettingsManager
+
+            return getter(SettingsManager.global_settings)
+        except ImportError:
+            return getter(DEFAULT_GLOBAL_SETTINGS)
+
+    return validator
+
+
 class LocalPlaybackSettings(BaseModel):
-    seek_step_raw: int | None = None
+    seek_step: Annotated[int, BeforeValidator(fallback_global(attrgetter("timeline.seek_step")))] = Field(
+        default=None, validate_default=True
+    )
     speed: float = 1.0
     uncapped: bool = False
     zone_frames: int = 100
@@ -900,37 +926,15 @@ class LocalPlaybackSettings(BaseModel):
     last_audio_index: int | None = None
     current_volume: float = 0.5
     muted: bool = False
-    audio_delay_raw: float | None = None
-
-    @property
-    def seek_step(self) -> int:
-        from .manager import SettingsManager
-
-        return (
-            self.seek_step_raw if self.seek_step_raw is not None else SettingsManager.global_settings.timeline.seek_step
-        )
-
-    @seek_step.setter
-    def seek_step(self, value: int | None) -> None:
-        self.seek_step_raw = value
-
-    @property
-    def audio_delay(self) -> float:
-        from .manager import SettingsManager
-
-        return (
-            self.audio_delay_raw
-            if self.audio_delay_raw is not None
-            else SettingsManager.global_settings.playback.audio_delay
-        )
-
-    @audio_delay.setter
-    def audio_delay(self, value: float | None) -> None:
-        self.audio_delay_raw = value
+    audio_delay: Annotated[float, BeforeValidator(fallback_global(attrgetter("playback.audio_delay")))] = Field(
+        default=None, validate_default=True
+    )
 
 
 class LocalTimelineSettings(BaseModel):
-    mode: Literal["frame", "time"] | None = None
+    mode: Annotated[Literal["frame", "time"], BeforeValidator(fallback_global(attrgetter("timeline.mode")))] = Field(
+        default=None, validate_default=True
+    )
 
 
 class SynchronizationSettings(BaseModel):
@@ -1002,7 +1006,4 @@ class LocalSettings(BaseSettings):
     plugins: dict[str, dict[str, Any] | BaseModel] = Field(default_factory=dict)
 
 
-# Global settings file location is inside the package directory
-GLOBAL_SETTINGS_PATH = Path(__file__).parent.parent.parent / "global_settings.json"
-DEFAULT_GLOBAL_SETTINGS = GlobalSettings()
 DEFAULT_LOCAL_SETTINGS = LocalSettings()
