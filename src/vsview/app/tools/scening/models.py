@@ -74,7 +74,7 @@ class RangeTime(AbstractRange[timedelta], UUIDModel):
         s = self.start
         e = self.end if self.end is not None else s
 
-        return Time(seconds=s.seconds), Time(seconds=e.seconds)
+        return Time(seconds=s.total_seconds()), Time(seconds=e.total_seconds())
 
     def from_frames(self, s: int | None, e: int | None, v: VideoOutputProxy) -> None:
         if s is not None:
