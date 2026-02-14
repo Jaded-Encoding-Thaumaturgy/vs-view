@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Iterator
 from contextlib import contextmanager
+from logging import getLogger
 from typing import Any
 
 from jetpytools import copy_signature
@@ -13,6 +14,8 @@ from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QTabWidget, QWidget
 
 from .video import GraphicsView
+
+logger = getLogger(__name__)
 
 
 class TabViewWidget(QTabWidget):
@@ -74,6 +77,7 @@ class TabViewWidget(QTabWidget):
         view = super().widget(index)
 
         if not isinstance(view, GraphicsView):
+            logger.debug("%s", view)
             raise ValueError("Current widget is not a GraphicsView")
 
         return view
