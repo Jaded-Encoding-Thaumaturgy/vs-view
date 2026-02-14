@@ -24,7 +24,7 @@ class ColorGenerator(Generator[QColor, QColor | None]):
             if value is not None:
                 self._hue = value.hueF()
 
-            res = QColor.fromHsvF(self._hue, 0.5, 0.9)
+            res = QColor.fromHsvF(self._hue, 0.5, 0.55)
             self._hue = (self._hue + self._golden_ratio_conjugate) % 1.0
             return res
 
