@@ -56,10 +56,10 @@ jobs:
             xvfb
 
       - name: Install dependencies
-        run: uv sync --locked --group test --group plugins
+        run: uv sync --locked --group test --group plugins --no-dev
 
       - name: Run tests
-        run: uv run pytest
+        run: uv run --no-sync pytest
 
       - name: Post webhook for failure
         if: failure()
