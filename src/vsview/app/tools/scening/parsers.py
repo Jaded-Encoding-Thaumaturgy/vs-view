@@ -6,7 +6,7 @@ from math import ceil
 from pathlib import Path
 
 from .api import Parser
-from .models import RangeFrame, SceneRow
+from .models import RangeFrame, RangeTime, SceneRow
 
 logger = getLogger(__name__)
 
@@ -54,14 +54,39 @@ class AssParser(Parser):
         return SceneRow(color=self.get_color(), name=path.stem, ranges=ranges)
 
 
+class OGMParser(Parser):
+    filter = Parser.FileFilter("Ogg Media (OGM) Chapters", "txt")
+
+    def parse(self, path: Path, fps: Fraction) -> SceneRow:
+        pattern = re.compile(
+            r"^\s*(CHAPTER\d+)\s*=\s*(\d+):(\d+):(\d+(?:\.\d+)?)\s*[\r\n]+"
+            r"\s*\1NAME\s*=\s*(.*)",
+            re.MULTILINE,
+        )
+
+        ranges = list[RangeTime]()
+
+        for match in pattern.finditer(path.read_text("utf-8")):
+            hours, minutes, seconds_str, name = match.group(2, 3, 4, 5)
+
+            ranges.append(
+                RangeTime(
+                    start=timedelta(hours=int(hours), minutes=int(minutes), seconds=float(seconds_str)),
+                    label=name.strip(),
+                )
+            )
+
+        return SceneRow(color=self.get_color(), name=path.stem, ranges=ranges)
+
+
 internal_parsers: list[Parser] = [
     AssParser(),
+    OGMParser(),
 ]
 
 # "Matroska XML Chapters (*.xml)": import_matroska_xml_chapters,
-# "OGM Chapters (*.txt)": import_ogm_chapters,
 # "Wobbly File (*.wob)": import_wobbly,
+# "Wobbly Sections (*.txt)"
 # "x264/x265 QP File (*.qp *.txt)": import_qp,
 # "XviD Log (*.txt)": import_xvid,
-# "Wobbly Sections (*.txt)"
 # "VSEdit Bookmarks (*.bookmarks)"
