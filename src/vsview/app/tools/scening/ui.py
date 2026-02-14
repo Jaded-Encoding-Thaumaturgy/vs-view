@@ -579,12 +579,15 @@ class RangeTableModel(AbstractTableModel):
         return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
-        if (
-            orientation == Qt.Orientation.Horizontal
-            and role == Qt.ItemDataRole.DisplayRole
-            and 0 <= section < len(RangeCol)
-        ):
+        if role != Qt.ItemDataRole.DisplayRole:
+            return None
+
+        if orientation == Qt.Orientation.Horizontal and 0 <= section < len(RangeCol):
             return RangeCol(section).header_name
+
+        if orientation == Qt.Orientation.Vertical:
+            return str(section + 1)
+
         return None
 
     @property

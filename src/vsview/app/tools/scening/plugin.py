@@ -226,6 +226,10 @@ class SceningPlugin(WidgetPluginBase[None, LocalSettings], IconReloadMixin):
         self.ranges_model = RangeTableModel(self.range_container, self.api)
         self.ranges_model.rangesModified.connect(self._persist_scenes)
         self.ranges_model.rangeDataModified.connect(self._refresh_range_on_timeline)
+        self.ranges_model.modelReset.connect(self._update_ranges_header_width)
+        self.ranges_model.rowsInserted.connect(self._update_ranges_header_width)
+        self.ranges_model.rowsRemoved.connect(self._update_ranges_header_width)
+
         self.ranges_delegate = RangeTableDelegate(self.range_container)
 
         self.ranges_view = QTableView(self.range_container)
@@ -256,6 +260,10 @@ class SceningPlugin(WidgetPluginBase[None, LocalSettings], IconReloadMixin):
         r_header.setSectionResizeMode(RangeCol.START_TIME, QHeaderView.ResizeMode.Interactive)
         r_header.setSectionResizeMode(RangeCol.END_TIME, QHeaderView.ResizeMode.Interactive)
         r_header.setSectionResizeMode(RangeCol.LABEL, QHeaderView.ResizeMode.Stretch)
+
+        v_header = self.ranges_view.verticalHeader()
+        v_header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        v_header.setDefaultSectionSize(24)
 
         range_layout.addWidget(self.ranges_view)
         self.splitter.addWidget(self.range_container)
@@ -636,3 +644,8 @@ class SceningPlugin(WidgetPluginBase[None, LocalSettings], IconReloadMixin):
 
             if idx > 0:
                 self.api.playback.seek(points[idx - 1])
+
+    def _update_ranges_header_width(self) -> None:
+        rows = self.ranges_model.rowCount()
+        width = self.ranges_view.verticalHeader().fontMetrics().horizontalAdvance(str(rows)) + 12
+        self.ranges_view.verticalHeader().setFixedWidth(max(width, 24))
