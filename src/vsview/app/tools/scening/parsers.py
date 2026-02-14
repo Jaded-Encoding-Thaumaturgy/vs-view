@@ -117,10 +117,34 @@ class MatroskaXMLParser(Parser):
         return SceneRow(color=self.get_color(), name=path.stem, ranges=ranges)
 
 
+class XvidLogParser(Parser):
+    filter = Parser.FileFilter("XviD Log", ["txt", "log"])
+
+    def parse(self, path: Path, fps: Fraction) -> SceneRow:
+        ranges = list[RangeFrame]()
+        current_frame = 0
+
+        lines = path.read_text("utf-8")
+
+        for line in lines.splitlines():
+            line = line.strip()
+
+            if not line or line.startswith("#"):
+                continue
+
+            if line[0] == "i":
+                ranges.append(RangeFrame(start=current_frame))
+
+            current_frame += 1
+
+        return SceneRow(color=self.get_color(), name=path.stem, ranges=ranges)
+
+
 internal_parsers: list[Parser] = [
     AssParser(),
     OGMParser(),
     MatroskaXMLParser(),
+    XvidLogParser(),
 ]
 
 # "Wobbly File (*.wob)": import_wobbly,
