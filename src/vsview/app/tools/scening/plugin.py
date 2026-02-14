@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
+from concurrent.futures import Future
 from enum import StrEnum
 from functools import cache
 from itertools import count
 from logging import getLogger
-from typing import Self
+from pathlib import Path
+from typing import TYPE_CHECKING, Self
 
-from jetpytools import cachedproperty
+import pluggy
+from jetpytools import cachedproperty, to_arr
 from pydantic import BaseModel, Field
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QFileDialog,
     QHeaderView,
     QMenu,
     QSplitter,
@@ -32,17 +36,34 @@ from vsview.api import (
     Time,
     VideoOutputProxy,
     WidgetPluginBase,
+    run_in_background,
+    run_in_loop,
 )
 
+from . import specs
 from .models import RangeFrame, RangeTime, SceneRow
+from .parsers import internal_parsers
 from .ui import Col, RangeCol, RangeTableDelegate, RangeTableModel, SceneTableDelegate, SceneTableModel
-from .utils import color_generator
+from .utils import ColorGenerator, monkey_patch_parser
+
+if TYPE_CHECKING:
+    from .api import Parser
 
 logger = getLogger(__name__)
 
 
 PLUGIN_IDENTIFIER = "jet_vsview_scening"
 PLUGIN_DISPLAY_NAME = "Scening"
+
+
+manager = pluggy.PluginManager("vsview.scening")
+
+
+@cache
+def load_external_parsers() -> None:
+    manager.add_hookspecs(specs)
+    n = manager.load_setuptools_entrypoints("vsview.scening")
+    logger.debug("Loaded %d external parsers", n)
 
 
 class ShortcutDefinition(StrEnum):
@@ -294,7 +315,7 @@ class SceningPlugin(WidgetPluginBase[None, LocalSettings], IconReloadMixin):
         )
 
     def load_settings(self) -> None:
-        self._color_gen = color_generator(None)
+        self._color_gen = ColorGenerator(None)
 
         # Set the next color based on the last scene
         if scenes := self.settings.local_.scenes:
@@ -331,8 +352,52 @@ class SceningPlugin(WidgetPluginBase[None, LocalSettings], IconReloadMixin):
         self.scenes_view.scrollTo(idx)
         self.scenes_view.setCurrentIndex(idx)
 
-    # TODO
-    def on_import_scene(self) -> None: ...
+    def on_import_scene(self) -> None:
+        load_external_parsers()
+
+        parsers: list[Parser] = manager.hook.vsview_scening_register_parser() + internal_parsers
+
+        filters = {f"{p.filter.label} (*.{' *.'.join(to_arr(p.filter.suffix))})": p for p in parsers}
+        files, selected_filter = QFileDialog.getOpenFileNames(
+            self,
+            "Import scene file(s)",
+            filter=";;".join(sorted(filters)),
+        )
+
+        if not files:
+            logger.info("No file selected")
+            return
+
+        fscenes = self.parse_imported_files(files, filters[selected_filter])
+
+        @run_in_loop
+        def on_completed(f: Future[list[SceneRow]]) -> None:
+            if f.exception():
+                logger.exception("Error parsing file(s)")
+                return
+
+            for scene in f.result():
+                self.scenes_model.add_scene(scene, emit_signal=False)
+
+            self._persist_scenes()
+
+        fscenes.add_done_callback(on_completed)
+
+    @run_in_background(name="ParseImportedFiles")
+    def parse_imported_files(self, files: list[str], parser: Parser) -> list[SceneRow]:
+        src_fps = self.api.current_voutput.vs_output.clip.fps
+
+        scenes = list[SceneRow]()
+
+        with monkey_patch_parser(parser, self._color_gen):
+            for file in files:
+                try:
+                    parsed = parser.parse(Path(file), src_fps)
+                    scenes.extend([parsed] if isinstance(parsed, SceneRow) else parsed)
+                except Exception:
+                    logger.exception("Error parsing file: %s", file)
+
+        return scenes
 
     def on_remove_scene_triggered(self) -> None:
         if not (selected_indexes := self.scenes_view.selectionModel().selectedRows()):

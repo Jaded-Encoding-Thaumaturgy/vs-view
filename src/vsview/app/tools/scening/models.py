@@ -97,7 +97,7 @@ class SceneRow(UUIDModel):
     checked_outputs: set[int] = Field(default_factory=set)
     display: bool = True
 
-    ranges: list[RangeFrame | RangeTime] = Field(default_factory=list)
+    ranges: list[RangeFrame | RangeTime] | list[RangeFrame] | list[RangeTime] = Field(default_factory=list)
 
     @property
     def notch_id(self) -> str:

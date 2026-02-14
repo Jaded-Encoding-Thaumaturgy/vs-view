@@ -1,15 +1,42 @@
-from collections.abc import Generator
+from __future__ import annotations
+
+import threading
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from random import random
+from types import MethodType
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtGui import QColor
 
+if TYPE_CHECKING:
+    from .api import Parser
 
-def color_generator(hue: float | None = None) -> Generator[QColor, QColor | None, None]:
-    if hue is None:
-        hue = random()
 
-    golden_ratio_conjugate = 0.618033988749895
+class ColorGenerator(Generator[QColor, QColor | None]):
+    def __init__(self, hue: float | None = None) -> None:
+        self._hue = hue if hue is not None else random()
+        self._lock = threading.Lock()
+        self._golden_ratio_conjugate = 0.618033988749895
 
-    while True:
-        sent = yield QColor.fromHsvF(hue, 0.5, 0.9)
-        hue = (sent.hueF() if sent is not None else hue + golden_ratio_conjugate) % 1.0
+    def send(self, value: QColor | None) -> QColor:
+        with self._lock:
+            if value is not None:
+                self._hue = value.hueF()
+
+            res = QColor.fromHsvF(self._hue, 0.5, 0.9)
+            self._hue = (self._hue + self._golden_ratio_conjugate) % 1.0
+            return res
+
+    def throw(self, exc: BaseException, /, *_: Any) -> QColor:  # type: ignore[override]
+        raise exc
+
+
+@contextmanager
+def monkey_patch_parser(parser: Parser, color_gen: Generator[QColor, QColor | None]) -> Iterator[None]:
+    setattr(parser, "get_color", MethodType(lambda _: next(color_gen), parser))
+
+    try:
+        yield
+    finally:
+        delattr(parser, "get_color")

@@ -615,7 +615,7 @@ class RangeTableModel(QAbstractTableModel):
         row = len(self._data)
 
         with self.insert_rows(row, 1):
-            scene.ranges.append(range_item)
+            scene.ranges.append(range_item)  # type: ignore[arg-type]
             self._data.append((range_item, scene))
 
         self.rangesModified.emit()
