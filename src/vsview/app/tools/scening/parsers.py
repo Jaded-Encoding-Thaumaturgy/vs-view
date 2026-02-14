@@ -140,15 +140,31 @@ class XvidLogParser(Parser):
         return SceneRow(color=self.get_color(), name=path.stem, ranges=ranges)
 
 
+class QPFileParser(Parser):
+    filter = Parser.FileFilter("QP File", ["qp", "txt"])
+
+    def parse(self, path: Path, fps: Fraction) -> SceneRow:
+        ranges = list[RangeFrame]()
+
+        for matched in re.finditer(r"^(\d+)\s+[IK]\s+(-?\d+)", path.read_text("utf-8"), re.MULTILINE):
+            try:
+                frame = int(matched.group(1))
+            except ValueError:
+                continue
+
+            ranges.append(RangeFrame(start=frame, label=str(matched.group(2))))
+
+        return SceneRow(color=self.get_color(), name=path.stem, ranges=ranges)
+
+
 internal_parsers: list[Parser] = [
     AssParser(),
     OGMParser(),
     MatroskaXMLParser(),
     XvidLogParser(),
+    QPFileParser(),
 ]
 
 # "Wobbly File (*.wob)": import_wobbly,
 # "Wobbly Sections (*.txt)"
-# "x264/x265 QP File (*.qp *.txt)": import_qp,
-# "XviD Log (*.txt)": import_xvid,
 # "VSEdit Bookmarks (*.bookmarks)"
