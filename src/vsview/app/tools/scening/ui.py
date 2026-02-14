@@ -58,7 +58,33 @@ class Col(HeaderIntEnum):
     DELETE = 4, ""
 
 
-class SceneTableModel(QAbstractTableModel):
+class AbstractTableModel(QAbstractTableModel):
+    @contextmanager
+    def insert_rows(self, first: int, last: int | None = None) -> Iterator[None]:
+        self.beginInsertRows(QModelIndex(), first, last or first)
+        try:
+            yield
+        finally:
+            self.endInsertRows()
+
+    @contextmanager
+    def remove_rows(self, first: int, last: int | None = None) -> Iterator[None]:
+        self.beginRemoveRows(QModelIndex(), first, last or first)
+        try:
+            yield
+        finally:
+            self.endRemoveRows()
+
+    @contextmanager
+    def reset_model(self) -> Iterator[None]:
+        self.beginResetModel()
+        try:
+            yield
+        finally:
+            self.endResetModel()
+
+
+class SceneTableModel(AbstractTableModel):
     """Table model for scene rows (Color | Name | Outputs | Display | Delete)."""
 
     SceneRowRole = Qt.ItemDataRole.UserRole + 1
@@ -177,9 +203,8 @@ class SceneTableModel(QAbstractTableModel):
     def add_scene(self, scene: SceneRow, emit_signal: bool = True) -> QModelIndex:
         row = len(self.scenes)
 
-        self.beginInsertRows(QModelIndex(), row, row)
-        self.scenes.append(scene)
-        self.endInsertRows()
+        with self.insert_rows(row):
+            self.scenes.append(scene)
 
         if emit_signal:
             self.scenesModified.emit()
@@ -191,10 +216,9 @@ class SceneTableModel(QAbstractTableModel):
         else:
             start, end = row, row
 
-        self.beginRemoveRows(QModelIndex(), start, end)
-        for r in to_arr(row):
-            self.scenes.pop(r)
-        self.endRemoveRows()
+        with self.remove_rows(start, end):
+            for r in to_arr(row):
+                self.scenes.pop(r)
 
         self.scenesModified.emit()
 
@@ -432,7 +456,7 @@ class RangeCol(HeaderIntEnum):
     LABEL = 4, "Label"
 
 
-class RangeTableModel(QAbstractTableModel):
+class RangeTableModel(AbstractTableModel):
     RangeRole = Qt.ItemDataRole.UserRole + 1
     SceneRowRole = Qt.ItemDataRole.UserRole + 2
     rangesModified = Signal()
@@ -571,30 +595,6 @@ class RangeTableModel(QAbstractTableModel):
     def current_voutput(self) -> VideoOutputProxy:
         return self.api.current_voutput
 
-    @contextmanager
-    def insert_rows(self, row: int, count: int) -> Iterator[None]:
-        self.beginInsertRows(QModelIndex(), row, row + count - 1)
-        try:
-            yield
-        finally:
-            self.endInsertRows()
-
-    @contextmanager
-    def remove_rows(self, row: int, count: int) -> Iterator[None]:
-        self.beginRemoveRows(QModelIndex(), row, row + count - 1)
-        try:
-            yield
-        finally:
-            self.endRemoveRows()
-
-    @contextmanager
-    def reset_model(self) -> Iterator[None]:
-        self.beginResetModel()
-        try:
-            yield
-        finally:
-            self.endResetModel()
-
     def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder) -> None:
         self._sort_column = column
         self._sort_order = order
@@ -614,7 +614,7 @@ class RangeTableModel(QAbstractTableModel):
     def add_range(self, range_item: RangeFrame | RangeTime, scene: SceneRow) -> None:
         row = len(self._data)
 
-        with self.insert_rows(row, 1):
+        with self.insert_rows(row):
             scene.ranges.append(range_item)  # type: ignore[arg-type]
             self._data.append((range_item, scene))
 
@@ -624,7 +624,7 @@ class RangeTableModel(QAbstractTableModel):
         if not (0 <= (i := idx.row()) < len(self._data)):
             return
 
-        with self.remove_rows(i, 1):
+        with self.remove_rows(i):
             range_item, scene = self._data.pop(i)
             scene.ranges = [r for r in scene.ranges if r is not range_item]
 
