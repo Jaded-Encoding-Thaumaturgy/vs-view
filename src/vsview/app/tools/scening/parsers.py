@@ -15,11 +15,7 @@ class AssParser(Parser):
     filter = Parser.FileFilter("Aegisub Advanced SSA subtitles", "ass")
 
     def parse(self, path: Path, fps: Fraction) -> SceneRow:
-        try:
-            with path.open(encoding="utf-8-sig") as file:
-                text = file.read()
-        except ValueError:
-            raise ValueError(f"Could not read file or file is empty: {path}")
+        text = path.read_text("utf-8-sig")
 
         ranges = list[RangeFrame]()
 
