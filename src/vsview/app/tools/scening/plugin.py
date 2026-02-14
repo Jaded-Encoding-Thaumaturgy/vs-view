@@ -355,7 +355,7 @@ class SceningPlugin(WidgetPluginBase[None, LocalSettings], IconReloadMixin):
     def on_import_scene(self) -> None:
         load_external_parsers()
 
-        parsers: list[Parser] = list(flatten(manager.hook.vsview_scening_register_parser())) + internal_parsers
+        parsers: list[Parser] = internal_parsers + list(flatten(manager.hook.vsview_scening_register_parser()))
 
         filters = {f"{p.filter.label} (*.{' *.'.join(to_arr(p.filter.suffix))})": p for p in parsers}
         files, selected_filter = QFileDialog.getOpenFileNames(

@@ -79,12 +79,54 @@ class OGMParser(Parser):
         return SceneRow(color=self.get_color(), name=path.stem, ranges=ranges)
 
 
+class MatroskaXMLParser(Parser):
+    filter = Parser.FileFilter("Matroska XML Chapters", "xml")
+
+    def parse(self, path: Path, fps: Fraction) -> SceneRow:
+        import xml.etree.ElementTree as ET
+
+        try:
+            tree = ET.parse(path)
+            root = tree.getroot()
+        except ET.ParseError:
+            raise ValueError(f"Could not parse XML file: {path}")
+
+        ranges = list[RangeTime]()
+
+        # Find all ChapterAtom nodes, usually nested within EditionEntry
+        for atom in root.findall(".//ChapterAtom"):
+            time_node = atom.find("ChapterTimeStart")
+
+            if time_node is None or time_node.text is None:
+                continue
+
+            try:
+                # Format is HH:MM:SS.nnnnnnnnn
+                # We split manually because datetime.strptime chokes on 9-digit nanoseconds
+                parts = time_node.text.split(":")
+                if len(parts) == 3:
+                    start_dt = timedelta(hours=int(parts[0]), minutes=int(parts[1]), seconds=float(parts[2]))
+
+                    name = ""
+                    if (display_node := atom.find("ChapterDisplay")) is not None:
+                        name_node = display_node.find("ChapterString")
+
+                        if name_node is not None and name_node.text:
+                            name = name_node.text
+
+                    ranges.append(RangeTime(start=start_dt, label=name))
+            except ValueError:
+                continue
+
+        return SceneRow(color=self.get_color(), name=path.stem, ranges=ranges)
+
+
 internal_parsers: list[Parser] = [
     AssParser(),
     OGMParser(),
+    MatroskaXMLParser(),
 ]
 
-# "Matroska XML Chapters (*.xml)": import_matroska_xml_chapters,
 # "Wobbly File (*.wob)": import_wobbly,
 # "Wobbly Sections (*.txt)"
 # "x264/x265 QP File (*.qp *.txt)": import_qp,
