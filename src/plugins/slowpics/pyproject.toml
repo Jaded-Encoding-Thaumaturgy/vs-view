@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling", "versioningit"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vsview-slowpics"
+dynamic = ["version"]
+description = "A vsview plugin to upload frames to slow.pics"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+dependencies = [
+    "vsview",
+    "vsjetpack>=1.0.0",
+    "httpx>=0.28.1",
+]
+
+[project.entry-points.vsview]
+vsview_slowpics = "vsview_slowpics"
+
+[project.urls]
+"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/slowpics"
+"Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
+"Contact" = "https://discord.gg/XTpc6Fa9eB"
+
+[tool.uv.sources]
+vsview = { workspace = true }
+
+[tool.hatch.version]
+source = "versioningit"
+default-version = "0.0.0"
+next-version = "minor"
+write = { file = "src/vsview_slowpics/_version.py", template = "__version__ = \"{normalized_version}\"\n__version_tuple__ = {version_tuple}" }

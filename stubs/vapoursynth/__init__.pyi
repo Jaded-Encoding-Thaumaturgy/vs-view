@@ -1077,6 +1077,10 @@ class VideoNode(RawNode):
     ) -> None: ...
 
 # <plugins/bound/VideoNode>
+# <attribute/VideoNode_bound/fpng>
+    fpng: Final[_fpng._VideoNode_bound.Plugin]
+    """fpng for vapoursynth"""
+# </attribute/VideoNode_bound/fpng>
 # <attribute/VideoNode_bound/resize>
     resize: Final[_resize._VideoNode_bound.Plugin]
     """VapourSynth Resize"""
@@ -1190,6 +1194,10 @@ class Core:
     bs: Final[_bs._Core_bound.Plugin]
     """Best Source 2"""
 # </attribute/Core_bound/bs>
+# <attribute/Core_bound/fpng>
+    fpng: Final[_fpng._Core_bound.Plugin]
+    """fpng for vapoursynth"""
+# </attribute/Core_bound/fpng>
 # <attribute/Core_bound/resize>
     resize: Final[_resize._Core_bound.Plugin]
     """VapourSynth Resize"""
@@ -1301,6 +1309,20 @@ class _bs:
             def VideoSource(self, source: _AnyStr, track: _IntLike | None = None, variableformat: _IntLike | None = None, fpsnum: _IntLike | None = None, fpsden: _IntLike | None = None, rff: _IntLike | None = None, threads: _IntLike | None = None, seekpreroll: _IntLike | None = None, enable_drefs: _IntLike | None = None, use_absolute_path: _IntLike | None = None, cachemode: _IntLike | None = None, cachepath: _AnyStr | None = None, cachesize: _IntLike | None = None, hwdevice: _AnyStr | None = None, extrahwframes: _IntLike | None = None, timecodes: _AnyStr | None = None, start_number: _IntLike | None = None, viewid: _IntLike | None = None, showprogress: _IntLike | None = None, maxdecoders: _IntLike | None = None, hwfallback: _IntLike | None = None, exporttimestamps: _IntLike | None = None) -> VideoNode: ...
 
 # </implementation/bs>
+
+# <implementation/fpng>
+class _fpng:
+    class _Core_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def Write(self, clip: VideoNode, filename: _AnyStr, firstnum: _IntLike | None = None, compression: _IntLike | None = None, overwrite: _IntLike | None = None, alpha: VideoNode | None = None) -> VideoNode: ...
+
+    class _VideoNode_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def Write(self, filename: _AnyStr, firstnum: _IntLike | None = None, compression: _IntLike | None = None, overwrite: _IntLike | None = None, alpha: VideoNode | None = None) -> VideoNode: ...
+
+# </implementation/fpng>
 
 # <implementation/resize>
 class _resize:

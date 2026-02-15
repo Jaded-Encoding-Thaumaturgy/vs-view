@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
     QColorDialog,
     QComboBox,
     QDoubleSpinBox,
+    QLineEdit,
     QPlainTextEdit,
     QSpinBox,
     QTimeEdit,
@@ -143,6 +144,24 @@ class Checkbox(WidgetMetadata[QCheckBox]):
 
     def get_value(self, widget: QCheckBox) -> Any:
         value = widget.isChecked()
+        return self.from_ui(value) if self.from_ui else value
+
+
+@dataclass(frozen=True, slots=True)
+class LineEdit(WidgetMetadata[QLineEdit]):
+    """LineEdit widget metadata."""
+
+    def create_widget(self, parent: QWidget | None = None) -> QLineEdit:
+        widget = QLineEdit(parent)
+        return widget
+
+    def load_value(self, widget: QLineEdit, value: Any) -> None:
+        if self.to_ui:
+            value = self.to_ui(value)
+        widget.setText(value)
+
+    def get_value(self, widget: QLineEdit) -> Any:
+        value = widget.text()
         return self.from_ui(value) if self.from_ui else value
 
 

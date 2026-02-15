@@ -11,7 +11,16 @@ from ..app.plugins import (
     WidgetPluginBase,
     hookimpl,
 )
-from ..app.settings.models import ActionDefinition, Checkbox, DoubleSpin, Dropdown, PlainTextEdit, Spin, WidgetMetadata
+from ..app.settings.models import (
+    ActionDefinition,
+    Checkbox,
+    DoubleSpin,
+    Dropdown,
+    LineEdit,
+    PlainTextEdit,
+    Spin,
+    WidgetMetadata,
+)
 from ..app.views.components import Accordion, AnimatedToggle, SegmentedControl
 from ..app.views.timeline import Frame, FrameEdit, Time, TimeEdit
 from ..app.views.video import BaseGraphicsView
@@ -32,6 +41,7 @@ __all__ = [
     "GraphicsViewProxy",
     "IconName",
     "IconReloadMixin",
+    "LineEdit",
     "LocalSettingsModel",
     "NodeProcessor",
     "PlainTextEdit",
