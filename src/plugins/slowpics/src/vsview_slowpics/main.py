@@ -380,16 +380,17 @@ class SlowPicsPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             self.thread_handle.wait()
 
     def add_frames(self) -> None:
+        self.frames_dropdown.blockSignals(True)
         self.frames_dropdown.clear()
         frames: list[SPFrame] = sorted(self.frames + list(self.manual_frames), key=lambda x: x.frame)
         for frame in frames:
             self.frames_dropdown.addItem(f"{frame.frame} ({frame.frame_type.name})", frame)
+        self.frames_dropdown.blockSignals(False)
 
     def _frame_selected(self, index: int) -> None:
-        # data: SPFrame = self.frames_dropdown.itemData(index)
+        data: SPFrame = self.frames_dropdown.itemData(index)
 
-        # self.api.__workspace._seek_frame(data.frame)
-        pass
+        self.api.playback.seek(data.frame)
 
     def _open_tmdb_search_popup(self) -> None:
         self.popup = TMDBPopup(self, self.settings.global_.tmdb_api_key)

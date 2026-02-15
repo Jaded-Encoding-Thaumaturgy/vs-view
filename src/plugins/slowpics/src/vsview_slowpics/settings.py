@@ -15,7 +15,7 @@ class GlobalSettings(BaseModel):
     ] = "{tmdb_title} ({tmdb_year}) - {video_nodes}"
     tmdb_tv_format: Annotated[
         str,
-        LineEdit("Format to use when selecting a Movie from TMDB"),
+        LineEdit("Format to use when selecting a TV Show from TMDB"),
     ] = "{tmdb_title} ({tmdb_year}) - S01E01 - {video_nodes}"
     tmdb_api_key: Annotated[
         str,

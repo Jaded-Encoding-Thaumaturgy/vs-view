@@ -159,12 +159,11 @@ class SlowPicsWorker(QObject):
         if frame_info.current_frame:
             found_frames.append(SPFrame(self.api.current_frame, SPFrameSource.CURRENT))
 
-        if len(frame_info.pict_types) != 3:
-            found_frames.extend(
-                self._get_random_frames(
-                    frame_info.random_frames, frame_info.pict_types, frame_info.random_min, random_max
-                )
+        found_frames.extend(
+            self._get_random_frames(
+                frame_info.random_frames, frame_info.pict_types, frame_info.random_min, random_max
             )
+        )
 
         if frame_info.random_light or frame_info.random_dark:
             found_frames.extend(
@@ -221,7 +220,7 @@ class SlowPicsWorker(QObject):
                     break
 
                 rnum = self._get_random_number_interval(random_min, random_max, random_count, len(random_frames))
-                if self.api.current_timeline_mode == "time":
+                if self.api.timeline.mode == "time":
                     timestamp = self.api.voutputs[0].frame_to_time(rnum)
                     frames = [source.vs_output.clip[source.time_to_frame(timestamp)] for source in self.api.voutputs]
                 else:
