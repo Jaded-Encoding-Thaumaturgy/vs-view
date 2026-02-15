@@ -1,0 +1,68 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "**/pyproject.toml"
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "**/pyproject.toml"
+      - ".github/workflows/test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+        vapoursynth-version: [73]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Set up VapourSynth ${{ matrix.vapoursynth-version }}
+        uses: Jaded-Encoding-Thaumaturgy/setup-vapoursynth@v1
+        with:
+          vapoursynth-version: ${{ matrix.vapoursynth-version }}
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libqt6gui6t64 \
+            libqt6multimedia6 \
+            libqt6svg6 \
+            libxcb-cursor0 \
+            xvfb
+
+      - name: Install dependencies
+        run: uv sync --locked --group test --group plugins --no-dev
+
+      - name: Run tests
+        run: uv run --no-sync pytest
+
+      - name: Post webhook for failure
+        if: failure()
+        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@v1
+        with:
+          webhook-url: ${{ secrets.WEBHOOK_URL }}

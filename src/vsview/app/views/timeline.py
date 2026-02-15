@@ -502,7 +502,7 @@ class TimelineHoverPopup(QWidget):
             )
         )
 
-        cursor_pen = QPen(Qt.GlobalColor.black, 1)
+        cursor_pen = QPen(Qt.GlobalColor.black, 2)
         cursor_pen.setCosmetic(True)
         painter.setPen(cursor_pen)
         painter.drawLine(
@@ -811,7 +811,9 @@ class Timeline(QWidget):
                 p_notch.draw(painter, self.scroll_rect)
 
         # Draw current frame cursor
-        painter.setPen(self.palette().color(self.BACKGROUND_COLOR))
+        cursor_pen = QPen(self.palette().color(self.BACKGROUND_COLOR), 2)
+        cursor_pen.setCosmetic(True)
+        painter.setPen(cursor_pen)
         painter.drawLine(cursor_line)
 
         # Draw hover indicator if mouse is over the widget

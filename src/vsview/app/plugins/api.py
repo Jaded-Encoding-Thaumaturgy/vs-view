@@ -187,10 +187,10 @@ class TimelineProxy(_TimelineProxy):
                 start, end = d
 
             start, end = (
-                Frame(start) if isinstance(start, int) else Time(seconds=start.seconds),
+                Frame(start) if isinstance(start, int) else Time(seconds=start.total_seconds()),
                 Frame(end)
                 if isinstance(end, int)
-                else Time(seconds=end.seconds)
+                else Time(seconds=end.total_seconds())
                 if isinstance(end, timedelta)
                 else None,
             )
