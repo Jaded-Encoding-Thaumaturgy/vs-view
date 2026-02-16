@@ -63,6 +63,7 @@ class Parser(ABC):
     which contain lists of frames or timestamps.
 
     To implement a parser, create a subclass and:
+
     1. Define the `filter` class variable.
     2. Implement the `parse` method.
     3. Register it using the `vsview_scening_register_parser` hook.

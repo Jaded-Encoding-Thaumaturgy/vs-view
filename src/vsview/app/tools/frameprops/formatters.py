@@ -27,9 +27,10 @@ class FormatterProperty:
     value_formatter: Callable[[Any], str] | dict[Hashable, str] | None = None
     """
     Optional value formatter:
-    - Callable: Transform the value to a string
-    - dict: Map values to strings (for enums/lookups)
-    - None: Use default str() conversion
+
+       - Callable: Transform the value to a string
+       - dict: Map values to strings (for enums/lookups)
+       - None: Use default str() conversion
     """
 
     def format_value(self, value: Any) -> str:

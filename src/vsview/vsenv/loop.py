@@ -133,20 +133,24 @@ def run_in_loop[**P, R](
     func: Callable[P, R] | Callable[P, _Coro[R]] | None = None, *, return_future: bool = True
 ) -> Any:
     """
-    Decorator. Executes the decorated function within the QtEventLoop (Main Thread).
+    Decorator. Executes the decorated function within the `QtEventLoop` (Main Thread).
 
     Args:
-        func: The function to wrap (when used as @run_in_loop without parens)
+        func: The function to wrap (when used as `@run_in_loop` without parens)
         return_future: If False, blocks and returns R directly.
 
-    Returns: A future object or the result directly, depending on return_future.
+    Returns:
+        A future object or the result directly, depending on return_future.
 
     Usage:
-        @run_in_loop
-        def my_func(): ...
+    ```python
+    @run_in_loop
+    def my_func(): ...
 
-        @run_in_loop(return_future=False)
-        def my_blocking_func(): ...
+
+    @run_in_loop(return_future=False)
+    def my_blocking_func(): ...
+    ```
     """
 
     def decorator(fn: Callable[P, R] | Callable[P, _Coro[R]]) -> Callable[P, Future[R] | R]:
@@ -203,20 +207,25 @@ def run_in_background[**P, R](
     func: Callable[P, R] | Callable[P, _Coro[R]] | None = None, *, name: str | None = None
 ) -> Callable[P, Future[R]] | Callable[[Callable[P, R] | Callable[P, _Coro[R]]], Callable[P, Future[R]]]:
     """
-    Executes the decorated function in a background thread (via QThreadPool) using the QtEventLoop's to_thread logic.
+    Executes the decorated function in a background thread (via QThreadPool)
+    using the `QtEventLoop`'s `to_thread` logic.
 
     Args:
-        func: The function to wrap (when used as @run_in_background without parens)
-        name: Optional thread name for logging (when used as @run_in_background(name="..."))
+        func: The function to wrap (when used as `@run_in_background` without parens)
+        name: Optional thread name for logging (when used as `@run_in_background(name="...")`)
 
-    Returns: A future object representing the result of the execution.
+    Returns:
+        A future object representing the result of the execution.
 
     Usage:
-        @run_in_background
-        def my_func(): ...
+    ```python
+    @run_in_background
+    def my_func(): ...
 
-        @run_in_background(name="MyWorker")
-        def my_named_func(): ...
+
+    @run_in_background(name="MyWorker")
+    def my_named_func(): ...
+    ```
     """
 
     def decorator(fn: Callable[P, R] | Callable[P, _Coro[R]]) -> Callable[P, Future[R]]:

@@ -90,11 +90,15 @@ class IconReloadMixin:
             color_role: Palette color role for simple icons (used when icon_states is None).
             icon_states: Full mapping of (QIcon.Mode, QIcon.State) -> QPalette.ColorRole.
                 Allows complete control over icon appearance for all Qt states.
-                Example: {
-                    (QIcon.Mode.Normal, QIcon.State.Off): QPalette.ColorRole.ToolTipText,
-                    (QIcon.Mode.Normal, QIcon.State.On): QPalette.ColorRole.Highlight,
-                    (QIcon.Mode.Disabled, QIcon.State.Off): QPalette.ColorRole.Mid,
-                }
+
+                Example:
+                    ```python
+                    {
+                        (QIcon.Mode.Normal, QIcon.State.Off): QPalette.ColorRole.ToolTipText,
+                        (QIcon.Mode.Normal, QIcon.State.On): QPalette.ColorRole.Highlight,
+                        (QIcon.Mode.Disabled, QIcon.State.Off): QPalette.ColorRole.Mid,
+                    }
+                    ```
         """
 
         def reload(btn: QToolButton) -> None:
@@ -193,12 +197,16 @@ class IconReloadMixin:
 
         Args:
             icons: Icon specification using IconName enum.
-                Simple usage: (IconName.PLAY, QColor("white"))
-                Full control: {
-                    (QIcon.Mode.Normal, QIcon.State.Off): (IconName.PLAY, QColor("white")),
-                    (QIcon.Mode.Normal, QIcon.State.On): (IconName.PAUSE, QColor("gray")),
-                    (QIcon.Mode.Disabled, QIcon.State.Off): (IconName.PLAY, QColor("darkgray")),
-                }
+                Simple usage: `(IconName.PLAY, QColor("white"))`
+                Full control:
+
+                    ```python
+                    {
+                        (QIcon.Mode.Normal, QIcon.State.Off): (IconName.PLAY, QColor("white")),
+                        (QIcon.Mode.Normal, QIcon.State.On): (IconName.PAUSE, QColor("gray")),
+                        (QIcon.Mode.Disabled, QIcon.State.Off): (IconName.PLAY, QColor("darkgray")),
+                    }
+                    ```
             size: Target size for SVG rendering (for crisp output).
         """
         icon = QIcon()
@@ -251,13 +259,18 @@ class IconReloadMixin:
                 Used when icon_states is None.
             icon_states: Full mapping of (QIcon.Mode, QIcon.State) -> QPalette.ColorRole.
                 Allows complete control over icon appearance for all Qt states:
-                - Modes: Normal, Disabled, Active, Selected
-                - States: Off, On
-                Example: {
-                    (QIcon.Mode.Normal, QIcon.State.Off): QPalette.ColorRole.ToolTipText,
-                    (QIcon.Mode.Normal, QIcon.State.On): QPalette.ColorRole.Mid,
-                    (QIcon.Mode.Disabled, QIcon.State.Off): QPalette.ColorRole.Dark,
-                }
+
+                   - Modes: Normal, Disabled, Active, Selected
+                   - States: Off, On
+
+                Example:
+                    ```python
+                    {
+                        (QIcon.Mode.Normal, QIcon.State.Off): QPalette.ColorRole.ToolTipText,
+                        (QIcon.Mode.Normal, QIcon.State.On): QPalette.ColorRole.Mid,
+                        (QIcon.Mode.Disabled, QIcon.State.Off): QPalette.ColorRole.Dark,
+                    }
+                    ```
 
         Returns:
             A configured QToolButton instance.
