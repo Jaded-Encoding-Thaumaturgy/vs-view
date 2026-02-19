@@ -218,3 +218,6 @@ __marimo__/
 # vsjet
 .vsjet/
 src/vsview/global_settings.json
+# VapourSynth inventory files
+vs_objects.inv
+vs_fixed.inv
