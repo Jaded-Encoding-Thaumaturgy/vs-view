@@ -1,0 +1,197 @@
+/* ============================================================================
+ * Custom Color Adjustments for VSView Documentation
+ * ========================================================================== */
+
+/* Global Transitions for smooth theme switching */
+:root, [data-md-color-scheme] {
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s;
+}
+
+/* Custom Scrollbar - Sleek and branded */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #7858c8;
+    border-radius: 10px;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb {
+    background: #a888e8;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #9878d8;
+}
+
+/* Light Mode Adjustments - Soft lavender/cream tones */
+[data-md-color-scheme="default"] {
+    --md-default-bg-color: #f5f2fa;
+    --md-default-bg-color--light: #f0ecf8;
+    --md-default-bg-color--lighter: #ebe5f5;
+    --md-code-bg-color: #ebe5f5;
+    --md-footer-bg-color: #e8e0f2;
+    --md-footer-bg-color--dark: #e0d8ea;
+    --md-primary-fg-color: #7858c8;
+    --md-primary-fg-color--light: #9878d8;
+    --md-primary-fg-color--dark: #6048b8;
+    --md-accent-fg-color: #9878d8;
+    --md-accent-fg-color--transparent: #9878d81a;
+    --md-accent-bg-color: #9878d81a;
+    --md-accent-bg-color--light: #9878d80d;
+}
+
+/* Dark Mode Adjustments - Neutral blue-gray base with interpolated variants */
+[data-md-color-scheme="slate"] {
+    /* Main background: neutral blue-gray as requested */
+    --md-default-bg-color: hsla(230, 15%, 21%, 1);
+    
+    /* Primary background (content area): slightly lighter */
+    --md-default-bg-color--light: hsla(230, 15%, 25%, 1);
+    --md-default-bg-color--lighter: hsla(230, 15%, 29%, 1);
+    
+    /* Code blocks: slightly deeper for contrast */
+    --md-code-bg-color: hsla(230, 15%, 18%, 1);
+    
+    /* Footer background: subtle transitions */
+    --md-footer-bg-color: hsla(230, 15%, 20%, 1);
+    --md-footer-bg-color--dark: hsla(230, 15%, 17%, 1);
+    
+    /* Primary color: Keeping the rich purple/lilac accents */
+    --md-primary-fg-color: #a888e8;
+    --md-primary-fg-color--light: #b898f0;
+    --md-primary-fg-color--dark: #9878d8;
+    
+    /* Accent color: Keeping the bright purple/pink highlights */
+    --md-accent-fg-color: #b898e8;
+    --md-accent-fg-color--transparent: #b898e81a;
+    --md-accent-bg-color: #b898e81a;
+    --md-accent-bg-color--light: #b898e80d;
+}
+
+/* Code Block Enhancements */
+.md-typeset code {
+    border-radius: 4px;
+}
+
+/* Fix for Toggle Line section and Copy to clipboard icons */
+.md-code__button,
+.md-clipboard,
+.md-clipboard--done,
+.md-code__selection {
+    color: #7858c8 !important; /* Branded purple for light mode */
+}
+
+[data-md-color-scheme="slate"] .md-code__button,
+[data-md-color-scheme="slate"] .md-clipboard,
+[data-md-color-scheme="slate"] .md-clipboard--done,
+[data-md-color-scheme="slate"] .md-code__selection {
+    color: #a888e8 !important; /* Branded purple for dark mode */
+}
+
+.md-code__button:hover,
+.md-clipboard:hover,
+.md-code__selection:hover {
+    color: #9878d8 !important;
+    background-color: var(--md-accent-bg-color);
+}
+
+/* Admonition Styling - Premium Branded Borders */
+.md-typeset .admonition,
+.md-typeset details {
+    border-width: 0 0 0 4px;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.md-typeset .admonition.note,
+.md-typeset details.note {
+    border-color: #7858c8;
+}
+
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+    border-color: #4caf50;
+}
+
+.md-typeset .admonition.warning,
+.md-typeset details.warning {
+    border-color: #ff9800;
+}
+
+/* Link Colors - Content Area */
+.md-typeset a {
+    color: var(--md-primary-fg-color);
+    transition: color 0.2s;
+}
+
+.md-typeset a:hover {
+    color: var(--md-primary-fg-color--light);
+}
+
+/* Sidebar and Navigation Links */
+.md-nav__link {
+    transition: color 0.2s, background-color 0.2s;
+    border-radius: 4px;
+}
+
+.md-nav__link:hover {
+    color: var(--md-primary-fg-color) !important;
+    background-color: var(--md-accent-bg-color);
+}
+
+.md-nav__link--active {
+    font-weight: 700;
+    color: var(--md-primary-fg-color) !important;
+}
+
+/* Body and Global Link Fallbacks */
+body {
+    transition: background-color 0.3s;
+}
+
+a {
+    transition: color 0.2s;
+}
+
+/* ============================================================================
+ * Layout Customization
+ * ============================================================================
+ * Increases the maximum width of the main content area for better readability
+ * on large screens.
+ * ========================================================================== */
+
+.md-grid {
+    max-width: 70rem; /* Standard Material is 61rem (~1220px) */
+}
+
+/* ============================================================================
+ * Figure Image Enhancements
+ * ============================================================================
+ * Adds a subtle branded glow around figure images so dark UI screenshots
+ * stand out against the page background.
+ * ========================================================================== */
+
+.md-typeset figure img {
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(120, 88, 200, 0.25);
+    transition: box-shadow 0.3s;
+}
+
+.md-typeset figure img:hover {
+    box-shadow: 0 0 28px rgba(120, 88, 200, 0.4);
+}
+
+[data-md-color-scheme="slate"] .md-typeset figure img {
+    box-shadow: 0 0 24px rgba(168, 136, 232, 0.3);
+}
+
+[data-md-color-scheme="slate"] .md-typeset figure img:hover {
+    box-shadow: 0 0 32px rgba(168, 136, 232, 0.45);
+}

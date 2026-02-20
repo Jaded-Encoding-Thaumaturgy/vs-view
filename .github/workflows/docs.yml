@@ -1,0 +1,55 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "vsview/v*"
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --only-group doc --no-install-workspace
+
+      - name: Patch VapourSynth inventory
+        run: uv run python scripts/fix_vs_inv.py
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/vsview/v* ]]; then
+            echo "name=${GITHUB_REF#refs/tags/vsview/}" >> "$GITHUB_OUTPUT"
+            echo "alias=" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=latest" >> "$GITHUB_OUTPUT"
+            echo "alias=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy docs
+        run: |
+          uv run mike deploy --push --update-aliases ${{ steps.version.outputs.name }}
+          if [[ "${{ steps.version.outputs.name }}" == "latest" ]]; then
+            uv run mike set-default --push latest
+          fi

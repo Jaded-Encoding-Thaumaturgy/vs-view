@@ -1,0 +1,8 @@
+{% extends "_base/module.html.jinja" %}
+
+{% block docstring scoped %}
+  {#- CUSTOMIZATION: Only show docstring for the root object if its heading is enabled -#}
+  {% if not root or config.show_root_heading %}
+    {{ super() }}
+  {% endif %}
+{% endblock docstring %}
