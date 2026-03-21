@@ -59,18 +59,18 @@ Second-party plugins are officially maintained but distributed as separate packa
 
 Second-party plugins are officially maintained but distributed as separate Python packages. Note that many of these also require specific **native VapourSynth plugins** to be installed in your VapourSynth environment.
 
-You can start with the **Essential Bundle**.
+You can start with the **Recommended Bundle**.
 
-!!! tip "Optional: Essential Bundle"
-    The `essential` bundle includes **Split Planes**, **FrameProps Extended**, and **Comparison**.
+!!! tip "Optional: Recommended Bundle"
+    The `recommended` bundle includes **Split Planes**, **FrameProps Extended**, and **Comparison**.
     
     === "pip"
-        ```bash title="Install essential bundle"
-        pip install "vsview[essential]"
+        ```bash title="Install recommended bundle"
+        pip install "vsview[recommended]"
         ```
     === "uv"
-        ```bash title="Add essential bundle"
-        uv add vsview --extra essential
+        ```bash title="Add recommended bundle"
+        uv add vsview --extra recommended
         ```
 
 Detailed installation for individual packages can be found in their respective sections below.

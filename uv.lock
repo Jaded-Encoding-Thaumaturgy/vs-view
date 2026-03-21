@@ -1548,7 +1548,7 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-essential = [
+recommended = [
     { name = "vsview-comp" },
     { name = "vsview-frameprops-extended" },
     { name = "vsview-split-planes" },
@@ -1604,11 +1604,11 @@ requires-dist = [
     { name = "vapoursynth", specifier = ">=69" },
     { name = "vsjetengine", specifier = ">=1.2.0" },
     { name = "vspackrgb", editable = "src/vspackrgb" },
-    { name = "vsview-comp", marker = "extra == 'essential'", editable = "src/plugins/comp" },
-    { name = "vsview-frameprops-extended", marker = "extra == 'essential'", editable = "src/plugins/frameprops-extended" },
-    { name = "vsview-split-planes", marker = "extra == 'essential'", editable = "src/plugins/split-planes" },
+    { name = "vsview-comp", marker = "extra == 'recommended'", editable = "src/plugins/comp" },
+    { name = "vsview-frameprops-extended", marker = "extra == 'recommended'", editable = "src/plugins/frameprops-extended" },
+    { name = "vsview-split-planes", marker = "extra == 'recommended'", editable = "src/plugins/split-planes" },
 ]
-provides-extras = ["essential", "secrets"]
+provides-extras = ["recommended", "secrets"]
 
 [package.metadata.requires-dev]
 dev = [

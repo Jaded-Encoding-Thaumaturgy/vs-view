@@ -30,8 +30,8 @@ Install and launch directly from your terminal:
     vsview
     ```
 
-    ```bash title="Install essential bundle"
-    pip install "vsview[essential]"
+    ```bash title="Install with recommended plugins"
+    pip install "vsview[recommended]"
     ```
 
     ```bash title="Open files directly:"
@@ -43,8 +43,8 @@ Install and launch directly from your terminal:
     vsview
     ```
 
-    ```bash title="Add essential bundle"
-    uv add vsview --extra essential
+    ```bash title="Install with recommended plugins"
+    uv add vsview --extra recommended
     ```
 
     ```bash title="Open files directly:"

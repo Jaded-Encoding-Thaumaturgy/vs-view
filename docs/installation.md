@@ -9,23 +9,24 @@
 ## Installation
 
 Choose your preferred package manager to install `vsview`.
-We recommend the **[essential](https://jaded-encoding-thaumaturgy.github.io/vs-view/plugins/second-party/#installation)** bundle for most users.
+We recommend the **[recommended](https://jaded-encoding-thaumaturgy.github.io/vs-view/plugins/second-party/#installation)** bundle for most users
+so that useful plugins are available out of the box.
 
 === "pip"
-    ```bash title="Standard installation"
+    ```bash title="Minimal installation"
     pip install vsview
     ```
 
-    ```bash title="Install essential bundle"
-    pip install vsview[essential]
+    ```bash title="Install with recommended plugins"
+    pip install vsview[recommended]
     ```
 === "uv"
-    ```bash title="Standard installation"
+    ```bash title="Minimal installation"
     uv add vsview
     ```
 
-    ```bash title="Add essential bundle"
-    uv add vsview --extra essential
+    ```bash title="Install with recommended plugins"
+    uv add vsview --extra recommended
     ```
 
 ## Development Installation
