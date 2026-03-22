@@ -101,7 +101,7 @@ class ExtractFramesWorker:
     @run_in_background(name="ExtractQt")
     def _qt_extract(self, clip: VideoNode, path: Path, frames: Sequence[int]) -> None:
         with self.api.vs_context():
-            clip = self.api.packer.to_rgb_packed(clip)
+            clip = self.api.packer.pack_clip(clip)
             remapped = remap_frames(clip, frames)
 
             sema = threading.Semaphore(QThreadPool.globalInstance().maxThreadCount() // 2)

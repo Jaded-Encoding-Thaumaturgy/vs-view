@@ -317,7 +317,7 @@ class FrameThumbnailList(QListWidget):
                 target_h,
                 format=RGB24,
             )
-            packed = self.api.packer.to_rgb_packed(downscaled, alpha=None)
+            packed = self.api.packer.pack_clip(downscaled, alpha=None)
 
             self.clip_cache[voutput.vs_index] = packed
 
