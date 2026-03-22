@@ -109,7 +109,7 @@ class ExtractFramesWorker:
 
             for n, vs_frame in zip(frames, remapped.frames(close=True)):
                 sema.acquire()
-                qimage = self.api.packer.frame_to_qimage(vs_frame).copy()
+                qimage = self.api.packer.frame_to_qimage(vs_frame, format=QImage.Format.Format_RGB32).copy()
                 f = self._qt_save(qimage, path.with_stem(path.stem % n))
                 f.add_done_callback(lambda _: sema.release())
                 workers.append(f)

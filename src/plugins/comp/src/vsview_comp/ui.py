@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
     QWidgetItem,
 )
 from shiboken6 import Shiboken
-from vapoursynth import RGB24, VideoNode
+from vapoursynth import VideoNode
 from vstools import core, get_prop
 
 from vsview.api import LineEdit, NonClosingMenu, PluginAPI, Time, VideoOutputProxy, run_in_background, run_in_loop
@@ -315,7 +315,7 @@ class FrameThumbnailList(QListWidget):
                 voutput.vs_output.clip,
                 target_w,
                 target_h,
-                format=RGB24,
+                format=self.api.packer.vs_format,
             )
             packed = self.api.packer.to_rgb_packed(downscaled, alpha=None)
 
