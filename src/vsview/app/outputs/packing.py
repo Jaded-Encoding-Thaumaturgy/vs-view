@@ -70,8 +70,10 @@ class Packer(ABC):
 
         return packed.std.SetFrameProp("VSViewHasAlpha", True) if alpha else packed
 
-    def frame_to_qimage(self, frame: vs.VideoFrame) -> QImage:
+    def frame_to_qimage(self, frame: vs.VideoFrame, **kwargs: Any) -> QImage:
         alpha = "VSViewHasAlpha" in frame.props or "_Alpha" in frame.props
+
+        params = dict[str, Any](format=self.qt_aformat if alpha else self.qt_format) | kwargs
 
         # QImage supports Buffer inputs
         return QImage(
@@ -79,7 +81,8 @@ class Packer(ABC):
             frame.width,
             frame.height,
             frame.get_stride(0),
-            self.qt_aformat if alpha else self.qt_format,
+            params.pop("format"),
+            **params,
         )
 
 
