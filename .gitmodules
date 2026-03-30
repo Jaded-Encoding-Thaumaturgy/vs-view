@@ -7,3 +7,7 @@
 [submodule "submodules/lucide"]
 	path = submodules/lucide
 	url = https://github.com/lucide-icons/lucide.git
+[submodule "submodules/pyapp"]
+	path = submodules/pyapp
+	url = https://github.com/Varde-s-Forks/pyapp
+	ignore = dirty
