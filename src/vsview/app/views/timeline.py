@@ -1030,7 +1030,7 @@ class Timeline(QWidget):
         self, key: str, data: Frame | Time, end_data: Frame | Time | None = None, id: Hashable | None = None
     ) -> None:
         self.custom_notches.get(key, set()).discard(
-            CustomNotch(
+            CustomNotch(  # type: ignore[type-var]
                 id or complex_hash.hash(key, data, end_data),
                 data,  # pyright: ignore[reportArgumentType]
                 end_data,  # pyright: ignore[reportArgumentType]
