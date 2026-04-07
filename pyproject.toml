@@ -65,7 +65,7 @@ dependencies = [
 dev = [
     "hatchling>=1.27.0",
     "vsstubs>=1.0.2; python_version>='3.13'",
-    "mypy>=1.19.0, <1.20.0",
+    "mypy>=1.20.0, <1.21.0",
     "ruff>=0.15.0, <0.16.0",
     "objgraph>=3.6.2",
     "graphviz>=0.21",
@@ -81,7 +81,7 @@ test = [
     "pytest-qt>=4.5.0",
     "pytest-xvfb>=3.1.1",
 ]
-doc = ["mkdocstrings[python]>=1.0.3", "zensical==0.0.30", "ruff"]
+doc = ["mkdocstrings[python]>=1.0.3", "zensical==0.0.32", "ruff"]
 plugins = [
     "vsview-split-planes",
     "vsview-fftspectrum",
