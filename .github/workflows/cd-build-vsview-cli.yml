@@ -1,0 +1,83 @@
+name: Build vsview-cli
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      python-version:
+        required: false
+        type: string
+        default: "3.12"
+
+jobs:
+  lint:
+    uses: ./.github/workflows/ci-lint.yml
+    with:
+      package: vsview-cli
+    secrets: inherit
+
+  wheels:
+    name: Build wheels (${{ matrix.os }})
+    needs: [lint]
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          enable-cache: true
+
+      - name: Inject version from tag
+        if: startsWith(github.ref, 'refs/tags/vsview-cli/v')
+        shell: uv run --no-sync --with toml-rs {0}
+        run: |
+          import os
+          import pathlib
+          import toml_rs
+
+          ref = os.environ.get("GITHUB_REF", "")
+          version = ref[len("refs/tags/vsview-cli/v") :]
+
+          print(f"Injecting version {version} into Cargo.toml")
+
+          path = pathlib.Path("src/vsview-cli/rust/Cargo.toml")
+
+          data = toml_rs.loads(path.read_text())
+          data["package"]["version"] = version
+          path.write_text(toml_rs.dumps(data))
+
+      - name: Build sdist
+        if: matrix.os == 'macos-latest'
+        run: uv build --package vsview-cli --sdist --out-dir dist --clear
+
+      - name: Upload sdist
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.4
+        with:
+          package-dir: src/vsview-cli
+          output-dir: wheelhouse
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl

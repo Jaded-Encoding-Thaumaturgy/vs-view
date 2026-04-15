@@ -1,0 +1,61 @@
+[build-system]
+requires = ["maturin>=1.13,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "vsview-cli"
+description = "Internal Rust-based CLI module for VSView"
+readme = "README.md"
+license = "Unlicense"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "Vardë", email = "ichunjo.le.terrible@gmail.com" }]
+maintainers = [{ name = "Vardë", email = "ichunjo.le.terrible@gmail.com" }]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Typing :: Typed",
+]
+dependencies = []
+dynamic = ["version"]
+
+[project.urls]
+"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/vsview_cli"
+"Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
+"Contact" = "https://discord.gg/XTpc6Fa9eB"
+
+[dependency-groups]
+dev = ["maturin>=1.13.1,<2.0", "pytest>=9.0.0, <10.0.0"]
+
+[tool.maturin]
+module-name = "vsview_cli._cli"
+python-source = "python"
+manifest-path = "rust/Cargo.toml"
+
+[tool.cibuildwheel]
+build-frontend = { name = "build[uv]", args = ["--verbose"] }
+build = "cp312-*"
+skip = "*-win32 *-manylinux_i686 *-musllinux_*"
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+# Matches minimum supported by PySide6 6.11
+environment = { MACOSX_DEPLOYMENT_TARGET = "13.0" }
+
+[tool.cibuildwheel.linux]
+archs = ["native"]
+# Matches minimum supported by PySide6 6.11
+manylinux-x86_64-image = "manylinux_2_39"
+manylinux-aarch64-image = "manylinux_2_34"

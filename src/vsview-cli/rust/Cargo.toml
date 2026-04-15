@@ -1,0 +1,50 @@
+[package]
+name = "vsview-cli"
+version = "0.0.0"                                                    # Updated by GitHub Actions
+edition = "2024"
+description = "Internal Rust-based CLI module for VSView"
+license = "Unlicense"
+repository = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view"
+homepage = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view"
+readme = "../README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "_cli"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+clap-cargo = "0.18.3"
+color-print = "0.3.7"
+pyo3-stub-gen = "0.22.0"
+
+[dependencies.clap]
+version = "4.6.0"
+features = ["derive", "env", "string", "color", "wrap_help"]
+
+[dependencies.pyo3]
+version = "0.28.3"
+features = ["extension-module", "abi3-py312"]
+
+[lints.rust]
+improper_ctypes = "warn"
+improper_ctypes_definitions = "warn"
+non_ascii_idents = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+single_use_lifetimes = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = [] }
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+
+must_use_candidate = { level = "allow", priority = 1 }
+missing_errors_doc = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }
+improper_ctypes = "warn"
+improper_ctypes_definitions = "warn"
