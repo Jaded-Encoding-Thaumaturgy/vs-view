@@ -1,14 +1,18 @@
+from __future__ import annotations
+
 import faulthandler
 import os
 import shlex
+import shutil
 import sys
+from collections.abc import Sequence
 from itertools import chain
 from logging import DEBUG, getLogger
 from pathlib import Path
 from signal import SIG_DFL, SIGINT, signal
-from typing import Annotated
 
-from typer import Argument, BadParameter, Exit, Option, Typer, echo
+from pydantic import BaseModel
+from vsview_cli import parse_args
 
 from .app.main import Application, MainWindow
 from .app.plugins.manager import PluginManager
@@ -18,221 +22,71 @@ from .logging import console, setup_logging
 
 logger = getLogger(__name__)
 
-app = Typer(
-    name="vsview",
-    rich_markup_mode="rich",
-    pretty_exceptions_enable=False,
-    add_completion=False,
-)
+# Enable faulthandler to get stack traces on segfaults
+faulthandler.enable(file=console.file)
 
 
-def show_settings_path(value: bool) -> None:
-    if value:
-        echo(GlobalSettings.path_env)
-
-        raise Exit(0)
-
-
-def wipe_settings(value: bool) -> None:
-    if value:
-        GlobalSettings.path_env.unlink(missing_ok=True)
-        echo("Global config file sucessfully deleted.")
-
-        raise Exit(0)
+class CLIConfig(BaseModel):
+    settings: SettingsCommand | None
+    files: list[Path]
+    no_settings: bool
+    settings_roaming: bool
+    settings_env: bool
+    settings_env_copy: bool
+    verbose: int
+    arg: dict[str, str]
+    qt_arg: list[str]
 
 
-def wipe_all_settings(value: bool) -> None:
-    if value:
-        GlobalSettings.config_path.rmdirs(missing_ok=True, ignore_errors=True)
-        echo("Global config path sucessfully deleted.")
-
-        raise Exit(0)
+class SettingsCommand(BaseModel):
+    path: bool = False
+    wipe: SettingsWipeCommand | None = None
 
 
-def roaming_settings_callback(value: bool) -> bool:
-    if value:
-        os.environ["VSVIEW_GLOBAL_SETTINGS_ROAMING"] = "1"
-
-    return value
+class SettingsWipeCommand(BaseModel):
+    all: bool = False
 
 
-def env_settings_callback(value: bool) -> bool:
-    if value:
-        os.environ["VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT"] = "1"
+def main(argv: Sequence[str] | None = None) -> None:
+    if argv is None:
+        argv = sys.argv[1:]
 
-    return value
+    raw = parse_args(["vsview", *argv], shutil.get_terminal_size().columns)
+    cfg = CLIConfig.model_validate(raw)
 
+    if cfg.settings:
+        if cfg.settings.path:
+            console.print(GlobalSettings.path_env)
+        if cfg.settings.wipe:
+            GlobalSettings.path_env.unlink(missing_ok=True)
+            console.print("Global config file sucessfully deleted.")
 
-def env_settings_copy_callback(value: bool) -> bool:
-    if value:
-        os.environ["VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT_COPY"] = "1"
-
-    return value
-
-
-def show_version(value: bool) -> None:
-    if value:
-        import importlib.metadata
-
-        try:
-            version = importlib.metadata.version("vsview")
-        except importlib.metadata.PackageNotFoundError:
-            version = "unknown"
-
-        echo(f"vsview {version}")
-
-        raise Exit(0)
-
-
-def parse_script_args(args: list[str]) -> dict[str, str]:
-    parsed = dict[str, str]()
-
-    for item in args:
-        if "=" not in item:
-            raise BadParameter(f"No value specified for argument {item}")
-
-        key, _, value = item.partition("=")
-
-        if not key.isidentifier():
-            raise BadParameter(f"Invalid argument name {key!r} (must be a valid Python identifier)")
-
-        parsed[key] = value
-
-    return parsed
-
-
-input_file_arg = Argument(
-    help="Path to input file(s); video(s), image(s) or script(s).",
-    resolve_path=True,
-)
-
-settings_path_opt = Option(
-    "--settings-path",
-    help=(
-        "Print to stdout the resolved [bold]global_settings.json[/bold] path and exit.\n\n"
-        "The resolved path respects environment scoping if [bold]--settings-env[/bold] is active.\n\n"
-        "Default base directory is [green]%LOCALAPPDATA%\\vsview\\\\[/green] on Windows, "
-        "[green]~/.config/vsview/[/green] on Linux, "
-        "and [green]~/Library/Application Support/vsview/[/green] on macOS."
-    ),
-    is_eager=True,
-    callback=show_settings_path,
-)
-settings_wipe_opt = Option(
-    "--settings-wipe",
-    help="Delete the [bold]global_settings.json[/bold] file (as shown by [bold]--settings-path[/bold]) and exit.\n\n",
-    is_eager=True,
-    callback=wipe_settings,
-)
-settings_wipe_all_opt = Option(
-    "--settings-wipe-all",
-    help="Delete the entire settings directory (including all environment-scoped subdirectories) and exit.",
-    is_eager=True,
-    callback=wipe_all_settings,
-)
-no_settings_opt = Option(
-    "--no-settings",
-    help="Run without loading or saving any settings for this session.",
-)
-settings_roaming_opt = Option(
-    "--settings-roaming",
-    help=(
-        "[bold]Windows only[/bold]. Store global settings in [green]%APPDATA%\\vsview\\\\[/green] "
-        "instead of [green]%LOCALAPPDATA%\\vsview\\\\[/green]"
-    ),
-    envvar="VSVIEW_GLOBAL_SETTINGS_ROAMING",
-    is_eager=True,
-    callback=roaming_settings_callback,
-)
-settings_env_opt = Option(
-    "--settings-env",
-    help="Scope global settings to the active Python environment to prevent conflicts.",
-    envvar="VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT",
-    is_eager=True,
-    callback=env_settings_callback,
-)
-settings_env_copy_opt = Option(
-    "--settings-env-copy",
-    help=(
-        "If [bold]--settings-env[/bold] is set, and the scoped file doesn't exist yet, "
-        "seed it from the base [bold]global_settings.json[/bold]."
-    ),
-    envvar="VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT_COPY",
-    is_eager=True,
-    callback=env_settings_copy_callback,
-)
-
-verbose_opt = Option(
-    "--verbose",
-    "-v",
-    count=True,
-    show_default=False,
-    metavar="",
-    help="Enable verbose output. Repeat to increase verbosity (-v, -vv, -vvv, ...).",
-)
-
-script_arg_opt = Option(
-    "--arg",
-    "-a",
-    metavar="KEY=VALUE",
-    help="Argument passed to the script environment. Can be specified multiple times.",
-)
-
-qt_arg_opt = Option(
-    "--qt-arg",
-    "-q",
-    metavar="ARG",
-    help=(
-        "Pass an argument directly to the underlying Qt application. "
-        "Can be specified multiple times, or as a single quoted string of multiple flags "
-        '(e.g. -q "-platform offscreen -geometry 1920x1080").'
-    ),
-)
-version_opt = Option(
-    "--version",
-    help="Show the installed vsview version and exit.",
-    is_eager=True,
-    callback=show_version,
-)
-
-
-@app.callback(
-    help=(
-        "Preview VapourSynth scripts, videos, images and audio in a desktop viewer.\n\n"
-        "Open one or more input files directly, or start without files to open the default workspaces.\n\n"
-    ),
-    invoke_without_command=True,
-)
-def vsview_cli(
-    files: Annotated[list[Path] | None, input_file_arg] = None,
-    arg: Annotated[list[str] | None, script_arg_opt] = None,
-    qt_arg: Annotated[list[str] | None, qt_arg_opt] = None,
-    settings_path: Annotated[bool, settings_path_opt] = False,
-    settings_wipe: Annotated[bool, settings_wipe_opt] = False,
-    settings_wipe_all: Annotated[bool, settings_wipe_all_opt] = False,
-    no_settings: Annotated[bool, no_settings_opt] = False,
-    settings_roaming: Annotated[bool, settings_roaming_opt] = False,
-    settings_env: Annotated[bool, settings_env_opt] = False,
-    settings_env_copy: Annotated[bool, settings_env_copy_opt] = False,
-    version: Annotated[bool, version_opt] = False,
-    verbose: Annotated[int, verbose_opt] = 0,
-) -> None:
-    # Enable faulthandler to get stack traces on segfaults
-    faulthandler.enable(file=console.file)
+            if cfg.settings.wipe.all:
+                GlobalSettings.config_path.rmdirs(missing_ok=True, ignore_errors=True)
+                console.print("Global config path sucessfully deleted.")
+        raise SystemExit(0)
 
     # Setup env vars
     os.environ["JETPYTOOLS_NO_COLOR"] = "1"
     os.environ["PYDANTIC_ERRORS_INCLUDE_URL"] = "false"
 
+    if cfg.settings_roaming:
+        os.environ["VSVIEW_GLOBAL_SETTINGS_ROAMING"] = "1"
+    if cfg.settings_env:
+        os.environ["VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT"] = "1"
+    if cfg.settings_env_copy:
+        os.environ["VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT_COPY"] = "1"
+
     # -v -> DEBUG, -vv -> DEBUG - 1, -vvv -> DEBUG - 2, etc.
-    setup_logging(level=DEBUG - max(0, verbose - 1) if verbose else None)
+    setup_logging(level=DEBUG - max(0, cfg.verbose - 1) if cfg.verbose else None)
 
     # Set signal handler to default to allow Ctrl+C to work
     signal(SIGINT, SIG_DFL)
 
     app = Application(
-        [sys.argv[0], *chain.from_iterable(shlex.split(q) for q in qt_arg or [])],
-        no_settings=no_settings,
+        # TODO: This parsing could  probably be moved to the rust parser
+        [sys.argv[0], *chain.from_iterable(shlex.split(q) for q in cfg.qt_arg)],
+        no_settings=cfg.no_settings,
     )
 
     PluginManager.load()
@@ -241,12 +95,11 @@ def vsview_cli(
     main_window = MainWindow()
     main_window.ensurePolished()
 
-    if files:
-        extra_args = parse_script_args(arg or [])
+    if cfg.files:
         main_window.show()
-        for file in files:
+        for file in cfg.files:
             if file.suffix in [".py", ".vpy"]:
-                main_window.load_new_script(file, **extra_args)
+                main_window.load_new_script(file, **cfg.arg)
             else:
                 main_window.load_new_file(file)
     else:
@@ -263,4 +116,4 @@ def vsview_cli(
         main_window.button_group.buttons()[0].click()
         main_window.stack.animations_enabled = True
 
-    sys.exit(app.exec())
+    raise SystemExit(app.exec())

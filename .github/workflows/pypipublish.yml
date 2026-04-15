@@ -11,6 +11,7 @@ on:
         type: choice
         options:
           - vsview
+          - vsview-cli
           - vspackrgb
           - audio-convert
           - comp
@@ -42,6 +43,13 @@ jobs:
     uses: ./.github/workflows/cd-build-python.yml
     with:
       matrix: ${{ needs.prepare.outputs.matrix }}
+      python-version: ${{ needs.prepare.outputs.python-version }}
+
+  vsview-cli-build:
+    needs: [prepare]
+    if: needs.prepare.outputs.build-workflow == 'vsview-cli'
+    uses: ./.github/workflows/cd-build-vsview-cli.yml
+    with:
       python-version: ${{ needs.prepare.outputs.python-version }}
 
   vspackrgb-build:
@@ -84,6 +92,14 @@ jobs:
         uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@v1
         with:
           webhook-url: ${{ secrets.WEBHOOK_URL }}
+
+  vsview-cli-publish:
+    needs: [prepare, vsview-cli-build]
+    if: needs.prepare.outputs.build-workflow == 'vsview-cli'
+    uses: ./.github/workflows/cd-publish-native.yml
+    with:
+      package-name: vsview-cli
+      python-version: ${{ needs.prepare.outputs.python-version }}
 
   vspackrgb-publish:
     needs: [prepare, vspackrgb-build]

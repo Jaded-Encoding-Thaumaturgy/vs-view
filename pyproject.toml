@@ -51,11 +51,12 @@ dependencies = [
     "vapoursynth>=69",
     "vsjetengine>=1.2.0",
     "vspackrgb>=1.0.0",
+    "vsview-cli>=1.0.0",
     "pyside6>=6.11.0",
     "jetpytools>=2.2.7",
     "pydantic>=2.0.0",
     "platformdirs>=4.9.2",
-    "typer>=0.20.0",
+    "rich>=14.0.0",
     "pygments>=2.20.0",
     "pluggy>=1.6.0",
     "typing_extensions>=4.15.0; python_version<'3.13'",
@@ -92,7 +93,7 @@ plugins = [
 ]
 
 [project.scripts]
-vsview = "vsview.cli:app"
+vsview = "vsview.cli:main"
 
 [project.optional-dependencies]
 recommended = [
@@ -142,10 +143,11 @@ dirty = "{next_version}+dirty"
 distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.dirty"
 
 [tool.uv.workspace]
-members = ["src/vspackrgb", "src/plugins/*"]
+members = ["src/vspackrgb", "src/vsview-cli", "src/plugins/*"]
 
 [tool.uv.sources]
 vspackrgb = { workspace = true }
+vsview-cli = { workspace = true }
 vsview-fftspectrum = { workspace = true }
 vsview-split-planes = { workspace = true }
 vsview-frameprops-extended = { workspace = true }

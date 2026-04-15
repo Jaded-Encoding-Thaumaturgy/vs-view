@@ -1,4 +1,4 @@
-from vsview.cli import app
+from vsview.cli import main
 
 if __name__ == "__main__":
-    app()
+    main()
