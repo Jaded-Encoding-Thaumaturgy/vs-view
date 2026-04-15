@@ -1,3 +1,9 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "typer>=0.24.1",
+# ]
+# ///
 import shutil
 from pathlib import Path
 from typing import Annotated
