@@ -647,20 +647,8 @@ class LoaderWorkspace[T](BaseWorkspace):
                 logger.debug("Sync playhead %r, using last frame %d", s, target_frame)
                 return target_frame
             case PlayHeadToolButton.State.LINK_TIME:
-                src_fps = self.outputs_manager.voutputs[self.tab_manager.tabs.previous_tab_index]
-                tgt_fps = self.outputs_manager.current_voutput
-
-                current_time = self.outputs_manager.current_voutput.frame_to_time(
-                    self.playback.state.current_frame,
-                    src_fps,
-                )
-                target_frame = self.outputs_manager.current_voutput.time_to_frame(
-                    current_time,
-                    tgt_fps,
-                )
-
                 target_frame = clamp(
-                    target_frame,
+                    self.outputs_manager.current_voutput.time_to_frame(self.playback.state.current_time),
                     0,
                     self.outputs_manager.current_voutput.vs_output.clip.num_frames - 1,
                 )
@@ -669,7 +657,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                     "Sync playhead %r, targeting frame %d (from time %.3fs)",
                     s,
                     target_frame,
-                    current_time.total_seconds(),
+                    self.playback.state.current_time.total_seconds(),
                 )
                 return target_frame
             case PlayHeadToolButton.State.LINK_FRAME:

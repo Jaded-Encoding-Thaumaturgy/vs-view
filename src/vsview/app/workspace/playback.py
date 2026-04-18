@@ -62,6 +62,7 @@ class PlaybackState(QObject):
         super().__init__(parent)
 
         self.current_frame = 0
+        self.current_time = Time()
         self.is_playing = False
 
         self.last_fps_update_ns = 0
@@ -235,6 +236,7 @@ class PlaybackManager(QObject):
             elif self._tab_manager.tabs.currentIndex() != -1:
                 voutput.last_frame = n
                 self.state.current_frame = n
+                self.state.current_time = voutput.frame_to_time(n)
 
             if cb_render:
                 cb_render(f)
@@ -458,6 +460,7 @@ class PlaybackManager(QObject):
                 self._track_fps()
 
                 self.state.current_frame = frame_n
+                self.state.current_time = voutput.frame_to_time(frame_n)
                 voutput.last_frame = frame_n
 
                 try:

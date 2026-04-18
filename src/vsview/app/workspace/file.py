@@ -141,6 +141,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
     @requires_content
     def snapshot_settings(self) -> None:
         self.local_settings.last_frame = self.playback.state.current_frame
+        self.local_settings.last_time = self.playback.state.current_time
         self.local_settings.last_output_tab_index = self.tab_manager.tabs.currentIndex()
         self.local_settings.synchronization.sync_playhead = self.tab_manager.sync_playhead_state
         self.local_settings.synchronization.sync_zoom = self.tab_manager.is_sync_zoom_enabled
