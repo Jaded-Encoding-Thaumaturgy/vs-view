@@ -8,7 +8,7 @@ from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import KW_ONLY, dataclass, field
-from datetime import time
+from datetime import time, timedelta
 from enum import StrEnum
 from functools import wraps
 from logging import getLogger
@@ -1518,6 +1518,7 @@ class LocalSettings(BaseSettings):
 
     source_path: str = ""
     last_frame: int = 0
+    last_time: timedelta = timedelta()
     last_output_tab_index: Annotated[int, AfterValidator(lambda i: max(0, i))] = 0
     playback: LocalPlaybackSettings = Field(default_factory=lambda: LocalPlaybackSettings())
     timeline: LocalTimelineSettings = Field(default_factory=lambda: LocalTimelineSettings())

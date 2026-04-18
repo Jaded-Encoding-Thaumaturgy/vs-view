@@ -281,11 +281,18 @@ class LoaderWorkspace[T](BaseWorkspace):
     @abstractmethod
     def loader(self) -> None: ...
 
-    def init_load(self, frame: int | None = None, tab_index: int | None = None) -> None:
+    def init_load(self, frame: int | None = None, time: float | None = None, tab_index: int | None = None) -> None:
         PluginManager.wait_for_loaded()
 
     @run_in_background(name="LoadContent")
-    def load_content(self, content: T, /, frame: int | None = None, tab_index: int | None = None) -> None:
+    def load_content(
+        self,
+        content: T,
+        /,
+        frame: int | None = None,
+        time: float | None = None,
+        tab_index: int | None = None,
+    ) -> None:
         logger.debug("load_content called: path=%r, frame=%r, tab_index=%r", content, frame, tab_index)
 
         self.set_loading_page()
@@ -294,7 +301,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.content = content
 
         unset_environment()
-        self.init_load(frame, tab_index)
+        self.init_load(frame, time, tab_index)
 
         with loader_lock:
             outputs = self._get_outputs()

@@ -22,6 +22,7 @@ from ...vsenv import run_in_loop
 from ..plugins.manager import PluginManager
 from ..settings import SettingsManager
 from ..settings.models import LocalSettings
+from ..views.timeline import Time
 from .loader import LoaderWorkspace, VSEngineWorkspace
 
 logger = getLogger(__name__)
@@ -167,7 +168,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.local_settings.layout.plugin_tab_index = self.plugin_splitter.plugin_tabs.currentIndex()
         self.local_settings.layout.dock_state = b64encode(self.dock_container.saveState().data()).decode("ascii")
 
-    def init_load(self, frame: int | None = None, tab_index: int | None = None) -> None:
+    def init_load(self, frame: int | None = None, time: float | None = None, tab_index: int | None = None) -> None:
         self.tab_manager.sync_playhead_btn.set_state(state=self.local_settings.synchronization.sync_playhead)
         self.tab_manager.sync_zoom_btn.setChecked(self.local_settings.synchronization.sync_zoom)
         self.tab_manager.sync_scroll_btn.setChecked(self.local_settings.synchronization.sync_scroll)
@@ -190,6 +191,8 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
 
         if frame is None:
             self.playback.state.current_frame = self.local_settings.last_frame
+        if time is None:
+            self.playback.state.current_time = Time(self.local_settings.last_time.total_seconds())
 
         if tab_index is None:
             self.outputs_manager.current_video_index = self.local_settings.last_output_tab_index
@@ -200,9 +203,16 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
     def get_output_metadata(self) -> dict[int, Any]:
         return output_metadata.get(str(self.content), {})
 
-    def load_content(self, content: Path, /, frame: int | None = None, tab_index: int | None = None) -> Future[None]:
+    def load_content(
+        self,
+        content: Path,
+        /,
+        frame: int | None = None,
+        time: float | None = None,
+        tab_index: int | None = None,
+    ) -> Future[None]:
         with self._restart_autosave():
-            return super().load_content(content, frame, tab_index)
+            return super().load_content(content, frame, time, tab_index)
 
     def reload_content(self) -> Future[None]:
         with self._restart_autosave():

@@ -459,6 +459,7 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
             return self.load_content(
                 self.content,
                 self.playback.state.current_frame,
+                self.playback.state.current_time.total_seconds(),
                 self.outputs_manager.current_video_index,
             )
 
