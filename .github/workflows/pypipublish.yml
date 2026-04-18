@@ -30,7 +30,7 @@ jobs:
       build-workflow: ${{ steps.check.outputs.build-workflow }}
       python-version: ${{ env.VSVIEW_PYTHON_VERSION }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - id: check
         run: python .github/scripts/resolve_package.py
         env:
@@ -79,17 +79,17 @@ jobs:
 
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: dist-${{ matrix.package }}
           path: dist
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
 
       - name: Post webhook for failure
         if: failure()
-        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@v1
+        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@fb70088dc5982abfac889fdded8603be4f5823b6 # v1
         with:
           webhook-url: ${{ secrets.WEBHOOK_URL }}
 
