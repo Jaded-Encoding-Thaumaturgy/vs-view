@@ -2368,6 +2368,7 @@ dev = [
     { name = "vsview-frameprops-extended" },
     { name = "vsview-histogram" },
     { name = "vsview-nativeres" },
+    { name = "vsview-pyapp" },
     { name = "vsview-split-planes" },
 ]
 doc = [
@@ -2448,6 +2449,7 @@ dev = [
     { name = "vsview-frameprops-extended", editable = "src/plugins/frameprops-extended" },
     { name = "vsview-histogram", editable = "src/plugins/histogram" },
     { name = "vsview-nativeres" },
+    { name = "vsview-pyapp", editable = "src/pyapp" },
     { name = "vsview-split-planes", editable = "src/plugins/split-planes" },
 ]
 doc = [
@@ -2601,6 +2603,25 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ab/25/dae5f6a096c7410ed9aa5473786e8e8074d2e1203a26ab826af54e1e47a0/vsview_nativeres-0.3.4.tar.gz", hash = "sha256:800b9ad69b298f2a8c2b466257ce415208984c92d95fead60b820ac1a1f485e3", size = 16353, upload-time = "2026-07-28T23:45:31.83Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/80/bbb7e6fcc0452b2fe1da9511d4b82912fba75de7aa6a1a7997de38e1afc0/vsview_nativeres-0.3.4-py3-none-any.whl", hash = "sha256:5b277120784c0b96c6ed92da9da02dd7694c3c75b86347b9734e3d43fdac91b1", size = 17793, upload-time = "2026-07-28T23:45:30.748Z" },
+]
+
+[[package]]
+name = "vsview-pyapp"
+version = "0.1.0"
+source = { editable = "src/pyapp" }
+dependencies = [
+    { name = "cyclopts" },
+    { name = "jetpytools" },
+    { name = "niquests" },
+    { name = "python-dotenv" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cyclopts", specifier = ">=4.22.1" },
+    { name = "jetpytools", specifier = ">=3.0.0" },
+    { name = "niquests", specifier = ">=3.21.0" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
 ]
 
 [[package]]

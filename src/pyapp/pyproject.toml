@@ -1,0 +1,19 @@
+
+[build-system]
+requires = ["uv_build>=0.12.0, <0.13.0"]
+build-backend = "uv_build"
+
+[project]
+name = "vsview-pyapp"
+version = "0.1.0"
+authors = [{ name = "Ichunjo", email = "ichunjo.le.terrible@gmail.com" }]
+requires-python = ">=3.12"
+dependencies = [
+    "python-dotenv>=1.2.2",
+    "jetpytools>=3.0.0",
+    "cyclopts>=4.22.1",
+    "niquests>=3.21.0",
+]
+
+[project.scripts]
+vsapp = "vsview_pyapp.cli:vsapp"

@@ -24,6 +24,10 @@
       "groupName": "Python dependencies"
     },
     {
+      "matchPackageNames": ["astral-sh/uv", "astral-sh/python-build-standalone"],
+      "groupName": "Python dependencies"
+    },
+    {
       "matchManagers": ["github-actions"],
       "groupName": "GitHub Actions",
       "pinDigests": true
@@ -35,6 +39,26 @@
     {
       "matchManagers": ["npm"],
       "groupName": "TS dependencies"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/src/pyapp/\\.env\\.template$/"],
+      "matchStrings": ["PYAPP_UV_VERSION\\s*=\\s*(?<currentValue>.*)"],
+      "depNameTemplate": "astral-sh/uv",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/src/pyapp/src/vsview_pyapp/cli\\.py$/"],
+      "matchStrings": [
+        "PYTHON_BUILD_STANDALONE_TAG\\s*=\\s*\"(?<currentValue>.*)\""
+      ],
+      "depNameTemplate": "astral-sh/python-build-standalone",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "regex:^(?<major>\\d{4})(?<minor>\\d{2})(?<patch>\\d{2})$"
     }
   ],
   "npm": {
