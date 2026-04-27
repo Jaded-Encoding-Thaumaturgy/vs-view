@@ -364,9 +364,6 @@ class TabManager(QWidget, IconReloadMixin):
 
     def _on_zoom_changed(self, zoom: float) -> None:
         """Handle zoom change events from GraphicsView widgets."""
-        if zoom not in SettingsManager.global_settings.view.zoom_factors:
-            raise ValueError(f"Invalid zoom factor: {zoom}")
-
         if (idx := self.tabs.indexOf(self.current_view)) >= 0:
             self.tabs.get_tab_label(idx).zoom = zoom
 

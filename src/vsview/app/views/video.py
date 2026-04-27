@@ -13,6 +13,7 @@ from typing import Any, Literal, NamedTuple
 from jetpytools import cachedproperty, clamp, copy_signature, cround
 from PySide6.QtCore import (
     QEasingCurve,
+    QEvent,
     QPoint,
     QPointF,
     QRect,
@@ -31,6 +32,7 @@ from PySide6.QtGui import (
     QImage,
     QKeyEvent,
     QMouseEvent,
+    QNativeGestureEvent,
     QPainter,
     QPen,
     QPixmap,
@@ -494,6 +496,27 @@ class BaseGraphicsView(QGraphicsView):
         painter.fillRect(visible_rect, brush)
 
         return None
+
+    def viewportEvent(self, event: QEvent) -> bool:
+        if not isinstance(event, QNativeGestureEvent) or event.gestureType() != Qt.NativeGestureType.ZoomNativeGesture:
+            return super().viewportEvent(event)
+
+        delta = event.value()
+        if isclose(delta, 0, rel_tol=1e-6) or self.autofit:
+            return False
+
+        new_zoom = self.current_zoom * (1.0 + delta)
+        new_zoom = clamp(new_zoom, self.zoom_factors[0], self.zoom_factors[-1])
+
+        if isclose(new_zoom, self.current_zoom, rel_tol=1e-6):
+            return True
+
+        self.set_zoom(new_zoom)
+
+        with QSignalBlocker(self.slider):
+            self.slider.setValue(self._zoom_to_slider(new_zoom))
+
+        return True
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         if event.type() == QResizeEvent.Type.Resize:
