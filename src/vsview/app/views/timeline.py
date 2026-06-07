@@ -11,7 +11,21 @@ from math import floor
 from typing import Any, Literal, NamedTuple, override
 
 from jetpytools import clamp, complex_hash
-from PySide6.QtCore import QEvent, QLineF, QPoint, QPointF, QRectF, QSignalBlocker, QSize, Qt, QTime, Signal
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QLineF,
+    QPoint,
+    QPointF,
+    QPropertyAnimation,
+    QRectF,
+    QSequentialAnimationGroup,
+    QSignalBlocker,
+    QSize,
+    Qt,
+    QTime,
+    Signal,
+)
 from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
@@ -31,10 +45,12 @@ from PySide6.QtGui import (
     QValidator,
 )
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -1017,6 +1033,38 @@ class Timeline(QWidget):
         self.mode = "frame" if index == 0 else "time"
 
 
+def _show_focus_for_user(self: QAbstractSpinBox) -> None:
+    self.setFocus()
+    self.selectAll()
+
+    accent = self.palette().color(QPalette.ColorRole.Accent)
+    effect = QGraphicsDropShadowEffect(self)
+    effect.setBlurRadius(0)
+    effect.setColor(accent)
+    effect.setOffset(0, 0)
+    self.setGraphicsEffect(effect)
+
+    # Ramp up: fast
+    anim_in = QPropertyAnimation(effect, b"blurRadius", self)
+    anim_in.setDuration(200)
+    anim_in.setStartValue(0.0)
+    anim_in.setEndValue(50.0)
+    anim_in.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    # Decay: slow fade
+    anim_out = QPropertyAnimation(effect, b"blurRadius", self)
+    anim_out.setDuration(800)
+    anim_out.setStartValue(50.0)
+    anim_out.setEndValue(0.0)
+    anim_out.setEasingCurve(QEasingCurve.Type.InCubic)
+
+    group = QSequentialAnimationGroup(self)
+    group.addAnimation(anim_in)
+    group.addAnimation(anim_out)
+    group.finished.connect(effect.deleteLater)
+    group.start()
+
+
 class FrameEdit(QSpinBox):
     frameChanged = Signal(Frame, Frame)
 
@@ -1040,6 +1088,8 @@ class FrameEdit(QSpinBox):
 
         return super().validate(input_text, pos)
 
+    show_focus_for_user = _show_focus_for_user
+
     def _on_value_changed(self, value: int) -> None:
         self.frameChanged.emit(Frame(value), Frame(self.old_value))
         self.old_value = value
@@ -1058,6 +1108,8 @@ class TimeEdit(QTimeEdit):
         self.setKeyboardTracking(False)
 
         self.old_time = self.time()
+
+    show_focus_for_user = _show_focus_for_user
 
     def _on_time_changed(self, value: QTime) -> None:
         self.valueChanged.emit(self.time(), self.old_time)

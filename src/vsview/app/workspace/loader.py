@@ -219,6 +219,17 @@ class LoaderWorkspace[T](BaseWorkspace):
             lambda: self.playback.request_frame(0x7FFFFFFF),
             self.loaded_page,
         )
+        sm.register_shortcut(
+            ActionID.JUMP_TO_TIME,
+            self.tbar.playback_container.time_edit.show_focus_for_user,
+            self.loaded_page,
+        )
+        sm.register_shortcut(
+            ActionID.JUMP_TO_FRAME,
+            self.tbar.playback_container.frame_edit.show_focus_for_user,
+            self.loaded_page,
+        )
+
         sm.register_shortcut(ActionID.RELOAD, self.reload_content, self.loaded_page)
         sm.register_shortcut(ActionID.RELOAD, self.reload_btn.click, self.error_page)
         sm.register_shortcut(ActionID.COPY_CURRENT_FRAME, self._copy_current_frame_to_clipboard, self.loaded_page)
