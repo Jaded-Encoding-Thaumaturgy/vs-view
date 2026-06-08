@@ -5,8 +5,9 @@ from functools import cache
 from logging import getLogger
 from pathlib import Path
 from typing import Annotated, Any, override
+from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, QTime, QTimer
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
@@ -53,6 +54,7 @@ from vsview.api import (
 from ._metadata import LOGIN_CONTEXT, PLUGIN_DISPLAY, PLUGIN_ID
 from .models import ComparisonImage, ComparisonSource, TMDBTitle
 from .ui import (
+    BrowserID,
     FrameSourceProvider,
     FrameThumbnailList,
     LineEditCompleter,
@@ -70,6 +72,17 @@ logger = getLogger(__name__)
 
 
 class GlobalSettings(BaseModel):
+    browser_id: Annotated[
+        str,
+        BrowserID(
+            label="Browser ID",
+            tooltip=(
+                "This browser ID identifies your uploads on slow.pics. "
+                "Copy it to your browser cookies to claim comparisons."
+            ),
+        ),
+    ] = Field(default_factory=lambda: str(uuid4()))
+
     tmdb_format: Annotated[
         str,
         LineEditCompleter(
@@ -159,7 +172,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         main_layout.addWidget(self.progress_stack)
 
-        self.slowpics_worker = SlowPicsWorker(self.api, self.secrets, self.progress_bar)
+        self.slowpics_worker = SlowPicsWorker(self.api, self.settings, self.secrets, self.progress_bar)
 
         self.api.register_action(
             f"{PLUGIN_ID}.add_current_frame",

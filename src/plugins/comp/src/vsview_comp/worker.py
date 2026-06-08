@@ -13,7 +13,6 @@ from logging import getLogger
 from operator import attrgetter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
-from uuid import uuid4
 
 import anyio
 import niquests
@@ -25,7 +24,7 @@ from PySide6.QtGui import QImage
 from vapoursynth import GRAY8, VideoNode
 from vstools import DitherType, clip_data_gather, core, depth, get_prop, remap_frames
 
-from vsview.api import Packer, PluginAPI, PluginSecrets, Time, run_in_background
+from vsview.api import Packer, PluginAPI, PluginSecrets, PluginSettings, Time, run_in_background
 
 from ._metadata import COOKIE_KEY, LOGIN_CONTEXT
 from .models import ComparisonSource, TMDBPayload, TMDBTitle, TMDBTitleData
@@ -33,7 +32,7 @@ from .ui import FrameSourceProvider, ProgressBar
 from .utils import LogNiquestsErrors, get_random_number_interval, get_slowpics_headers
 
 if TYPE_CHECKING:
-    from .plugin import CompPlugin
+    from .plugin import CompPlugin, GlobalSettings
 
 REV_CONF = niquests.RevocationConfiguration(niquests.RevocationStrategy.PREFER_CRL)
 
@@ -390,11 +389,17 @@ class SlowPicsWorker:
     BASE_URL = "https://slow.pics"
     MAX_CONCURRENT_REQUESTS = 6
 
-    def __init__(self, api: PluginAPI, secrets: PluginSecrets, progress_bar: ProgressBar) -> None:
+    def __init__(
+        self,
+        api: PluginAPI,
+        settings: PluginSettings[GlobalSettings, None],
+        secrets: PluginSecrets,
+        progress_bar: ProgressBar,
+    ) -> None:
         self.api = api
+        self.settings = settings
         self.secrets = secrets
         self.progress_bar = progress_bar
-        self.browser_id = str(uuid4())
         self.headers = get_slowpics_headers()
 
     @run_in_background(name="SlowPicsTags")
@@ -468,7 +473,7 @@ class SlowPicsWorker:
 
             payload = {
                 "collectionName": collection_name or "",
-                "browserId": self.browser_id,
+                "browserId": self.settings.global_.browser_id,
                 "optimizeImages": "true",
                 "desiredFileType": "image/png",
                 "hentai": str(nsfw).lower(),
@@ -536,9 +541,12 @@ class SlowPicsWorker:
         homepage.raise_for_status()
 
         if not (browser_id := self._get_cookie(client.cookies, "BROWSER-ID")):
-            niquests.cookies.cookiejar_from_dict({"BROWSER-ID": self.browser_id}, cookiejar=client.cookies)
+            niquests.cookies.cookiejar_from_dict(
+                {"BROWSER-ID": self.settings.global_.browser_id},
+                cookiejar=client.cookies,
+            )
         else:
-            self.browser_id = browser_id
+            self.settings.global_.browser_id = browser_id
 
         client.headers.update({"X-XSRF-TOKEN": self._get_cookie(client.cookies, "XSRF-TOKEN")})
 
@@ -600,7 +608,7 @@ class SlowPicsWorker:
         image_path: Path,
     ) -> None:
         url = f"/upload/image/{image_uuid}"
-        data = {"collectionUuid": collection, "imageUuid": image_uuid, "browserId": self.browser_id}
+        data = {"collectionUuid": collection, "imageUuid": image_uuid, "browserId": self.settings.global_.browser_id}
 
         # Handle 429 "Too many requests"
         for retry in range(5):

@@ -10,11 +10,12 @@ from functools import partial
 from logging import getLogger
 from pathlib import Path
 from typing import Any, NamedTuple, Self, override
+from uuid import uuid4
 
 import jinja2
 from jetpytools import cachedproperty
 from PySide6.QtCore import QBuffer, QCoreApplication, QEvent, QIODevice, QObject, QPoint, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QImage, QKeyEvent, QMouseEvent, QPainter, QPaintEvent, QPixmap, QWheelEvent
+from PySide6.QtGui import QCursor, QIcon, QImage, QKeyEvent, QMouseEvent, QPainter, QPaintEvent, QPixmap, QWheelEvent
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -37,6 +38,7 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyleOptionFrame,
     QToolButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
     QWidgetAction,
@@ -46,7 +48,18 @@ from shiboken6 import Shiboken
 from vapoursynth import VideoFrame, VideoNode
 from vstools import core, get_prop
 
-from vsview.api import LineEdit, NonClosingMenu, PluginAPI, Time, VideoOutputProxy, run_in_background, run_in_loop
+from vsview.api import (
+    IconName,
+    IconReloadMixin,
+    LineEdit,
+    NonClosingMenu,
+    PluginAPI,
+    Time,
+    VideoOutputProxy,
+    WidgetMetadata,
+    run_in_background,
+    run_in_loop,
+)
 
 from .models import TMDBTitle
 
@@ -1085,3 +1098,62 @@ class LineEditCompleter(LineEdit):
     @override
     def create_widget(self, parent: QWidget | None = None) -> QLineEdit:
         return PlaceholderLineEdit([*TMDBTitle.format_hints, "vs_names"], parent)
+
+
+class BrowserIDWidget(QWidget, IconReloadMixin):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.browser_id_lbl = QLabel(self)
+        self.browser_id_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.browser_id_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.browser_id_lbl.setStyleSheet("""
+            border: 1px solid palette(mid);
+            border-radius: 4px;
+            padding: 4px;
+            background: palette(button);
+        """)
+
+        self.regenerate_id_btn = self.make_tool_button(IconName.ARROW_CLOCKWISE, "Generate a new browser ID", self)
+        self.regenerate_id_btn.clicked.connect(self.on_regenerate_id_btn_clicked)
+
+        self.copy_btn = self.make_tool_button(IconName.CLIPBOARD, "Copy browser ID", self)
+        self.copy_btn.clicked.connect(self.on_copy_btn_clicked)
+
+        layout.addWidget(self.browser_id_lbl)
+        layout.addWidget(self.regenerate_id_btn)
+        layout.addWidget(self.copy_btn)
+
+    @property
+    def id(self) -> str:
+        return self.browser_id_lbl.text()
+
+    @id.setter
+    def id(self, value: str) -> None:
+        self.browser_id_lbl.setText(value)
+
+    def on_regenerate_id_btn_clicked(self) -> None:
+        self.id = str(uuid4())
+
+    def on_copy_btn_clicked(self) -> None:
+        QApplication.clipboard().setText(self.browser_id_lbl.text())
+        QToolTip.showText(QCursor.pos(), "Copied!", self.copy_btn)
+
+
+class BrowserID(WidgetMetadata[BrowserIDWidget]):
+    @override
+    def create_widget(self, parent: QWidget | None = None) -> BrowserIDWidget:
+        return BrowserIDWidget(parent)
+
+    @override
+    def load_value(self, widget: BrowserIDWidget, value: Any) -> None:
+        with self.apply_transform(value, self.to_ui) as value:
+            widget.id = value
+
+    @override
+    def get_value(self, widget: BrowserIDWidget) -> Any:
+        with self.apply_transform(widget.id, self.from_ui) as value:
+            return value
