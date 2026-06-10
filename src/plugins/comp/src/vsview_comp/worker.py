@@ -4,8 +4,9 @@ import asyncio
 import os
 import re
 import threading
-from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
-from concurrent.futures import Future, wait
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from concurrent.futures import CancelledError, Future, wait
+from contextlib import suppress
 from datetime import UTC, datetime
 from http.cookiejar import CookieJar
 from itertools import chain
@@ -14,7 +15,6 @@ from operator import attrgetter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
-import anyio
 import niquests
 import niquests.cookies
 from jetpytools import cachedproperty, ndigits
@@ -27,7 +27,7 @@ from vstools import DitherType, clip_data_gather, core, depth, get_prop, remap_f
 from vsview.api import Packer, PluginAPI, PluginSecrets, PluginSettings, Time, run_in_background
 
 from ._metadata import COOKIE_KEY, LOGIN_CONTEXT
-from .models import ComparisonSource, TMDBPayload, TMDBTitle, TMDBTitleData
+from .models import SlowPicsSources, SlowPicsUploadResponse, TMDBPayload, TMDBTitle, TMDBTitleData
 from .ui import FrameSourceProvider, ProgressBar
 from .utils import LogNiquestsErrors, get_random_number_interval, get_slowpics_headers
 
@@ -46,13 +46,28 @@ class ExtractFramesWorker:
         self.data = parent.frames_list.get_data()
         self.voutputs = parent.selected_voutputs
         self.packer = Packer(8)
+        self._is_cancelled = False
+        self._lock = threading.Lock()
 
         if not (storage := self.api.get_local_storage(parent)):
             raise NotImplementedError
         self.storage = storage
 
+    @property
+    def is_cancelled(self) -> bool:
+        with self._lock:
+            return self._is_cancelled
+
     @run_in_background(name="ExtractFrames")
     def run(self) -> list[tuple[int, Path]]:
+        with self.api.vs_context():
+            return self._extract()
+
+    def cancel(self) -> None:
+        with self._lock:
+            self._is_cancelled = True
+
+    def _extract(self) -> list[tuple[int, Path]]:
         self.progress_bar.update_progress(
             range=(0, len(self.data) * len(self.voutputs)),
             fmt="Extracting frames %v / %m",
@@ -72,6 +87,8 @@ class ExtractFramesWorker:
             is_fpng_available = hasattr(core, "fpng")
 
             for output in self.voutputs:
+                if self.is_cancelled:
+                    raise CancelledError("Extract frames cancelled")
                 images_path = path / f"({output.vs_index}) ({output.vs_name})"
                 images_path = sanitize_filepath(images_path, replacement_text="_")
                 images_path.mkdir(parents=True, exist_ok=True)
@@ -90,7 +107,10 @@ class ExtractFramesWorker:
                 workers.append(f)
 
             # Wait for workers to finish extracting
-            wait(workers)
+            while not all(w.done() for w in workers):
+                if self.is_cancelled:
+                    raise CancelledError("Extract frames cancelled")
+                wait(workers, timeout=0.1)
 
         return images_paths
 
@@ -100,8 +120,13 @@ class ExtractFramesWorker:
             clip = clip.fpng.Write(filename=str(path), compression=1, alpha=alpha)
             remapped = remap_frames(clip, frames)
 
+            def _progress(*_: Any) -> None:
+                if self.is_cancelled:
+                    raise CancelledError("Extract frames cancelled")
+                self.progress_bar.update_progress(increment=1)
+
             with open(os.devnull, "wb") as sink:
-                remapped.output(sink, progress_update=lambda *_: self.progress_bar.update_progress(increment=1))
+                remapped.output(sink, progress_update=_progress)
 
     @run_in_background(name="ExtractQt")
     def _qt_extract(self, clip: VideoNode, alpha: VideoNode | None, path: Path, frames: Sequence[int]) -> None:
@@ -113,6 +138,8 @@ class ExtractFramesWorker:
             workers = list[Future[None]]()
 
             for n, vs_frame in zip(frames, remapped.frames(close=True)):
+                if self.is_cancelled:
+                    break
                 sema.acquire()
                 qimage = self.packer.frame_to_qimage(vs_frame).copy()
                 f = self._qt_save(qimage, path.with_stem(path.stem % n))
@@ -123,6 +150,8 @@ class ExtractFramesWorker:
 
     @run_in_background(name="QtSave")
     def _qt_save(self, qimage: QImage, path: Path) -> None:
+        if self.is_cancelled:
+            return
         qimage.save(str(path), "PNG", 75)  # type: ignore[call-overload]
         self.progress_bar.update_progress(increment=1)
 
@@ -145,6 +174,7 @@ class SelectFrameWorker:
         self.light = parent.light_frame_count.value()
         self.normal = parent.random_frame_count.value() - self.dark - self.light
         self.voutputs = parent.selected_voutputs
+        self.is_cancelled = False
 
         # Existing frames to avoid duplicates
         v = self.api.current_voutput
@@ -166,6 +196,9 @@ class SelectFrameWorker:
     def run(self) -> list[tuple[Time, FrameSourceProvider]]:
         with self.api.vs_context():
             return self.get()
+
+    def cancel(self) -> None:
+        self.is_cancelled = True
 
     def get(self) -> list[tuple[Time, FrameSourceProvider]]:
         found_times = list[tuple[Time, FrameSourceProvider]]()
@@ -198,6 +231,9 @@ class SelectFrameWorker:
             return random_frames
 
         while len(random_frames) < self.normal:
+            if self.is_cancelled:
+                raise CancelledError("Select frames cancelled")
+
             for _ in range(self.ALLOWED_FRAME_SEARCHES):
                 rnum = get_random_number_interval(
                     start_frame,
@@ -222,6 +258,8 @@ class SelectFrameWorker:
                     )
 
                     for f in node_frames.frames(close=True):
+                        if self.is_cancelled:
+                            raise CancelledError("Select frames cancelled")
                         is_pict_type_not_selected = (
                             self.should_check_pict
                             and get_prop(f, "_PictType", str, default="", func="__vsview__") not in self.pict_types
@@ -261,12 +299,10 @@ class SelectFrameWorker:
             range=(0, len(frames_to_check)), fmt="Checking frames light levels %v / %m", value=0
         )
 
-        checked_count = 0
-
         def _progress(*_: Any) -> None:
-            nonlocal checked_count
-            checked_count += 1
-            self.progress_bar.update_progress(value=checked_count)
+            if self.is_cancelled:
+                raise CancelledError("Select frames cancelled")
+            self.progress_bar.update_progress(increment=1)
 
         decimated = remap_frames(v.vs_output.clip, frames_to_check).std.PlaneStats()
         avg_levels = clip_data_gather(
@@ -401,6 +437,16 @@ class SlowPicsWorker:
         self.secrets = secrets
         self.progress_bar = progress_bar
         self.headers = get_slowpics_headers()
+        self.sema = asyncio.Semaphore(self.MAX_CONCURRENT_REQUESTS)
+        self.is_cancelled = False
+        self._upload_task: asyncio.Task[Any] | None = None
+        self._upload_loop: asyncio.AbstractEventLoop | None = None
+
+    def cancel(self) -> None:
+        self.is_cancelled = True
+        if self._upload_task and self._upload_loop:
+            with suppress(Exception):
+                self._upload_loop.call_soon_threadsafe(self._upload_task.cancel)
 
     @run_in_background(name="SlowPicsTags")
     def get_tags(self) -> list[Tag]:
@@ -438,102 +484,68 @@ class SlowPicsWorker:
             return self._cookies_jar(client.cookies) if await self._login_async(client) else {}
 
     @run_in_background(name="SlowPicsUpload")
-    async def upload(
-        self,
-        *,
-        collection_name: str,
-        sources: list[ComparisonSource],
-        public: bool,
-        nsfw: bool,
-        tmdb_id: str | None,
-        remove_after: int,
-        tags: list[str],
-        cookies: dict[str, str],
-    ) -> str:
-        self._sema = asyncio.Semaphore(self.MAX_CONCURRENT_REQUESTS)
+    async def upload(self, *, src: SlowPicsSources, cookies: dict[str, str]) -> str:
+        self.is_cancelled = False
+        self._upload_task = asyncio.current_task()
+        self._upload_loop = asyncio.get_running_loop()
 
-        is_comparison = len(sources) > 1
-        total_images = sum(len(images) for _, images in sources)
+        try:
+            async with (
+                niquests.AsyncSession(
+                    base_url=self.BASE_URL,
+                    pool_maxsize=self.MAX_CONCURRENT_REQUESTS,
+                    pool_connections=self.MAX_CONCURRENT_REQUESTS,
+                    headers=self.headers,
+                    cookies=cookies,
+                    timeout=20,
+                    disable_http3=True,
+                    multiplexed=True,
+                    revocation_configuration=REV_CONF,
+                ) as client,
+                LogNiquestsErrors("Slowpics Upload"),
+            ):
+                logger.debug("Setup client")
+                await self._setup_client(client, cookies)
 
-        async with (
-            niquests.AsyncSession(
-                base_url=self.BASE_URL,
-                pool_maxsize=self.MAX_CONCURRENT_REQUESTS,
-                pool_connections=self.MAX_CONCURRENT_REQUESTS,
-                headers=self.headers,
-                cookies=cookies,
-                timeout=20,
-                disable_http3=True,
-                multiplexed=True,
-                revocation_configuration=REV_CONF,
-            ) as client,
-            LogNiquestsErrors("Slowpics Upload"),
-        ):
-            await self._setup_client(client, cookies)
+                logger.debug("Starting upload of: %s", src.collection_name)
+                start_resp = await client.post(
+                    url=f"/upload/{src.upload_type}",
+                    data=src.payload | {"browserId": self.settings.global_.browser_id},
+                )
+                await client.gather(start_resp)
+                comp_data = SlowPicsUploadResponse.model_validate(start_resp.raise_for_status().json())
 
-            payload = {
-                "collectionName": collection_name or "",
-                "browserId": self.settings.global_.browser_id,
-                "optimizeImages": "true",
-                "desiredFileType": "image/png",
-                "hentai": str(nsfw).lower(),
-                "public": str(public).lower(),
-                "visibility": "PUBLIC" if public else "LINK_ONLY",
-                "removeAfter": str(remove_after) if remove_after >= 1 else "",
-            }
+                collection_url = f"https://slow.pics/c/{comp_data.key}"
+                logger.debug("Starting upload of: %s", collection_url)
 
-            for j in range(len(sources[0].images)):
-                if is_comparison:
-                    image_ref = sources[0][1][j]
-                    payload[f"comparisons[{j}].name"] = f"{image_ref.timestamp} / {image_ref.frame_no}"
-                    payload[f"comparisons[{j}].hentai"] = str(nsfw).lower()
+                # Upload images concurrently
+                self.progress_bar.update_progress(range=(0, src.total_images), fmt="Uploading images %v / %m", value=0)
 
-                    for i, (source_name, images) in enumerate(sources):
-                        payload[f"comparisons[{j}].imageNames[{i}]"] = (
-                            f"{source_name}{f' ({images[j].pict_type})' if images[j].pict_type != '?' else ''}"
-                        )
-                else:
-                    # Single source collection
-                    source_name, images = sources[0]
-                    image = images[j]
-                    payload[f"imageNames[{j}]"] = f"{image.timestamp} / {image.frame_no} - {source_name}"
+                async def upload_with_progress(img_uuid: str, img_path: Path) -> None:
+                    if self.is_cancelled:
+                        raise asyncio.CancelledError("Slowpics upload cancelled")
+                    logger.debug("Uploading image: %s", img_uuid)
+                    await self._upload_image(client, comp_data.collection_uuid, img_uuid, img_path)
+                    logger.debug("Finished uploading image: %s", img_uuid)
+                    self.progress_bar.update_progress(increment=1)
 
-            if tag_data := ({f"tags[{i}]": tag for i, tag in enumerate(tags)} if public else {}):
-                payload |= tag_data
+                async with asyncio.TaskGroup() as tg:
+                    for img_uuid, image_path in src.get_images(comp_data):
+                        if self.is_cancelled:
+                            raise asyncio.CancelledError("Slowpics upload cancelled")
+                        tg.create_task(upload_with_progress(img_uuid, image_path))
 
-            if tmdb_id:
-                payload["tmdbId"] = tmdb_id
+                logger.debug("Finished uploading all images")
+                self.progress_bar.update_progress(fmt="Finished uploading %v images")
 
-            endpoint = f"/upload/{'comparison' if is_comparison else 'collection'}"
-            start_resp = await client.post(endpoint, data=payload)
-            await client.gather(start_resp)
-            comp_data = start_resp.raise_for_status().json()
+                # Refresh cookies
+                self.secrets.set_json(COOKIE_KEY, COOKIE_KEY, self._cookies_jar(client.cookies))
+                logger.debug("Refreshed cookies")
 
-            collection_uuid = comp_data["collectionUuid"]
-            key = comp_data["key"]
-            image_ids: list[list[str]] = comp_data["images"]
-
-            logger.debug("Starting upload of: https://slow.pics/c/%s", key)
-
-            # Upload images concurrently
-            self.progress_bar.update_progress(range=(0, total_images), fmt="Uploading images %v / %m", value=0)
-            reqs = list[Awaitable[None]]()
-
-            for i, (_, images) in enumerate(sources):
-                for j, (image_path, *_) in enumerate(images):
-                    image_uuid = image_ids[j][i] if is_comparison else image_ids[0][j]
-                    reqs.append(self._upload_image(client, collection_uuid, image_uuid, image_path))
-
-            for i, coro in enumerate(asyncio.as_completed(reqs), start=1):
-                await coro
-                self.progress_bar.update_progress(value=i)
-
-            self.progress_bar.update_progress(fmt="Finished uploading %v images")
-
-            # Refresh cookies
-            self.secrets.set_json(COOKIE_KEY, COOKIE_KEY, self._cookies_jar(client.cookies))
-
-            return f"https://slow.pics/c/{key}"
+                return collection_url
+        finally:
+            self._upload_task = None
+            self._upload_loop = None
 
     async def _setup_client(self, client: niquests.AsyncSession, cookies: dict[str, str]) -> None:
         homepage = await client.get("/comparison")
@@ -612,12 +624,14 @@ class SlowPicsWorker:
 
         # Handle 429 "Too many requests"
         for retry in range(5):
+            if self.is_cancelled:
+                raise asyncio.CancelledError("Slowpics upload cancelled")
             try:
-                async with self._sema:
+                async with self.sema:
                     response = await client.post(
                         url,
                         data=data,
-                        files={"file": (image_path.name, await anyio.Path(image_path).read_bytes(), "image/png")},
+                        files={"file": (image_path.name, await asyncio.to_thread(image_path.read_bytes), "image/png")},
                     )
                     await client.gather(response)
                 if response.status_code == 429:

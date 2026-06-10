@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from logging import getLogger
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, Self
@@ -22,6 +22,77 @@ class ComparisonImage(NamedTuple):
 class ComparisonSource(NamedTuple):
     name: str
     images: Sequence[ComparisonImage]
+
+
+class SlowPicsSources(NamedTuple):
+    collection_name: str
+    sources: Sequence[ComparisonSource]
+    public: bool
+    nsfw: bool
+    tmdb_id: str | None
+    remove_after: int
+    tags: list[str]
+
+    @property
+    def is_comparison(self) -> bool:
+        return len(self.sources) > 1
+
+    @property
+    def upload_type(self) -> str:
+        return "comparison" if self.is_comparison else "collection"
+
+    @property
+    def total_images(self) -> int:
+        return sum(len(images) for _, images in self.sources)
+
+    @property
+    def payload(self) -> dict[str, str]:
+        payload = {
+            "collectionName": self.collection_name or "",
+            "optimizeImages": "true",
+            "desiredFileType": "image/png",
+            "hentai": str(self.nsfw).lower(),
+            "public": str(self.public).lower(),
+            "visibility": "PUBLIC" if self.public else "LINK_ONLY",
+            "removeAfter": str(self.remove_after) if self.remove_after >= 1 else "",
+        }
+
+        for j in range(len(self.sources[0].images)):
+            if self.is_comparison:
+                image_ref = self.sources[0][1][j]
+                payload[f"comparisons[{j}].name"] = f"{image_ref.timestamp} / {image_ref.frame_no}"
+                payload[f"comparisons[{j}].hentai"] = str(self.nsfw).lower()
+
+                for i, (source_name, images) in enumerate(self.sources):
+                    payload[f"comparisons[{j}].imageNames[{i}]"] = (
+                        f"{source_name}{f' ({images[j].pict_type})' if images[j].pict_type != '?' else ''}"
+                    )
+            else:
+                # Single source collection
+                source_name, images = self.sources[0]
+                image = images[j]
+                payload[f"imageNames[{j}]"] = f"{image.timestamp} / {image.frame_no} - {source_name}"
+
+        if self.public:
+            payload |= {f"tags[{i}]": tag for i, tag in enumerate(self.tags)}
+
+        if self.tmdb_id:
+            payload["tmdbId"] = self.tmdb_id
+
+        return payload
+
+    def get_images(self, comp_data: SlowPicsUploadResponse) -> Iterator[tuple[str, Path]]:
+        for i, (_, images) in enumerate(self.sources):
+            for j, (image_path, *_) in enumerate(images):
+                yield comp_data.images[j][i] if self.is_comparison else comp_data.images[0][j], image_path
+
+
+class SlowPicsUploadResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    collection_uuid: str = Field(alias="collectionUuid")
+    key: str
+    images: list[list[str]]
 
 
 class TMDBGenre(BaseModel):

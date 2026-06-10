@@ -1,6 +1,7 @@
 import ast
+import asyncio
 from collections.abc import Sequence
-from concurrent.futures import Future
+from concurrent.futures import CancelledError, Future
 from functools import cache
 from logging import getLogger
 from pathlib import Path
@@ -52,7 +53,7 @@ from vsview.api import (
 )
 
 from ._metadata import LOGIN_CONTEXT, PLUGIN_DISPLAY, PLUGIN_ID
-from .models import ComparisonImage, ComparisonSource, TMDBTitle
+from .models import ComparisonImage, ComparisonSource, SlowPicsSources, TMDBTitle
 from .ui import (
     BrowserID,
     FrameSourceProvider,
@@ -125,6 +126,9 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._pending_extract_frames: Future[list[tuple[int, Path]]] | None = None
         self._pending_upload: Future[str] | Future[None] | None = None
         self._pending_tags: Future[list[Tag]] | None = None
+        self._select_frames_worker: SelectFrameWorker | None = None
+        self._extract_frames_worker: ExtractFramesWorker | None = None
+        self._is_upload_cancelled = False
         self._extraction_finished = False
         self._extract_paths: list[tuple[int, Path]] | None = None
         self._reported_url = ""
@@ -147,8 +151,19 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.progress_stack = QStackedWidget(self)
         self.progress_stack.hide()
 
-        self.progress_bar = ProgressBar(self.progress_stack)
+        self.progress_container = QWidget(self.progress_stack)
+        progress_layout = QHBoxLayout(self.progress_container)
+        progress_layout.setContentsMargins(0, 0, 0, 0)
+        progress_layout.setSpacing(4)
+
+        self.progress_bar = ProgressBar(self.progress_container)
         self.progress_bar.progressRunning.connect(self.set_progress_bar_on_top)
+
+        self.cancel_btn = self.make_tool_button(IconName.X_CIRCLE, "Cancel operation", self.progress_container)
+        self.cancel_btn.clicked.connect(self.on_cancel_clicked)
+
+        progress_layout.addWidget(self.progress_bar, 1)
+        progress_layout.addWidget(self.cancel_btn)
 
         self.reported_url_container = QWidget(self.progress_stack)
         reported_url_layout = QHBoxLayout(self.reported_url_container)
@@ -166,9 +181,9 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         reported_url_layout.addWidget(self.url_label)
         reported_url_layout.addWidget(self.url_copy_btn)
 
-        self.progress_stack.addWidget(self.progress_bar)
+        self.progress_stack.addWidget(self.progress_container)
         self.progress_stack.addWidget(self.reported_url_container)
-        self.progress_stack.setCurrentWidget(self.progress_bar)
+        self.progress_stack.setCurrentWidget(self.progress_container)
 
         main_layout.addWidget(self.progress_stack)
 
@@ -559,7 +574,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.frames_list.update_thumbnails(voutput.vs_index)
 
     def set_progress_bar_on_top(self) -> None:
-        self.progress_stack.setCurrentWidget(self.progress_bar)
+        self.progress_stack.setCurrentWidget(self.progress_container)
         self.progress_stack.show()
 
     def set_url_on_top(self) -> None:
@@ -648,8 +663,17 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         @run_in_loop
         def on_finished(future: Future[list[tuple[Time, FrameSourceProvider]]]) -> None:
             self.progress_bar.reset_progress()
+            self.progress_stack.hide()
 
-            if future.exception():
+            self._pending_select_frames = None
+            self._select_frames_worker = None
+
+            if exc := future.exception():
+                if isinstance(exc, CancelledError):
+                    logger.info("Frame selection cancelled.")
+                else:
+                    logger.error("Error during frame selection: %s", exc)
+                self._update_buttons_state()
                 return
 
             times = future.result()
@@ -662,9 +686,9 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                     src_provider=src_provider,
                 )
 
-            self._pending_select_frames = None
             self._update_buttons_state()
 
+        self._select_frames_worker = worker
         self._pending_select_frames = worker.run()
         self._pending_select_frames.add_done_callback(on_finished)
         self._update_buttons_state()
@@ -676,14 +700,22 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                 return
 
             worker = ExtractFramesWorker(self.api, self)
+            self._extract_frames_worker = worker
             self._pending_extract_frames = worker.run()
 
             @run_in_loop
             def on_finished(f: Future[list[tuple[int, Path]]]) -> None:
                 self.clip_section.setEnabled(True)
                 self.progress_bar.reset_progress()
+                self.progress_stack.hide()
                 self._pending_extract_frames = None
-                if not f.exception():
+                self._extract_frames_worker = None
+                if exc := f.exception():
+                    if isinstance(exc, CancelledError):
+                        logger.info("Frame extraction cancelled.")
+                    else:
+                        logger.error("Error during frame extraction: %s", exc)
+                else:
                     self._extract_paths = f.result()
                     self._extraction_finished = True
                 self._update_buttons_state()
@@ -878,15 +910,16 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             return
 
         # Run the upload
+        self._is_upload_cancelled = False
 
         @run_in_loop
         def on_cookies(future: Future[dict[str, str]]) -> None:
-            if future.exception():
+            if self._is_upload_cancelled or future.exception():
                 self._on_upload_error()
                 return
 
             # Once we have the cookies, run the upload
-            self._pending_upload = self.slowpics_worker.upload(
+            src = SlowPicsSources(
                 collection_name=self.collection_name.text() or "Untitled",
                 sources=sources,
                 public=self.public_check.isChecked(),
@@ -894,16 +927,22 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                 tmdb_id=f"{self.tmdb_title.media_tag}_{self.tmdb_title.id}" if self.tmdb_title else None,
                 remove_after=self.remove_after.value(),
                 tags=self.tags.selected_tags(),
-                cookies=future.result(),
             )
+            self._pending_upload = self.slowpics_worker.upload(src=src, cookies=future.result())
 
             # Once the upload is finished, reset the progress bar and update the buttons state
             @run_in_loop
             def on_upload_finished(f: Future[str]) -> None:
                 self.progress_bar.reset_progress()
+                self.progress_stack.hide()
                 self._pending_upload = None
 
-                if not f.exception():
+                if exc := f.exception():
+                    if isinstance(exc, asyncio.CancelledError):
+                        logger.info("Upload cancelled.")
+                    else:
+                        logger.error("Error during upload: %s", exc)
+                else:
                     url = f.result()
                     logger.info("Upload complete: %s", url)
                     self._reported_url = url
@@ -923,6 +962,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
     def _on_upload_error(self, message: str | None = None) -> None:
         # Helper to cleanup UI on failure from background
         self.progress_bar.reset_progress()
+        self.progress_stack.hide()
         self.clip_section.setEnabled(True)
         self._pending_upload = None
         self._update_buttons_state()
@@ -953,6 +993,17 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.upload_btn.setEnabled(frames_ready and not needs_extraction)
 
         self._current_outputs = current_outputs
+
+    def on_cancel_clicked(self) -> None:
+        logger.info("Cancel button clicked, aborting active tasks...")
+        if self._pending_select_frames and not self._pending_select_frames.done() and self._select_frames_worker:
+            self._select_frames_worker.cancel()
+        if self._pending_extract_frames and not self._pending_extract_frames.done() and self._extract_frames_worker:
+            self._extract_frames_worker.cancel()
+        if self._pending_upload and not self._pending_upload.done():
+            self._is_upload_cancelled = True
+            self.slowpics_worker.cancel()
+        self.progress_stack.hide()
 
     def on_url_copy_btn_clicked(self) -> None:
         QApplication.clipboard().setText(self._reported_url)
