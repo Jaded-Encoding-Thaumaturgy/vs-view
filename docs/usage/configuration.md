@@ -73,6 +73,11 @@ vsview [OPTIONS] [FILES]... [COMMAND]
     vsview -q -platform -q offscreen -q -geometry -q 1920x1080
     ```
 
+#### `--hdr`
+:   Enable High Dynamic Range (HDR) support and configure target graphics API (Direct3D12, Vulkan, Metal).
+
+    **Env:** `VSVIEW_HDR`
+
 #### `--verbose` / `-v`
 :   Enable verbose output. Repeat to increase verbosity (`-vv`, `-vvv`).
 

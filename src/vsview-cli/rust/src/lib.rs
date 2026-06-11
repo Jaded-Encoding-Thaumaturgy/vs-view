@@ -77,6 +77,7 @@ fn parse_args(py: Python<'_>, args: Vec<String>, columns: Option<usize>) -> PyRe
     dict.set_item("verbose", cli.verbose)?;
     dict.set_item("arg", script_args_to_map(cli.arg))?;
     dict.set_item("qt_arg", cli.qt_arg)?;
+    dict.set_item("hdr", cli.hdr)?;
 
     Ok(dict)
 }

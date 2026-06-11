@@ -44,6 +44,10 @@ pub(crate) struct Cli {
     #[arg(short = 'q', long, value_name = "ARG")]
     pub qt_arg: Vec<String>,
 
+    /// Enable High Dynamic Range (HDR) support and set up graphics APIs.
+    #[arg(long, env = "VSVIEW_HDR")]
+    pub hdr: bool,
+
     #[command(flatten)]
     pub settings_config: SettingsArgs,
 
