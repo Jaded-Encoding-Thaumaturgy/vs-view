@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from enum import Flag, auto
 from logging import getLogger
 from math import isclose
-from typing import Any, Literal, NamedTuple, override
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, override
 
 from jetpytools import cachedproperty, clamp, copy_signature, cround
 from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
+    QObject,
     QPoint,
     QPointF,
     QRect,
@@ -61,6 +62,9 @@ from shiboken6 import Shiboken
 
 from ...vsenv import run_in_background, run_in_loop
 from ..settings import ActionID, SettingsManager, ShortcutManager
+
+if TYPE_CHECKING:
+    from .hdr import HDRViewport
 
 logger = getLogger(__name__)
 
@@ -359,6 +363,10 @@ class BaseGraphicsView(QGraphicsView):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
 
+        # HDR Support
+        self._hdr_viewport: HDRViewport | None = None
+        self._hdr_enabled = False
+
         self.graphics_scene = QGraphicsScene(self)
 
         self._checkerboard = self._create_checkerboard_pixmap()
@@ -485,6 +493,10 @@ class BaseGraphicsView(QGraphicsView):
 
     @override
     def drawBackground(self, painter: QPainter, rect: QRectF | QRect) -> None:
+        if self._hdr_enabled:
+            # Let the HDR background shine through
+            return None
+
         if not Shiboken.isValid(self.pixmap_item) or self.pixmap_item.pixmap().isNull():
             return super().drawBackground(painter, rect)
 
@@ -500,6 +512,18 @@ class BaseGraphicsView(QGraphicsView):
         painter.fillRect(visible_rect, brush)
 
         return None
+
+    @override
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if (
+            watched == self.viewport()
+            and event.type() == QEvent.Type.Resize
+            and self._hdr_enabled
+            and self._hdr_viewport
+        ):
+            self._hdr_viewport.setGeometry(self.viewport().rect())
+            self._sync_hdr_transform()
+        return super().eventFilter(watched, event)
 
     @override
     def viewportEvent(self, event: QEvent) -> bool:
@@ -525,10 +549,17 @@ class BaseGraphicsView(QGraphicsView):
 
     @override
     def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
         if event.type() == QResizeEvent.Type.Resize:
             self.set_zoom(self.current_zoom if not self.autofit else 0)
 
-        super().resizeEvent(event)
+    @override
+    def scrollContentsBy(self, dx: int, dy: int) -> None:
+        super().scrollContentsBy(dx, dy)
+        if self._hdr_enabled and self._hdr_viewport:
+            # Re-align the child viewport widget to prevent scrolling translation
+            self._hdr_viewport.setGeometry(self.viewport().rect())
+            self._sync_hdr_transform()
 
     @override
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -638,10 +669,22 @@ class BaseGraphicsView(QGraphicsView):
 
         self.setScene(self.graphics_scene)
 
-    def set_pixmap(self, pixmap: QPixmap) -> None:
+    def set_pixmap(self, pixmap: QPixmap, hdr_image: QImage | None = None) -> None:
+        """
+        Set the current frame.
+        If hdr_image is provided and HDR is enabled, it will use the HDR viewport.
+        """
         pixmap.setDevicePixelRatio(self.devicePixelRatio())
         old_size = self.pixmap_item.pixmap().size()
         self.pixmap_item.setPixmap(pixmap)
+
+        if self._hdr_enabled and hdr_image and self._hdr_viewport:
+            # Hide the 8-bit pixmap so the HDR viewport behind it is visible
+            self.pixmap_item.setVisible(False)
+            self._hdr_viewport.set_image(hdr_image)
+        else:
+            self.pixmap_item.setVisible(True)
+
         self._update_rect_selection_overlay()
 
         if old_size != pixmap.size():
@@ -649,6 +692,37 @@ class BaseGraphicsView(QGraphicsView):
 
             if self.autofit:
                 self.set_zoom(0, animated=False)
+
+        if self._hdr_enabled and self._hdr_viewport:
+            self._sync_hdr_transform()
+
+    def set_hdr_enabled(self, enabled: bool) -> None:
+        from .hdr import HDRViewport
+
+        if self._hdr_enabled == enabled:
+            return
+
+        self._hdr_enabled = enabled
+
+        if enabled:
+            v = self.viewport()
+
+            if not self._hdr_viewport:
+                # Parent to the viewport so it draws on top of viewport background
+                self._hdr_viewport = HDRViewport(v)
+                v.installEventFilter(self)
+
+            self._hdr_viewport.setGeometry(v.rect())
+            self._hdr_viewport.show()
+            self.pixmap_item.setVisible(False)
+            self._sync_hdr_transform()
+        else:
+            if self._hdr_viewport:
+                self._hdr_viewport.hide()
+
+            self.pixmap_item.setVisible(True)
+
+        self.update()
 
     def update_scene_rect(self) -> None:
         self.setSceneRect(self.pixmap_item.mapRectToScene(self.pixmap_item.boundingRect()))
@@ -715,6 +789,12 @@ class BaseGraphicsView(QGraphicsView):
         """Clear the current rectangular selection and emit signals."""
         self._set_rect_selection(QRect(), emit_changed=True, emit_finished=True)
 
+    def _sync_hdr_transform(self) -> None:
+        if not self._hdr_enabled or not self._hdr_viewport:
+            return
+        # Combine the GraphicsView transform (zoom/pan) with the Item transform (SAR)
+        self._hdr_viewport.set_video_transform(self.pixmap_item.sceneTransform() * self.viewportTransform())
+
     @staticmethod
     def _create_checkerboard_pixmap() -> QPixmap:
         size = SettingsManager.global_settings.view.checkerboard_size
@@ -747,6 +827,7 @@ class BaseGraphicsView(QGraphicsView):
             self.displayTransformChanged.emit(transform)
             self.update_scene_rect()
             self.set_zoom(0 if self.autofit else self.current_zoom, animated=False)
+            self._sync_hdr_transform()
 
     def _init_rect_selection_overlay(self) -> None:
         self._rect_selection_overlay = RectSelectionOverlay(self.pixmap_item)
@@ -1019,6 +1100,7 @@ class BaseGraphicsView(QGraphicsView):
 
     def _apply_zoom_value(self, value: float) -> None:
         self.setTransform(QTransform().scale(value, value))
+        self._sync_hdr_transform()
 
     def _on_autofit_action(self) -> None:
         self.set_autofit(not self.autofit)
