@@ -342,7 +342,7 @@ class FrameThumbnailList(QListWidget):
                 voutput.vs_output.clip,
                 target_w,
                 target_h,
-                format=self.api.packer.vs_format,
+                format=self.api.packer.format.vs,
             )
             packed = self.api.packer.to_rgb_packed(downscaled, alpha=None)
 

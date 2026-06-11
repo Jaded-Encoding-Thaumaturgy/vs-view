@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import sys
 from abc import ABC
-from collections.abc import Mapping
-from enum import IntEnum
+from enum import Enum, IntEnum
 from logging import Filter, LogRecord, getLogger
-from typing import Any, Literal, override
+from typing import Any, Literal, assert_never, override
 
+import vapoursynth
 import vapoursynth as vs
 from PySide6.QtGui import QImage
 from vspackrgb.helpers import get_plane_buffer, packrgb
 
+from ..env import getenv_bool
 from .settings import SettingsManager
 
 if sys.version_info >= (3, 13):
@@ -65,20 +66,87 @@ def warn_missing_props(n: int, f: vs.VideoFrame) -> vs.VideoFrame:
 class Packer(ABC):
     """RGB packer"""
 
-    FORMAT_CONFIG: Mapping[int, tuple[vs.PresetVideoFormat, vs.PresetVideoFormat, QImage.Format, QImage.Format]] = {
-        8: (vs.RGB24, vs.GRAY8, QImage.Format.Format_RGB32, QImage.Format.Format_ARGB32),
-        10: (vs.RGB30, vs.GRAY10, QImage.Format.Format_RGB30, QImage.Format.Format_A2RGB30_Premultiplied),
-    }
+    class FormatConfig(Enum):
+        """Configuration for video formats."""
 
-    def __init__(self, bit_depth: int | None = None) -> None:
-        self.bit_depth = bit_depth or SettingsManager.global_settings.view.bit_depth
-        self.vs_format, self.vs_aformat, self.qt_format, self.qt_aformat = Packer.FORMAT_CONFIG[self.bit_depth]
+        INT8 = 8, vs.INTEGER
+        INT10 = 10, vs.INTEGER
+        INT16 = 16, vs.INTEGER
+        FP16 = 16, vs.FLOAT
+        FP32 = 32, vs.FLOAT
+
+        @property
+        def bitdepth(self) -> int:
+            """The bit depth of the format."""
+            return self.value[0]
+
+        @property
+        def sample_type(self) -> vs.SampleType:
+            """The VapourSynth sample type."""
+            return self.value[1]
+
+        @property
+        def vs(self) -> vs.PresetVideoFormat:
+            """The RGB PresetVideoFormat corresponding to this format config."""
+            return vs.PresetVideoFormat(vs.RGB << 28 | self.sample_type << 24 | self.bitdepth << 16)
+
+        @property
+        def vs_alpha(self) -> vapoursynth.PresetVideoFormat:
+            """
+            The alpha channel PresetVideoFormat (GRAY) corresponding to this format config.
+            """
+            return vs.PresetVideoFormat(vs.GRAY << 28 | self.sample_type << 24 | self.bitdepth << 16)
+
+        @property
+        def qt(self) -> QImage.Format:
+            """The matching Qt QImage.Format without alpha support."""
+            match self.value:
+                case 8, _:
+                    return QImage.Format.Format_RGB32
+                case 10, _:
+                    return QImage.Format.Format_RGB30
+                case 16, vs.INTEGER:
+                    return QImage.Format.Format_RGBA64
+                case 16, vs.FLOAT:
+                    return QImage.Format.Format_RGBA16FPx4
+                case 32, _:
+                    return QImage.Format.Format_RGBA32FPx4
+                case _:
+                    assert_never(self.value)
+
+        @property
+        def qt_alpha(self) -> QImage.Format:
+            """The matching Qt QImage.Format with alpha channel support."""
+            match self.value:
+                case 8, _:
+                    return QImage.Format.Format_ARGB32
+                case 10, _:
+                    return QImage.Format.Format_A2RGB30_Premultiplied
+                case _:
+                    return self.qt
+
+        @property
+        def formats(
+            self,
+        ) -> tuple[vapoursynth.PresetVideoFormat, vapoursynth.PresetVideoFormat, QImage.Format, QImage.Format]:
+            """Returns a tuple containing (vs, vs_alpha, qt, qt_alpha)."""
+            return self.vs, self.vs_alpha, self.qt, self.qt_alpha
+
+    def __init__(self, bit_depth: int | None = None, sample_type: vs.SampleType = vs.INTEGER) -> None:
+        if getenv_bool("VSVIEW_HDR"):
+            self.hdr = True
+            bit_depth = max(16, bit_depth or 16)
+            sample_type = vs.FLOAT
+        else:
+            self.hdr = False
+
+        self.format = Packer.FormatConfig((bit_depth or SettingsManager.global_settings.view.bit_depth, sample_type))
 
     def to_rgb_planar(self, clip: vs.VideoNode, **kwargs: Any) -> vs.VideoNode:
-        """Converts clip to planar vs.RGB24 or vs.RGB30."""
+        """Converts clip to planar RGB."""
 
         params = dict[str, Any](
-            format=self.vs_format,
+            format=self.format.vs,
             dither_type=SettingsManager.global_settings.view.dither_type,
             resample_filter_uv=SettingsManager.global_settings.view.chroma_resizer.vs_func,
             filter_param_a_uv=SettingsManager.global_settings.view.chroma_resizer.param_a,
@@ -86,6 +154,12 @@ class Packer(ABC):
             transfer=vs.TRANSFER_BT709,
             primaries=vs.PRIMARIES_BT709,
         )
+
+        if self.hdr:
+            # For HDR, we must use BT.2020 PQ (ST2084)
+            params["transfer"] = vs.TRANSFER_ST2084
+            params["primaries"] = vs.PRIMARIES_BT2020
+            return clip.resize.Point(**params | kwargs)
 
         # Returns directly the clip without checking anything.
         # If color specs are set, this will work.
@@ -106,14 +180,14 @@ class Packer(ABC):
         return clip.resize.Point(**params | in_params | kwargs)
 
     def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | Literal[True] | None = None) -> vs.VideoNode:
-        """Converts planar vs.RGB24 or vs.RGB30 to interleaved BGRA32 or RGB30 to packed A2R10G10B10"""
+        """Converts planar VapourSynth RGB to interleaved/packed Qt format."""
         return packrgb(clip, alpha, "cython")
 
     def pack_clip(self, clip: vs.VideoNode, alpha: vs.VideoNode | Literal[True] | None = None) -> vs.VideoNode:
         """Converts a planar VideoNode and an optional alpha mask to a packed RGB/RGBA VideoNode."""
         if isinstance(alpha, vs.VideoNode):
             alpha = alpha.resize.Point(
-                format=self.vs_aformat,
+                format=self.format.vs_alpha,
                 dither_type=SettingsManager.global_settings.view.dither_type,
             )
 
@@ -138,19 +212,25 @@ class Packer(ABC):
 
         alpha = "VSViewHasAlpha" in frame.props or "_Alpha" in frame.props
 
-        params = dict[str, Any](format=self.qt_aformat if alpha else self.qt_format) | kwargs
+        params = dict[str, Any](format=self.format.qt_alpha if alpha else self.format.qt) | kwargs
+
+        # Handle the 4x width hack for (16/32)-bit packing
+        width = frame.width
+        if self.format.bitdepth >= 16:
+            width //= 4
 
         # QImage supports Buffer inputs
         img = QImage(
             get_plane_buffer(frame, 0),  # type: ignore[call-overload]
-            frame.width,
+            width,
             frame.height,
             frame.get_stride(0),
             params.pop("format"),
             **params,
         )
 
-        if SettingsManager.global_settings.view.copy_qimage:
+        # If we are in HDR/(16/32)-bit mode, we must copy the image
+        if self.format.bitdepth >= 16 or SettingsManager.global_settings.view.copy_qimage:
             return img.copy()
 
         return img
