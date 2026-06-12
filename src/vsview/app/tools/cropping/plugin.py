@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from logging import getLogger
 from typing import override
 
 from jetpytools import clamp
@@ -30,6 +31,8 @@ from vsview.api import (
 
 from .settings import GlobalSettings
 from .utils import CommandLabel, CropValues, CustomRect, CustomSize
+
+logger = getLogger(__name__)
 
 
 class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
@@ -165,6 +168,12 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     @run_in_loop(return_future=False)
     @override
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
+        # TODO: Add support for HDR
+        if voutput.packer.hdr:
+            self.setDisabled(True)
+            logger.warning("The Cropping tool isn't available for HDR outputs.")
+        else:
+            self.setEnabled(True)
         self.api.current_view.rect_selection_enabled = self.enable_btn.isChecked()
         self._apply_view_selection(self.api.current_view.rect_selection)
 
