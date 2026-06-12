@@ -86,8 +86,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     os.environ["JETPYTOOLS_NO_COLOR"] = "true"
     os.environ["PYDANTIC_ERRORS_INCLUDE_URL"] = "false"
     if cfg.hdr:
-        os.environ.setdefault("QSG_RHI_HDR", "scrgb")
+        os.environ.setdefault("QSG_RHI_HDR", "p3" if sys.platform == "darwin" else "scrgb")
         os.environ.setdefault("QSG_INFO", "1")
+        os.environ.setdefault("QSG_RHI_DEBUG_LAYER", "1")
+        os.environ.setdefault("QSG_RHI_LEAK_CHECK", "1")
+        os.environ.setdefault("QSG_RHI_PROFILE", "1")
+        if sys.platform == "linux":
+            os.environ.setdefault("QSG_RENDER_LOOP", "basic")
 
     if cfg.settings_roaming:
         os.environ["VSVIEW_GLOBAL_SETTINGS_ROAMING"] = "true"
