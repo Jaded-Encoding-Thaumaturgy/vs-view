@@ -43,6 +43,7 @@ from vsview.api import (
     IconName,
     IconReloadMixin,
     LocalSettingsModel,
+    Packer,
     PluginAPI,
     PluginSettings,
     VideoOutputProxy,
@@ -420,6 +421,7 @@ class FramePropPreviewGraphicsView(BaseGraphicsView):
     def __init__(self, parent: QWidget | None, api: PluginAPI) -> None:
         super().__init__(parent)
         self.api = api
+        self._packer = Packer(8)
         self._f2c_cache = dict[int, vs.VideoNode]()
         self.api.register_on_destroy(self._f2c_cache.clear)
 
@@ -440,10 +442,10 @@ class FramePropPreviewGraphicsView(BaseGraphicsView):
                 fmt = QImage.Format.Format_Grayscale16
             case _:
                 with self.api.vs_context():
-                    packed_clip = self.api.packer.pack_clip(self.frame2clip(frame))
+                    packed_clip = self._packer.pack_clip(self.frame2clip(frame))
 
                     with packed_clip.get_frame(0) as packed:
-                        return self.api.packer.frame_to_qimage(packed).copy()
+                        return self._packer.frame_to_qimage(packed).copy()
 
         return QImage(
             get_plane_buffer(frame, 0),  # type: ignore[call-overload]
