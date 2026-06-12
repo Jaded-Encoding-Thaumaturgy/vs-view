@@ -4,6 +4,7 @@ import ctypes
 from colorsys import rgb_to_hls, rgb_to_hsv
 from enum import Enum, auto
 from functools import partial
+from logging import getLogger
 from math import ceil, floor, log, log10
 from struct import unpack
 from typing import Annotated, Any, override
@@ -44,6 +45,7 @@ from .utils import get_chroma_offsets, scale_value_to_float
 
 type CachedVideoNode = vs.VideoNode
 
+logger = getLogger(__name__)
 
 # ctypes data types for pixel extraction
 DATA_TYPES: dict[vs.SampleType, dict[int, type[ctypes._SimpleCData[Any]]]] = {
@@ -228,6 +230,12 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     # Plugin hooks
     @override
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
+        # TODO: Add support for HDR
+        if voutput.packer.hdr:
+            self.setDisabled(True)
+            logger.warning("The ColorPicker tool isn't available on HDR outputs.")
+        else:
+            self.setEnabled(True)
         if voutput not in self.outputs:
             self.outputs[voutput] = cache_clip(voutput.vs_output.clip, 10)
 
