@@ -15,7 +15,6 @@ from PySide6.QtWidgets import QHBoxLayout, QToolButton, QVBoxLayout, QWidget
 from vapoursynth import VideoFrame
 
 from ...assets import IconName
-from ...env import getenv_bool
 from ...vsenv import run_in_loop
 from ..icon import IconReloadMixin
 from ..plugins.api import PluginAPI
@@ -269,7 +268,7 @@ class TabManager(QWidget, IconReloadMixin):
             view.statusSavingImageStarted.connect(self.statusLoadingStarted.emit)
             view.statusSavingImageFinished.connect(self.statusLoadingFinished.emit)
             view.displayTransformChanged.connect(lambda transform: self.sarTransformed.emit(transform.m11()))
-            view.set_hdr_enabled(getenv_bool("VSVIEW_HDR"))
+            view.set_hdr_enabled(voutput.packer.hdr)
 
             tab_label = TabLabel(voutput.vs_name, voutput.vs_index, new_tabs)
 

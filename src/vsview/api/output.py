@@ -35,7 +35,7 @@ def set_output(
     *,
     alpha: vs.VideoNode | Literal[True] | None = ...,
     framedurs: Sequence[SupportsFloat] | None = None,
-    # scenes: ScenesT = None,
+    hdr: bool | None = None,
     **kwargs: Any,
 ) -> None: ...
 
@@ -48,7 +48,7 @@ def set_output(
     *,
     alpha: vs.VideoNode | Literal[True] | None = ...,
     framedurs: Sequence[SupportsFloat] | None = None,
-    # scenes: ScenesT = None,
+    hdr: bool | None = None,
     **kwargs: Any,
 ) -> None: ...
 
@@ -62,7 +62,7 @@ def set_output(
     alpha: vs.VideoNode | Literal[True] | None = ...,
     *,
     framedurs: Sequence[SupportsFloat] | None = None,
-    # scenes: ScenesT = None,
+    hdr: bool | None = None,
     **kwargs: Any,
 ) -> None: ...
 
@@ -146,7 +146,7 @@ def set_output(
     alpha: vs.VideoNode | Literal[True] | None = None,
     *,
     framedurs: Sequence[SupportsFloat] | None = None,
-    # scenes: ScenesT = None,
+    hdr: bool | None = None,
     downmix: bool | None = None,
     **kwargs: Any,
 ) -> None:
@@ -178,6 +178,8 @@ def set_output(
             this sets the display name for the output.
         alpha: Optional alpha channel VideoNode or if True, fetch the `_Alpha` prop (only for VideoNode outputs).
         framedurs: Optional sequence of frame durations in seconds for VFR clips (only for VideoNode outputs).
+        hdr: Optional boolean override for the HDR detection for VideoNode outputs.
+            If passing `--hdr`, this flag can be used to disable HDR conversion for this output.
         downmix: if None (default), follows the global settings downmix of vsview if previewed
             through vsview. Otherwise True or False forces the behavior.
         **kwargs: Additional metadata passed to VSView plugins for custom configuration of this output.
@@ -237,6 +239,7 @@ def set_output(
                     effective_name or f"{title} {i}",
                     [float(f) for f in (framedurs or [])],
                     alpha is True or None,
+                    hdr,
                     kwargs,
                 )
             elif isinstance(n, vs.AudioNode):

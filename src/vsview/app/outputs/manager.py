@@ -4,8 +4,9 @@ from collections.abc import Mapping
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
-from vapoursynth import AudioNode, VideoOutputTuple
+from vapoursynth import AudioNode, SampleType, VideoOutputTuple
 
+from ...env import getenv_bool
 from ..packing import Packer
 from .audio import AudioOutput
 from .video import VideoOutput
@@ -21,10 +22,6 @@ class OutputsManager:
 
     def __init__(self, api: PluginAPI) -> None:
         self.api = api
-
-    @property
-    def packer(self) -> Packer:
-        return self._packer
 
     @property
     def voutputs(self) -> list[VideoOutput]:
@@ -83,22 +80,29 @@ class OutputsManager:
 
         Returns an empty list on error; caller is responsible for cleanup.
         """
-
-        voutputs = list[VideoOutput]()
-        self._packer = Packer()
-
-        logger.debug("Configured video packer (%s-bit)", self.packer.format.bitdepth)
-
         if not vs_vouputs:
             logger.error("No video outputs found")
 
         # Snapshot items to avoid keeping the dict iterator alive during processing.
         # This prevents the iterator from holding references to VS objects in the traceback.
         items = list(vs_vouputs.items())
+        voutputs = list[VideoOutput]()
 
         try:
             for i, output in items:
-                voutput = VideoOutput(output, i, self.packer, metadata.get(i))
+                vmetadata = metadata.get(i)
+                if getenv_bool("VSVIEW_HDR") and (vmetadata.hdr in [None, True] if vmetadata else True):
+                    packer = Packer(16, SampleType.FLOAT, hdr=True)
+                else:
+                    packer = Packer()
+
+                logger.debug(
+                    "Configured video packer (%s-bit, %s)",
+                    packer.format.bitdepth,
+                    packer.format.sample_type.name,
+                )
+
+                voutput = VideoOutput(output, i, packer, vmetadata)
                 voutput.last_frame = last_frame
                 voutput.prepare_video(self.api)
                 voutputs.append(voutput)

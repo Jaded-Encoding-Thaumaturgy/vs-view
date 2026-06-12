@@ -157,6 +157,7 @@ def _make_voutput_proxy(voutput: VideoOutput) -> VideoOutputProxy:
         tuple(voutput.cum_durations) if voutput.cum_durations is not None else None,
         voutput.kwargs,
         voutput.info,
+        voutput.packer,
     )
 
 
@@ -341,8 +342,7 @@ class _PluginAPI(_PluginLimitedApi):
         if tab_index not in view.outputs:
             with self.__workspace.env.use():
                 node = view.get_node(self.current_voutput.vs_output.clip)
-                packed = self.__workspace.outputs_manager.packer.pack_clip(node)
-                view.outputs[tab_index] = packed
+                view.outputs[tab_index] = self.current_voutput.packer_sdr.pack_clip(node)
                 logger.debug("Created output node for tab %d", tab_index)
 
         with self.__workspace.env.use():

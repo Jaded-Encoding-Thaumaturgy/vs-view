@@ -10,10 +10,10 @@ from typing import Any, Literal, assert_never, override
 
 import vapoursynth
 import vapoursynth as vs
+from jetpytools import CustomValueError
 from PySide6.QtGui import QImage
 from vspackrgb.helpers import get_plane_buffer, packrgb
 
-from ..env import getenv_bool
 from .settings import SettingsManager
 
 if sys.version_info >= (3, 13):
@@ -132,15 +132,18 @@ class Packer(ABC):
             """Returns a tuple containing (vs, vs_alpha, qt, qt_alpha)."""
             return self.vs, self.vs_alpha, self.qt, self.qt_alpha
 
-    def __init__(self, bit_depth: int | None = None, sample_type: vs.SampleType = vs.INTEGER) -> None:
-        if getenv_bool("VSVIEW_HDR"):
-            self.hdr = True
-            bit_depth = max(16, bit_depth or 16)
-            sample_type = vs.FLOAT
-        else:
-            self.hdr = False
-
+    def __init__(
+        self,
+        bit_depth: int | None = None,
+        sample_type: vs.SampleType = vs.INTEGER,
+        *,
+        hdr: bool = False,
+    ) -> None:
         self.format = Packer.FormatConfig((bit_depth or SettingsManager.global_settings.view.bit_depth, sample_type))
+        self.hdr = hdr
+
+        if self.hdr and (self.format.bitdepth < 16 or self.format.sample_type != vs.FLOAT):
+            raise CustomValueError("Invalid format for HDR")
 
     def to_rgb_planar(self, clip: vs.VideoNode, **kwargs: Any) -> vs.VideoNode:
         """Converts clip to planar RGB."""

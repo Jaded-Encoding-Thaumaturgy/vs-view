@@ -40,6 +40,12 @@ from vsview.app.views.video import BaseGraphicsView
 from vsview.types import Frame, Time
 from vsview.vsenv.loop import run_in_loop
 
+if sys.version_info >= (3, 13):
+    from warnings import deprecated
+else:
+    from typing_extensions import deprecated
+
+
 from ._interface import (
     _GraphicsViewProxy,
     _PlaybackProxy,
@@ -473,9 +479,14 @@ class PluginAPI(_PluginAPI):
         return self.__workspace.playback.state.is_playing
 
     @property
+    @deprecated(
+        "Accessing this property is deprecated. "
+        "Use `self.api.current_voutput.packer` or `self.api.current_voutput.packer_sdr`",
+        category=DeprecationWarning,
+    )
     def packer(self) -> Packer:
         """Return the packer used by the workspace."""
-        return self.__workspace.outputs_manager.packer
+        return self.current_voutput.packer_sdr
 
     @property
     def settings(self) -> SimpleNamespace:
@@ -848,7 +859,7 @@ class PluginGraphicsView(BaseGraphicsView):
         Execution Thread: **Main or Background**.
         If you need to update the UI, use the `@run_in_loop` decorator.
         """
-        self.update_display(self.api.packer.frame_to_qimage(f).copy())
+        self.update_display(self.api.current_voutput.packer_sdr.frame_to_qimage(f).copy())
 
     def get_node(self, clip: vs.VideoNode) -> vs.VideoNode:
         """

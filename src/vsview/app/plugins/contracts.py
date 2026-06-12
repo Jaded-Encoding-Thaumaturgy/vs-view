@@ -10,6 +10,7 @@ import vapoursynth as vs
 from pydantic import BaseModel
 
 from vsview.app.outputs import VideoOutput
+from vsview.app.packing import Packer
 from vsview.app.views import OutputInfo
 from vsview.types import Frame, Time
 
@@ -41,6 +42,17 @@ class VideoOutputProxy:
 
     info: OutputInfo = field(hash=False, compare=False)
     """Output information."""
+
+    packer: Packer = field(hash=False, compare=False)
+    """The packer used by this VideoOutput."""
+
+    @property
+    def packer_sdr(self) -> Packer:
+        """
+        Same as `packer` if this output is not HDR capable,
+        otherwise returns a 10-bit Packer with `hdr=False` to ensure SDR processing.
+        """
+        return self.packer if not self.packer.hdr else Packer(10, vs.SampleType.INTEGER)
 
     def time_to_frame(self, time: timedelta, fps: VideoOutputProxy | Fraction | None = None) -> Frame:
         """Convert a time to a frame number for this output."""
