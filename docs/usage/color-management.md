@@ -8,14 +8,18 @@ description: How VSView handles color space conversion and frame properties.
 
 When displaying VapourSynth clips, **VSView** must convert the output to packed RGB for rendering on the screen.
 
-Currently, this conversion explicitly targets **BT.709** primaries and transfer characteristics.
+By default, this conversion targets the **BT.709** color space (primaries and transfer characteristics) for standard dynamic range (SDR) rendering.
 
-!!! warning "HDR and Out-of-Range Content"
+If you are working with high dynamic range content (HDR), VSView supports native end-to-end HDR rendering on HDR-capable displays.
 
-    VSView does not perform tone mapping.
-    
-    Because display conversion is currently fixed to BT.709 targets,
-    HDR content and out-of-range values will be clipped during preview.
+!!! info "No Tone Mapping"
+
+    VSView does not perform any tone mapping of HDR content in either SDR or HDR modes.
+
+    - **In SDR mode**: HDR content and out-of-range values will be clipped to the standard BT.709 gamut.
+    - **In HDR mode**: Native linear PQ values are converted directly to linear scRGB and passed to the OS compositor.
+
+        Any tone mapping or luminance mapping (to fit the display's peak brightness) is handled entirely by the OS and the display hardware.
 
     This behavior affects preview only. It does not change the source clip in your script.
 
@@ -54,3 +58,25 @@ You can control how VSView reacts to missing properties via the **Settings Dialo
 -  **Ignore**
 
     Follows the same steps as **Warn**, but no warnings are emitted to the log.
+
+
+## High Dynamic Range (HDR)
+
+VSView supports native HDR display output via high bit-depth color conversion and hardware acceleration.
+
+To preview content in HDR, you must meet the following requirements:
+
+1. **System & Display**: An HDR-capable display must be connected and HDR must be enabled in your operating system settings.
+2. **Command Line Flag**: Launch VSView with the [`--hdr` CLI option](configuration.md#-hdr) (or set the `VSVIEW_HDR=true` environment variable).
+
+### Script Configuration
+
+By default, when `--hdr` is enabled, all outputs will attempt HDR conversion.
+You can explicitly override this behavior or disable HDR on a per-output basis in your VapourSynth script by passing `hdr=False` to `set_output()`.
+
+```python title="script.vpy"
+from vsview import set_output
+
+# Disable HDR for this specific output
+set_output(clip, hdr=False)
+```
