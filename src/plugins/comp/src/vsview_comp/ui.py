@@ -342,9 +342,9 @@ class FrameThumbnailList(QListWidget):
                 voutput.vs_output.clip,
                 target_w,
                 target_h,
-                format=self.api.packer.format.vs,
+                format=voutput.packer_sdr.format.vs,
             )
-            packed = self.api.packer.to_rgb_packed(downscaled, alpha=None)
+            packed = voutput.packer_sdr.to_rgb_packed(downscaled, alpha=None)
 
             out[voutput.vs_index] = packed
 
@@ -416,7 +416,7 @@ class FrameThumbnailList(QListWidget):
                 return
 
             with f.result() as frame:
-                image = self.api.packer.frame_to_qimage(frame).copy()
+                image = self.api.current_voutput.packer_sdr.frame_to_qimage(frame).copy()
                 pict_type = (
                     get_prop(frame, "_PictType", str, default="?", func=self.fetch_thumbnail)
                     if item.get_pict_type
