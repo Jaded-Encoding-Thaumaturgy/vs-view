@@ -160,6 +160,7 @@ vsview-split-planes = { workspace = true }
 vsview-frameprops-extended = { workspace = true }
 vsview-audio-convert = { workspace = true }
 vsview-comp = { workspace = true }
+vsview-histogram = { workspace = true }
 
 [tool.mypy]
 mypy_path = "$MYPY_CONFIG_FILE_DIR/stubs"

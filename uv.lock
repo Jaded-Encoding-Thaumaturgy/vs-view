@@ -15,6 +15,7 @@ members = [
     "vsview-comp",
     "vsview-fftspectrum",
     "vsview-frameprops-extended",
+    "vsview-histogram",
     "vsview-split-planes",
 ]
 
@@ -2411,6 +2412,22 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "vsjetpack", specifier = ">=1.4.0" },
+    { name = "vsview", editable = "." },
+]
+
+[[package]]
+name = "vsview-histogram"
+source = { editable = "src/plugins/histogram" }
+dependencies = [
+    { name = "numpy" },
+    { name = "vsjetpack" },
+    { name = "vsview" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.4.6" },
+    { name = "vsjetpack", specifier = ">=1.5.0" },
     { name = "vsview", editable = "." },
 ]
 

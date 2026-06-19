@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling", "versioningit", "hatch-sbom[uv]>=0.3.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vsview-histogram"
+dynamic = ["version"]
+description = "A vsview plugin displaying video clips' histograms and other related visualizations"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "Vardë", email = "ichunjo.le.terrible@gmail.com" }]
+maintainers = [
+    { name = "Vardë", email = "ichunjo.le.terrible@gmail.com" },
+    { name = "Jaded Encoding Thaumaturgy", email = "jaded.encoding.thaumaturgy@gmail.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+dependencies = ["vsview", "vsjetpack>=1.5.0", "numpy>=2.4.6"]
+
+[project.entry-points.vsview]
+vsview_histogram = "vsview_histogram"
+
+[project.urls]
+"Documentation" = "https://jaded-encoding-thaumaturgy.github.io/vs-view/plugins/second-party/#histogram"
+"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/histogram"
+"Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
+"Contact" = "https://discord.gg/XTpc6Fa9eB"
+
+[tool.hatch.build.targets.wheel.hooks.sbom]
+source = "uv"
+
+[tool.hatch.build.targets.wheel.hooks.sbom.uv]
+no-dev = true
+frozen = false
+no-sources = true
+
+[tool.hatch.version]
+source = "versioningit"
+
+[tool.versioningit.vcs]
+match = ["histogram/v*"]
+default-tag = "histogram/v0.0.0"
+
+[tool.versioningit.tag2version]
+rmprefix = "histogram/v"
+
+[tool.versioningit.format]
+distance = "{next_version}.dev{distance}+{vcs}{rev}"
+dirty = "{next_version}+dirty"
+distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.dirty"
+
+[tool.uv.sources]
+vsview = { workspace = true }
