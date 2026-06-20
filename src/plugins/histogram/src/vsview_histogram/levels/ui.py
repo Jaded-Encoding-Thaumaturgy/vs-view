@@ -8,7 +8,7 @@ import vapoursynth as vs
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QWidget
 from vstools import Range, get_lowest_value, get_peak_value
 
-from vsview.api import PluginSettings, VideoOutputProxy
+from vsview.api import PluginSettings
 
 if TYPE_CHECKING:
     from .charts import LevelsChartView
@@ -25,22 +25,28 @@ class HistogramContainerWidget(QFrame):
         self.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Sunken)
         self.current_layout = QVBoxLayout(self)
         self.current_layout.setContentsMargins(0, 0, 0, 0)
-        self.current_layout.setSpacing(8)
+        self.current_layout.setSpacing(4)
 
         self.charts: list[LevelsChartView] = []
 
-    def update_voutput(self, voutput: VideoOutputProxy) -> None:
-        self._fmt = voutput.vs_output.clip.format._as_dict()
+    def update_histogram(self, frame: vs.VideoFrame) -> None:
+        self._fmt = frame.format._as_dict()
         # FIXME: _as_dict doesn't pass num_planes in R77
-        self._fmt["num_planes"] = voutput.vs_output.clip.format.num_planes
-
-        self.setup_layout(self._fmt["num_planes"])
+        self._fmt["num_planes"] = frame.format.num_planes
+        self.setup_layout()
 
         for i in range(self._fmt["num_planes"]):
-            self.charts[i].configure(self._fmt, i, self.settings.global_.show_unsafe)
+            self.charts[i].configure(self._fmt, i, self.settings.global_.levels.show_unsafe)
 
-    def setup_layout(self, num_planes: int) -> None:
+        for plane in range(frame.format.num_planes):
+            hist = compute_histogram(frame, plane, self.settings.global_.levels.factor)
+            chart = self.charts[plane]
+            chart.update_data(hist, self.width(), self.settings.global_.levels.bin_res)
+
+    def setup_layout(self) -> None:
         from .charts import LevelsChartView
+
+        num_planes = self._fmt["num_planes"]
 
         # Only create charts if we don't have enough
         while len(self.charts) < num_planes:
@@ -53,27 +59,13 @@ class HistogramContainerWidget(QFrame):
         for i in range(num_planes, len(self.charts)):
             self.charts[i].hide()
 
-    def update_histogram(self, frame: vs.VideoFrame) -> None:
-        bin_res = self.settings.global_.bin_res
-
-        for plane in range(frame.format.num_planes):
-            hist = compute_histogram(frame, plane, self.settings.global_.factor)
-            chart = self.charts[plane]
-            chart.update_data(hist, self.width(), bin_res)
-
-    def update_settings(self) -> None:
-        self.setup_layout(self._fmt["num_planes"])
-
-        for i in range(self._fmt["num_planes"]):
-            self.charts[i].configure(self._fmt, i, self.settings.global_.show_unsafe)
-
 
 def compute_histogram(frame: vs.VideoFrame, plane: int, clamp_factor: float) -> npt.NDArray[np.intp]:
     arr = np.asarray(frame[plane])
 
-    # Float format is digitized to 10-bit (1024 bins)
+    # Float format is digitized to 16-bit (65536 bins)
     if frame.format.sample_type is vs.FLOAT:
-        bins_count = 1024
+        bins_count = 65536
         data_int = scale_array_float(arr.astype(np.float32), frame, frame.format.color_family is vs.YUV and plane > 0)
     else:
         bins_count = 1 << frame.format.bits_per_sample
@@ -86,14 +78,14 @@ def compute_histogram(frame: vs.VideoFrame, plane: int, clamp_factor: float) -> 
 
 def scale_array_float(arr: npt.NDArray[np.float32], frame: vs.VideoFrame, chroma: bool) -> npt.NDArray[np.int32]:
     color_range = Range.from_video(frame)
-    output_peak = get_peak_value(10, chroma, color_range, frame.format.color_family)
-    output_lowest = get_lowest_value(10, chroma, color_range, frame.format.color_family)
+    output_peak = get_peak_value(16, chroma, color_range, frame.format.color_family)
+    output_lowest = get_lowest_value(16, chroma, color_range, frame.format.color_family)
 
     arr *= output_peak - output_lowest
 
     if chroma:
-        arr += 128 << 2
+        arr += 128 << 8
     elif color_range.is_limited:
-        arr += 16 << 2
+        arr += 16 << 8
 
-    return arr.round().clip(0, 1023).astype(np.int32)
+    return arr.round().clip(0, 65535).astype(np.int32)

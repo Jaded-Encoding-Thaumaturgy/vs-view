@@ -175,8 +175,8 @@ class LevelsChartView(QChartView):
                 self.safe_min = 16 << scale_shift
                 self.safe_max = 235 << scale_shift if plane_idx == 0 else 240 << scale_shift
             else:
-                self.safe_min = 64
-                self.safe_max = 940 if plane_idx == 0 else 960
+                self.safe_min = 4096
+                self.safe_max = 60160 if plane_idx == 0 else 61440
 
         self.max_val = 1 << fmt["bits_per_sample"] if fmt["sample_type"] == vs.INTEGER else 1024
 
@@ -304,5 +304,5 @@ def create_dithered_brush(stops: Sequence[tuple[float, QColor]], width: int, hei
     a_dithered = (a + noise).clip(0, 255).astype(np.uint8)
 
     rgba = np.dstack([r_dithered, g_dithered, b_dithered, a_dithered])
-    img = QImage(rgba, width, height, width * 4, QImage.Format.Format_RGBA8888)  # type: ignore[call-overload]
+    img = QImage(rgba, width, height, width * 4, QImage.Format.Format_RGBA8888).copy()  # type: ignore[call-overload]
     return QBrush(img)
