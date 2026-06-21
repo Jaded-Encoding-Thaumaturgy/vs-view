@@ -289,7 +289,11 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
 
         active_tab = self.tab_widget.currentIndex()
 
-        with self.api.vs_context(), self.api.current_voutput.vs_output.clip.get_frame(n) as frame:
+        with (
+            self.api.blocker(self),
+            self.api.vs_context(),
+            self.api.current_voutput.vs_output.clip.get_frame(n) as frame,
+        ):
             if active_tab == 0:
                 self.levels_container.update_histogram(frame)
             elif active_tab == 1 and self._numba_prewarm_worker.done():
