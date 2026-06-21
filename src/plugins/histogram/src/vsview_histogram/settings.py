@@ -24,7 +24,6 @@ class VectorscopeSettings(BaseModel):
 
 
 class LumaSettings(BaseModel):
-    res: Literal[0, 256, 512, 1024, 2048] = 0
     shift: int = 4
     sawtooth: bool = False
 

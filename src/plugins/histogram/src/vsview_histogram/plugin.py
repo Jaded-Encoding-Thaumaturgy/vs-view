@@ -1,3 +1,4 @@
+import itertools
 from concurrent.futures import Future
 from logging import getLogger
 from threading import Lock
@@ -58,9 +59,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         with lock:
             if HistogramPlugin.numba_prewarm_worker is None:
                 HistogramPlugin.numba_prewarm_worker = prewarm_numba()
-        HistogramPlugin.numba_prewarm_worker.add_done_callback(
-            lambda f: self.update_histogram() if not f.exception() else None
-        )
+        HistogramPlugin.numba_prewarm_worker.add_done_callback(self._notify_numba_ready)
 
     def setup_levels(self) -> None:
         container = QWidget(self)
@@ -125,19 +124,6 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         controls_layout = QHBoxLayout()
         controls_layout.setContentsMargins(8, 8, 8, 4)
 
-        res_label = QLabel("Resolution:", container)
-        controls_layout.addWidget(res_label)
-
-        self.luma_res_combo = QComboBox(container)
-        self.luma_res_combo.addItem("Auto", 0)
-        self.luma_res_combo.addItem("256 width", 256)
-        self.luma_res_combo.addItem("512 width", 512)
-        self.luma_res_combo.addItem("1024 width", 1024)
-        self.luma_res_combo.addItem("2048 width", 2048)
-        self.luma_res_combo.setCurrentIndex(self.luma_res_combo.findData(self.settings.global_.luma.res))
-        self.luma_res_combo.currentIndexChanged.connect(self.on_luma_resolution_changed)
-        controls_layout.addWidget(self.luma_res_combo)
-
         shift_label = QLabel("Frequency (Shift):", container)
         controls_layout.addWidget(shift_label)
 
@@ -154,7 +140,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         controls_layout.addWidget(self.luma_sawtooth_checkbox)
         controls_layout.addStretch()
 
-        self.luma_container = LumaContainerWidget(container, self.settings)
+        self.luma_container = LumaContainerWidget(container, self.api, self.settings)
         layout.addLayout(controls_layout)
         layout.addWidget(self.luma_container)
 
@@ -308,8 +294,9 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         ):
             if active_tab == 0:
                 self.levels_container.update_histogram(frame)
-            elif active_tab == 1 and (w := HistogramPlugin.numba_prewarm_worker) and w.done():
-                self.luma_container.update_luma(frame)
+            # The API does the update for us
+            elif active_tab == 1:
+                pass
             elif active_tab == 2:
                 self.vectorscope_container.update_histogram(frame)
             elif active_tab == 3:
@@ -317,7 +304,10 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
 
     def on_tab_changed(self, index: int) -> None:
         self.settings.global_.selected_tab = index
-        self.update_histogram()
+        if index == 1:
+            self.luma_container.view.refresh()
+        else:
+            self.update_histogram()
 
     def on_levels_bin_resolution_changed(self, index: int) -> None:
         self.settings.global_.levels.bin_res = self.levels_bin_combo.currentData()
@@ -365,17 +355,19 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.settings.global_.vectorscope.luma = value
         self.update_histogram()
 
-    def on_luma_resolution_changed(self, index: int) -> None:
-        self.settings.global_.luma.res = self.luma_res_combo.currentData()
-        self.update_histogram()
-
     def on_luma_shift_changed(self, index: int) -> None:
         self.settings.global_.luma.shift = self.luma_shift_combo.currentData()
-        self.update_histogram()
+        self.luma_container.view.refresh()
 
     def on_luma_sawtooth_changed(self, state: int) -> None:
         self.settings.global_.luma.sawtooth = self.luma_sawtooth_checkbox.isChecked()
-        self.update_histogram()
+        self.luma_container.view.refresh()
+
+    def _notify_numba_ready(self, f: Future[None]) -> None:
+        if f.exception():
+            return
+        self.luma_container.view.numba_ready = True
+        self.luma_container.view.refresh()
 
 
 @run_in_background(name="NumbaPreWarm")
@@ -383,24 +375,26 @@ def prewarm_numba() -> None:
     from .luma.numba_backend import process_luma_numba
 
     logger.debug("Starting pre-warm of process_luma_numba...")
+    dtypes = [(np.uint8, 8), (np.uint16, 16), (np.float32, 16)]
+    sawtooth_options = [False, True]
+    is_limited_options = [False, True]
 
-    # Covers contiguous and non-contiguous layouts for uint8, uint16, and float32
-    for dtype, max_val, shift_out in [(np.uint8, 255, 0), (np.uint16, 65535, 8), (np.float32, 65535, 8)]:
-        for sawtooth in [False, True]:
-            logger.debug(
-                "Pre-warm of dtype=%s, max_val=%s, shift_out=%s, sawtooth=%s",
-                dtype,
-                max_val,
-                shift_out,
-                sawtooth,
-            )
-            # Contiguous variant
-            dummy_src = np.zeros((16, 16), dtype=dtype)
-            dummy_dst = np.zeros((16, 16), dtype=np.uint8)
-            process_luma_numba(dummy_src, dummy_dst, max_val, shift_out, 4, sawtooth)
+    for (dtype, bits), sawtooth, is_limited in itertools.product(dtypes, sawtooth_options, is_limited_options):
+        # Covers contiguous and non-contiguous layouts for uint8, uint16, and float32
+        logger.debug(
+            "Pre-warm of dtype=%s, bits=%s, sawtooth=%s, is_limited=%s",
+            dtype,
+            bits,
+            sawtooth,
+            is_limited,
+        )
+        # Contiguous variant
+        dummy_src = np.zeros((16, 16), dtype=dtype)
+        dummy_dst = np.zeros((16, 16), dtype=np.uint8)
+        process_luma_numba(dummy_src, dummy_dst, bits, 4, sawtooth, is_limited)
 
-            # Non-contiguous (strided) variant
-            dummy_src_nc = np.zeros((32, 32), dtype=dtype)[::2, ::2]
-            process_luma_numba(dummy_src_nc, dummy_dst, max_val, shift_out, 4, sawtooth)
+        # Non-contiguous (strided) variant
+        dummy_src_nc = np.zeros((32, 32), dtype=dtype)[::2, ::2]
+        process_luma_numba(dummy_src_nc, dummy_dst, bits, 4, sawtooth, is_limited)
 
-    logger.debug("Pre-warm numba process_luma_numba is completed")
+        logger.debug("Pre-warm numba process_luma_numba is completed")

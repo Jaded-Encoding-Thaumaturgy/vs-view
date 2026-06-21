@@ -1,127 +1,71 @@
 from __future__ import annotations
 
+import ctypes
 from logging import getLogger
 from typing import override
 
 import numpy as np
-import vapoursynth as vs
-from PySide6.QtCore import QRect
-from PySide6.QtGui import QColor, QImage, QPainter, QPaintEvent
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QWidget
-from vstools import Range, get_lowest_value, get_peak_value
+from vstools import Range, get_y, vs
 
-from vsview.api import PluginSettings
+from vsview.api import PluginAPI, PluginGraphicsView, PluginSettings
 
 from ..settings import GlobalSettings
 
 logger = getLogger(__name__)
 
 
-class LumaWidget(QWidget):
-    BACKGROUND_COLOR = QColor(20, 20, 20)
-
-    def __init__(self, parent: QWidget, settings: PluginSettings[GlobalSettings, None]) -> None:
-        super().__init__(parent)
+class LumaView(PluginGraphicsView):
+    def __init__(self, parent: QWidget, api: PluginAPI, settings: PluginSettings[GlobalSettings, None]) -> None:
+        super().__init__(parent, api)
         self.settings = settings
-        self.scope_image = QImage()
-        self.setMinimumHeight(128)
+        self.numba_ready = False
 
     @override
-    def paintEvent(self, event: QPaintEvent) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    def on_current_frame_changed(self, n: int, f: vs.VideoFrame) -> None:
+        if self.numba_ready:
+            super().on_current_frame_changed(n, f)
 
-        # Background
-        painter.fillRect(self.rect(), self.BACKGROUND_COLOR)
+    @override
+    def get_node(self, clip: vs.VideoNode) -> vs.VideoNode:
+        if (cfam := clip.format.color_family) not in (vs.GRAY, vs.YUV):
+            logger.warning("%s input - no luma data", cfam.name)
+            return clip.std.BlankClip(format=vs.GRAY8).text.Text(f"{cfam.name} input - no luma data", 5, 4)
 
-        if self.scope_image.isNull():
-            return
-
-        img_w = self.scope_image.width()
-        img_h = self.scope_image.height()
-        widget_w = self.width()
-        widget_h = self.height()
-
-        scale = min(widget_w / img_w, widget_h / img_h)
-        target_w = int(img_w * scale)
-        target_h = int(img_h * scale)
-
-        x = (widget_w - target_w) // 2
-        y = (widget_h - target_h) // 2
-
-        painter.drawImage(QRect(x, y, target_w, target_h), self.scope_image)
-
-    def update_data(self, frame: vs.VideoFrame) -> None:
-        # Extract luma plane
-        if frame.format.color_family == vs.RGB:
-            logger.warning("RGB input — no luma data")
-            self.scope_image.fill(0)
-            self.update()
-            return
-
-        arr = np.asarray(frame[0])
-        h, w = arr.shape
-
-        # Determine step for downsampling
-        if (res := self.settings.global_.luma.res) == 0:
-            target_w = max(256, self.width())
-            target_h = max(144, self.height())
-            step = max(1, w // target_w, h // target_h)
-        else:
-            step = max(1, w // res)
-
-        # Zero-copy downsampling slice
-        arr_down = arr[::step, ::step]
+        bits = clip.format.bits_per_sample
+        shift_in = self.settings.global_.luma.shift
+        use_sawtooth = self.settings.global_.luma.sawtooth
+        sample_type = clip.format.sample_type
+        fp16 = (sample_type, bits) == (vs.FLOAT, 16)
 
         from .numba_backend import process_luma_numba
 
-        bits = frame.format.bits_per_sample
-        shift_in = self.settings.global_.luma.shift
-        use_sawtooth = self.settings.global_.luma.sawtooth
+        def modify_frame_func(n: int, f: list[vs.VideoFrame]) -> vs.VideoFrame:
+            arr = np.asarray(f[1][0], np.float32 if fp16 else None)
+            is_limited = Range.from_video(f[1]).is_limited
 
-        if frame.format.sample_type == vs.FLOAT:
-            color_range = Range.from_video(frame)
-            output_peak = get_peak_value(16, False, color_range, frame.format.color_family)
-            output_lowest = get_lowest_value(16, False, color_range, frame.format.color_family)
+            frame_dst = f[0].copy()
+            dst_ptr = ctypes.cast(frame_dst.get_write_ptr(0), ctypes.POINTER(ctypes.c_uint8))
+            dst_arr = np.ctypeslib.as_array(dst_ptr, shape=(frame_dst.height, frame_dst.get_stride(0)))
 
-            scale = (output_peak - output_lowest) / 65535.0
-            offset = (16 << 8) / 65535.0 if color_range.is_limited else 0.0
+            process_luma_numba(arr, dst_arr, bits, shift_in, use_sawtooth, is_limited)
 
-            arr_down = (arr_down * scale + offset).astype(np.float32)
-            max_val = 65535
-            shift_out = 8
-        else:
-            max_val = (1 << bits) - 1
-            shift_out = max(0, bits - 8)
+            return frame_dst
 
-        dst_arr = np.empty(arr_down.shape, dtype=np.uint8)
+        blank = clip.std.BlankClip(format=vs.GRAY8, keep=True)
 
-        process_luma_numba(arr_down, dst_arr, max_val, shift_out, shift_in, use_sawtooth)
-
-        self.scope_image = QImage(
-            dst_arr,  # type: ignore[call-overload]
-            *dst_arr.shape[::-1],
-            dst_arr.strides[0],
-            QImage.Format.Format_Grayscale8,
-        ).copy()
-        self.update()
-
-    def clear(self) -> None:
-        self.scope_image = QImage()
-        self.update()
+        return blank.std.ModifyFrame(clips=[blank, get_y(clip)], selector=modify_frame_func)
 
 
 class LumaContainerWidget(QFrame):
-    def __init__(self, parent: QWidget, settings: PluginSettings[GlobalSettings, None]) -> None:
+    def __init__(self, parent: QWidget, api: PluginAPI, settings: PluginSettings[GlobalSettings, None]) -> None:
         super().__init__(parent)
+        self.api = api
         self.settings = settings
         self.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Sunken)
 
         self.current_layout = QHBoxLayout(self)
         self.current_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.luma_widget = LumaWidget(self, self.settings)
-        self.current_layout.addWidget(self.luma_widget)
-
-    def update_luma(self, frame: vs.VideoFrame) -> None:
-        self.luma_widget.update_data(frame)
+        self.view = LumaView(self, self.api, self.settings)
+        self.current_layout.addWidget(self.view)

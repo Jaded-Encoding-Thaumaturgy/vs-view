@@ -19,20 +19,36 @@ numba_logger.setLevel(INFO)
 def process_luma_numba(
     src: npt.NDArray[np.integer[Any] | np.floating[Any]],
     dst: npt.NDArray[np.uint8],
-    max_val: int,
-    shift_out: int,
+    bits: int,
     shift_in: int,
     use_sawtooth: bool,
+    is_limited: bool,
 ) -> None:
     h, w = src.shape
-    modulo_limit = max_val + 1
     is_float = src.dtype.kind == "f"
+
+    if is_float:
+        max_val = 65535
+        shift_out = 8
+        if is_limited:
+            scale = 56064.0 / 65535.0
+            offset = 4096.0 / 65535.0
+        else:
+            scale = 1.0
+            offset = 0.0
+    else:
+        max_val = (1 << bits) - 1
+        shift_out = max(0, bits - 8)
+        scale = 1.0
+        offset = 0.0
+
+    modulo_limit = max_val + 1
 
     if use_sawtooth:
         for y in numba.prange(h):
             for x in range(w):
                 if is_float:
-                    p_val = round(src[y, x] * max_val)
+                    p_val = round((src[y, x] * scale + offset) * max_val)
                     p = 0 if p_val < 0 else min(p_val, max_val)
                 else:
                     p = int(src[y, x])
@@ -44,7 +60,7 @@ def process_luma_numba(
         for y in numba.prange(h):
             for x in range(w):
                 if is_float:
-                    p_val = round(src[y, x] * max_val)
+                    p_val = round((src[y, x] * scale + offset) * max_val)
                     p = 0 if p_val < 0 else min(p_val, max_val)
                 else:
                     p = int(src[y, x])
