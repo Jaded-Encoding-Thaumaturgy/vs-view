@@ -23,9 +23,16 @@ class VectorscopeSettings(BaseModel):
     luma: int = 192
 
 
+class LumaSettings(BaseModel):
+    res: Literal[0, 256, 512, 1024, 2048] = 0
+    shift: int = 4
+    sawtooth: bool = False
+
+
 class GlobalSettings(BaseModel):
     selected_tab: int = 0
 
     levels: LevelsSettings = Field(default_factory=LevelsSettings)
     waveform: WaveformSettings = Field(default_factory=WaveformSettings)
     vectorscope: VectorscopeSettings = Field(default_factory=VectorscopeSettings)
+    luma: LumaSettings = Field(default_factory=LumaSettings)

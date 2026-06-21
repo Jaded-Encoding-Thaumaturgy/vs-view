@@ -1,5 +1,6 @@
 from typing import override
 
+import numpy as np
 from jetpytools import fallback
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
@@ -14,9 +15,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from vsview.api import PluginAPI, VideoOutputProxy, WidgetPluginBase, run_in_loop
+from vsview.api import PluginAPI, WidgetPluginBase, run_in_background, run_in_loop
 
 from .levels import HistogramContainerWidget
+from .luma import LumaContainerWidget
 from .settings import GlobalSettings
 from .vectorscope import VectorscopeContainerWidget
 from .waveform import WaveformContainerWidget
@@ -31,6 +33,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
 
         self.tab_widget = QTabWidget(self)
         self.setup_levels()
+        self.setup_luma()
         self.setup_vectorscope()
         self.setup_waveform()
 
@@ -42,6 +45,10 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(self.tab_widget)
+
+        # Start Numba JIT background warming thread
+        self._numba_prewarm_worker = self._prewarm_numba()
+        self._numba_prewarm_worker.add_done_callback(lambda f: self.update_histogram() if not f.exception() else None)
 
     def setup_levels(self) -> None:
         container = QWidget(self)
@@ -97,6 +104,49 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         layout.addWidget(self.levels_container)
 
         self.tab_widget.addTab(container, "Levels")
+
+    def setup_luma(self) -> None:
+        container = QWidget(self)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        controls_layout = QHBoxLayout()
+        controls_layout.setContentsMargins(8, 8, 8, 4)
+
+        res_label = QLabel("Resolution:", container)
+        controls_layout.addWidget(res_label)
+
+        self.luma_res_combo = QComboBox(container)
+        self.luma_res_combo.addItem("Auto", 0)
+        self.luma_res_combo.addItem("256 width", 256)
+        self.luma_res_combo.addItem("512 width", 512)
+        self.luma_res_combo.addItem("1024 width", 1024)
+        self.luma_res_combo.addItem("2048 width", 2048)
+        self.luma_res_combo.setCurrentIndex(self.luma_res_combo.findData(self.settings.global_.luma.res))
+        self.luma_res_combo.currentIndexChanged.connect(self.on_luma_resolution_changed)
+        controls_layout.addWidget(self.luma_res_combo)
+
+        shift_label = QLabel("Frequency (Shift):", container)
+        controls_layout.addWidget(shift_label)
+
+        self.luma_shift_combo = QComboBox(container)
+        for i in range(1, 8 + 1):
+            self.luma_shift_combo.addItem(f"{2**i} cycles ({i})", i)
+        self.luma_shift_combo.setCurrentIndex(self.luma_shift_combo.findData(self.settings.global_.luma.shift))
+        self.luma_shift_combo.currentIndexChanged.connect(self.on_luma_shift_changed)
+        controls_layout.addWidget(self.luma_shift_combo)
+
+        self.luma_sawtooth_checkbox = QCheckBox("Sawtooth style", container)
+        self.luma_sawtooth_checkbox.setChecked(self.settings.global_.luma.sawtooth)
+        self.luma_sawtooth_checkbox.stateChanged.connect(self.on_luma_sawtooth_changed)
+        controls_layout.addWidget(self.luma_sawtooth_checkbox)
+        controls_layout.addStretch()
+
+        self.luma_container = LumaContainerWidget(container, self.settings)
+        layout.addLayout(controls_layout)
+        layout.addWidget(self.luma_container)
+
+        self.tab_widget.addTab(container, "Luma")
 
     def setup_vectorscope(self) -> None:
         container = QWidget(self)
@@ -223,10 +273,6 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.update_histogram()
 
     @override
-    def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
-        self.update_histogram(voutput=voutput)
-
-    @override
     def on_current_frame_changed(self, n: int) -> None:
         self.update_histogram(n)
 
@@ -235,21 +281,22 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.update_histogram()
 
     @run_in_loop(return_future=False)
-    def update_histogram(self, n: int | None = None, voutput: VideoOutputProxy | None = None) -> None:
-        if self.api.is_playing:
+    def update_histogram(self, n: int | None = None) -> None:
+        if not self.isVisible() or self.api.is_playing:
             return
 
         n = fallback(n, self.api.current_frame)
-        voutput = fallback(voutput, self.api.current_voutput)
 
         active_tab = self.tab_widget.currentIndex()
 
-        with self.api.vs_context(), voutput.vs_output.clip.get_frame(n) as frame:
+        with self.api.vs_context(), self.api.current_voutput.vs_output.clip.get_frame(n) as frame:
             if active_tab == 0:
                 self.levels_container.update_histogram(frame)
-            elif active_tab == 1:
-                self.vectorscope_container.update_histogram(frame)
+            elif active_tab == 1 and self._numba_prewarm_worker.done():
+                self.luma_container.update_luma(frame)
             elif active_tab == 2:
+                self.vectorscope_container.update_histogram(frame)
+            elif active_tab == 3:
                 self.waveform_container.update_histogram(frame)
 
     def on_tab_changed(self, index: int) -> None:
@@ -301,3 +348,31 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
     def on_vectorscope_luma_changed(self, value: int) -> None:
         self.settings.global_.vectorscope.luma = value
         self.update_histogram()
+
+    def on_luma_resolution_changed(self, index: int) -> None:
+        self.settings.global_.luma.res = self.luma_res_combo.currentData()
+        self.update_histogram()
+
+    def on_luma_shift_changed(self, index: int) -> None:
+        self.settings.global_.luma.shift = self.luma_shift_combo.currentData()
+        self.update_histogram()
+
+    def on_luma_sawtooth_changed(self, state: int) -> None:
+        self.settings.global_.luma.sawtooth = self.luma_sawtooth_checkbox.isChecked()
+        self.update_histogram()
+
+    @run_in_background(name="NumbaPreWarm")
+    def _prewarm_numba(self) -> None:
+        from .luma.numba_backend import process_luma_numba
+
+        # Covers contiguous and non-contiguous layouts for uint8, uint16, and float32
+        for dtype, max_val, shift_out in [(np.uint8, 255, 0), (np.uint16, 65535, 8), (np.float32, 65535, 8)]:
+            for sawtooth in [False, True]:
+                # Contiguous variant
+                dummy_src = np.zeros((16, 16), dtype=dtype)
+                dummy_dst = np.zeros((16, 16), dtype=np.uint8)
+                process_luma_numba(dummy_src, dummy_dst, max_val, shift_out, 4, sawtooth)
+
+                # Non-contiguous (strided) variant
+                dummy_src_nc = np.zeros((32, 32), dtype=dtype)[::2, ::2]
+                process_luma_numba(dummy_src_nc, dummy_dst, max_val, shift_out, 4, sawtooth)

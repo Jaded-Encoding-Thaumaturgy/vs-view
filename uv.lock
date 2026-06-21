@@ -2419,6 +2419,7 @@ requires-dist = [
 name = "vsview-histogram"
 source = { editable = "src/plugins/histogram" }
 dependencies = [
+    { name = "numba" },
     { name = "numpy" },
     { name = "vsjetpack" },
     { name = "vsview" },
@@ -2426,6 +2427,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "numba", specifier = ">=0.65.1" },
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "vsjetpack", specifier = ">=1.5.0" },
     { name = "vsview", editable = "." },
