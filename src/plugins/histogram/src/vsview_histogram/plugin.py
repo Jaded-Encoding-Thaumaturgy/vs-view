@@ -1,3 +1,6 @@
+from concurrent.futures import Future
+from logging import getLogger
+from threading import Lock
 from typing import override
 
 import numpy as np
@@ -23,10 +26,15 @@ from .settings import GlobalSettings
 from .vectorscope import VectorscopeContainerWidget
 from .waveform import WaveformContainerWidget
 
+logger = getLogger(__name__)
+lock = Lock()
+
 
 class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
     identifier = "jet_vsview_histogram"
     display_name = "Histogram"
+
+    numba_prewarm_worker: Future[None] | None = None
 
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent, api)
@@ -47,8 +55,12 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         main_layout.addWidget(self.tab_widget)
 
         # Start Numba JIT background warming thread
-        self._numba_prewarm_worker = self._prewarm_numba()
-        self._numba_prewarm_worker.add_done_callback(lambda f: self.update_histogram() if not f.exception() else None)
+        with lock:
+            if HistogramPlugin.numba_prewarm_worker is None:
+                HistogramPlugin.numba_prewarm_worker = prewarm_numba()
+        HistogramPlugin.numba_prewarm_worker.add_done_callback(
+            lambda f: self.update_histogram() if not f.exception() else None
+        )
 
     def setup_levels(self) -> None:
         container = QWidget(self)
@@ -296,7 +308,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         ):
             if active_tab == 0:
                 self.levels_container.update_histogram(frame)
-            elif active_tab == 1 and self._numba_prewarm_worker.done():
+            elif active_tab == 1 and (w := HistogramPlugin.numba_prewarm_worker) and w.done():
                 self.luma_container.update_luma(frame)
             elif active_tab == 2:
                 self.vectorscope_container.update_histogram(frame)
@@ -365,18 +377,30 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.settings.global_.luma.sawtooth = self.luma_sawtooth_checkbox.isChecked()
         self.update_histogram()
 
-    @run_in_background(name="NumbaPreWarm")
-    def _prewarm_numba(self) -> None:
-        from .luma.numba_backend import process_luma_numba
 
-        # Covers contiguous and non-contiguous layouts for uint8, uint16, and float32
-        for dtype, max_val, shift_out in [(np.uint8, 255, 0), (np.uint16, 65535, 8), (np.float32, 65535, 8)]:
-            for sawtooth in [False, True]:
-                # Contiguous variant
-                dummy_src = np.zeros((16, 16), dtype=dtype)
-                dummy_dst = np.zeros((16, 16), dtype=np.uint8)
-                process_luma_numba(dummy_src, dummy_dst, max_val, shift_out, 4, sawtooth)
+@run_in_background(name="NumbaPreWarm")
+def prewarm_numba() -> None:
+    from .luma.numba_backend import process_luma_numba
 
-                # Non-contiguous (strided) variant
-                dummy_src_nc = np.zeros((32, 32), dtype=dtype)[::2, ::2]
-                process_luma_numba(dummy_src_nc, dummy_dst, max_val, shift_out, 4, sawtooth)
+    logger.debug("Starting pre-warm of process_luma_numba...")
+
+    # Covers contiguous and non-contiguous layouts for uint8, uint16, and float32
+    for dtype, max_val, shift_out in [(np.uint8, 255, 0), (np.uint16, 65535, 8), (np.float32, 65535, 8)]:
+        for sawtooth in [False, True]:
+            logger.debug(
+                "Pre-warm of dtype=%s, max_val=%s, shift_out=%s, sawtooth=%s",
+                dtype,
+                max_val,
+                shift_out,
+                sawtooth,
+            )
+            # Contiguous variant
+            dummy_src = np.zeros((16, 16), dtype=dtype)
+            dummy_dst = np.zeros((16, 16), dtype=np.uint8)
+            process_luma_numba(dummy_src, dummy_dst, max_val, shift_out, 4, sawtooth)
+
+            # Non-contiguous (strided) variant
+            dummy_src_nc = np.zeros((32, 32), dtype=dtype)[::2, ::2]
+            process_luma_numba(dummy_src_nc, dummy_dst, max_val, shift_out, 4, sawtooth)
+
+    logger.debug("Pre-warm numba process_luma_numba is completed")
