@@ -282,7 +282,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
 
     @run_in_loop(return_future=False)
     def update_histogram(self, n: int | None = None) -> None:
-        if not self.isVisible() or self.api.is_playing:
+        if not self.isVisible() or self.api.is_playing or not self.isEnabled():
             return
 
         n = fallback(n, self.api.current_frame)
