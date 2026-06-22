@@ -1,5 +1,4 @@
 import itertools
-from concurrent.futures import Future
 from logging import getLogger
 from threading import Lock
 from typing import override
@@ -18,6 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from vsengine import UnifiedFuture
 
 from vsview.api import PluginAPI, WidgetPluginBase, run_in_background, run_in_loop
 
@@ -28,14 +28,14 @@ from .vectorscope import VectorscopeContainerWidget
 from .waveform import WaveformContainerWidget
 
 logger = getLogger(__name__)
-lock = Lock()
 
 
 class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
     identifier = "jet_vsview_histogram"
     display_name = "Histogram"
 
-    numba_prewarm_worker: Future[None] | None = None
+    numba_prewarm_worker: UnifiedFuture[None] | None = None
+    lock = Lock()
 
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent, api)
@@ -56,10 +56,10 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         main_layout.addWidget(self.tab_widget)
 
         # Start Numba JIT background warming thread
-        with lock:
+        with self.lock:
             if HistogramPlugin.numba_prewarm_worker is None:
                 HistogramPlugin.numba_prewarm_worker = prewarm_numba()
-        HistogramPlugin.numba_prewarm_worker.add_done_callback(self._notify_numba_ready)
+        HistogramPlugin.numba_prewarm_worker.map(lambda _: self._notify_numba_ready())
 
     def setup_levels(self) -> None:
         container = QWidget(self)
@@ -363,9 +363,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.settings.global_.luma.sawtooth = self.luma_sawtooth_checkbox.isChecked()
         self.luma_container.view.refresh()
 
-    def _notify_numba_ready(self, f: Future[None]) -> None:
-        if f.exception():
-            return
+    def _notify_numba_ready(self) -> None:
         self.luma_container.view.numba_ready = True
         self.luma_container.view.refresh()
 
@@ -381,13 +379,7 @@ def prewarm_numba() -> None:
 
     for (dtype, bits), sawtooth, is_limited in itertools.product(dtypes, sawtooth_options, is_limited_options):
         # Covers contiguous and non-contiguous layouts for uint8, uint16, and float32
-        logger.debug(
-            "Pre-warm of dtype=%s, bits=%s, sawtooth=%s, is_limited=%s",
-            dtype,
-            bits,
-            sawtooth,
-            is_limited,
-        )
+        logger.debug("Pre-warm of dtype=%s, bits=%s, sawtooth=%s, is_limited=%s", dtype, bits, sawtooth, is_limited)
         # Contiguous variant
         dummy_src = np.zeros((16, 16), dtype=dtype)
         dummy_dst = np.zeros((16, 16), dtype=np.uint8)
