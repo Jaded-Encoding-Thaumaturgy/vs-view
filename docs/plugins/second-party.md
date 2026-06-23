@@ -43,6 +43,14 @@ Second-party plugins are officially maintained but distributed as separate packa
 
     [:lucide-move-right: Details](#frameprops-extended) · [:fontawesome-brands-github: Source](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/frameprops-extended)
 
+- :lucide-bar-chart-2: **Histogram**
+
+    ---
+
+    Per-frame video scopes: Levels, Luma, Vectorscope, and Waveform.
+
+    [:lucide-move-right: Details](#histogram) · [:fontawesome-brands-github: Source](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/histogram)
+
 - :lucide-layers-2: **Split Planes**
 
     ---
@@ -150,6 +158,77 @@ You can explicitly exclude specific outputs by passing the `allow_comp` keyword 
     ```
 
 The FFT Spectrum tool provides a visualization of the Fast Fourier Transform (FFT) spectrum of all the planes of a video clip.
+
+---
+
+## Histogram [ :fontawesome-brands-github: ](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/histogram){ title="Source Code" }
+
+=== "pip"
+    ```bash title="Install Histogram"
+    pip install vsview-histogram
+    ```
+=== "uv"
+    ```bash title="Add Histogram"
+    uv add vsview-histogram
+    ```
+
+Provides per-frame video scopes as tabs inside a single panel. 
+
+- Updates are paused during playback and resume on the active tab when playback stops.
+- Right-click any plot to copy or save the view.
+
+!!! note
+    The Luma tab uses [Numba](https://numba.pydata.org/) JIT compilation. A background pre-warm runs at startup; the tab is inactive until it completes.
+
+### Levels
+
+Plots a per-plane pixel value histogram for the current frame.
+
+| Control               | Options              | Description                                                                             |
+| :-------------------- | :------------------- | :-------------------------------------------------------------------------------------- |
+| **Bin resolution**    | Auto, 256, 512, 1024 | Number of histogram bins. Auto scales to the panel width.                               |
+| **Clamp factor**      | 0.001 % – 100 %      | Clips peak bin counts to this percentage of total pixels, making smaller peaks visible. |
+| **Show unsafe zones** | on / off             | Highlights broadcast-illegal ranges (YUV limited range only).                           |
+
+### Luma
+
+Displays a luma scope using a VapourSynth `ModifyFrame` node, rendered through the standard graphics view.
+
+| Control               | Options                      | Description                                                         |
+| :-------------------- | :--------------------------- | :------------------------------------------------------------------ |
+| **Frequency (Shift)** | 2 – 256 cycles (shift 1 – 8) | Controls the number of luma cycles displayed across the scope.      |
+| **Sawtooth style**    | on / off                     | Switches the rendering style from sine-like to a sawtooth waveform. |
+
+Only GRAY and YUV inputs are supported. RGB input shows an error overlay.
+
+### Vectorscope
+
+Plots chroma (U/V) distribution on a 2D plane.
+
+Graticules show 75 % and 100 % saturation circles, a skin-tone reference line, and primary/secondary color targets
+that automatically adjust based on the clip's color matrix (supporting Rec. 601, Rec. 709, Rec. 2020, and ST 240M).
+
+| Control        | Options                                | Description                                                                                                                                           |
+| :------------- | :------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Mode**       | Density, Chroma Wheel, Pixel Color     | **Density**: logarithmic heat-map with a phosphor color table.<br>**Chroma Wheel**: density map drawn over a full-color UV background wheel.<br>**Pixel Color**: each pixel plotted at its actual RGB-converted color. |
+| **Resolution** | Auto, 256, 512, 1024                   | Size of the internal scope image (square). Auto caps to the bit depth limit.                                                                           |
+| **Matrix**     | Auto, BT.709, BT.601, BT.2020, ST 240M | Color matrix coefficients used for target graticules and signal conversion. Auto detects from clip properties or resolution.                            |
+| **Luma**       | 0 – 255                                | Fixed luma value used for color reconstruction in Chroma Wheel mode. Only active in that mode.                                                         |
+
+RGB input is not supported and shows a warning. GRAY input plots all pixels at neutral chroma.
+
+### Waveform
+
+Plots pixel values column-by-column as a waveform. Logarithmic density scaling is applied per-column.
+
+| Control          | Options              | Description                                                                                                             |
+| :--------------- | :------------------- | :---------------------------------------------------------------------------------------------------------------------- |
+| **Mode**         | Luma, RGB/YUV Parade | **Luma**: single Y-plane waveform.<br>**Parade**: one waveform per plane side-by-side (R/G/B or Y/U/V, depending on color family). |
+| **Resolution**   | Auto, 256, 512, 1024 | Vertical resolution of the scope. Auto caps to the bit depth limit.                                                     |
+| **Show zones**   | on / off             | Overlays the neutral line and broadcast-limit lines (16/235 for luma, 16/240 for chroma) with shaded unsafe regions.    |
+| **Dynamic gain** | on / off             | When on, scales brightness relative to the densest column. When off, scales relative to frame height.                   |
+| **Gain**         | 0.1× – 10.0×         | Multiplier applied on top of the logarithmic scale.                                                                     |
+
 
 ---
 
