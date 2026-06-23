@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from enum import StrEnum
 from functools import cache
 from logging import getLogger
-from typing import override
+from typing import Literal, override
 
 import numpy as np
 import vapoursynth as vs
@@ -11,24 +12,124 @@ from jetpytools import cachedproperty
 from PySide6.QtCore import QPointF, QRect, Qt
 from PySide6.QtGui import QColor, QContextMenuEvent, QImage, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QWidget
-from vstools import Range, get_lowest_value, get_peak_value
+from vstools import Matrix, Range, get_lowest_value, get_peak_value
 
 from vsview.api import PluginAPI, PluginSettings
 
 from ..settings import GlobalSettings
 from ..utils import CustomContextMenu
 
-YUV_TO_RGB_MAT = np.array(
-    [
-        [1.000000, 1.000000, 1.000000],
-        [0.000000, -0.187324, 1.855600],
-        [1.574800, -0.468124, 0.000000],
-    ],
-    dtype=np.float32,
-)
-"""Rec. 709 inverse conversion matrix for Y, U-128, V-128 -> R, G, B"""
-
 logger = getLogger(__name__)
+
+# Math to calculate a target coordinate on the 256x256 canvas from RGB (range 0-1) and matrix coefficients (Kr, Kb):
+#   Kg = 1.0 - Kr - Kb
+#   Y = Kr * R + Kg * G + Kb * B
+#   U_val = (B - Y) / (2 * (1 - Kb))
+#   V_val = (R - Y) / (2 * (1 - Kr))
+#   x = 128.0 + U_val * (240 - 16)
+#   y = 128.0 - V_val * (240 - 16)
+BT709_TARGETS = {
+    "R": (102, 16),
+    "M": (214, 26),
+    "B": (240, 138),
+    "C": (154, 240),
+    "G": (42, 230),
+    "Y": (16, 118),
+}
+BT2020_TARGETS = {
+    "R": (97, 16),
+    "M": (209, 25),
+    "B": (240, 137),
+    "C": (159, 240),
+    "G": (47, 231),
+    "Y": (16, 119),
+}
+BT601_TARGETS = {
+    "R": (90, 16),
+    "M": (202, 34),
+    "B": (240, 146),
+    "C": (166, 240),
+    "G": (54, 222),
+    "Y": (16, 110),
+}
+ST240M_TARGETS = {
+    "R": (102, 16),
+    "M": (214, 28),
+    "B": (240, 140),
+    "C": (154, 240),
+    "G": (42, 228),
+    "Y": (16, 116),
+}
+
+
+class VectorScopeMatrix(StrEnum):
+    BT709 = "bt709"
+    BT601 = "bt601"
+    BT2020_NCL = "bt2020"
+    ST240_M = "st240m"
+
+    @property
+    def yuv_to_rgb_mat(self) -> np.ndarray[tuple[Literal[3], Literal[3]], np.dtype[np.float32]]:
+        return _YUV_TO_RGB_MATS[self]
+
+    @property
+    def targets(self) -> dict[str, tuple[int, int]]:
+        return _TARGETS[self]
+
+    @classmethod
+    def from_matrix(cls, current: Matrix) -> VectorScopeMatrix:
+        match current:
+            case Matrix.BT470_BG | Matrix.ST170_M:
+                return VectorScopeMatrix.BT601
+            case Matrix.BT2020_NCL | Matrix.BT2020_CL:
+                return VectorScopeMatrix.BT2020_NCL
+            case Matrix.ST240_M:
+                return VectorScopeMatrix.ST240_M
+            case _:
+                return VectorScopeMatrix.BT709
+
+
+_YUV_TO_RGB_MATS = {
+    VectorScopeMatrix.BT601: np.asarray(
+        [
+            [1.000000, 1.000000, 1.000000],
+            [0.000000, -0.344136, 1.772000],
+            [1.402000, -0.714136, 0.000000],
+        ],
+        dtype=np.float32,
+    ),
+    VectorScopeMatrix.BT2020_NCL: np.asarray(
+        [
+            [1.000000, 1.000000, 1.000000],
+            [0.000000, -0.164553, 1.881400],
+            [1.474600, -0.571353, 0.000000],
+        ],
+        dtype=np.float32,
+    ),
+    VectorScopeMatrix.ST240_M: np.asarray(
+        [
+            [1.000000, 1.000000, 1.000000],
+            [0.000000, -0.226622, 1.826000],
+            [1.576000, -0.476622, 0.000000],
+        ],
+        dtype=np.float32,
+    ),
+    VectorScopeMatrix.BT709: np.asarray(
+        [
+            [1.000000, 1.000000, 1.000000],
+            [0.000000, -0.187324, 1.855600],
+            [1.574800, -0.468124, 0.000000],
+        ],
+        dtype=np.float32,
+    ),
+}
+
+_TARGETS = {
+    VectorScopeMatrix.BT709: BT709_TARGETS,
+    VectorScopeMatrix.BT601: BT601_TARGETS,
+    VectorScopeMatrix.BT2020_NCL: BT2020_TARGETS,
+    VectorScopeMatrix.ST240_M: ST240M_TARGETS,
+}
 
 
 class VectorscopeWidget(QWidget):
@@ -43,6 +144,7 @@ class VectorscopeWidget(QWidget):
         self.scope_image.fill(0)
 
         self.context_menu = CustomContextMenu(self, self.api)
+        self.current_matrix = Matrix.UNSPECIFIED
 
     @cachedproperty
     def color_table(self) -> Sequence[int]:
@@ -73,7 +175,7 @@ class VectorscopeWidget(QWidget):
 
         if self.settings.global_.vectorscope.mode == "chroma_wheel":
             # Draw high-resolution background color wheel first
-            painter.drawImage(target_rect, background_image())
+            painter.drawImage(target_rect, background_image(self._resolved_matrix))
 
             # Use additive blending to draw the density points on top
             painter.save()
@@ -105,15 +207,12 @@ class VectorscopeWidget(QWidget):
         painter.setPen(QPen(QColor(244, 164, 96, 180), 1, Qt.PenStyle.SolidLine))
         painter.drawLine(128, 128, 66, 32)
 
-        # Primary and secondary targets for Rec.709
-        targets = {"R": (102, 16), "M": (214, 26), "B": (240, 138), "C": (154, 240), "G": (42, 230), "Y": (16, 118)}
-
         painter.setPen(QPen(QColor(180, 180, 180, 200), 1))
         font = painter.font()
         font.setPointSize(6)
         painter.setFont(font)
 
-        for label, (u, v) in targets.items():
+        for label, (u, v) in self._resolved_matrix.targets.items():
             painter.drawRect(u - 3, v - 3, 6, 6)
             painter.drawText(u + 5, v + 3, label)
 
@@ -132,11 +231,6 @@ class VectorscopeWidget(QWidget):
         neutral = size // 2
 
         match fmt.color_family:
-            case vs.RGB:
-                self.scope_image.fill(0)
-                self.update()
-                logger.warning("RGB input — no chroma data")
-                return
             case vs.GRAY:
                 # Grayscale has neutral chroma
                 yuv_scaled = np.full((3, 16, 16), neutral, dtype=np.int32)
@@ -174,9 +268,13 @@ class VectorscopeWidget(QWidget):
                         yuv_scaled = yuv_int << (-shift)
                     else:
                         yuv_scaled = yuv_int
-            case _:
-                raise NotImplementedError
+            case _ as cfam:
+                self.scope_image.fill(0)
+                self.update()
+                logger.warning("%s input — no chroma data", cfam.name)
+                return
 
+        self.current_matrix = Matrix.from_video(frame, func=self.update_frame)
         yuv_scaled = yuv_scaled.clip(0, size - 1)
 
         if yuv_scaled.dtype != np.int32:
@@ -198,7 +296,7 @@ class VectorscopeWidget(QWidget):
             scale_factor = size / 256.0
             yuv_flat[0] /= scale_factor
             yuv_flat[1:] = (yuv_flat[1:] - neutral) / scale_factor
-            rgb = (yuv_flat.T @ YUV_TO_RGB_MAT).clip(0, 255).astype(np.uint8)
+            rgb = (yuv_flat.T @ self._resolved_matrix.yuv_to_rgb_mat).clip(0, 255).astype(np.uint8)
 
             # Draw into canvas
             grid = np.zeros((size, size, 4), dtype=np.uint8)
@@ -233,7 +331,7 @@ class VectorscopeWidget(QWidget):
 
             # Use fixed moderate luma for accurate hue, then scale by density for brightness
             luma = np.full_like(density, self.settings.global_.vectorscope.luma)
-            base_rgb = (np.column_stack([luma, u_val, v_val]) @ YUV_TO_RGB_MAT).clip(0, 255)
+            base_rgb = (np.column_stack([luma, u_val, v_val]) @ self._resolved_matrix.yuv_to_rgb_mat).clip(0, 255)
             colored = (base_rgb * density[:, np.newaxis]).clip(0, 255).astype(np.uint8)
 
             rgb = np.zeros((size, size, 4), dtype=np.uint8)
@@ -246,6 +344,14 @@ class VectorscopeWidget(QWidget):
             self.scope_image.setColorTable(self.color_table)
 
         self.update()
+
+    @property
+    def _resolved_matrix(self) -> VectorScopeMatrix:
+        return (
+            VectorScopeMatrix.from_matrix(self.current_matrix)
+            if (matrix := self.settings.global_.vectorscope.matrix) == "auto"
+            else VectorScopeMatrix(matrix)
+        )
 
 
 class VectorscopeContainerWidget(QFrame):
@@ -266,7 +372,7 @@ class VectorscopeContainerWidget(QFrame):
 
 
 @cache
-def background_image(size: int = 1024) -> QImage:
+def background_image(matrix: VectorScopeMatrix, size: int = 1024) -> QImage:
     pixel_scale = 256.0 / size
     u_bg = np.tile(np.arange(size, dtype=np.float32) * pixel_scale, (size, 1))
     v_bg = (256.0 - np.tile(np.arange(size, dtype=np.float32).reshape(size, 1) * pixel_scale, (1, size))).clip(0, 255)
@@ -280,7 +386,7 @@ def background_image(size: int = 1024) -> QImage:
     y_bg = 16.0 + weight * (64.0 - 16.0)
 
     yuv_bg = np.dstack([y_bg, u_bg_masked - 128.0, v_bg_masked - 128.0])
-    rgb = (yuv_bg @ YUV_TO_RGB_MAT).clip(0, 255).astype(np.uint8)
+    rgb = (yuv_bg @ matrix.yuv_to_rgb_mat).clip(0, 255).astype(np.uint8)
 
     rgba = np.zeros((size, size, 4), dtype=np.uint8)
     rgba[..., :3] = rgb

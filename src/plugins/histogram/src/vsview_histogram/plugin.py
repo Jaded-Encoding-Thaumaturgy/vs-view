@@ -182,6 +182,21 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.vectorscope_res_combo.currentIndexChanged.connect(self.on_vectorscope_resolution_changed)
         controls_layout.addWidget(self.vectorscope_res_combo)
 
+        matrix_label = QLabel("Matrix:", container)
+        controls_layout.addWidget(matrix_label)
+
+        self.vectorscope_matrix_combo = QComboBox(container)
+        self.vectorscope_matrix_combo.addItem("Auto", "auto")
+        self.vectorscope_matrix_combo.addItem("BT.709", "bt709")
+        self.vectorscope_matrix_combo.addItem("BT.601", "bt601")
+        self.vectorscope_matrix_combo.addItem("BT.2020", "bt2020")
+        self.vectorscope_matrix_combo.addItem("ST 240M", "st240m")
+        self.vectorscope_matrix_combo.setCurrentIndex(
+            self.vectorscope_matrix_combo.findData(self.settings.global_.vectorscope.matrix)
+        )
+        self.vectorscope_matrix_combo.currentIndexChanged.connect(self.on_vectorscope_matrix_changed)
+        controls_layout.addWidget(self.vectorscope_matrix_combo)
+
         luma_label = QLabel("Luma:", container)
         controls_layout.addWidget(luma_label)
 
@@ -349,6 +364,10 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
 
     def on_vectorscope_resolution_changed(self, index: int) -> None:
         self.settings.global_.vectorscope.res = self.vectorscope_res_combo.currentData()
+        self.update_histogram()
+
+    def on_vectorscope_matrix_changed(self, index: int) -> None:
+        self.settings.global_.vectorscope.matrix = self.vectorscope_matrix_combo.currentData()
         self.update_histogram()
 
     def on_vectorscope_luma_changed(self, value: int) -> None:
