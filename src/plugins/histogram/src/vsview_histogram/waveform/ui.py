@@ -9,13 +9,14 @@ import numpy.typing as npt
 import vapoursynth as vs
 from jetpytools import cachedproperty, classproperty
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPaintEvent, QPen
+from PySide6.QtGui import QColor, QContextMenuEvent, QImage, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QWidget
 from vstools import Range, get_lowest_value, get_peak_value
 
-from vsview.api import PluginSettings
+from vsview.api import PluginAPI, PluginSettings
 
 from ..settings import GlobalSettings
+from ..utils import CustomContextMenu
 
 
 class ColorName(StrEnum):
@@ -66,14 +67,27 @@ class WaveformWidget(QWidget):
     UNSAFE_FILL_COLOR = QColor(244, 67, 54, 25)
     UNSAFE_BORDER_PEN = QPen(QColor(244, 67, 54, 120), 1, Qt.PenStyle.DashLine)
 
-    def __init__(self, parent: QWidget, settings: PluginSettings[GlobalSettings, None], color_name: ColorName) -> None:
+    def __init__(
+        self,
+        parent: QWidget,
+        api: PluginAPI,
+        settings: PluginSettings[GlobalSettings, None],
+        color_name: ColorName,
+    ) -> None:
         super().__init__(parent)
+        self.api = api
         self.settings = settings
         self.color_name = color_name
         self.scope_image = QImage()
         self._is_chroma = False
         self._color_family: vs.ColorFamily = vs.UNDEFINED
         self.setMinimumHeight(150)
+
+        self.context_menu = CustomContextMenu(self, self.api)
+
+    @override
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        self.context_menu.exec(event.globalPos())
 
     @override
     def paintEvent(self, event: QPaintEvent) -> None:
@@ -208,8 +222,9 @@ class WaveformWidget(QWidget):
 
 
 class WaveformContainerWidget(QFrame):
-    def __init__(self, parent: QWidget, settings: PluginSettings[GlobalSettings, None]) -> None:
+    def __init__(self, parent: QWidget, api: PluginAPI, settings: PluginSettings[GlobalSettings, None]) -> None:
         super().__init__(parent)
+        self.api = api
         self.settings = settings
         self.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Sunken)
 
@@ -250,7 +265,7 @@ class WaveformContainerWidget(QFrame):
 
         # Only create waveforms if we don't have enough
         while len(self.waveforms) < num_needed:
-            w = WaveformWidget(self, self.settings, needed_colors[len(self.waveforms)])
+            w = WaveformWidget(self, self.api, self.settings, needed_colors[len(self.waveforms)])
             self.waveforms.append(w)
             self.current_layout.addWidget(w, stretch=1)
 

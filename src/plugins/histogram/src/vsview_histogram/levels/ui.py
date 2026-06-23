@@ -8,18 +8,18 @@ import vapoursynth as vs
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QWidget
 from vstools import Range, get_lowest_value, get_peak_value
 
-from vsview.api import PluginSettings
+from vsview.api import PluginAPI, PluginSettings
 
 if TYPE_CHECKING:
     from .charts import LevelsChartView
-
 from ..settings import GlobalSettings
 
 
 class HistogramContainerWidget(QFrame):
-    def __init__(self, parent: QWidget, settings: PluginSettings[GlobalSettings, None]) -> None:
+    def __init__(self, parent: QWidget, api: PluginAPI, settings: PluginSettings[GlobalSettings, None]) -> None:
         super().__init__(parent)
 
+        self.api = api
         self.settings = settings
 
         self.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Sunken)
@@ -50,7 +50,7 @@ class HistogramContainerWidget(QFrame):
 
         # Only create charts if we don't have enough
         while len(self.charts) < num_planes:
-            chart = LevelsChartView(self)
+            chart = LevelsChartView(self, self.api)
             self.charts.append(chart)
             self.current_layout.addWidget(chart, stretch=1)
 

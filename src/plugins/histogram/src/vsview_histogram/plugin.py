@@ -110,7 +110,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         controls_layout.addWidget(self.levels_unsafe_checkbox)
         controls_layout.addStretch()
 
-        self.levels_container = HistogramContainerWidget(container, self.settings)
+        self.levels_container = HistogramContainerWidget(container, self.api, self.settings)
         layout.addLayout(controls_layout)
         layout.addWidget(self.levels_container)
 
@@ -196,7 +196,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         controls_layout.addWidget(self.vectorscope_luma_spin)
         controls_layout.addStretch()
 
-        self.vectorscope_container = VectorscopeContainerWidget(self, self.settings)
+        self.vectorscope_container = VectorscopeContainerWidget(self, self.api, self.settings)
         layout.addLayout(controls_layout)
         layout.addWidget(self.vectorscope_container)
 
@@ -259,7 +259,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         controls_layout.addWidget(self.waveform_gain_spin)
         controls_layout.addStretch()
 
-        self.waveform_container = WaveformContainerWidget(container, self.settings)
+        self.waveform_container = WaveformContainerWidget(container, self.api, self.settings)
         layout.addLayout(controls_layout)
         layout.addWidget(self.waveform_container)
 

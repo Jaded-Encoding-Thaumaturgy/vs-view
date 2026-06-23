@@ -9,13 +9,14 @@ import numpy as np
 import vapoursynth as vs
 from jetpytools import cachedproperty
 from PySide6.QtCore import QPointF, QRect, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPaintEvent, QPen
+from PySide6.QtGui import QColor, QContextMenuEvent, QImage, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QWidget
 from vstools import Range, get_lowest_value, get_peak_value
 
-from vsview.api import PluginSettings
+from vsview.api import PluginAPI, PluginSettings
 
 from ..settings import GlobalSettings
+from ..utils import CustomContextMenu
 
 YUV_TO_RGB_MAT = np.array(
     [
@@ -31,14 +32,17 @@ logger = getLogger(__name__)
 
 
 class VectorscopeWidget(QWidget):
-    def __init__(self, parent: QWidget | None, settings: PluginSettings[GlobalSettings, None]) -> None:
+    def __init__(self, parent: QWidget | None, api: PluginAPI, settings: PluginSettings[GlobalSettings, None]) -> None:
         super().__init__(parent)
+        self.api = api
         self.settings = settings
-        self.setMinimumSize(256, 256)
+        self.setMinimumSize(128, 128)
 
-        self.scope_image = QImage(256, 256, QImage.Format.Format_Indexed8)
+        self.scope_image = QImage(128, 128, QImage.Format.Format_Indexed8)
         self.scope_image.setColorTable(self.color_table)
         self.scope_image.fill(0)
+
+        self.context_menu = CustomContextMenu(self, self.api)
 
     @cachedproperty
     def color_table(self) -> Sequence[int]:
@@ -50,6 +54,10 @@ class VectorscopeWidget(QWidget):
             b = min(255, int(i * 1.3))
             colors.append(QColor(r, g, b, 255).rgba())
         return colors
+
+    @override
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        self.context_menu.exec(event.globalPos())
 
     @override
     def paintEvent(self, event: QPaintEvent) -> None:
@@ -241,15 +249,16 @@ class VectorscopeWidget(QWidget):
 
 
 class VectorscopeContainerWidget(QFrame):
-    def __init__(self, parent: QWidget, settings: PluginSettings[GlobalSettings, None]) -> None:
+    def __init__(self, parent: QWidget, api: PluginAPI, settings: PluginSettings[GlobalSettings, None]) -> None:
         super().__init__(parent)
+        self.api = api
         self.settings = settings
         self.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Sunken)
 
         self.current_layout = QVBoxLayout(self)
         self.current_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.vectorscope = VectorscopeWidget(self, self.settings)
+        self.vectorscope = VectorscopeWidget(self, self.api, self.settings)
         self.current_layout.addWidget(self.vectorscope)
 
     def update_histogram(self, frame: vs.VideoFrame) -> None:

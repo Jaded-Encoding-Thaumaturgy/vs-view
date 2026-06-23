@@ -9,8 +9,23 @@ import vapoursynth as vs
 from jetpytools import clamp
 from PySide6.QtCharts import QAreaSeries, QChart, QChartView, QLineSeries, QValueAxis
 from PySide6.QtCore import QMargins, QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QGradient, QImage, QLinearGradient, QPainter, QPen, QResizeEvent, QTransform
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QContextMenuEvent,
+    QGradient,
+    QImage,
+    QLinearGradient,
+    QPainter,
+    QPen,
+    QResizeEvent,
+    QTransform,
+)
 from PySide6.QtWidgets import QWidget
+
+from vsview.api import PluginAPI
+
+from ..utils import CustomContextMenu
 
 
 class LevelsChartView(QChartView):
@@ -30,12 +45,14 @@ class LevelsChartView(QChartView):
     GRADIENT_WIDTH = 2048
     GRADIENT_HEIGHT = 128
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         chart = QChart(backgroundRoundness=0, backgroundVisible=True, margins=QMargins(0, 0, 0, 0))
         chart.legend().hide()
 
         super().__init__(chart, parent)
+        self.api = api
 
+        self.context_menu = CustomContextMenu(self, self.api)
         self.setMaximumHeight(512)
 
         # Series (unsafe zones are added first to render in the background)
@@ -105,6 +122,10 @@ class LevelsChartView(QChartView):
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         self.update_brush_transform()
+
+    @override
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        self.context_menu.exec(event.globalPos())
 
     def update_brush_transform(self, rect: QRectF | None = None) -> None:
         if not isinstance(rect, QRectF):
