@@ -130,12 +130,14 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.luma_shift_combo = QComboBox(container)
         for i in range(1, 8 + 1):
             self.luma_shift_combo.addItem(f"{2**i} cycles ({i})", i)
+        self.luma_shift_combo.setToolTip("Controls the number of luma cycles displayed across the scope.")
         self.luma_shift_combo.setCurrentIndex(self.luma_shift_combo.findData(self.settings.global_.luma.shift))
         self.luma_shift_combo.currentIndexChanged.connect(self.on_luma_shift_changed)
         controls_layout.addWidget(self.luma_shift_combo)
 
         self.luma_sawtooth_checkbox = QCheckBox("Sawtooth style", container)
         self.luma_sawtooth_checkbox.setChecked(self.settings.global_.luma.sawtooth)
+        self.luma_sawtooth_checkbox.setToolTip("Switches the rendering style from sine-like to a sawtooth waveform.")
         self.luma_sawtooth_checkbox.stateChanged.connect(self.on_luma_sawtooth_changed)
         controls_layout.addWidget(self.luma_sawtooth_checkbox)
         controls_layout.addStretch()
@@ -162,6 +164,12 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.vectorscope_mode_combo.addItem("Density", "density")
         self.vectorscope_mode_combo.addItem("Chroma Wheel", "chroma_wheel")
         self.vectorscope_mode_combo.addItem("Pixel Color", "pixel_color")
+        self.vectorscope_mode_combo.setToolTip(
+            "Display mode for vectorscope plots:\n"
+            "- Density: logarithmic heat-map with phosphor color table\n"
+            "- Chroma Wheel: density map drawn over a full-color UV background wheel\n"
+            "- Pixel Color: each pixel plotted at its actual RGB-converted color"
+        )
         self.vectorscope_mode_combo.setCurrentIndex(
             self.vectorscope_mode_combo.findData(self.settings.global_.vectorscope.mode)
         )
@@ -176,6 +184,9 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.vectorscope_res_combo.addItem("256x256", 256)
         self.vectorscope_res_combo.addItem("512x512", 512)
         self.vectorscope_res_combo.addItem("1024x1024", 1024)
+        self.vectorscope_res_combo.setToolTip(
+            "Size of the internal scope image (square).\n'Auto' caps to the bit depth limit."
+        )
         self.vectorscope_res_combo.setCurrentIndex(
             self.vectorscope_res_combo.findData(self.settings.global_.vectorscope.res)
         )
@@ -191,6 +202,10 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.vectorscope_matrix_combo.addItem("BT.601", "bt601")
         self.vectorscope_matrix_combo.addItem("BT.2020", "bt2020")
         self.vectorscope_matrix_combo.addItem("ST 240M", "st240m")
+        self.vectorscope_matrix_combo.setToolTip(
+            "Color matrix coefficients used for target graticules and signal conversion.\n"
+            "'Auto' detects from clip properties or resolution."
+        )
         self.vectorscope_matrix_combo.setCurrentIndex(
             self.vectorscope_matrix_combo.findData(self.settings.global_.vectorscope.matrix)
         )
@@ -205,6 +220,9 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
             minimum=0,
             maximum=255,
             value=self.settings.global_.vectorscope.luma,
+        )
+        self.vectorscope_luma_spin.setToolTip(
+            "Fixed luma value used for color reconstruction in Chroma Wheel mode.\nOnly active in Chroma Wheel mode."
         )
         self.vectorscope_luma_spin.valueChanged.connect(self.on_vectorscope_luma_changed)
         self.vectorscope_luma_spin.setEnabled(self.settings.global_.vectorscope.mode == "chroma_wheel")
@@ -232,6 +250,11 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.waveform_mode_combo = QComboBox(container)
         self.waveform_mode_combo.addItem("Luma", "luma")
         self.waveform_mode_combo.addItem("RGB/YUV Parade", "parade")
+        self.waveform_mode_combo.setToolTip(
+            "Waveform rendering layout:\n"
+            "- Luma: single Y-plane waveform\n"
+            "- RGB/YUV Parade: one waveform per plane side-by-side"
+        )
         self.waveform_mode_combo.setCurrentIndex(self.waveform_mode_combo.findData(self.settings.global_.waveform.mode))
         self.waveform_mode_combo.currentIndexChanged.connect(self.on_waveform_mode_changed)
         controls_layout.addWidget(self.waveform_mode_combo)
@@ -244,17 +267,26 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         self.waveform_res_combo.addItem("256 lines", 256)
         self.waveform_res_combo.addItem("512 lines", 512)
         self.waveform_res_combo.addItem("1024 lines", 1024)
+        self.waveform_res_combo.setToolTip("Vertical resolution of the scope.\n'Auto' caps to the bit depth limit.")
         self.waveform_res_combo.setCurrentIndex(self.waveform_res_combo.findData(self.settings.global_.waveform.res))
         self.waveform_res_combo.currentIndexChanged.connect(self.on_waveform_resolution_changed)
         controls_layout.addWidget(self.waveform_res_combo)
 
         self.waveform_zones_checkbox = QCheckBox("Show zones", container)
         self.waveform_zones_checkbox.setChecked(self.settings.global_.waveform.show_zones)
+        self.waveform_zones_checkbox.setToolTip(
+            "Overlay neutral lines and broadcast-limit lines\n"
+            "(16/235 for luma, 16/240 for chroma) with shaded unsafe regions."
+        )
         self.waveform_zones_checkbox.stateChanged.connect(self.on_waveform_unsafe_changed)
         controls_layout.addWidget(self.waveform_zones_checkbox)
 
         self.waveform_dynamic_checkbox = QCheckBox("Dynamic gain", container)
         self.waveform_dynamic_checkbox.setChecked(self.settings.global_.waveform.dynamic_gain)
+        self.waveform_dynamic_checkbox.setToolTip(
+            "When enabled, scales brightness relative to the densest column.\n"
+            "When disabled, scales relative to the frame height."
+        )
         self.waveform_dynamic_checkbox.stateChanged.connect(self.on_waveform_dynamic_gain_changed)
         controls_layout.addWidget(self.waveform_dynamic_checkbox)
 
@@ -270,6 +302,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
             singleStep=0.1,
             value=self.settings.global_.waveform.gain,
         )
+        self.waveform_gain_spin.setToolTip("Brightness multiplier applied on top of the logarithmic scale.")
         self.waveform_gain_spin.valueChanged.connect(self.on_waveform_gain_changed)
         controls_layout.addWidget(self.waveform_gain_spin)
         controls_layout.addStretch()
