@@ -2232,6 +2232,7 @@ dev = [
     { name = "vsview-comp" },
     { name = "vsview-fftspectrum" },
     { name = "vsview-frameprops-extended" },
+    { name = "vsview-histogram" },
     { name = "vsview-nativeres" },
     { name = "vsview-split-planes" },
 ]
@@ -2245,6 +2246,7 @@ plugins = [
     { name = "vsview-comp" },
     { name = "vsview-fftspectrum" },
     { name = "vsview-frameprops-extended" },
+    { name = "vsview-histogram" },
     { name = "vsview-nativeres" },
     { name = "vsview-split-planes" },
 ]
@@ -2300,6 +2302,7 @@ dev = [
     { name = "vsview-comp", editable = "src/plugins/comp" },
     { name = "vsview-fftspectrum", editable = "src/plugins/fftspectrum" },
     { name = "vsview-frameprops-extended", editable = "src/plugins/frameprops-extended" },
+    { name = "vsview-histogram", editable = "src/plugins/histogram" },
     { name = "vsview-nativeres" },
     { name = "vsview-split-planes", editable = "src/plugins/split-planes" },
 ]
@@ -2313,6 +2316,7 @@ plugins = [
     { name = "vsview-comp", editable = "src/plugins/comp" },
     { name = "vsview-fftspectrum", editable = "src/plugins/fftspectrum" },
     { name = "vsview-frameprops-extended", editable = "src/plugins/frameprops-extended" },
+    { name = "vsview-histogram", editable = "src/plugins/histogram" },
     { name = "vsview-nativeres" },
     { name = "vsview-split-planes", editable = "src/plugins/split-planes" },
 ]

@@ -99,6 +99,7 @@ plugins = [
     "vsview-comp",
     "vsview-nativeres",
     "vsview-audio-convert",
+    "vsview-histogram",
 ]
 
 [project.urls]
@@ -164,8 +165,8 @@ vsview-histogram = { workspace = true }
 
 [tool.mypy]
 mypy_path = "$MYPY_CONFIG_FILE_DIR/stubs"
-exclude = ["^submodules/"]
 exclude_gitignore = true
+exclude = ["^submodules/"]
 
 # Flags changed by --strict
 warn_return_any = false
