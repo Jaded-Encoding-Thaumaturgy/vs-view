@@ -121,13 +121,10 @@ class ExtractFramesWorker:
             clip = clip.fpng.Write(filename=str(path), compression=1, alpha=alpha)
             remapped = remap_frames(clip, frames)
 
-            def _progress(*_: Any) -> None:
+            for _ in remapped.frames(close=True):
                 if self.is_cancelled:
                     raise CancelledError("Extract frames cancelled")
                 self.progress_bar.update_progress(increment=1)
-
-            with open(os.devnull, "wb") as sink:
-                remapped.output(sink, progress_update=_progress)
 
     @run_in_background(name="ExtractQt")
     def _qt_extract(self, clip: VideoNode, alpha: VideoNode | None, path: Path, frames: Sequence[int]) -> None:
