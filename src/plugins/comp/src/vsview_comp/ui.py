@@ -8,12 +8,12 @@ from functools import partial
 from logging import getLogger
 from pathlib import Path
 from threading import Semaphore
-from typing import Any, NamedTuple, Self, override
+from typing import Any, NamedTuple, Self, overload, override
 from uuid import uuid4
 
 import jinja2
 import vsengine.video
-from jetpytools import cachedproperty
+from jetpytools import cachedproperty, clamp
 from PySide6.QtCore import (
     QBuffer,
     QCoreApplication,
@@ -21,19 +21,38 @@ from PySide6.QtCore import (
     QIODevice,
     QObject,
     QPoint,
+    QPointF,
     QRect,
+    QRectF,
     QSize,
     Qt,
     QThreadPool,
     Signal,
 )
-from PySide6.QtGui import QCursor, QIcon, QImage, QKeyEvent, QMouseEvent, QPainter, QPaintEvent, QPixmap, QWheelEvent
+from PySide6.QtGui import (
+    QBrush,
+    QCursor,
+    QIcon,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPainterPath,
+    QPaintEvent,
+    QPalette,
+    QPen,
+    QPixmap,
+    QSinglePointEvent,
+    QWheelEvent,
+)
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
     QCompleter,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -1166,3 +1185,319 @@ class BrowserID(WidgetMetadata[BrowserIDWidget]):
     def get_value(self, widget: BrowserIDWidget) -> Any:
         with self.apply_transform(widget.id, self.from_ui) as value:
             return value
+
+
+class ProbabilityCurveWidget(QWidget):
+    curveChanged = Signal()
+
+    MARGINS = 40
+    MAX_Y = 5.0
+    Y_VAL_GRID_LINES = range(int(MAX_Y) + 1)
+
+    def __init__(self, parent: QWidget, start_frame: int, end_frame: int) -> None:
+        super().__init__(parent)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)
+
+        self._start_frame = start_frame
+        self._end_frame = end_frame
+        self._dragged_index: int | None = None
+        self._hovered_index: int | None = None
+        self._points = [QPointF(0.0, 1.0), QPointF(1.0, 1.0)]
+
+    @property
+    def points(self) -> list[QPointF]:
+        return self._points.copy()
+
+    @points.setter
+    def points(self, value: Sequence[QPointF]) -> None:
+        self._points = [QPointF(p.x(), clamp(self.MAX_Y, 0.0, p.y())) for p in sorted(value, key=lambda p: p.x())]
+        if not self._points or self._points[0].x() != 0.0:
+            self._points.insert(0, QPointF(0.0, 1.0))
+        if self._points[-1].x() != 1.0:
+            self._points.append(QPointF(1.0, 1.0))
+        self.update()
+
+    @property
+    def plot_rect(self) -> QRectF:
+        m = self.MARGINS
+        w = max(1.0, self.width() - 2 * m)
+        h = max(1.0, self.height() - 2 * m)
+        return QRectF(m, m, w, h)
+
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if (
+            event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace)
+            and self._hovered_index is not None
+            and 0 < self._hovered_index < len(self.points) - 1
+        ):
+            self.points.pop(self._hovered_index)
+            self._hovered_index = None
+            self._dragged_index = None
+            self.curveChanged.emit()
+            self.update()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    @override
+    def leaveEvent(self, event: QEvent) -> None:
+        super().leaveEvent(event)
+        self._hovered_index = None
+        self.update()
+
+    @override
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.add_point_at(event)
+
+    @override
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            if (idx := self.find_point_near(event)) is not None:
+                self._dragged_index = idx
+                self.update()
+            else:
+                if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    self.add_point_at(event)
+
+    @override
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if self._dragged_index is not None:
+            nx, ny = self.to_normalized(event)
+
+            if self._dragged_index == 0:
+                nx = 0.0
+            elif self._dragged_index == len(self._points) - 1:
+                nx = 1.0
+            else:
+                min_x = self._points[self._dragged_index - 1].x() + 0.01
+                max_x = self._points[self._dragged_index + 1].x() - 0.01
+                nx = clamp(nx, min_x, max_x)
+
+            self._points[self._dragged_index] = QPointF(nx, ny)
+            self.curveChanged.emit()
+            self.update()
+        else:
+            old_hover = self._hovered_index
+            self._hovered_index = self.find_point_near(event)
+
+            if self._hovered_index != old_hover:
+                self.update()
+
+            if self._hovered_index is not None:
+                self.setCursor(Qt.CursorShape.PointingHandCursor)
+            else:
+                self.setCursor(
+                    Qt.CursorShape.CrossCursor
+                    if self.plot_rect.contains(event.position())
+                    else Qt.CursorShape.ArrowCursor
+                )
+
+    @override
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragged_index = None
+            self.update()
+        elif event.button() == Qt.MouseButton.RightButton:
+            if (idx := self.find_point_near(event)) is not None and 0 < idx < len(self._points) - 1:
+                self._points.pop(idx)
+                if self._hovered_index == idx:
+                    self._hovered_index = None
+                self.curveChanged.emit()
+                self.update()
+                event.accept()
+                return
+
+        super().mouseReleaseEvent(event)
+
+    @override
+    def paintEvent(self, event: QPaintEvent) -> None:
+        super().paintEvent(event)
+        plot_rect = self.plot_rect
+
+        with QPainter(self) as painter:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+            # Draw background grid
+            grid_color = self.palette().color(QPalette.ColorRole.WindowText)
+            grid_color.setAlphaF(0.15)
+            grid_pen = QPen(grid_color, 1, Qt.PenStyle.DashLine)
+            painter.setPen(grid_pen)
+
+            # Horizontal grid lines
+            for y_val in self.Y_VAL_GRID_LINES:
+                p_left = self.to_pixels(0.0, y_val)
+                p_right = self.to_pixels(1.0, y_val)
+                painter.drawLine(p_left, p_right)
+
+                # Draw Y labels
+                painter.setPen(self.palette().color(QPalette.ColorRole.WindowText))
+                painter.drawText(
+                    QRectF(0.0, p_left.y() - 7.0, self.MARGINS - 5, 14.0),
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                    f"{y_val:.0f}",
+                )
+                painter.setPen(grid_pen)
+
+            # Draw axes border
+            painter.setPen(QPen(self.palette().color(QPalette.ColorRole.Mid)))
+            painter.drawRect(plot_rect)
+
+            # X labels
+            painter.setPen(self.palette().color(QPalette.ColorRole.WindowText))
+            font = painter.font()
+            font.setPointSize(8)
+            painter.setFont(font)
+
+            start_lbl_rect = QRectF(plot_rect.left() - 40, plot_rect.bottom() + 5, 80, 15)
+            end_lbl_rect = QRectF(plot_rect.right() - 40, plot_rect.bottom() + 5, 80, 15)
+            painter.drawText(start_lbl_rect, Qt.AlignmentFlag.AlignCenter, f"Frame {self._start_frame}")
+            painter.drawText(end_lbl_rect, Qt.AlignmentFlag.AlignCenter, f"Frame {self._end_frame}")
+
+            # Draw active point info overlay
+            active_idx = self._dragged_index if self._dragged_index is not None else self._hovered_index
+            if active_idx is not None:
+                val = self.points[active_idx]
+                f_num = int(self._start_frame + val.x() * (self._end_frame - self._start_frame))
+                info_text = f"Point {active_idx}: Frame {f_num} (Weight: {val.y():.2f})"
+
+                painter.setPen(self.palette().color(QPalette.ColorRole.WindowText))
+                bold_font = painter.font()
+                bold_font.setBold(True)
+                painter.setFont(bold_font)
+
+                info_rect = QRectF(plot_rect.left(), 0.0, plot_rect.width(), self.MARGINS)
+                painter.drawText(info_rect, Qt.AlignmentFlag.AlignCenter, info_text)
+
+            # Plot the curve
+            curve_path = QPainterPath()
+            if self.points:
+                p0 = self.to_pixels(self.points[0])
+                curve_path.moveTo(p0)
+                for p in self.points[1:]:
+                    pt = self.to_pixels(p)
+                    curve_path.lineTo(pt)
+
+            painter.setPen(QPen(self.palette().color(QPalette.ColorRole.Highlight), 2))
+            painter.drawPath(curve_path)
+
+            # Draw control points
+            node_brush = QBrush(self.palette().color(QPalette.ColorRole.Button))
+            node_pen = QPen(self.palette().color(QPalette.ColorRole.Highlight), 1.5)
+            hover_pen = QPen(self.palette().color(QPalette.ColorRole.WindowText), 2)
+
+            for idx, p in enumerate(self.points):
+                pt = self.to_pixels(p)
+
+                if idx == self._hovered_index or idx == self._dragged_index:
+                    painter.setPen(hover_pen)
+                    radius = 6.0
+                else:
+                    painter.setPen(node_pen)
+                    radius = 4.5
+
+                painter.setBrush(node_brush)
+                painter.drawEllipse(pt, radius, radius)
+
+    @overload
+    def to_pixels(self, pt: QPointF, /) -> QPointF: ...
+    @overload
+    def to_pixels(self, x: float, y: float, /) -> QPointF: ...
+    def to_pixels(self, x_or_pt: float | QPointF, y: float | None = None) -> QPointF:
+        if isinstance(x_or_pt, QPointF):
+            x, y = x_or_pt.toTuple()
+        elif y is not None:
+            x = x_or_pt
+        else:
+            raise TypeError
+
+        plot_rect = self.plot_rect
+        px = plot_rect.left() + x * plot_rect.width()
+        py = plot_rect.bottom() - (y / self.MAX_Y) * plot_rect.height()
+        return QPointF(px, py)
+
+    def to_normalized(self, event: QSinglePointEvent) -> tuple[float, float]:
+        plot_rect = self.plot_rect
+        pt = event.position()
+        x = (pt.x() - plot_rect.left()) / plot_rect.width()
+        y = ((plot_rect.bottom() - pt.y()) / plot_rect.height()) * self.MAX_Y
+        return clamp(x, 0, 1), clamp(y, 0, self.MAX_Y)
+
+    def add_point_at(self, event: QSinglePointEvent) -> None:
+        nx, ny = self.to_normalized(event)
+        if nx <= 0.005 or nx >= 0.995:
+            return
+
+        insert_idx = 0
+        for i, p in enumerate(self._points):
+            if p.x() > nx:
+                insert_idx = i
+                break
+        else:
+            insert_idx = len(self._points)
+
+        self._points.insert(insert_idx, QPointF(nx, ny))
+        self._dragged_index = insert_idx
+        self._hovered_index = insert_idx
+        self.curveChanged.emit()
+        self.update()
+
+    def find_point_near(self, event: QSinglePointEvent) -> int | None:
+        pos = event.position()
+
+        for idx, p in enumerate(self.points):
+            pp = self.to_pixels(p)
+            dist_sq = (pp.x() - pos.x()) ** 2 + (pp.y() - pos.y()) ** 2
+            if dist_sq <= 100.0:  # 10px radius
+                return idx
+
+        return None
+
+
+class ProbabilityCurveDialog(QDialog):
+    def __init__(
+        self,
+        current_points: Sequence[QPointF],
+        start_frame: int,
+        end_frame: int,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Frame Selection Probability Curve")
+        self.resize(800, 500)
+
+        layout = QVBoxLayout(self)
+
+        info_label = QLabel(
+            "<b>Probability Curve Editor</b><br/>"
+            "Double-click on the graph to add a point. Drag points to change position and probability.<br/>"
+            "Right-click or press Delete/Backspace on a point to remove it. Outer boundaries are fixed horizontally.",
+            self,
+        )
+        info_label.setStyleSheet("color: palette(placeholder-text); font-size: 12px;")
+        layout.addWidget(info_label)
+
+        self.curve_widget = ProbabilityCurveWidget(self, start_frame, end_frame)
+        self.curve_widget.points = current_points
+        layout.addWidget(self.curve_widget, 1)
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+            | QDialogButtonBox.StandardButton.Reset,
+            self,
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        button_box.button(QDialogButtonBox.StandardButton.Reset).clicked.connect(self.on_reset)
+
+        layout.addWidget(button_box)
+
+    @property
+    def points(self) -> Sequence[QPointF]:
+        return self.curve_widget.points
+
+    def on_reset(self) -> None:
+        self.curve_widget.points = [QPointF(0.0, 1.0), QPointF(1.0, 1.0)]

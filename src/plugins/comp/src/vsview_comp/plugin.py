@@ -10,11 +10,12 @@ from uuid import uuid4
 
 from jetpytools import SupportsString
 from pydantic import BaseModel, Field
-from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, QTime, QTimer
+from PySide6.QtCore import QEvent, QObject, QPointF, QSignalBlocker, Qt, QTime, QTimer
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -63,6 +64,7 @@ from .ui import (
     LineEditCompleter,
     MainCompWidget,
     OutputDropdown,
+    ProbabilityCurveDialog,
     ProgressBar,
     TagsLineEdit,
     TagsListPopup,
@@ -134,6 +136,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._extraction_finished = False
         self._extract_paths: list[tuple[int, Path]] | None = None
         self._reported_url = ""
+        self.curve_points: Sequence[QPointF] = [QPointF(0.0, 1.0), QPointF(1.0, 1.0)]
 
         # Build UI
         main_layout = QVBoxLayout(self)
@@ -298,6 +301,11 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.random_frame_count.setToolTip("Total number of random frames to select")
         self.random_frame_count.frameChanged.connect(self.on_random_frame_count_changed)
 
+        self.curve_btn = QPushButton("Curve...", frame_count_widget)
+        self.curve_btn.setToolTip("Edit frame selection probability curve")
+        self.curve_btn.setFixedWidth(65)
+        self.curve_btn.clicked.connect(self.on_curve_button_clicked)
+
         self.dark_frame_count = FrameEdit(frame_count_widget)
         self.dark_frame_count.setMaximum(9999)
         self.dark_frame_count.setValue(0)
@@ -311,6 +319,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.light_frame_count.setToolTip("Number of random lightest frames to include")
 
         frame_count_layout.addWidget(self.random_frame_count)
+        frame_count_layout.addWidget(self.curve_btn)
         frame_count_layout.addStretch()
         frame_count_layout.addWidget(QLabel("Dark:"))
         frame_count_layout.addWidget(self.dark_frame_count)
@@ -619,6 +628,16 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
     def on_random_frame_count_changed(self, new: Frame, old: Frame) -> None:
         self._update_buttons_state()
+
+    def on_curve_button_clicked(self) -> None:
+        dialog = ProbabilityCurveDialog(
+            self.curve_points,
+            self.frame_edit_start.value(),
+            self.frame_edit_end.value(),
+            self,
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.curve_points = dialog.points
 
     def on_add_multiple_frames(self) -> None:
         text, ok = QInputDialog.getText(

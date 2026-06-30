@@ -1,23 +1,24 @@
 from __future__ import annotations
 
 import asyncio
-import os
+import random
 import re
 import threading
+from bisect import bisect_left
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import CancelledError, Future, wait
 from contextlib import suppress
 from datetime import UTC, datetime
 from http.cookiejar import CookieJar
 from itertools import chain
-from logging import getLogger
+from logging import DEBUG, getLogger
 from operator import attrgetter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import niquests
 import niquests.cookies
-from jetpytools import cachedproperty, ndigits
+from jetpytools import cachedproperty, clamp, ndigits
 from pathvalidate import sanitize_filepath
 from PySide6.QtCore import QThreadPool
 from PySide6.QtGui import QImage
@@ -29,7 +30,7 @@ from vsview.api import Packer, PluginAPI, PluginSecrets, PluginSettings, Time, r
 from ._metadata import COOKIE_KEY, LOGIN_CONTEXT
 from .models import SlowPicsSources, SlowPicsUploadResponse, TMDBPayload, TMDBTitle, TMDBTitleData
 from .ui import FrameSourceProvider, ProgressBar
-from .utils import LogNiquestsErrors, UploadError, get_random_number_interval, get_slowpics_headers
+from .utils import LogNiquestsErrors, UploadError, get_probability_cdf, get_slowpics_headers
 
 if TYPE_CHECKING:
     from .plugin import CompPlugin, GlobalSettings
@@ -174,6 +175,7 @@ class SelectFrameWorker:
         self.light = parent.light_frame_count.value()
         self.normal = parent.random_frame_count.value() - self.dark - self.light
         self.voutputs = parent.selected_voutputs
+        self.curve_points = parent.curve_points
         self.is_cancelled = False
 
         # Existing frames to avoid duplicates
@@ -230,19 +232,30 @@ class SelectFrameWorker:
             )
             return random_frames
 
-        while len(random_frames) < self.normal:
+        cdf, total_weight = get_probability_cdf(start_frame, end_frame, self.curve_points)
+
+        # Perform Inverse Transform Stratified Sampling (ITSS)
+        for j in range(self.normal):
             if self.is_cancelled:
                 raise CancelledError("Select frames cancelled")
 
-            for _ in range(self.ALLOWED_FRAME_SEARCHES):
-                rnum = get_random_number_interval(
-                    start_frame,
-                    end_frame,
-                    self.normal,
-                    len(random_frames),
-                    self.checked,
-                )
-                self.checked.append(rnum)
+            lo_val = j * (total_weight / self.normal)
+            hi_val = (j + 1) * (total_weight / self.normal)
+            logger.log(DEBUG - 1, "lo_val: %.4f, hi_val: %.4f, total_weight: %.4f", lo_val, hi_val, total_weight)
+
+            for k in range(self.ALLOWED_FRAME_SEARCHES):
+                logger.log(DEBUG - 1, "k: %s", k)
+
+                if self.is_cancelled:
+                    raise CancelledError("Select frames cancelled")
+
+                u = random.uniform(lo_val, hi_val)
+                f_idx = clamp(bisect_left(cdf, u), 0, end_frame - start_frame - 1)
+                rnum = start_frame + f_idx
+                logger.log(DEBUG - 1, "u: %.4f, f_idx: %s, rnum: %s", u, f_idx, rnum)
+
+                if rnum in self.checked:
+                    continue
 
                 is_valid = True
                 if self.should_check_pict or self.should_check_combed:
@@ -271,10 +284,20 @@ class SelectFrameWorker:
 
                         if is_pict_type_not_selected or is_combed:
                             is_valid = False
+                            logger.log(
+                                DEBUG - 1,
+                                "Invalid frame found: %s (from u: %.4f). PictType not selected: %s. Combed: %s",
+                                rnum,
+                                u,
+                                is_pict_type_not_selected,
+                                is_combed,
+                            )
                             break
 
                 if is_valid:
+                    self.checked.append(rnum)
                     random_frames.append(v.frame_to_time(rnum))
+                    logger.log(DEBUG - 1, "Valid frame found: %s (from u: %.4f)", rnum, u)
                     self.progress_bar.update_progress(value=len(random_frames))
                     break
             else:
