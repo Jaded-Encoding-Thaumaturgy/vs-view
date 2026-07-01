@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.metadata
 import itertools
+import math
+from bisect import bisect_right
 from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import cache
@@ -10,6 +12,7 @@ from types import TracebackType
 from typing import override
 
 import niquests
+from jetpytools import clamp
 from PySide6.QtCore import QPointF
 
 logger = getLogger(__name__)
@@ -63,8 +66,7 @@ class LogNiquestsErrors(AbstractContextManager[None], AbstractAsyncContextManage
         return self.__exit__(exc_t, exc_val, tb)
 
 
-class UploadError(Exception):
-    pass
+class UploadError(Exception): ...
 
 
 def get_probability_cdf(start_frame: int, end_frame: int, curve_points: Sequence[QPointF]) -> tuple[list[float], float]:
@@ -76,25 +78,58 @@ def get_probability_cdf(start_frame: int, end_frame: int, curve_points: Sequence
     if num_frames <= 1:
         weights = [1.0]
     else:
-        pt_idx = 0
-        weights = list[float]()
+        weights = [
+            get_temporal_weight((f - start_frame) / (end_frame - start_frame), curve_points)
+            for f in range(start_frame, end_frame + 1)
+        ]
 
-        for f in range(start_frame, end_frame + 1):
-            x = (f - start_frame) / (end_frame - start_frame)
+    return build_cdf(weights)
 
-            while pt_idx < len(curve_points) - 2 and x > curve_points[pt_idx + 1].x():
-                pt_idx += 1
 
-            l, r = curve_points[pt_idx], curve_points[pt_idx + 1]  # noqa: E741
-            w = l.y() if l.x() == r.x() else l.y() + (r.y() - l.y()) * (x - l.x()) / (r.x() - l.x())
-            weights.append(max(0.0, w))
-
+def build_cdf(weights: Sequence[float]) -> tuple[list[float], float]:
+    """
+    Accumulates weights into a CDF. Falls back to uniform distribution if total weight is near-zero.
+    """
     cdf = list(itertools.accumulate(weights))
     total_weight = cdf[-1] if cdf else 0.0
 
-    # Fallback for ultra-low total weight
     if total_weight <= 1e-6:
-        cdf = list(itertools.accumulate([1.0] * num_frames))
-        total_weight = float(num_frames)
+        cdf = list(itertools.accumulate([1.0] * len(weights)))
+        total_weight = len(weights)
 
     return cdf, total_weight
+
+
+def get_temporal_weight(x: float, curve_points: Sequence[QPointF]) -> float:
+    """
+    Interpolates the temporal probability weight for a normalized position x in [0.0, 1.0].
+    """
+    if not curve_points:
+        return 1.0
+
+    if len(curve_points) == 1:
+        return curve_points[0].y()
+
+    x = clamp(x, 0.0, 1.0)
+    idx = bisect_right(curve_points, x, key=lambda pt: pt.x())
+
+    # Ensure idx is mapped to a valid interval segment [idx-1, idx]
+    idx = clamp(idx, 1, len(curve_points) - 1)
+    l, r = curve_points[idx - 1], curve_points[idx]  # noqa: E741
+
+    # Linear interpolation
+    w = l.y() if (dx := r.x() - l.x()) == 0.0 else l.y() + (r.y() - l.y()) * (x - l.x()) / dx
+
+    return max(0.0, w)
+
+
+def asymmetric_gaussian(x: float, mu: float, sigma_left: float, sigma_right: float) -> float:
+    """
+    Computes weight using an asymmetric Gaussian curve.
+    """
+    sigma = sigma_left if x < mu else sigma_right
+
+    if sigma <= 0.0:
+        return 1.0 if x == mu else 0.0
+
+    return math.exp(-((x - mu) ** 2) / (2 * (sigma**2)))

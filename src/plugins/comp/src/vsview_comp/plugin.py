@@ -47,6 +47,7 @@ from vsview.api import (
     Login,
     PluginAPI,
     SegmentedControl,
+    Spin,
     Time,
     TimeEdit,
     VideoOutputProxy,
@@ -109,6 +110,29 @@ class GlobalSettings(BaseModel):
             tooltip="The Slowpoke.pics credentials for login",
         ),
     ] = ""
+
+    allowed_frame_searches: Annotated[
+        int,
+        Spin(
+            label="Allowed frame searches",
+            min=10,
+            max=9999,
+            tooltip="The maximum number of search attempts to find a valid normal frame.",
+        ),
+    ] = 150
+
+    brightness_candidates: Annotated[
+        int,
+        Spin(
+            label="Brightness candidates",
+            min=0,
+            max=9999,
+            tooltip=(
+                "The number of candidate frames to analyze for finding dark/light frames.\n"
+                "0 will automatically calculate a value based on the clip length."
+            ),
+        ),
+    ] = 0
 
     pict_types_i: bool = True
     pict_types_p: bool = True
