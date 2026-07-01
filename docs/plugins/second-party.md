@@ -137,18 +137,61 @@ It features automated frame selection, filtering by picture type, and integratio
 - **Frame Selection**:
     - Choose frames manually or automatically based on frame count and time range.
     - Filter by picture types (I/P/B-frames) and combed frames.
-    - Auto-select based on frame brightness (darkest/lightest).
+    - Select the darkest and/or lightest frames using asymmetric Gaussian brightness scoring.
+- **Probability Curve**:
+    - Bias which part of the timeline random frames are drawn from using an interactive curve editor.
+    - Click **Curve...** next to the random frame count to open the editor.
 - **TMDB Integration**:
     - Search and retrieve metadata from TMDB to automatically populate collection names.
-    - Customize the naming format in the plugin settings.
+    - Customize the naming format in the plugin **Settings**.
 - **Direct Upload**:
-    - Upload extracted frames directly to [Slow.pics](https://slow.pics/).
-    - Configure login in the plugin settings to upload directly.
+    - Upload extracted frames to [Slow.pics](https://slow.pics/).
+    - Configure login in the plugin **Settings** to upload directly.
+
+### Settings
+
+| Setting                    | Default  | Description                                                                                     |
+| :------------------------- | :------- | :---------------------------------------------------------------------------------------------- |
+| **Browser ID**             | auto     | UUID sent to Slow.pics on every upload. (see [Browser ID](#browser-id)).                        |
+| **Allowed frame searches** | 150      | Max attempts per frame slot before giving up.                                                   |
+| **Brightness candidates**  | 0 (auto) | Candidate frames to analyze for dark/light selection. `0` auto-scales from clip length and FPS. |
+
+### Probability Curve Editor
+
+Click **Curve...** (next to the random frame count) to open the curve editor and bias where in the timeline random frames are sampled from.
+
+| Action                                   | Effect                                         |
+| :--------------------------------------- | :--------------------------------------------- |
+| Double-click on the graph                | Add a control point                            |
+| Drag a point                             | Adjust its position and weight (Y-axis, 0 – 5) |
+| Right-click / ++delete++ / ++backspace++ | Remove the point                               |
+| **Reset**                                | Restore flat uniform distribution              |
+
+The boundary points (start/end frame) are fixed horizontally but their weights are editable. Y = 1 everywhere gives uniform sampling.
+
+### Dark / Light Frame Selection
+
+Candidate frames are scored with an **asymmetric Gaussian** on their average luma (`PlaneStatsAverage`):
+
+- **Dark**: peak ≈ 6.5 % (σ left = 0.015, σ right = 0.15)
+- **Light**: peak ≈ 75 % (σ left = 0.45, σ right = 0.90)
+
+### Browser ID
+
+Every upload is tagged with a persistent **Browser ID** UUID so Slow.pics can associate it with your browser session.
+
+!!! tip "Claiming an anonymous upload"
+    If you uploaded without being logged in, you can still claim the comparison afterwards:
+
+    1. Copy your **Browser ID** from the plugin **Settings** (clipboard button).
+    2. In your browser's dev tools (++f12++), go to **Application → Cookies → `slow.pics`** and set `BROWSER-ID` to that value.
+    3. Reload the comparison page and claim it from the page menu.
+
+    When uploading while logged in, Slow.pics returns its own `BROWSER-ID`; the plugin adopts it automatically.
 
 ### Script Integration
 
-By default, all outputs registered in the script via `set_output` are available in the Comparison plugin.
-You can explicitly exclude specific outputs by passing the `allow_comp` keyword argument.
+All `set_output` outputs are available by default. Pass `allow_comp` to explicitly exclude specific outputs.
 
 ### VapourSynth Requirements
 - [**fpng**](https://github.com/Mikewando/vsfpng) (Optional): For slightly faster frame extraction.
