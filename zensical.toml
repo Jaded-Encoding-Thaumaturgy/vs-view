@@ -60,6 +60,7 @@ nav = [
         { "Quick Script" = "usage/workspaces/quick-script.md" },
         { "Color Management" = "usage/color-management.md" },
         { "Configuration & CLI" = "usage/configuration.md" },
+        { "Visual Studio Code Integration" = "usage/vscode.md" },
     ] },
     { "Plugins" = [
         { "Overview" = "plugins/overview.md" },
