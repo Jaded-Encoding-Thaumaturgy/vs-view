@@ -128,7 +128,7 @@ only-include = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/vsview"]
-exclude = ["README.md", "__main__.py"]
+exclude = ["README.md"]
 
 [tool.hatch.build.targets.wheel.hooks.sbom]
 source = "uv"
