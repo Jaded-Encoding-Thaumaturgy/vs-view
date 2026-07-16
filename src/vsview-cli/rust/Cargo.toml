@@ -16,14 +16,14 @@ path = "src/lib.rs"
 [dependencies]
 clap-cargo = "0.18.3"
 color-print = "0.3.7"
-pyo3-stub-gen = "0.22.0"
+pyo3-stub-gen = "0.23.0"
 
 [dependencies.clap]
 version = "4.6.0"
 features = ["derive", "env", "string", "color", "wrap_help"]
 
 [dependencies.pyo3]
-version = "0.28.3"
+version = "0.29.0"
 features = ["extension-module", "abi3-py312"]
 
 [lints.rust]
