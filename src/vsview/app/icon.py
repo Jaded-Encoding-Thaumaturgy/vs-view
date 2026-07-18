@@ -3,7 +3,7 @@ from contextlib import suppress
 from functools import partial
 from logging import DEBUG, getLogger
 from typing import Any, ClassVar
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, WeakMethod
 
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QIcon, QPalette, QPixmap
@@ -56,7 +56,13 @@ class IconReloadMixin:
 
         from ..app.settings import SettingsManager
 
-        SettingsManager.signals.globalChanged.connect(lambda: QTimer.singleShot(0, self._reload_all_icons))
+        weak = WeakMethod(self._reload_all_icons)
+
+        def _on_global_changed() -> None:
+            if (method := weak()) is not None:
+                QTimer.singleShot(0, method)
+
+        SettingsManager.signals.globalChanged.connect(_on_global_changed)
 
     def deleteLater(self) -> None:
         self._button_reloaders.clear()
