@@ -486,7 +486,7 @@ class Timeline(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        SettingsManager.signals.globalChanged.connect(self._on_settings_changed)
+        SettingsManager.signals.connect_global_weak(self._on_settings_changed)
 
         self._mode: Literal["frame", "time"] = SettingsManager.global_settings.timeline.mode
 

@@ -209,7 +209,7 @@ class TabManager(QWidget, IconReloadMixin):
 
         self._setup_shortcuts()
 
-        SettingsManager.signals.globalChanged.connect(self.set_tab_visiblity)
+        SettingsManager.signals.connect_global_weak(self.set_tab_visiblity)
 
     def _setup_shortcuts(self) -> None:
         sm = ShortcutManager()

@@ -173,10 +173,10 @@ class _PluginLimitedApi(QObject):
         self.__workspace = workspace
         self.__settings_store: _PluginSettingsStore | None = None
 
-        SettingsManager.signals.globalChanged.connect(self._on_global_settings_changed)
-        SettingsManager.signals.localChanged.connect(self._on_local_settings_changed)
-        SettingsManager.signals.aboutToSaveGlobal.connect(self.aboutToSaveGlobal.emit)
-        SettingsManager.signals.aboutToSaveLocal.connect(self.aboutToSaveLocal.emit)
+        SettingsManager.signals.connect_global_weak(self._on_global_settings_changed)
+        SettingsManager.signals.connect_local_weak(self._on_local_settings_changed)
+        SettingsManager.signals.connect_about_global_weak(self.aboutToSaveGlobal.emit)
+        SettingsManager.signals.connect_about_local_weak(self.aboutToSaveLocal.emit)
 
     @property
     def _settings_store(self) -> _PluginSettingsStore:

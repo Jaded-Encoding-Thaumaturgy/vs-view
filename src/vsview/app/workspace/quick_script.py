@@ -333,7 +333,7 @@ class CodeEditorDock(QDockWidget, IconReloadMixin):
 
         self._apply_theme()
 
-        SettingsManager.signals.globalChanged.connect(self._apply_theme)
+        SettingsManager.signals.connect_global_weak(self._apply_theme)
 
     def _apply_theme(self) -> None:
         style = get_style_by_name(SettingsManager.global_settings.appearance.editor_theme)

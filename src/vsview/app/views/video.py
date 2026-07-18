@@ -355,7 +355,7 @@ class BaseGraphicsView(QGraphicsView):
         self._sar_applied = False
 
         self.zoom_factors = SettingsManager.global_settings.view.zoom_factors.copy()
-        SettingsManager.signals.globalChanged.connect(self._on_settings_changed)
+        SettingsManager.signals.connect_global_weak(self._on_settings_changed)
 
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)

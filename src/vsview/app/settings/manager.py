@@ -1,12 +1,16 @@
 """Settings manager for vsview."""
 
 import json
+import weakref
+from collections.abc import Callable
+from inspect import ismethod
 from logging import DEBUG, getLogger
 from pathlib import Path
+from typing import Any
 
 from jetpytools import Singleton, inject_self
 from pydantic import ValidationError
-from PySide6.QtCore import QObject, QSignalBlocker, Signal
+from PySide6.QtCore import QObject, QSignalBlocker, Signal, SignalInstance
 from PySide6.QtWidgets import QApplication
 from rich.pretty import pretty_repr
 
@@ -23,6 +27,26 @@ class SettingsSignals(QObject):
     localChanged = Signal(str)  # Emits the script path hash
     aboutToSaveGlobal = Signal()
     aboutToSaveLocal = Signal(str)  # Emits the script path hash
+
+    def connect_global_weak(self, slot: Callable[..., Any], *args: Any) -> None:
+        self._wrap_global_method_signal(self.globalChanged, slot, *args)
+
+    def connect_local_weak(self, slot: Callable[..., Any], *args: Any) -> None:
+        self._wrap_local_method_signal(self.localChanged, slot, *args)
+
+    def connect_about_global_weak(self, slot: Callable[..., Any], *args: Any) -> None:
+        self._wrap_global_method_signal(self.aboutToSaveGlobal, slot, *args)
+
+    def connect_about_local_weak(self, slot: Callable[..., Any], *args: Any) -> None:
+        self._wrap_local_method_signal(self.aboutToSaveLocal, slot, *args)
+
+    def _wrap_global_method_signal(self, signal: SignalInstance, slot: Callable[..., Any], *args: Any) -> None:
+        weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
+        signal.connect(lambda: m() if (m := weak()) is not None else None, *args)
+
+    def _wrap_local_method_signal(self, signal: SignalInstance, slot: Callable[..., Any], *args: Any) -> None:
+        weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
+        signal.connect(lambda p: m(p) if (m := weak()) is not None else None, *args)
 
 
 class SettingsManager(Singleton):

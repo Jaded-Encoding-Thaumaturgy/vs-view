@@ -93,8 +93,8 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
 
         self.tbar.playback_container.settingsChanged.connect(self._on_playback_settings_changed)
 
-        SettingsManager.signals.aboutToSaveLocal.connect(lambda _: self.snapshot_settings())
-        SettingsManager.signals.localChanged.connect(lambda _: self._on_local_settings_changed())
+        SettingsManager.signals.connect_about_local_weak(self.snapshot_settings)
+        SettingsManager.signals.connect_local_weak(self._on_local_settings_changed)
 
     @override
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
@@ -128,6 +128,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
 
         if hasattr(self, "content"):
             SettingsManager.save_local(self.content, self.local_settings)
+            del self.content
 
         return super().deleteLater()
 
@@ -144,7 +145,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         )
 
     @requires_content
-    def snapshot_settings(self) -> None:
+    def snapshot_settings(self, _: Any) -> None:
         self.local_settings.last_frame = self.playback.state.current_frame
         self.local_settings.last_time = self.playback.state.current_time
         self.local_settings.last_output_tab_index = self.tab_manager.tabs.currentIndex()
@@ -332,7 +333,7 @@ class GenericFileWorkspace(LoaderWorkspace[Path]):
         self.local_settings.playback.uncapped = uncapped
 
     @requires_content
-    def _on_local_settings_changed(self) -> None:
+    def _on_local_settings_changed(self, _: Any) -> None:
         self.tab_manager.sync_playhead_btn.set_state(state=self.local_settings.synchronization.sync_playhead)
         self.tab_manager.sync_zoom_btn.setChecked(self.local_settings.synchronization.sync_zoom)
         self.tab_manager.sync_scroll_btn.setChecked(self.local_settings.synchronization.sync_scroll)
