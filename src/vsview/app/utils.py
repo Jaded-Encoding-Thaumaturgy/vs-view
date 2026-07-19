@@ -1,5 +1,6 @@
 """Utility functions for vsview."""
 
+import gc
 import hashlib
 import io
 import os
@@ -41,6 +42,8 @@ def check_leaks(stage: Literal["before", "after"]) -> None:
         logger.exception("")
         return
 
+    gc.collect()
+
     # Capture show_growth output
     with io.StringIO() as buf:
         original_stdout = sys.stdout
@@ -76,6 +79,44 @@ def check_leaks(stage: Literal["before", "after"]) -> None:
                 logger.warning("Potential %s leak! Backref graph saved to %s", type_name, filename)
             except Exception as e:
                 logger.debug("Could not generate leak graph for %s: %s", type_name, e)
+
+    # Check for QObject leaks
+    qobjects = [obj for obj in gc.get_objects() if isinstance(obj, QObject)]
+    lingering_qobjects = []
+
+    for obj in qobjects:
+        class_name = obj.__class__.__name__
+        if (
+            "Workspace" in class_name
+            or "Plugin" in class_name
+            or class_name in ("TabViewWidget", "Timeline", "PlaybackContainer", "GraphicsView")
+        ):
+            lingering_qobjects.append(obj)
+
+    if lingering_qobjects:
+        logger.debug("--- Lingering QObjects Check (%s) ---", stage)
+        for obj in lingering_qobjects:
+            is_valid = Shiboken.isValid(obj)
+            logger.warning(
+                "Lingering QObject: %s at %s (C++ Valid: %s)",
+                obj.__class__.__name__,
+                hex(id(obj)),
+                is_valid,
+            )
+
+            # If running the check after deletion, generate backref graph for lingering instances
+            if stage == "after" and is_valid:
+                try:
+                    filename = f"leak_qobject_{obj.__class__.__name__.lower()}_{stage.replace(' ', '_').lower()}.png"
+                    objgraph.show_backrefs(
+                        [obj],
+                        max_depth=10,
+                        filename=filename,
+                        highlight=lambda x: x is obj,
+                    )
+                    logger.warning("Potential QObject leak! Backref graph saved to %s", filename)
+                except Exception as e:
+                    logger.debug("Could not generate QObject leak graph for %s: %s", obj.__class__.__name__, e)
 
 
 class LRUCache[K, V](OrderedDict[K, V]):

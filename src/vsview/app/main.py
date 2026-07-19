@@ -364,7 +364,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(workspace)
 
         btn = WorkspaceToolButton(self, workspace.title, workspace)
-        btn.customContextMenuRequested.connect(lambda pos: self._show_sidebar_context_menu(pos, btn))
+        btn.customContextMenuRequested.connect(self._on_sidebar_context_menu_requested)
 
         self.nav_container.add_button(btn)
         self.button_group.addButton(btn)
@@ -499,11 +499,13 @@ class MainWindow(QMainWindow):
             actions.append(reload_action)
 
         clear_action = QAction("Clear", self)
-        clear_action.triggered.connect(lambda: self._on_clear_action(btn))
+        clear_action.setProperty("btn", btn)
+        clear_action.triggered.connect(self._on_clear_action_triggered)
         actions.append(clear_action)
 
         delete_action = QAction("Delete", self)
-        delete_action.triggered.connect(lambda: self.delete_workspace(btn))
+        delete_action.setProperty("btn", btn)
+        delete_action.triggered.connect(self._on_delete_workspace_triggered)
         actions.append(delete_action)
 
         menu.addActions(actions)
@@ -513,6 +515,21 @@ class MainWindow(QMainWindow):
             action.deleteLater()
 
         menu.deleteLater()
+
+    def _on_sidebar_context_menu_requested(self, pos: QPoint) -> None:
+        btn = self.sender()
+        if isinstance(btn, WorkspaceToolButton):
+            self._show_sidebar_context_menu(pos, btn)
+
+    def _on_clear_action_triggered(self) -> None:
+        action = self.sender()
+        if isinstance(action, QAction) and (btn := action.property("btn")):
+            self._on_clear_action(btn)
+
+    def _on_delete_workspace_triggered(self) -> None:
+        action = self.sender()
+        if isinstance(action, QAction) and (btn := action.property("btn")):
+            self.delete_workspace(btn)
 
     def _on_clear_action(self, btn: WorkspaceToolButton[BaseWorkspace]) -> None:
         old_index = self.nav_container.buttons.index(btn)
@@ -630,6 +647,12 @@ class StackedWidget(QStackedWidget):
 
         self.currentChanged.connect(self._on_current_changed)
 
+    @override
+    def removeWidget(self, widget: QWidget) -> None:
+        if widget is self._last_widget:
+            self._last_widget = None
+        super().removeWidget(widget)
+
     def animate_to_widget(self, widget: QWidget, *, animated: bool = True) -> None:
         if (current := self.currentWidget()) is widget or widget is None:
             return
@@ -688,6 +711,7 @@ class StackedWidget(QStackedWidget):
             old_widget.env.core.clear_cache()
 
         if index < 0:
+            self._last_widget = None
             return
 
         widget = self.widget(index)

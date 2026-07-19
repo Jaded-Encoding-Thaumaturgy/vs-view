@@ -1,4 +1,5 @@
 import itertools
+import weakref
 from logging import getLogger
 from threading import Lock
 from typing import override
@@ -61,7 +62,11 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         with self.lock:
             if HistogramPlugin.numba_prewarm_worker is None:
                 HistogramPlugin.numba_prewarm_worker = prewarm_numba().catch(lambda e: logger.error(e))
-        HistogramPlugin.numba_prewarm_worker.map(lambda _: self._notify_numba_ready(), on_loop=True)
+
+        weak_self = weakref.ref(self)
+        HistogramPlugin.numba_prewarm_worker.map(
+            lambda _: p._notify_numba_ready() if (p := weak_self()) else None, on_loop=True
+        )
 
         self.cie_nodes = dict[VideoOutputProxy, tuple[vs.VideoNode, vs.VideoNode]]()
         self.api.register_on_destroy(self.cie_nodes.clear)

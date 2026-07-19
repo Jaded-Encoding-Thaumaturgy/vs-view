@@ -49,6 +49,11 @@ class IconReloadMixin:
     }
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        if hasattr(self, "_icon_reload_initialized"):
+            return
+
+        self._icon_reload_initialized = True
+
         super().__init__(*args, **kwargs)
         self._button_reloaders = WeakKeyDictionary[QToolButton, Callable[[], None]]()
         self._action_reloaders = WeakKeyDictionary[QAction, Callable[[], None]]()
@@ -62,13 +67,23 @@ class IconReloadMixin:
             if (method := weak()) is not None:
                 QTimer.singleShot(0, method)
 
-        SettingsManager.signals.globalChanged.connect(_on_global_changed)
+        self._on_global_changed_slot = _on_global_changed
+
+        SettingsManager.signals.globalChanged.connect(self._on_global_changed_slot)
+
+        # Automatically clean up when Qt destroys the C++ object
+        # Use singleShot to defer connection until after C++ constructors finish
+        QTimer.singleShot(
+            0,
+            lambda: (
+                Shiboken.isValid(self)
+                and hasattr(self, "destroyed")
+                and getattr(self, "destroyed").connect(lambda: self._cleanup_icon_reload())
+            ),
+        )
 
     def deleteLater(self) -> None:
-        self._button_reloaders.clear()
-        self._action_reloaders.clear()
-        self._custom_callbacks.clear()
-
+        self._cleanup_icon_reload()
         getattr(super(), "deleteLater", lambda: None)()
 
     def register_icon_button(
@@ -364,6 +379,17 @@ class IconReloadMixin:
             q_icon = self.make_icon((icon, act_color), size=icon_size)
 
         return q_icon
+
+    def _cleanup_icon_reload(self) -> None:
+        if hasattr(self, "_on_global_changed_slot"):
+            from ..app.settings import SettingsManager
+
+            SettingsManager.signals.globalChanged.disconnect(self._on_global_changed_slot)
+            del self._on_global_changed_slot
+
+        self._button_reloaders.clear()
+        self._action_reloaders.clear()
+        self._custom_callbacks.clear()
 
 
 def load_icon(
