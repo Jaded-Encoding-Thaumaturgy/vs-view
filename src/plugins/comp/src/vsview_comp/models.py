@@ -77,7 +77,7 @@ class SlowPicsSources(NamedTuple):
                 # Single source collection
                 source_name, images = self.sources[0]
                 image = images[j]
-                payload[f"imageNames[{j}]"] = f"{image.timestamp} / {image.frame_no} - {source_name}"
+                payload[f"images[{j}].name"] = f"{image.timestamp} / {image.frame_no} - {source_name}"
 
         if self.public:
             payload |= {f"tags[{i}]": tag for i, tag in enumerate(self.tags)}
@@ -90,7 +90,9 @@ class SlowPicsSources(NamedTuple):
     def get_images(self, comp_data: SlowPicsUploadResponse) -> Iterator[tuple[str, Path]]:
         for i, (_, images) in enumerate(self.sources):
             for j, (image_path, *_) in enumerate(images):
-                yield comp_data.images[j][i] if self.is_comparison else comp_data.images[0][j], image_path
+                image_uuid = comp_data.images[j][i] if self.is_comparison else comp_data.images[0][j]
+                if image_uuid not in comp_data.complete_image_uuids:
+                    yield image_uuid, image_path
 
 
 class SlowPicsUploadResponse(BaseModel):
@@ -99,6 +101,7 @@ class SlowPicsUploadResponse(BaseModel):
     collection_uuid: str = Field(alias="collectionUuid")
     key: str
     images: list[list[str]]
+    complete_image_uuids: list[str] = Field(alias="completeImageUuids")
 
 
 class TMDBGenre(BaseModel):

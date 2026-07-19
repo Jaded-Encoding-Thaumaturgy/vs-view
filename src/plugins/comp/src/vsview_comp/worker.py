@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import random
 import re
 import threading
@@ -630,10 +631,13 @@ class SlowPicsWorker:
                 logger.debug("Setup client")
                 await self._setup_client(client, cookies)
 
+                logger.debug("Calculating image hashes")
+                image_hashes = await self._hash_images(src)
+
                 logger.debug("Starting upload of: %s", src.collection_name)
                 start_resp = await client.post(
                     url=f"/upload/{src.upload_type}",
-                    data=src.payload | {"browserId": self.settings.global_.browser_id},
+                    data=src.payload | {"browserId": self.settings.global_.browser_id} | image_hashes,
                 )
                 await client.gather(start_resp)
                 comp_data = SlowPicsUploadResponse.model_validate(start_resp.raise_for_status().json())
@@ -783,6 +787,26 @@ class SlowPicsWorker:
                 logger.error("Error uploading %s (attempt %d) '%s'", image_path.name, retry + 1, e)
                 logger.debug("Traceback:", exc_info=True)
                 await asyncio.sleep((retry + 1) * 2)
+
+    async def _hash_images(self, src: SlowPicsSources) -> dict[str, str]:
+        payload = dict[str, str]()
+
+        def _hash_image(file: Path, image_key: str) -> None:
+            with file.open("rb") as f:
+                payload[image_key] = hashlib.file_digest(f, "sha256").hexdigest()
+
+        async with asyncio.TaskGroup() as tg:
+            for j in range(len(src.sources[0].images)):
+                for i, (_, images) in enumerate(src.sources):
+                    tg.create_task(
+                        asyncio.to_thread(
+                            _hash_image,
+                            images[j].path,
+                            f"comparisons[{j}].images[{i}].hashSum" if src.is_comparison else f"images[{j}].hashSum",
+                        )
+                    )
+
+        return payload
 
     @staticmethod
     def _cookies_jar(cookies: CookieJar) -> dict[str, str]:
