@@ -23,7 +23,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Typing :: Typed",
 ]
-dependencies = ["vsview", "vsjetpack>=1.4.0"]
+dependencies = ["vsview", "vsjetpack>=2.1.1"]
 
 [project.entry-points."vsview.frameprops"]
 vsview_frameprops_extended = "vsview_frameprops_extended"

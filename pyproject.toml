@@ -107,6 +107,9 @@ plugins = [
     "vsview-audio-convert",
     "vsview-histogram",
 ]
+# Specify this one to it's properly resolved for nativeres.
+# PyPI has an outdated wheel stub version compared to vs-wheels. 
+index-nonsense = ["vapoursynth-ffms2"]
 
 [project.urls]
 Documentation = "https://jaded-encoding-thaumaturgy.github.io/vs-view/"
@@ -154,12 +157,14 @@ distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.dirty"
 [[tool.uv.index]]
 name = "vs-wheels"
 url = "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple"
+explicit = true
 
 [tool.uv.workspace]
 members = ["src/vspackrgb", "src/vsview-cli", "src/plugins/*"]
 
 [tool.uv.sources]
 vapoursynth-fmtconv = { index = "vs-wheels" }
+vapoursynth-ffms2 = { index = "vs-wheels" }
 vspackrgb = { workspace = true }
 vsview-cli = { workspace = true }
 vsview-fftspectrum = { workspace = true }

@@ -1101,11 +1101,11 @@ wheels = [
 
 [[package]]
 name = "platformdirs"
-version = "4.10.0"
+version = "4.10.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d7/47/e4501f49c178ae1d9f4a75073fda4204f52647993f075a9db4d14930e0c5/platformdirs-4.10.0.tar.gz", hash = "sha256:31e761a6a0ca04faf7353ea759bdba55652be214725111e5aac52dfa29d4bef7", size = 31224, upload-time = "2026-05-28T03:32:53.587Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/cd/4f25b2f95b23f5d2c9c1fe43e49841bff5800562149b2666afc09309aa8f/platformdirs-4.10.1.tar.gz", hash = "sha256:ceab4084426fe6319ce18e86deada8ab1b7487c7aee7040c55e277c9ae793695", size = 31678, upload-time = "2026-07-18T03:53:43.808Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/81/e6/cd9575ac904136b3cbf7aa7ee819ef86eedb7274e46f230e94ea4342e729/platformdirs-4.10.0-py3-none-any.whl", hash = "sha256:fb516cdb12eb0d857d0cd85a7c57cea4d060bee4578d6cf5a14dfdf8cbf8784a", size = 22743, upload-time = "2026-05-28T03:32:52.175Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/73/6fd0bb9ce84138c3857f12e9de63bc901852975a092d545f18087a204aa2/platformdirs-4.10.1-py3-none-any.whl", hash = "sha256:0e4eff26be2d75293977f7cddc153fd9b8eaa7fb0c7b64ffe4076cb443117443", size = 22906, upload-time = "2026-07-18T03:53:42.576Z" },
 ]
 
 [[package]]
@@ -1793,16 +1793,16 @@ wheels = [
 
 [[package]]
 name = "urllib3-future"
-version = "2.22.901"
+version = "2.23.900"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h11" },
     { name = "jh2" },
     { name = "qh3", marker = "(platform_machine == 'AMD64' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'ARM64' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'arm64' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'armv7l' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'i686' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'ppc64' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'ppc64le' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'riscv64' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'riscv64gc' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 's390x' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'x86' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine == 'AMD64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'ARM64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'arm64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'armv7l' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'i686' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'ppc64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'ppc64le' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'riscv64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'riscv64gc' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 's390x' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'AMD64' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'ARM64' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'arm64' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'armv7l' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'i686' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'ppc64' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'ppc64le' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'riscv64' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'riscv64gc' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 's390x' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'x86' and platform_python_implementation == 'CPython' and sys_platform == 'win32') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'win32')" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/81/10f2b68f02f3fcfcd476c8839bee0a8121f0f6740326233755869236e2b6/urllib3_future-2.22.901.tar.gz", hash = "sha256:fbece0ff51299a213c926897ffbed61d820ab5ef2ba81cece361c049fe2f51a9", size = 1306989, upload-time = "2026-07-09T06:35:05.466Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/e0/b8d8e0a919fe2a0674a3193b42de9c56816341b85d69b5ef6af58a72710b/urllib3_future-2.23.900.tar.gz", hash = "sha256:f488f22983f96cd8c733640b47e6a32def462d33c59bcc4bea6d97a8568b70c8", size = 1321689, upload-time = "2026-07-19T08:40:16.762Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/d4/f2c424cec0a6911f53d3a8ece6198c94c428fc805270b681a465f43f20f1/urllib3_future-2.22.901-py3-none-any.whl", hash = "sha256:dc2d4572ba612be69e3f6db87d1f469b7d08f107e80fd8749081d7e6a5a2fe10", size = 777228, upload-time = "2026-07-09T06:35:03.693Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/d8/6deac579e5b9f658b4221ac0b732517df2225fff49630dc4aed6f5b105c1/urllib3_future-2.23.900-py3-none-any.whl", hash = "sha256:4303dc9a5d8c4c810f3fcd3b13bd62d69c3a4f63bb7e62089410907c34aeaf6b", size = 786724, upload-time = "2026-07-19T08:40:15.081Z" },
 ]
 
 [[package]]
@@ -2003,19 +2003,20 @@ wheels = [
 
 [[package]]
 name = "vapoursynth-lsmas"
-version = "1282.0.0"
-source = { registry = "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple" }
+version = "1296.0.0.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "vapoursynth" },
 ]
-sdist = { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-lsmas-v1282.0.0/vapoursynth_lsmas-1282.0.0.tar.gz", hash = "sha256:142ed08e66d62689ec862d86d665f2ccab9ebfdc8cc285a648bce3f992482a86" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/27/e8e4b1f7808cea0aea7affb7dee55ef27a5588f0deeecf244478323829a0/vapoursynth_lsmas-1296.0.0.1.tar.gz", hash = "sha256:a755c8867256cbdb576ac41d7477f05c78cf479ff1cd5ed99cc9445e91200b7f", size = 19054465, upload-time = "2026-07-08T04:54:32.083Z" }
 wheels = [
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-lsmas-v1282.0.0/vapoursynth_lsmas-1282.0.0-py3-none-macosx_15_0_arm64.whl", hash = "sha256:fc4a620cad730ec6669c5f9ea55bdf5bcb86189045182447746a19d9655098fe" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-lsmas-v1282.0.0/vapoursynth_lsmas-1282.0.0-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:a92b186536a0ff3ed0c25857d8ea31165657ed7818936f4c028b8342afda3c31" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-lsmas-v1282.0.0/vapoursynth_lsmas-1282.0.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:65579fe22f51221a3a0897302f6a8e4971641e4b326f51aa13b9329574dc30bc" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-lsmas-v1282.0.0/vapoursynth_lsmas-1282.0.0-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:809d6a37e9e37403b99b1e6da7100d4749a82f1f4817031f63535fe0774c05b8" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-lsmas-v1282.0.0/vapoursynth_lsmas-1282.0.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:b1db1047ba624e99aea92aadd9bb67d02c73ca797e53877177d405f4fd140fc2" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-lsmas-v1282.0.0/vapoursynth_lsmas-1282.0.0-py3-none-win_amd64.whl", hash = "sha256:48a2b01f36106d0cbba1aab1582de770b3da648716c9180ca2a11582d1013262" },
+    { url = "https://files.pythonhosted.org/packages/98/ca/25878e37729188190ec3725538baa52330dd754f2bd0928fd3e51d7a9f35/vapoursynth_lsmas-1296.0.0.1-py3-none-macosx_15_0_arm64.whl", hash = "sha256:88a7ff3624cd7cbdb8cf557bda204812a718d4ce79c60b16e2a8444d12f8618a", size = 9028819, upload-time = "2026-07-08T04:54:17.438Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/bf/c7b56e0a8cefdb41f10d07edd0381375a92598479ad50f22ecc7613f9cee/vapoursynth_lsmas-1296.0.0.1-py3-none-macosx_15_0_x86_64.whl", hash = "sha256:745a203bb82b74436fcee70dcd7b6b0949d4de1b1b946b22bcfd8c80a359c445", size = 10147144, upload-time = "2026-07-08T04:54:19.581Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/64/209ae146769df67105b1d86a3ccba03ac86a3f9ce22bbc92ce69ecb98300/vapoursynth_lsmas-1296.0.0.1-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:ba371f22335655f41dd02f9bf603a714c7cfa0d708043fce4bf67c9b45a5aa6a", size = 10959810, upload-time = "2026-07-08T04:54:21.49Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/4e/8ef05f58b8bea11d589d5b56e282176eb8e4a0a2ce66390dd66ce2e4a64a/vapoursynth_lsmas-1296.0.0.1-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:04b01ccb741aa8dbc18d08837e44111dc2c3f11941fe2ea07f2fc559596fa5bb", size = 11757727, upload-time = "2026-07-08T04:54:23.707Z" },
+    { url = "https://files.pythonhosted.org/packages/10/b2/29e0dffde758f30589cfe4b533e4d40e78001f0c2e9ce61e3d5f750ce6dd/vapoursynth_lsmas-1296.0.0.1-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:b70a5fb5844b76700c7325dba863b297019b9a3e96bcdc6cc87e702f805900e9", size = 10833691, upload-time = "2026-07-08T04:54:25.886Z" },
+    { url = "https://files.pythonhosted.org/packages/43/e9/a702010d1c138491a03a9159ef52d4d7fe234e3b5437a33d2661055ff7dd/vapoursynth_lsmas-1296.0.0.1-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:9b6f1b559549ee50e30b51a2dffabba10cd95e89e6f52f2fb31ade2eaa376a98", size = 12653902, upload-time = "2026-07-08T04:54:27.95Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/3b/64b84d928d4f1c02996ee39192b60ece26fd2bed8136fbc75ce41c64ff2b/vapoursynth_lsmas-1296.0.0.1-py3-none-win_amd64.whl", hash = "sha256:61ddaf94ea2f2c9df7c0023a3c54ea9c05cbd83099b93cf0d48edb78210f94a1", size = 11529284, upload-time = "2026-07-08T04:54:29.9Z" },
 ]
 
 [[package]]
@@ -2257,6 +2258,9 @@ doc = [
     { name = "ruff" },
     { name = "zensical" },
 ]
+index-nonsense = [
+    { name = "vapoursynth-ffms2" },
+]
 plugins = [
     { name = "vsview-audio-convert" },
     { name = "vsview-comp" },
@@ -2334,6 +2338,7 @@ doc = [
     { name = "ruff" },
     { name = "zensical", specifier = "==0.0.50" },
 ]
+index-nonsense = [{ name = "vapoursynth-ffms2", index = "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple" }]
 plugins = [
     { name = "vsview-audio-convert", editable = "src/plugins/audio-convert" },
     { name = "vsview-comp", editable = "src/plugins/comp" },
@@ -2407,7 +2412,7 @@ requires-dist = [
     { name = "niquests", specifier = ">=3.19.0" },
     { name = "pathvalidate", specifier = ">=3.3.1" },
     { name = "vsfpng", marker = "extra == 'vsfpng'", specifier = ">=1.2" },
-    { name = "vsjetpack", specifier = ">=1.5.0" },
+    { name = "vsjetpack", specifier = ">=2.1.1" },
     { name = "vsview", extras = ["secrets"], editable = "." },
 ]
 provides-extras = ["vsfpng"]
@@ -2424,7 +2429,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "vapoursynth-fftspectrum-rs", specifier = ">=1.0.13" },
-    { name = "vsjetpack", specifier = ">=1.5.0" },
+    { name = "vsjetpack", specifier = ">=2.1.1" },
     { name = "vsview", editable = "." },
 ]
 
@@ -2438,7 +2443,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "vsjetpack", specifier = ">=1.4.0" },
+    { name = "vsjetpack", specifier = ">=2.1.1" },
     { name = "vsview", editable = "." },
 ]
 
@@ -2458,21 +2463,21 @@ requires-dist = [
     { name = "numba", specifier = ">=0.62.1" },
     { name = "numpy", specifier = ">=2.4.0" },
     { name = "vapoursynth-fmtconv", specifier = ">=31", index = "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple" },
-    { name = "vsjetpack", specifier = ">=2.0.0" },
+    { name = "vsjetpack", specifier = ">=2.1.1" },
     { name = "vsview", editable = "." },
 ]
 
 [[package]]
 name = "vsview-nativeres"
-version = "0.3.0"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "nativeres" },
     { name = "vsview" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/42/60/52c68cdbc4273cc848200c828827f3cecb092ccb4070163f33772a46a88e/vsview_nativeres-0.3.0.tar.gz", hash = "sha256:0ef296455eaf7c80cd90328d64b797d3b4874089ca6a91f00b4941379df206be", size = 15804, upload-time = "2026-06-20T00:04:56.488Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8c/2b/37548ccb461f9b7acf6abb5e2ba13ea5e1d88ab8fd2980b7f3657b1a55f4/vsview_nativeres-0.3.1.tar.gz", hash = "sha256:9dd71719cce1dd6f9be064aee9c52d4133c56b48428ad332b7e834a1cc5e47cf", size = 15866, upload-time = "2026-07-20T15:57:39.014Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/96/aa27f0634e30b83c24568886ccc90ee07c202c9b0266f7a82e9fbcb73718/vsview_nativeres-0.3.0-py3-none-any.whl", hash = "sha256:19dcef6033742ab81a652be78d2848722728dd1276a9d7789c377b15ed267f8e", size = 17216, upload-time = "2026-06-20T00:04:55.139Z" },
+    { url = "https://files.pythonhosted.org/packages/37/60/337a1a45a9f00f9de186667bf873787e95ada883ccb1e3cac20b4b59720a/vsview_nativeres-0.3.1-py3-none-any.whl", hash = "sha256:40752466c0d31fb83ac2f2a3d30aa9ef7e2acc6de4b810fd8046e1a58e7b631a", size = 17256, upload-time = "2026-07-20T15:57:37.898Z" },
 ]
 
 [[package]]
@@ -2487,7 +2492,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "vapoursynth-akarin", specifier = ">=1.4.0" },
-    { name = "vsjetpack", specifier = ">=1.5.0" },
+    { name = "vsjetpack", specifier = ">=2.1.1" },
     { name = "vsview", editable = "." },
 ]
 

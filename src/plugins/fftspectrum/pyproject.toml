@@ -25,7 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "vsview",
-    "vsjetpack>=1.5.0",
+    "vsjetpack>=2.1.1",
     "vapoursynth-fftspectrum-rs>=1.0.13",
 ]
 
