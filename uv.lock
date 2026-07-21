@@ -2469,15 +2469,15 @@ requires-dist = [
 
 [[package]]
 name = "vsview-nativeres"
-version = "0.3.1"
+version = "0.3.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "nativeres" },
     { name = "vsview" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8c/2b/37548ccb461f9b7acf6abb5e2ba13ea5e1d88ab8fd2980b7f3657b1a55f4/vsview_nativeres-0.3.1.tar.gz", hash = "sha256:9dd71719cce1dd6f9be064aee9c52d4133c56b48428ad332b7e834a1cc5e47cf", size = 15866, upload-time = "2026-07-20T15:57:39.014Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/16/7d/284580e7c8ab42d19de42770a9025b2278d0b07831e1683694dcea7ee009/vsview_nativeres-0.3.2.tar.gz", hash = "sha256:bbbedd5205389c54c194cf595bd3fb3d6b5f6189d00c67e01522f887c3eda06d", size = 15876, upload-time = "2026-07-20T16:36:55.772Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/37/60/337a1a45a9f00f9de186667bf873787e95ada883ccb1e3cac20b4b59720a/vsview_nativeres-0.3.1-py3-none-any.whl", hash = "sha256:40752466c0d31fb83ac2f2a3d30aa9ef7e2acc6de4b810fd8046e1a58e7b631a", size = 17256, upload-time = "2026-07-20T15:57:37.898Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/64/3a5415449db6476ccb2ac717b5869d6221cc7ad85576536ad20cb3bccab1/vsview_nativeres-0.3.2-py3-none-any.whl", hash = "sha256:6b8cd892dcc23f0766d5d7d2d30f203e97de4dcc140efe856e6546e6e315ad22", size = 17277, upload-time = "2026-07-20T16:36:54.658Z" },
 ]
 
 [[package]]
