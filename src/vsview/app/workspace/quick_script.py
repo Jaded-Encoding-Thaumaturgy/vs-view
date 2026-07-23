@@ -48,27 +48,45 @@ class PygmentsHighlighter(QSyntaxHighlighter):
 
     def __init__(self, document: QTextDocument) -> None:
         super().__init__(document)
-        from pygments.lexers.python import PythonLexer
+        from ._lexer import StatefulPythonLexer
 
-        self.lexer = PythonLexer()
+        self.lexer = StatefulPythonLexer()
         self._formats: dict[_TokenType, QTextCharFormat] = {}
         self._style: type[Style]
+        self._stack_to_int: dict[tuple[str, ...], int] = {("root",): 0}
+        self._int_to_stack: dict[int, tuple[str, ...]] = {0: ("root",)}
+        self._next_state_id = 1
 
     @override
     def highlightBlock(self, text: str) -> None:
-        for index, token_type, value in self.lexer.get_tokens_unprocessed(text):
-            token_t: _TokenType | None = token_type
+        prev_state = self.previousBlockState()
+        if prev_state == -1 or prev_state not in self._int_to_stack:
+            stack = ("root",)
+        else:
+            stack = self._int_to_stack[prev_state]
 
-            while token_t:
-                if token_t in self._formats:
-                    fmt = self._formats[token_t]
+        for index, token_type, value in self.lexer.get_tokens_unprocessed(text, stack=stack):
+            t: _TokenType | None = token_type
+
+            while t:
+                if t in self._formats:
+                    fmt = self._formats[t]
                     break
-                token_t = token_t.parent
+                t = t.parent
             else:
                 fmt = QTextCharFormat()
 
             if fmt.isValid():
                 self.setFormat(index, len(value), fmt)
+
+        last_stack = self.lexer.last_state_stack
+
+        if last_stack not in self._stack_to_int:
+            self._stack_to_int[last_stack] = self._next_state_id
+            self._int_to_stack[self._next_state_id] = last_stack
+            self._next_state_id += 1
+
+        self.setCurrentBlockState(self._stack_to_int[last_stack])
 
     def set_style(self, style: type[Style]) -> None:
         self._style = style
