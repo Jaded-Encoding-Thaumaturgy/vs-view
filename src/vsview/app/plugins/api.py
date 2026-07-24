@@ -557,7 +557,10 @@ class PluginAPI(_PluginAPI):
         Context manager for using the VapourSynth environment of the workspace.
         """
         with self.__workspace.env.use():
-            yield
+            try:
+                yield
+            finally:
+                pass
 
     @contextmanager
     @deprecated(
