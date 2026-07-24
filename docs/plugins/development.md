@@ -82,11 +82,10 @@ class MyPlugin(WidgetPluginBase):
         # Prevent the logic from running if we are past frame 2000
         if self.api.current_frame > 2000:
             return
-        
+
         # Access the current timeline mode
         if self.api.timeline.mode == "frame":
             print("Viewing by frame!")
-
 ```
 
 See the [API reference](../api/developer/#vsview.api.PluginAPI) page for a complete list of capabilities.
@@ -104,7 +103,7 @@ from vsview.api import LocalSettingsModel, PluginSettings, Dropdown
 
 
 class GlobalSettings(BaseModel):
-    mode: Annotated[ # (1)!
+    mode: Annotated[  # (1)!
         str,
         Dropdown(
             label="Mode",
@@ -117,16 +116,15 @@ class GlobalSettings(BaseModel):
 
 class LocalSettings(LocalSettingsModel):
     enabled: bool = True
-    threshold: int | None = None # (2)!
+    threshold: int | None = None  # (2)!
 
 
-class MyPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]): # (3)!
+class MyPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):  # (3)!
     def setup_ui(self) -> None:
         if self.settings.global_.mode == "h":
             ...
-        
-        self.threshold = fallback(self.settings.local_.threshold, self.settings.global_.threshold)
 
+        self.threshold = fallback(self.settings.local_.threshold, self.settings.global_.threshold)
 ```
 
 1.  The `#!python Annotated` type allows adding a supported widget to be registered in the settings panel. See the [reference API](../api/developer/#ui-settings) for the different supported widgets.
@@ -144,6 +142,7 @@ from enum import StrEnum
 from typing import Self
 
 from vsview.api import ActionDefinition
+
 
 class ShortcutDefinition(StrEnum):
     definition: ActionDefinition
@@ -166,6 +165,7 @@ Then, map the definitions to your actions or functions using `self.api.register_
 from PySide6.QtWidgets import QWidget
 from vsview.api import PluginAPI, WidgetPluginBase
 
+
 class MyPlugin(WidgetPluginBase):
     identifier = "my_plugin"
     display_name = "My Plugin"
@@ -183,14 +183,13 @@ class MyPlugin(WidgetPluginBase):
         self.api.register_shortcut(
             ShortcutDefinition.REMOVE_ITEM.definition,
             self.on_remove_item_triggered,
-            self.view_widget, # Parent widget
+            self.view_widget,  # Parent widget
         )
 
         # Registering an existing QAction
         self.api.register_action(ShortcutDefinition.TOGGLE_PLAYBACK.definition, self.my_play_action)
 
-    def on_remove_item_triggered(self) -> None:
-        ... # Your logic here
+    def on_remove_item_triggered(self) -> None: ...  # Your logic here
 ```
 
 1. **`shortcuts` attribute**: Exposes the shortcuts to the user application settings panel, allowing them to modify the default keys.
@@ -258,17 +257,17 @@ class FrameCounterPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent, api)
         layout = QVBoxLayout(self)
-        
+
         # Read the current settings
         font_size = fallback(self.settings.local_.font_size, self.settings.global_.font_size)
         font_weight = self.settings.global_.font_weight
-        
+
         # Initialize our UI state
         self.label = QLabel(f"Frame: {self.api.current_frame}", self)
         self.label.setStyleSheet(f"font-size: {font_size}px; font-weight: {font_weight};")
-        
+
         layout.addWidget(self.label)
-        
+
         # Setup shortcuts
         self.api.register_shortcut(
             ShortcutDefinition.RESET_TEXT.definition,
@@ -283,7 +282,7 @@ class FrameCounterPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
     def on_current_frame_changed(self, n: int) -> None:
         self.update_label(n)
 
-    @run_in_loop # (1)!
+    @run_in_loop  # (1)!
     def update_label(self, n: int) -> None:
         self.label.setText(f"Frame: {n}")
 

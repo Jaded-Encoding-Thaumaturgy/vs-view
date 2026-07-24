@@ -29,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_git(*args: Any) -> str:
-    result = subprocess.run(["git", *args], capture_output=True, text=True, cwd=REPO_ROOT)
+    result = subprocess.run(["git", *args], capture_output=True, text=True, cwd=REPO_ROOT, check=False)
 
     if result.returncode != 0:
         raise RuntimeError(f"git {' '.join(map(str, args))} failed: {result.stderr.strip()}")

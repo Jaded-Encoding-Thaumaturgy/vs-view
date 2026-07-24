@@ -36,6 +36,7 @@ Define a field with annotation and default value in a `BaseModel` in `models.py`
 ```python
 from .metadata import Checkbox
 
+
 class GlobalSettings(BaseModel):
     __section__ = "General"
 
@@ -67,9 +68,10 @@ drag_timeout: Annotated[
     Spin(
         label="Timeout",
         suffix=" ms",
-        to_ui=lambda v: int(v * 1000),   # seconds -> ms (display)
-        from_ui=lambda v: v / 1000.0,    # ms -> seconds (storage)
-)] = 0.04  # Default in seconds
+        to_ui=lambda v: int(v * 1000),  # seconds -> ms (display)
+        from_ui=lambda v: v / 1000.0,  # ms -> seconds (storage)
+    ),
+] = 0.04  # Default in seconds
 ```
 
 ---

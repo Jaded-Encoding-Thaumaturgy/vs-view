@@ -14,11 +14,7 @@ def fix_inventory(input_path: Path, output_path: Path) -> None:
 
     if not input_file.exists():
         print(f"{input_file} not found locally. Downloading from VapourSynth...")
-        try:
-            urllib.request.urlretrieve("https://www.vapoursynth.com/doc/objects.inv", input_file)
-        except Exception as e:
-            print(f"Error downloading inventory: {e}")
-            return
+        urllib.request.urlretrieve("https://www.vapoursynth.com/doc/objects.inv", input_file)
 
     data = input_file.read_bytes()
 
