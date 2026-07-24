@@ -196,9 +196,11 @@ def cache_clip(clip: vs.VideoNode, cache_size: int) -> vs.VideoNode:
 
 if TYPE_CHECKING:
 
-    class ObjectType(type): ...
+    class ObjectType(type):
+        """Metaclass type of any Shiboken.Object."""
 else:
     ObjectType = type(Shiboken.Object)
+    """Metaclass type of any Shiboken.Object."""
 
 
 class QObjectSet[T: QObject](MutableSet[T]):

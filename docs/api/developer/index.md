@@ -97,10 +97,15 @@ Most of these symbols are re-exported through the top-level `vsview.api` module 
     options:
         heading_level: 3
         members:
+           - hookimpl
            - Packer 
            - run_in_background
            - run_in_loop
            - IconName
            - IconReloadMixin
            - load_icon
-           - hookimpl
+           - ObjectType
+           - QObjectCounter
+           - QObjectSet
+           - cache_clip
+           - path_to_hash

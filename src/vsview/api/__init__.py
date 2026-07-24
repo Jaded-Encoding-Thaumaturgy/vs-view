@@ -39,6 +39,7 @@ from ..app.settings.widgets import (
     LoginCredentialsInput,
     PathListEditWidget,
 )
+from ..app.utils import ObjectType, QObjectCounter, QObjectSet, cache_clip, path_to_hash
 from ..app.views import OutputInfo
 from ..app.views.components import AbstractTableModel, Accordion, AnimatedToggle, NonClosingMenu, SegmentedControl
 from ..app.views.timeline import FrameEdit, TimeEdit
@@ -76,6 +77,7 @@ __all__ = [
     "LoginCredentialsInput",
     "NodeProcessor",
     "NonClosingMenu",
+    "ObjectType",
     "OutputInfo",
     "Packer",
     "PathListEdit",
@@ -85,6 +87,8 @@ __all__ = [
     "PluginGraphicsView",
     "PluginSecrets",
     "PluginSettings",
+    "QObjectCounter",
+    "QObjectSet",
     "SegmentedControl",
     "Spin",
     "Time",
@@ -93,11 +97,13 @@ __all__ = [
     "WidgetMetadata",
     "WidgetPluginBase",
     "WidgetTimeEdit",
+    "cache_clip",
     "catch_output",
     "get_packer",
     "hookimpl",
     "is_preview",
     "load_icon",
+    "path_to_hash",
     "run_in_background",
     "run_in_loop",
     "set_output",
