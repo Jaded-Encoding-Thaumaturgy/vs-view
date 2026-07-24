@@ -1178,8 +1178,8 @@ class BrowserID(WidgetMetadata[BrowserIDWidget]):
 
     @override
     def load_value(self, widget: BrowserIDWidget, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            widget.id = value
+        with self.apply_transform(value, self.to_ui) as v:
+            widget.id = v
 
     @override
     def get_value(self, widget: BrowserIDWidget) -> Any:

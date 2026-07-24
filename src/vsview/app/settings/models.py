@@ -118,7 +118,7 @@ class AppearanceSettings(BaseModel):
                 ("Dark", Qt.ColorScheme.Dark),
             ],
             tooltip=(
-                "Application theme.\n"  #
+                "Application theme.\n"  # no fmt
                 "You may have to restart the application for the changes to fully take effect."
             ),
         ),
@@ -130,7 +130,7 @@ class AppearanceSettings(BaseModel):
             label="Style",
             items=lambda QStyleFactory=QStyleFactory: [(k.title(), k.lower()) for k in QStyleFactory.keys()],  # noqa: N803, SIM118
             tooltip=(
-                "Application style.\n"  #
+                "Application style.\n"  # no fmt
                 "You may have to restart the application for the changes to fully take effect."
             ),
         ),

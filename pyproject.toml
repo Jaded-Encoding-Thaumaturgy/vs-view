@@ -82,7 +82,7 @@ dev = [
     "hatchling>=1.29.0",
     "vsstubs>=1.5.0",
     "mypy>=2.3.0, <2.4.0",
-    "ruff>=0.15.0, <0.16.0",
+    "ruff>=0.16.0, <0.17.0",
     "objgraph>=3.6.2",
     "graphviz>=0.21",
     "types-pygments>=2.20.0",
@@ -232,7 +232,7 @@ extend-select = [
     "FURB",
     "RUF",
 ]
-ignore = ["N802", "N815"]
+ignore = ["N802", "N815", "B009", "B010"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.*" = ["F401", "F403"]

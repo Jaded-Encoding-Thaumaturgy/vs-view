@@ -116,13 +116,13 @@ class FrameBuffer:
 
         try:
             main_frame = bundle.main_future.result()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             exceptions = [e]
             # Main frame failed - clean up plugin futures to avoid leaks
             for identifier, fut in bundle.plugin_futures.items():
                 try:
                     fut.result().close()
-                except Exception as ep:
+                except Exception as ep:  # noqa: BLE001
                     exceptions.append(ep)
             raise (
                 ExceptionGroup(f"Failed to render main frame '{e}'", exceptions)

@@ -440,15 +440,17 @@ class SettingsDialog(QDialog, IconReloadMixin):
         try:
             global_settings = self._get_global_settings_from_ui()
             SettingsManager.save_global(global_settings)
-        except Exception:
-            logger.error("Failed to save global settings")
+        except Exception as e:
+            logger.error("Failed to save global settings with the error: %s", e)
+            logger.debug("Full traceback:", exc_info=e)
             return False
 
         if self._script_path:
             try:
                 SettingsManager.save_local(self._script_path, self._get_local_settings_from_ui())
-            except Exception:
-                logger.error("Failed to save local settings")
+            except Exception as e:
+                logger.error("Failed to save local settings with the error: %s", e)
+                logger.debug("Full traceback:", exc_info=e)
                 return False
 
         return True

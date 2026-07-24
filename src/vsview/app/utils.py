@@ -77,7 +77,7 @@ def check_leaks(stage: Literal["before", "after"]) -> None:
                     highlight=lambda x, this_objs=objs: x in this_objs,
                 )
                 logger.warning("Potential %s leak! Backref graph saved to %s", type_name, filename)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.debug("Could not generate leak graph for %s: %s", type_name, e)
 
     # Check for QObject leaks
@@ -112,10 +112,10 @@ def check_leaks(stage: Literal["before", "after"]) -> None:
                         [obj],
                         max_depth=10,
                         filename=filename,
-                        highlight=lambda x: x is obj,
+                        highlight=lambda x, target=obj: x is target,
                     )
                     logger.warning("Potential QObject leak! Backref graph saved to %s", filename)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.debug("Could not generate QObject leak graph for %s: %s", obj.__class__.__name__, e)
 
 
@@ -271,7 +271,9 @@ class QObjectCounter[T: QObject](Container[T], Sized):
             self._counts[value] += 1
             return self._counts[value]
 
-        def cleanup(*_: object, ref: weakref.ReferenceType[T] = weakref.ref(value)) -> None:
+        ref = weakref.ref(value)
+
+        def cleanup(*_: object) -> None:
             if obj := ref():
                 self._counts.pop(obj, None)
                 self._cleanup.pop(obj, None)

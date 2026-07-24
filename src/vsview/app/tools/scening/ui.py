@@ -44,6 +44,7 @@ from vsview.api import (
 from .models import AbstractRange, RangeFrame, RangeTime, SceneRow
 
 ROLE_CHECK_STATE = Qt.ItemDataRole.UserRole + 10
+EMPTY_MODEL_INDEX = QModelIndex()
 
 
 class HeaderIntEnum(IntEnum):
@@ -79,11 +80,11 @@ class SceneTableModel(AbstractTableModel):
         self.output_map = output_map
 
     @override
-    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = EMPTY_MODEL_INDEX) -> int:
         return len(self.scenes)
 
     @override
-    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = EMPTY_MODEL_INDEX) -> int:
         return len(Col)
 
     @override
@@ -460,11 +461,11 @@ class RangeTableModel(AbstractTableModel):
         self.api.register_on_destroy(lambda: cachedproperty.clear_cache(self))
 
     @override
-    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = EMPTY_MODEL_INDEX) -> int:
         return len(self._data)
 
     @override
-    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = EMPTY_MODEL_INDEX) -> int:
         return len(RangeCol)
 
     @override

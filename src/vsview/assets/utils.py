@@ -56,6 +56,7 @@ def load_fonts() -> None:
                 )
         except Exception as e:
             _logger.warning("Error loading font %s: %s", font_file, e)
+            _logger.debug("Full traceback", exc_info=True)
 
 
 @cache

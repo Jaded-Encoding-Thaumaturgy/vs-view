@@ -284,6 +284,7 @@ class PythonListFramesParser(Parser):
                 ranges.append(RangeFrame.model_validate(item))
             except Exception:
                 logger.warning("Skipping invalid item in %s: %s", name, item)
+                logger.debug("Full traceback:", exc_info=True)
 
         if not ranges:
             raise ValueError("Empty file")
@@ -314,6 +315,7 @@ class PythonListTimestampsParser(Parser):
                 ranges.append(RangeTime.model_validate(item))
             except Exception:
                 logger.warning("Error parsing item in %s: %s", name, item)
+                logger.debug("Full traceback:", exc_info=True)
 
         if not ranges:
             raise ValueError("Empty file")

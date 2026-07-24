@@ -282,7 +282,7 @@ class PlaybackManager(QObject):
                 with voutput.prepared_clip.get_frame(n) as frame:
                     logger.debug("Frame %d rendered", n)
                     image = voutput.packer.frame_to_qimage(frame).copy()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 try:
                     voutput.vs_output.clip.get_frame(n).close()
                 except Exception as exc_user:
@@ -470,6 +470,7 @@ class PlaybackManager(QObject):
                     e.__class__.__qualname__,
                     e,
                 )
+                logger.debug("Full traceback", exc_info=True)
                 self.loadFailed.emit()
                 return
 

@@ -177,11 +177,11 @@ class ColorPicker(WidgetMetadata[ColorPickerInput]):
 
     @override
     def load_value(self, widget: ColorPickerInput, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            if isinstance(value, str):
-                widget.color = QColor(value)
-            elif isinstance(value, QColor):
-                widget.color = value
+        with self.apply_transform(value, self.to_ui) as v:
+            if isinstance(v, str):
+                widget.color = QColor(v)
+            elif isinstance(v, QColor):
+                widget.color = v
 
     @override
     def get_value(self, widget: ColorPickerInput) -> Any:
@@ -207,14 +207,14 @@ class Checkbox(WidgetMetadata[QCheckBox]):
 
     @override
     def load_value(self, widget: QCheckBox, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
+        with self.apply_transform(value, self.to_ui) as v:
             if self.tristate:
-                if isinstance(value, bool):
-                    widget.setCheckState(Qt.CheckState.Checked if value else Qt.CheckState.Unchecked)
+                if isinstance(v, bool):
+                    widget.setCheckState(Qt.CheckState.Checked if v else Qt.CheckState.Unchecked)
                 else:
-                    widget.setCheckState(Qt.CheckState(value))
+                    widget.setCheckState(Qt.CheckState(v))
             else:
-                widget.setChecked(bool(value))
+                widget.setChecked(bool(v))
 
     @override
     def get_value(self, widget: QCheckBox) -> Any:
@@ -233,8 +233,8 @@ class LineEdit(WidgetMetadata[QLineEdit]):
 
     @override
     def load_value(self, widget: QLineEdit, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            widget.setText(value)
+        with self.apply_transform(value, self.to_ui) as v:
+            widget.setText(v)
 
     @override
     def get_value(self, widget: QLineEdit) -> Any:
@@ -258,8 +258,8 @@ class Dropdown(WidgetMetadata[QComboBox]):
 
     @override
     def load_value(self, widget: QComboBox, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            index = widget.findData(value)
+        with self.apply_transform(value, self.to_ui) as v:
+            index = widget.findData(v)
             if index >= 0:
                 widget.setCurrentIndex(index)
 
@@ -300,8 +300,8 @@ class Spin(WidgetMetadata[QSpinBox]):
 
     @override
     def load_value(self, widget: QSpinBox, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            widget.setValue(value)
+        with self.apply_transform(value, self.to_ui) as v:
+            widget.setValue(v)
 
     @override
     def get_value(self, widget: QSpinBox) -> Any:
@@ -330,8 +330,8 @@ class DoubleSpin(WidgetMetadata[QDoubleSpinBox]):
 
     @override
     def load_value(self, widget: QDoubleSpinBox, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            widget.setValue(value)
+        with self.apply_transform(value, self.to_ui) as v:
+            widget.setValue(v)
 
     @override
     def get_value(self, widget: QDoubleSpinBox) -> Any:
@@ -365,8 +365,8 @@ class PlainTextEdit[T: SupportsRichComparison](WidgetMetadata[QPlainTextEdit]):
 
     @override
     def load_value(self, widget: QPlainTextEdit, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            widget.setPlainText(str(value))
+        with self.apply_transform(value, self.to_ui) as v:
+            widget.setPlainText(str(v))
 
     @override
     def get_value(self, widget: QPlainTextEdit) -> Any:
@@ -421,8 +421,8 @@ class ListEdit[T: SupportsRichComparison](WidgetMetadata[ListEditWidget[T]]):
 
     @override
     def load_value(self, widget: ListEditWidget[T], value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            widget.set_values(value)
+        with self.apply_transform(value, self.to_ui) as v:
+            widget.set_values(v)
 
     @override
     def get_value(self, widget: ListEditWidget[T]) -> Any:
@@ -460,8 +460,8 @@ class WidgetTimeEdit(WidgetMetadata[QTimeEdit]):
 
     @override
     def load_value(self, widget: QTimeEdit, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            widget.setTime(QTime(value))
+        with self.apply_transform(value, self.to_ui) as v:
+            widget.setTime(QTime(v))
 
     @override
     def get_value(self, widget: QTimeEdit) -> Any:
@@ -481,8 +481,8 @@ class PathListEdit(WidgetMetadata[PathListEditWidget]):
 
     @override
     def load_value(self, widget: PathListEditWidget, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            widget.set_values(value)
+        with self.apply_transform(value, self.to_ui) as v:
+            widget.set_values(v)
 
     @override
     def get_value(self, widget: PathListEditWidget) -> Any:
@@ -503,8 +503,8 @@ class FilePicker(WidgetMetadata[FilePickerWidget]):
 
     @override
     def load_value(self, widget: FilePickerWidget, value: Any) -> None:
-        with self.apply_transform(value, self.to_ui) as value:
-            widget.file_path = value or ""
+        with self.apply_transform(value, self.to_ui) as v:
+            widget.file_path = v or ""
 
     @override
     def get_value(self, widget: FilePickerWidget) -> Any:

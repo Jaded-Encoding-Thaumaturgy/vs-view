@@ -48,7 +48,6 @@ class IconName(StrEnum):
     VOLUME_LOW = "speaker-none"
     VOLUME_OFF = "speaker-x"
     VOLUME_MUTE = "speaker-slash"
-    #
     PIPETTE = "eyedropper"
     CLIPBOARD = "clipboard"
     PLUS = "plus"
