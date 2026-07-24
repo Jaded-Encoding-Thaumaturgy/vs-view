@@ -597,9 +597,9 @@ class MainWindow(QMainWindow):
                 checked: bool,
                 idx: int = i,
                 identifier: str = plugin.identifier,
-                workspace: QWidget = self.stack.currentWidget(),
             ) -> None:
                 settings[identifier] = checked
+                workspace = self.stack.currentWidget()
                 if isinstance(workspace, LoaderWorkspace) and workspace.plugins_loaded:
                     callback(workspace, idx, checked)
 
