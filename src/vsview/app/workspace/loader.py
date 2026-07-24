@@ -647,10 +647,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                     cb_render(f)
 
             logger.debug("Requesting frame %d", target_frame)
-            try:
-                self.playback.request_frame(target_frame, on_complete, notify_plugins=False)
-            except Exception:
-                return False
+            self.playback.request_frame(target_frame, on_complete, notify_plugins=False)
         else:
             with self.env.use():
                 self.api._on_current_voutput_changed(refresh_plugins)
