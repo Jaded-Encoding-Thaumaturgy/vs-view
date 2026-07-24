@@ -309,6 +309,13 @@ class _PluginAPI(_PluginLimitedApi):
                 if view.current_tab in view.outputs:
                     buffer.register_plugin_node(plugin.identifier, view.outputs[view.current_tab])
 
+    def _on_workspace_loaded(self) -> None:
+        for plugin in self.__workspace.plugins:
+            try:
+                plugin.on_workspace_loaded()
+            except Exception:
+                logger.exception("%s: Failed for plugin %r", plugin.on_workspace_loaded, plugin.identifier)
+
     def _on_current_voutput_changed(self, refresh: bool = False) -> None:
         # Notify all visible plugin views of output change.
         for plugin in self.__workspace.plugins:

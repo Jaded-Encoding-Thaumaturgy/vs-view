@@ -2,7 +2,6 @@ import ast
 import asyncio
 from collections.abc import Sequence
 from concurrent.futures import CancelledError
-from functools import cache
 from logging import getLogger
 from pathlib import Path
 from typing import Annotated, Any, override
@@ -232,8 +231,6 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             self.add_frame_act,
             context=Qt.ShortcutContext.WindowShortcut,
         )
-
-        self.api.register_on_destroy(self.init_load.cache_clear)
 
         # Disable the whole plugin if we don't have a local storage
         self.setEnabled(has_file := bool(self.api.file_path))
@@ -573,10 +570,11 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             return True
         return super().eventFilter(watched, event)
 
-    @cache
+    @override
     @run_in_loop(return_future=False)
-    def init_load(self) -> None:
-        voutputs = self.comp_voutputs
+    def on_workspace_loaded(self) -> None:
+        if not (voutputs := self.comp_voutputs):
+            return
 
         max_total_frames = min(voutputs, key=lambda v: v.info.total_frames).info.total_frames
         shortest = min(voutputs, key=lambda v: v.info.total_duration)
@@ -585,7 +583,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.outputs_dropdown.shortest_dur_text = f" - {max_total_duration.to_ts()} ({max_total_frames})"
         self.outputs_dropdown.populate(voutputs)
         self.frames_list.clear()
-        self.frames_list.included_outputs = self.comp_voutputs
+        self.frames_list.included_outputs = voutputs
         self._update_frames_count()
 
         max_frame = max_total_frames - 1
@@ -612,8 +610,6 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
     @override
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
-        self.init_load()
-
         if self.pict_types_supported and not any("_PictType" in props for props in voutput.props.values()):
             self.pict_types_supported = False
 

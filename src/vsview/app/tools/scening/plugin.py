@@ -137,7 +137,6 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.load_settings()
 
         self.register_icon_callback(self.on_reload_icon)
-        self.api.register_on_destroy(self.init_load.cache_clear)
 
         self.api.globalSettingsChanged.connect(self._update_toolbar_style)
 
@@ -406,14 +405,13 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         for scene in self.settings.local_.scenes:
             self.scenes_model.add_scene(scene, emit_signal=False)
 
-    @cache
-    def init_load(self) -> None:
+    @override
+    def on_workspace_loaded(self) -> None:
         self.output_map.clear()
         self.output_map.update((out.vs_index, out.vs_name) for out in self.api.voutputs)
 
     @override
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
-        self.init_load()
         cachedproperty.clear_cache(self.ranges_model)
 
         self.on_scene_selection_changed()

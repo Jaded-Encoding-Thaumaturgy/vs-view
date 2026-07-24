@@ -326,6 +326,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         # Load plugins in the load_content function so the plugins can get the file_path
         # and do VS things in the init since the environment is already created.
         self.load_plugins()
+        self.api._on_workspace_loaded()
 
         @run_in_loop(return_future=False)
         def on_complete(f: Future[int]) -> None:
@@ -401,6 +402,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             current_tab_i = self._restore_reload_tabs(tabs, voutputs, saved_state, current_tab_i, autofit_enabled)
 
             self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
+            self.api._on_workspace_loaded()
 
             @run_in_loop(return_future=False)
             def on_complete(f: Future[int]) -> None:
