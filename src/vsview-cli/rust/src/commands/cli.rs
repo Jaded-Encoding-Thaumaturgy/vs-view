@@ -49,6 +49,9 @@ pub(crate) struct Cli {
     pub hdr: bool,
 
     #[command(flatten)]
+    pub workspace_config: WorkspaceArgs,
+
+    #[command(flatten)]
     pub settings_config: SettingsArgs,
 
     #[command(subcommand)]
@@ -86,6 +89,19 @@ pub(crate) struct SettingsArgs {
         ),
     )]
     pub settings_env_copy: bool,
+}
+
+#[derive(Debug, Args)]
+#[allow(clippy::struct_excessive_bools)]
+#[command(next_help_heading = "Workspace Options")]
+pub(crate) struct WorkspaceArgs {
+    /// Open a specific workspace on startup. Can be specified multiple times to open several at once.
+    #[arg(short, long, value_name = "WORKSPACE", value_parser = |s: &str| -> Result<String, String> { Ok(s.to_lowercase()) })]
+    pub workspace: Vec<String>,
+
+    /// Start the app without opening any workspace.
+    #[arg(long, env = "VSVIEW_NO_DEFAULT_WORKSPACE")]
+    pub no_default_workspace: bool,
 }
 
 #[derive(Debug, Subcommand)]

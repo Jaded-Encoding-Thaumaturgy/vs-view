@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Generator, Sequence
+from contextlib import contextmanager
 from functools import partial
 from logging import getLogger
 from pathlib import Path
@@ -690,6 +691,14 @@ class StackedWidget(QStackedWidget):
         self._animation.setEasingCurve(QEasingCurve.Type.OutQuad)
         self._animation.finished.connect(self._finish_animation)
         self._animation.start()
+
+    @contextmanager
+    def disable_animation(self) -> Generator[None]:
+        self.animations_enabled = False
+        try:
+            yield
+        finally:
+            self.animations_enabled = True
 
     def _finish_animation(self) -> None:
         if self._overlay is not None:

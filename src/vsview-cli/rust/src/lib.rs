@@ -64,6 +64,8 @@ fn parse_args(py: Python<'_>, args: Vec<String>, columns: Option<usize>) -> PyRe
 
     dict.set_item("files", cli.files)?;
     dict.set_item("settings", settings_dict)?;
+    dict.set_item("workspace", cli.workspace_config.workspace)?;
+    dict.set_item("no_default_workspace", cli.workspace_config.no_default_workspace)?;
     dict.set_item("no_settings", cli.settings_config.no_settings)?;
     dict.set_item(
         "settings_roaming",

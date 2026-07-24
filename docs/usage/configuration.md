@@ -86,6 +86,36 @@ vsview [OPTIONS] [FILES]... [COMMAND]
 
 ---
 
+## Workspace Options
+
+#### `--workspace` / `-w` `WORKSPACE`
+:   Open a specific workspace on startup. Can be specified multiple times to open several at once.
+
+    The value is a **workspace slug**. The workspace title lowercased with spaces replaced by hyphens. Built-in slugs:
+
+    | Slug            | Workspace               |
+    | :-------------- | :---------------------- |
+    | `script` | Python Script workspace |
+    | `file`    | Video File workspace    |
+    | `quick-script`  | Quick Script workspace  |
+
+    Plugin-provided workspaces are also accepted if the plugin is installed.
+
+    ```bash
+    # Open two workspaces on startup
+    vsview --workspace script --workspace file
+    ```
+
+#### `--no-default-workspace`
+:   Start the app without opening any workspace.
+
+    Suppresses the three default workspaces (Python Script, Video File, Quick Script)
+    that are normally opened when no files or `--workspace` flags are provided.
+
+    **Env:** `VSVIEW_NO_DEFAULT_WORKSPACE`
+
+---
+
 ## Settings Options
 
 These options control how VSView handles its configuration files.

@@ -19,6 +19,7 @@ from vsview_cli import parse_args
 from .app.main import Application, MainWindow
 from .app.plugins.manager import PluginManager
 from .app.settings.models import GlobalSettings
+from .app.workspace import BaseWorkspace, PythonScriptWorkspace, QuickScriptWorkspace, VideoFileWorkspace
 from .assets import load_fonts
 from .env import getenv_bool, load_dotenv
 from .logging import console, setup_basic_logging, setup_logging
@@ -41,6 +42,8 @@ for stream in (console.file, sys.stderr, sys.__stderr__):
 class CLIConfig(BaseModel):
     settings: SettingsCommand | None
     files: list[Path]
+    workspace: list[str]
+    no_default_workspace: bool
     no_settings: bool
     settings_roaming: bool
     settings_env: bool
@@ -139,14 +142,37 @@ def main(argv: Sequence[str] | None = None) -> None:
                 main_window.load_new_script(file, **cfg.arg)
             else:
                 main_window.load_new_file(file)
-    else:
+    elif cfg.workspace:
+        PluginManager.wait_for_loaded()
+        app.processEvents()
+
+        workspaces: list[type[BaseWorkspace]] = [
+            PythonScriptWorkspace,
+            VideoFileWorkspace,
+            QuickScriptWorkspace,
+            *PluginManager.workspaces,
+        ]
+        possibles = {w.title.lower().replace(" ", "-"): w for w in workspaces}
+        should_exit = False
+
+        with main_window.stack.disable_animation():
+            for choice in cfg.workspace:
+                if choice not in possibles:
+                    logger.critical("The %r workspace doesn't exist. Pick from %s", choice, list(possibles))
+                    should_exit = True
+                    continue
+                main_window.add_workspace(possibles[choice])
+
+        if should_exit:
+            raise SystemExit(app.exit(1))
+
+    elif not cfg.no_default_workspace:
         app.processEvents()
         # Now create default workspaces
-        main_window.script_subaction.trigger()
-        main_window.file_subaction.trigger()
-        main_window.stack.animations_enabled = False
-        main_window.quick_script_subaction.trigger()
-        main_window.button_group.buttons()[0].click()
-        main_window.stack.animations_enabled = True
+        with main_window.stack.disable_animation():
+            main_window.script_subaction.trigger()
+            main_window.file_subaction.trigger()
+            main_window.quick_script_subaction.trigger()
+            main_window.button_group.buttons()[0].click()
 
     raise SystemExit(app.exec())
