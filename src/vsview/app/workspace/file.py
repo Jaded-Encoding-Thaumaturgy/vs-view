@@ -390,9 +390,6 @@ class VideoFileWorkspace(GenericFileWorkspace):
 
         try:
             with self.env.use():
-                if not hasattr(self.env.core, "bs"):
-                    raise RuntimeError("The BestSource plugin 'bs' is required to load a file")
-
                 self._source().set_output()
         except Exception:
             logger.exception("There was an error:")
@@ -404,12 +401,14 @@ class VideoFileWorkspace(GenericFileWorkspace):
         if find_spec("vssource"):
             from vssource import BestSource
 
-            try:
-                return BestSource(show_pretty_progress=True).source(self.content, 0)
-            except Exception as e:
-                logger.warning("vssource.BestSource failed to index with the error %r", str(e))
+            from ...logging import console
 
-        logger.info("Using fallback bs.VideoSource...")
+            pr = BestSource.get_progress(console=console)
+            task = pr.add_task("Indexing with BestSource...", total=100.0, visible=False)
+            bs = BestSource(show_pretty_progress=lambda pct: pr.update(task, completed=pct, visible=True))
+            return bs.source(self.content, 0)
+
+        logger.debug("Using fallback bs.VideoSource...")
         return self.env.core.bs.VideoSource(str(self.content))
 
 
