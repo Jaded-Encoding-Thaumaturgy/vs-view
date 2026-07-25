@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from vsengine.futures import UnifiedFuture
+
 from vsview.api import (
     Accordion,
     ActionDefinition,
@@ -71,13 +72,7 @@ from .ui import (
     ThumbnailItem,
     TMDBListPopup,
 )
-from .worker import (
-    ExtractFramesWorker,
-    SelectFrameWorker,
-    SlowPicsWorker,
-    Tag,
-    TMDBWorker,
-)
+from .worker import ExtractFramesWorker, SelectFrameWorker, SlowPicsWorker, Tag, TMDBWorker
 
 logger = getLogger(__name__)
 
