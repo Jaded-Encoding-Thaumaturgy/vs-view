@@ -35,7 +35,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from vsengine.futures import UnifiedFuture
-
 from vsview.api import (
     Accordion,
     ActionDefinition,
@@ -72,7 +71,13 @@ from .ui import (
     ThumbnailItem,
     TMDBListPopup,
 )
-from .worker import ExtractFramesWorker, SelectFrameWorker, SlowPicsWorker, Tag, TMDBWorker
+from .worker import (
+    ExtractFramesWorker,
+    SelectFrameWorker,
+    SlowPicsWorker,
+    Tag,
+    TMDBWorker,
+)
 
 logger = getLogger(__name__)
 
@@ -781,6 +786,13 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         else:
             prepare_and_extract()
 
+    def update_comp_title_text(self) -> None:
+        if not self.tmdb_title:
+            return
+        voutputs = self.selected_voutputs
+        vs_names = " vs ".join(v.vs_name for v in voutputs)
+        self.collection_name.setText(self.tmdb_title.format_name(self.settings.global_.tmdb_format, vs_names=vs_names))
+
     def on_tmdb_text_changed(self, text: str) -> None:
         self.tmdb_title = None
         if not text.strip():
@@ -841,11 +853,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self.tmdb_title = title
 
-        # Automatically set the collection name if it's currently empty
-        if not self.collection_name.text().strip():
-            voutputs = self.selected_voutputs
-            vs_names = " vs ".join(v.vs_name for v in voutputs)
-            self.collection_name.setText(title.format_name(self.settings.global_.tmdb_format, vs_names=vs_names))
+        self.update_comp_title_text()
 
     def on_tags_editing_started(self) -> None:
         if self.tags_popup.has_tags():
@@ -1053,6 +1061,10 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.upload_btn.setEnabled(frames_ready and not needs_extraction)
 
         self._current_outputs = current_outputs
+
+        # if the collection name has been set it was probably via the tmdb title so update
+        if self.collection_name.text():
+            self.update_comp_title_text()
 
     def on_cancel_clicked(self) -> None:
         logger.info("Cancel button clicked, aborting active tasks...")
