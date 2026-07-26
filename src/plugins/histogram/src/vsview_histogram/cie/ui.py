@@ -203,7 +203,6 @@ class CIEDiagramWidget(QWidget):
         super().__init__(parent)
         self.api = api
         self.settings = settings
-        self.setMinimumSize(128, 128)
 
         self.scope_image = QImage(128, 128, QImage.Format.Format_RGBA8888)
         self.scope_image.fill(0)

@@ -137,7 +137,6 @@ class VectorscopeWidget(QWidget):
         super().__init__(parent)
         self.api = api
         self.settings = settings
-        self.setMinimumSize(128, 128)
 
         self.scope_image = QImage(128, 128, QImage.Format.Format_Indexed8)
         self.scope_image.setColorTable(self.color_table)

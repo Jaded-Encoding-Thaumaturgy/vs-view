@@ -83,7 +83,6 @@ class WaveformWidget(QWidget):
         self.scope_image = QImage()
         self._is_chroma = False
         self._color_family: vs.ColorFamily = vs.UNDEFINED
-        self.setMinimumHeight(150)
 
         self.context_menu = CustomContextMenu(self, self.api)
 
