@@ -99,6 +99,7 @@ class SettingsManager(Singleton):
         path_hash = path_to_hash(script_path)
 
         if path_hash not in self._local_settings:
+            logger.debug("%s is not in loaded local settings (from %s)", path_hash, script_path)
             self._load_local(script_path)
 
         return self._local_settings.get(path_hash) or self.default_local_settings

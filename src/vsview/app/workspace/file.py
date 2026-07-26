@@ -6,7 +6,7 @@ from concurrent.futures import Future
 from contextlib import suppress
 from functools import wraps
 from importlib.util import find_spec
-from logging import getLogger
+from logging import DEBUG, getLogger
 from pathlib import Path
 from typing import Any, ClassVar, Concatenate, NamedTuple, overload, override
 
@@ -54,10 +54,11 @@ def requires_content[W: GenericFileWorkspace, **P, R0, R1](
         @wraps(func)
         def wrapper(self: W, *args: P.args, **kwargs: P.kwargs) -> Any:
             if hasattr(self, "content"):
+                logger.log(DEBUG - 1, "Content is available for %s", func)
                 return func(self, *args, **kwargs)
 
             if return_fallback:
-                logger.debug("Content is not available, returning fallback value")
+                logger.log(DEBUG - 1, "Content is not available for %s, returning fallback value", func)
                 return return_fallback()
 
             return None
