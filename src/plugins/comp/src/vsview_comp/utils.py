@@ -3,11 +3,12 @@ from __future__ import annotations
 import importlib.metadata
 import itertools
 import math
+import threading
 from bisect import bisect_right
 from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import cache
-from logging import getLogger
+from logging import DEBUG, LogRecord, getLogger
 from types import TracebackType
 from typing import override
 
@@ -29,6 +30,26 @@ def get_slowpics_headers() -> dict[str, str]:
         "Referer": "https://slow.pics/comparison",
         "User-Agent": f"vs-view (https://github.com/Jaded-Encoding-Thaumaturgy/vs-view {version})",
     }
+
+
+_DEMOTE_LOCK = threading.Lock()
+_DEMOTE_SET = False
+
+
+def demote_ssl_socket_logs() -> None:
+    global _DEMOTE_SET
+    qt_logger = getLogger("qt.default")
+
+    def filter_func(record: LogRecord) -> bool:
+        if "QIODevice::read (QSslSocket): device not open" in record.getMessage():
+            record.levelno = DEBUG
+            record.levelname = "DEBUG"
+        return True
+
+    with _DEMOTE_LOCK:
+        if not _DEMOTE_SET:
+            qt_logger.addFilter(filter_func)
+            _DEMOTE_SET = True
 
 
 class LogNiquestsErrors(AbstractContextManager[None], AbstractAsyncContextManager[None]):

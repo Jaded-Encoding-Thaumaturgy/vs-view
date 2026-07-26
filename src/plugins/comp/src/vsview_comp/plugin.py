@@ -72,6 +72,7 @@ from .ui import (
     ThumbnailItem,
     TMDBListPopup,
 )
+from .utils import demote_ssl_socket_logs
 from .worker import ExtractFramesWorker, SelectFrameWorker, SlowPicsWorker, Tag, TMDBWorker
 
 logger = getLogger(__name__)
@@ -243,6 +244,11 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         app.installEventFilter(self)
         self.destroyed.connect(lambda: app.removeEventFilter(self) if (app := QApplication.instance()) else None)
+
+        # Demote the "QIODevice::read (QSslSocket): device not open" log
+        # because niquests lets an idle socket linger in memory and this triggers
+        # the internal Qt socket notifier when the remote server closes the connection after 120 s.
+        demote_ssl_socket_logs()
 
     def _setup_clip_options(self, main: MainCompWidget) -> None:
         self.clip_section = Accordion("Clip Options", main)
