@@ -374,7 +374,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(workspace)
 
         # Connect status bar signals for new workspace
-        self._update_status_connection(workspace)
+        self._update_connection(workspace)
 
         return btn
 
@@ -542,20 +542,23 @@ class MainWindow(QMainWindow):
 
         self.delete_workspace(btn)
 
-    def _update_status_connection(self, widget: QWidget | None) -> None:
+    def _update_connection(self, workspace: BaseWorkspace) -> None:
         if self._connected_workspace is not None:
             self.status_widget.disconnect_workspace(self._connected_workspace)
+            self._connected_workspace.on_disconnected()
             self._connected_workspace = None
 
-        if isinstance(widget, LoaderWorkspace):
-            self.status_widget.connect_workspace(widget)
-            self._connected_workspace = widget
-
-            if widget.outputs_manager.current_voutput:
-                widget._emit_output_info()
+        if isinstance(workspace, LoaderWorkspace):
+            self.status_widget.connect_workspace(workspace)
+            self._connected_workspace = workspace
         else:
             self.status_widget.clear()
             self.status_widget.set_ready()
+
+        workspace.on_connected()
+
+        if isinstance(workspace, LoaderWorkspace) and workspace.outputs_manager.current_voutput:
+            workspace._emit_output_info()
 
     def _populate_workspace_menu(self) -> None:
         def populate_wk_menu() -> None:
@@ -725,8 +728,8 @@ class StackedWidget(QStackedWidget):
 
         widget = self.widget(index)
 
-        if isinstance(main_window := self.window(), MainWindow):
-            main_window._update_status_connection(widget)
+        if isinstance(main_window := self.window(), MainWindow) and isinstance(widget, BaseWorkspace):
+            main_window._update_connection(widget)
 
         self._last_widget = widget
 

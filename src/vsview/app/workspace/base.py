@@ -70,6 +70,10 @@ class BaseWorkspace(QMainWindow):
         self.clear_environment()
         return super().deleteLater()
 
+    def on_connected(self) -> None: ...
+
+    def on_disconnected(self) -> None: ...
+
     def clear_environment(self) -> None:
         if env := getattr(self, "script", self._env):
             clear_environment(env)
