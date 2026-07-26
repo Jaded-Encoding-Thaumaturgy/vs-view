@@ -871,7 +871,7 @@ class LocalViewSettings(BaseModel):
     last_center: Annotated[
         QPointF | None,
         PlainValidator(lambda v: QPointF(*v) if v else v),
-        PlainSerializer(lambda v: v.toTuple()),
+        PlainSerializer(lambda v: v.toTuple() if isinstance(v, QPointF) else None),
     ] = None
     """The last center position of the view."""
 
