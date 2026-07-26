@@ -107,11 +107,15 @@ class SettingsManager(Singleton):
     @inject_self.cached
     def save_global(self, settings: GlobalSettings | None = None, path: Path | None = None) -> None:
         """Save global settings to disk."""
+        try:
+            self._signals.aboutToSaveGlobal.emit()
+        except Exception:
+            logger.exception("There was an error when emitting aboutToSaveGlobal")
+
         self._global_settings = settings if settings is not None else self._global_settings
         path = path or GlobalSettings.path_env
 
         try:
-            self._signals.aboutToSaveGlobal.emit()
             if not self._noop:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(self._global_settings.model_dump_json(indent=2), encoding="utf-8")
@@ -131,15 +135,16 @@ class SettingsManager(Singleton):
         """
         from ..utils import path_to_hash
 
-        path_hash = path_to_hash(script_path)
         settings_path = self.local_settings_path(script_path)
-
-        # Ensure source_path is set
-        settings.source_path = str(script_path)
-        self._local_settings[path_hash] = settings
 
         try:
             self._signals.aboutToSaveLocal.emit(str(settings_path))
+        except Exception:
+            logger.exception("There was an error when emitting aboutToSaveLocal")
+
+        self._local_settings[path_to_hash(script_path)] = settings
+
+        try:
             if not self._noop:
                 settings_path.parent.mkdir(parents=True, exist_ok=True)
                 settings_path.write_text(settings.model_dump_json(indent=2), encoding="utf-8")
