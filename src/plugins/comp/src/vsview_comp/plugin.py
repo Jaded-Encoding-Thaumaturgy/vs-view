@@ -312,7 +312,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         )
         self.frames_list.listSizeChanged.connect(self.on_list_size_changed)
 
-        self.add_frame_act.triggered.connect(lambda: self.frames_list.add_item(get_pict_type=self.pict_types_supported))
+        self.add_frame_act.triggered.connect(self.frames_list.add_item)
         self.remove_frame_act.triggered.connect(self.frames_list.remove_selected)
 
         frame_row.addWidget(toolbar)
@@ -698,7 +698,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         for f in frames:
             if f in range(self.api.current_voutput.info.total_frames):
-                self.frames_list.add_item(frame=f, get_pict_type=self.pict_types_supported)
+                self.frames_list.add_item(frame=f)
             else:
                 logger.warning("Skipping invalid frame number: %s", f)
 
@@ -728,11 +728,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         def on_success(times: list[tuple[Time, FrameSourceProvider]]) -> None:
             v = self.api.current_voutput
             for t, src_provider in times:
-                self.frames_list.add_item(
-                    frame=v.time_to_frame(t),
-                    get_pict_type=self.pict_types_supported,
-                    src_provider=src_provider,
-                )
+                self.frames_list.add_item(frame=v.time_to_frame(t), src_provider=src_provider)
 
         def on_error(exc: BaseException) -> None:
             if isinstance(exc, CancelledError):

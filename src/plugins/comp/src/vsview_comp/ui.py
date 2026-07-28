@@ -271,12 +271,10 @@ class ThumbnailItem(QListWidgetItem):
         time: Time,
         frame: int,
         src_provider: FrameSourceProvider,
-        get_pict_type: bool = False,
     ) -> None:
         self.time = time
         self.frame = frame
         self.src_provider = src_provider
-        self.get_pict_type = get_pict_type
         self.metadata = dict[int, ThumbnailItem.Metadata]()
 
         super().__init__(self._get_text("?"))
@@ -386,7 +384,6 @@ class FrameThumbnailList(QListWidget):
     def add_item(
         self,
         frame: int | None = None,
-        get_pict_type: bool = False,
         src_provider: FrameSourceProvider = FrameSourceProvider.MANUAL,
     ) -> None:
         if frame is not None:
@@ -401,7 +398,7 @@ class FrameThumbnailList(QListWidget):
                 self.setCurrentRow(i)
                 return
 
-        item = ThumbnailItem(time, frame, src_provider, get_pict_type)
+        item = ThumbnailItem(time, frame, src_provider)
         # Ensure the item has space for the icon before it's loaded
         item.setSizeHint(QSize(self.ICON_SIZE.width() + self.spacing() * 2, 92))
 
@@ -442,11 +439,7 @@ class FrameThumbnailList(QListWidget):
                 return
             with frame:
                 image = voutput.packer_sdr.frame_to_qimage(frame).copy()
-                pict_type = (
-                    get_prop(frame, "_PictType", str, default="?", func=self.fetch_thumbnail)
-                    if item.get_pict_type
-                    else "?"
-                )
+                pict_type = get_prop(frame, "_PictType", str, default="?", func=self.fetch_thumbnail)
             item.metadata[idx] = ThumbnailItem.Metadata(image, pict_type)
 
             if idx == self.api.current_voutput.vs_index:
