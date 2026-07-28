@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, ABCMeta, abstractmethod
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import KW_ONLY, dataclass, field
 from functools import wraps
@@ -246,7 +246,7 @@ class LineEdit(WidgetMetadata[QLineEdit]):
 class Dropdown(WidgetMetadata[QComboBox]):
     """Dropdown/ComboBox widget metadata."""
 
-    items: Iterable[tuple[str, Any]] | Callable[[], Iterable[tuple[str, Any]]]
+    items: Sequence[tuple[str, Any]] | Callable[[], Sequence[tuple[str, Any]]]
     """Iterable of (display_text, value) tuples or a callable that returns one."""
 
     @override
