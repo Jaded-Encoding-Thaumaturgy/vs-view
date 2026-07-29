@@ -69,12 +69,20 @@ def _get_widget_metadata(annotation: Any) -> WidgetMetadata[QWidget] | None:
     return None
 
 
-def extract_settings(model: type[BaseModel], prefix: str = "", section: str | None = None) -> list[SettingEntry]:
+def extract_settings(
+    model: type[BaseModel],
+    prefix: str = "",
+    section: str | None = None,
+    section_prefix: str | None = None,
+) -> list[SettingEntry]:
     """Extract SettingEntry list from a Pydantic model's Annotated fields."""
     result = list[SettingEntry]()
     hints = get_type_hints(model, include_extras=True)
 
-    model_section = getattr(model, "__section__", None) or section
+    if model_section_attr := getattr(model, "__section__", None):
+        model_section = f"{section_prefix} - {model_section_attr}" if section_prefix else model_section_attr
+    else:
+        model_section = section or section_prefix
 
     for field_name, annotation in hints.items():
         key = f"{prefix}{field_name}" if prefix else field_name
@@ -84,7 +92,14 @@ def extract_settings(model: type[BaseModel], prefix: str = "", section: str | No
             # Check if it's a nested BaseModel
             inner_type = get_args(annotation)[0] if get_origin(annotation) is Annotated else annotation
             if isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
-                result.extend(extract_settings(inner_type, prefix=f"{key}.", section=model_section))
+                result.extend(
+                    extract_settings(
+                        inner_type,
+                        prefix=f"{key}.",
+                        section=model_section,
+                        section_prefix=section_prefix,
+                    )
+                )
         else:
             if model_section is None:
                 raise ValueError(f"No section defined for setting '{key}'. Add __section__ to the model class.")

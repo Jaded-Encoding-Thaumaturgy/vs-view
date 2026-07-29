@@ -131,6 +131,31 @@ class MyPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):  # (3)!
 2. By inheriting from `#!python LocalSettingsModel` and by setting `threshold=None` we make a local threshold value that falls back to the globally defined value above.
 3. In order to access the settings and register the models with the VSView settings, make sure the classes are added here as generic types.
 
+### Organizing Settings into Sections
+
+Setting models (top-level models or nested `BaseModel` classes) can define a `#!python __section__` class attribute to group fields under distinct UI accordions.
+
+All plugin setting sections in the UI are automatically prefixed with `Plugin - <display_name>`:
+
+- **With `#!python __section__ = "Custom Section"`**: Appears under `Plugin - <display_name> - Custom Section`.
+- **Without `#!python __section__`**: Defaults to `Plugin - <display_name>` (or inherits its parent model's section if nested).
+
+```python
+class AdvancedSettings(BaseModel):
+    __section__ = "Advanced"  # (1)!
+    debug_logging: Annotated[bool, Checkbox(label="Debug Logging")] = False
+
+
+class GlobalSettings(BaseModel):
+    __section__ = "General"  # (2)!
+    mode: Annotated[str, Dropdown(label="Mode", items=[("Horizontal", "h")])] = "h"
+    advanced: AdvancedSettings = AdvancedSettings()  # (3)!
+```
+
+1. Nested model section will render as `Plugin - My Plugin - Advanced`.
+2. Top-level model section will render as `Plugin - My Plugin - General`.
+3. Nested model properties inherit section logic automatically.
+
 ## Keyboard Shortcuts
 
 Plugins can register custom keyboard shortcuts with VSView's central shortcut manager. Shortcuts remain user-configurable and hot-reloadable.

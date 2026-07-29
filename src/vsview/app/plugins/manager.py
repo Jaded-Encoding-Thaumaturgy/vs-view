@@ -212,10 +212,10 @@ class PluginManager(Singleton):
         from ..settings.dialog import SettingsDialog
         from ..settings.models import SettingEntry, extract_settings
 
-        def extract_plugin_settings(model: type, plugin_id: str, section_name: str) -> list[SettingEntry]:
+        def extract_plugin_settings(model: type, plugin_id: str, section_prefix: str) -> list[SettingEntry]:
             return [
                 entry._replace(key=f"plugins.{plugin_id}.{entry.key}")
-                for entry in extract_settings(model, section=section_name)
+                for entry in extract_settings(model, section_prefix=section_prefix)
             ]
 
         global_entries = list[SettingEntry]()
@@ -230,13 +230,13 @@ class PluginManager(Singleton):
             if global_model is None and local_model is None:
                 continue
 
-            section = f"Plugin - {display_name}"
+            section_prefix = f"Plugin - {display_name}"
 
             if global_model is not None:
-                global_entries.extend(extract_plugin_settings(global_model, identifier, section))
+                global_entries.extend(extract_plugin_settings(global_model, identifier, section_prefix))
 
             if local_model is not None:
-                local_entries.extend(extract_plugin_settings(local_model, identifier, section))
+                local_entries.extend(extract_plugin_settings(local_model, identifier, section_prefix))
 
         self._populate_default_settings("global")
 
