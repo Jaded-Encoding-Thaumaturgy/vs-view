@@ -8,13 +8,14 @@ import sys
 import threading
 import weakref
 from collections import OrderedDict, UserDict
-from collections.abc import Callable, Container, Iterator, MutableSet, Sized
+from collections.abc import Callable, Container, Generator, Iterator, MutableSet, Sized
+from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, override
 
 import vapoursynth as vs
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QTimer
 from shiboken6 import Shiboken
 
 logger = getLogger(__name__)
@@ -35,6 +36,27 @@ def path_to_hash(path: str | os.PathLike[str]) -> str:
     return hashlib.md5(str(Path(path).resolve()).encode()).hexdigest()[:16]
 
 
+class _CheckLeaks[**P, R]:
+    def __init__(self, func: Callable[P, R]) -> None:
+        self.func = func
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        return self.func(*args, **kwargs)
+
+    @contextmanager
+    def ctx(self) -> Generator[None]:
+        from ..env import getenv_bool
+
+        try:
+            if getenv_bool("VSVIEW_DEBUG"):
+                QTimer.singleShot(0, lambda: check_leaks("before"))
+            yield
+        finally:
+            if getenv_bool("VSVIEW_DEBUG"):
+                QTimer.singleShot(0, lambda: check_leaks("after"))
+
+
+@_CheckLeaks
 def check_leaks(stage: Literal["before", "after"]) -> None:
     try:
         import objgraph  # type: ignore[import-untyped]

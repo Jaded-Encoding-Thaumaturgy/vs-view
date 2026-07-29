@@ -17,6 +17,7 @@ from PySide6.QtCore import (
     QSignalBlocker,
     QSize,
     Qt,
+    QTimer,
 )
 from PySide6.QtGui import (
     QAction,
@@ -59,6 +60,7 @@ from .plugins.manager import PluginManager
 from .settings import ActionID, SecretsManager, SettingsManager, ShortcutManager
 from .settings.dialog import SettingsDialog, ShortcutEditor
 from .settings.models import WindowGeometry
+from .utils import check_leaks
 from .views import StatusWidget
 from .workspace import (
     BaseWorkspace,
@@ -402,7 +404,8 @@ class MainWindow(QMainWindow):
         if not self.nav_container.buttons:
             unregister_policy()
 
-        gc_collect()
+        with check_leaks.ctx():
+            QTimer.singleShot(0, gc_collect)
 
     def _save_geometry(self) -> None:
         # For maximized windows, use normalGeometry to get the unmaximized dimensions
