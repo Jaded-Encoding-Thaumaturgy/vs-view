@@ -137,7 +137,7 @@ class AppearanceSettings(BaseModel):
                 "You may have to restart the application for the changes to fully take effect."
             ),
         ),
-    ] = None
+    ] = Qt.ColorScheme.Dark
 
     style: Annotated[
         str | None,
