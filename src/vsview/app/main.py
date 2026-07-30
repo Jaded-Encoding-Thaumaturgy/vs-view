@@ -201,6 +201,7 @@ class MainWindow(QMainWindow):
 
         # Content area
         self.stack = StackedWidget(self)
+        self.stack.currentChanged.connect(self._on_stack_current_changed)
         main_layout.addWidget(self.stack)
 
         # Connect signals
@@ -362,9 +363,8 @@ class MainWindow(QMainWindow):
     ) -> WorkspaceToolButton[WorkspaceT]:
         get_policy()
 
+        self.disconnect_workspace()
         workspace = workspace_t(self)
-
-        self.stack.addWidget(workspace)
 
         btn = WorkspaceToolButton(self, workspace.title, workspace)
         btn.customContextMenuRequested.connect(self._on_sidebar_context_menu_requested)
@@ -373,14 +373,14 @@ class MainWindow(QMainWindow):
         self.button_group.addButton(btn)
 
         btn.setChecked(True)
+        self.stack.addWidget(workspace)
         self.stack.setCurrentWidget(workspace)
-
-        # Connect status bar signals for new workspace
-        self._update_connection(workspace)
 
         return btn
 
     def delete_workspace(self, btn: WorkspaceToolButton[BaseWorkspace]) -> None:
+        self.disconnect_workspace()
+
         # Switching to another workspace before deleting the workspace and the environment,
         # otherwise we're getting a dead environment when `self.stack.removeWidget` because it triggers
         # currentChanged.connect(self.on_current_changed) in StackWidget
@@ -395,8 +395,6 @@ class MainWindow(QMainWindow):
         self.nav_container.remove_button(btn)
 
         if Shiboken.isValid(btn.workspace):
-            if btn.workspace is self._connected_workspace:
-                self._connected_workspace = None
             btn.workspace.deleteLater()
 
         btn.deleteLater()
@@ -406,6 +404,29 @@ class MainWindow(QMainWindow):
 
         with check_leaks.ctx():
             QTimer.singleShot(0, gc_collect)
+
+    def connect_workspace(self, workspace: BaseWorkspace) -> None:
+        if isinstance(workspace, LoaderWorkspace):
+            self.status_widget.connect_workspace(workspace)
+            self._connected_workspace = workspace
+        else:
+            self.status_widget.clear()
+            self.status_widget.set_ready()
+
+        workspace.on_connected()
+
+    def disconnect_workspace(self) -> None:
+        if self._connected_workspace is not None:
+            self.status_widget.disconnect_workspace(self._connected_workspace)
+            self._connected_workspace.on_disconnected()
+            self._connected_workspace = None
+
+    def update_connection(self, workspace: BaseWorkspace) -> None:
+        self.disconnect_workspace()
+        self.connect_workspace(workspace)
+
+        if isinstance(workspace, LoaderWorkspace) and workspace.outputs_manager.current_voutput:
+            workspace._emit_output_info()
 
     def _save_geometry(self) -> None:
         # For maximized windows, use normalGeometry to get the unmaximized dimensions
@@ -539,29 +560,18 @@ class MainWindow(QMainWindow):
         old_index = self.nav_container.buttons.index(btn)
         workspace_type = type(btn.workspace)
 
-        new_btn = self.add_workspace(workspace_type)
+        self.setUpdatesEnabled(False)
+        self.button_group.blockSignals(True)
 
-        self.nav_container.move_button(new_btn, old_index)
+        try:
+            self.delete_workspace(btn)
+            new_btn = self.add_workspace(workspace_type)
 
-        self.delete_workspace(btn)
-
-    def _update_connection(self, workspace: BaseWorkspace) -> None:
-        if self._connected_workspace is not None:
-            self.status_widget.disconnect_workspace(self._connected_workspace)
-            self._connected_workspace.on_disconnected()
-            self._connected_workspace = None
-
-        if isinstance(workspace, LoaderWorkspace):
-            self.status_widget.connect_workspace(workspace)
-            self._connected_workspace = workspace
-        else:
-            self.status_widget.clear()
-            self.status_widget.set_ready()
-
-        workspace.on_connected()
-
-        if isinstance(workspace, LoaderWorkspace) and workspace.outputs_manager.current_voutput:
-            workspace._emit_output_info()
+            self.nav_container.move_button(new_btn, old_index)
+        finally:
+            self.button_group.blockSignals(False)
+            self.setUpdatesEnabled(True)
+            self.update()
 
     def _populate_workspace_menu(self) -> None:
         def populate_wk_menu() -> None:
@@ -640,6 +650,29 @@ class MainWindow(QMainWindow):
         self.sidebar.setVisible(checked)
         self.settings_manager.global_settings.appearance.sidebar_visible = checked
 
+    def _on_stack_current_changed(self, index: int) -> None:
+        old_widget = self.stack.last_widget
+
+        if (
+            isinstance(old_widget, BaseWorkspace)
+            and Shiboken.isValid(old_widget)
+            and old_widget._env
+            and not old_widget._env.disposed
+        ):
+            logger.debug("Leaving environment %r", old_widget.env._data)
+            old_widget.env.core.clear_cache()
+
+        if index < 0:
+            self.stack.last_widget = None
+            return
+
+        widget = self.stack.widget(index)
+
+        if isinstance(widget, BaseWorkspace):
+            self.update_connection(widget)
+
+        self.stack.last_widget = widget
+
 
 class StackedWidget(QStackedWidget):
     ANIMATION_DURATION = 150
@@ -647,17 +680,15 @@ class StackedWidget(QStackedWidget):
     def __init__(self, /, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self._last_widget: QWidget | None = self.currentWidget()
+        self.last_widget: QWidget | None = self.currentWidget()
         self._animation: QPropertyAnimation | None = None
         self._overlay: QLabel | None = None
         self.animations_enabled = True
 
-        self.currentChanged.connect(self._on_current_changed)
-
     @override
     def removeWidget(self, widget: QWidget) -> None:
-        if widget is self._last_widget:
-            self._last_widget = None
+        if widget is self.last_widget:
+            self.last_widget = None
         super().removeWidget(widget)
 
     def animate_to_widget(self, widget: QWidget, *, animated: bool = True) -> None:
@@ -712,29 +743,6 @@ class StackedWidget(QStackedWidget):
             self._overlay = None
 
         self._animation = None
-
-    def _on_current_changed(self, index: int) -> None:
-        old_widget = self._last_widget
-
-        if (
-            isinstance(old_widget, BaseWorkspace)
-            and Shiboken.isValid(old_widget)
-            and old_widget._env
-            and not old_widget._env.disposed
-        ):
-            logger.debug("Leaving environment %r", old_widget.env._data)
-            old_widget.env.core.clear_cache()
-
-        if index < 0:
-            self._last_widget = None
-            return
-
-        widget = self.widget(index)
-
-        if isinstance(main_window := self.window(), MainWindow) and isinstance(widget, BaseWorkspace):
-            main_window._update_connection(widget)
-
-        self._last_widget = widget
 
 
 DRAG_MIME_TYPE = "application/x-workspace-button"
