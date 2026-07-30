@@ -13,8 +13,8 @@ import pluggy
 if TYPE_CHECKING:
     from vapoursynth import AudioNode, VideoNode
 
-    from ..workspace import BaseWorkspace
     from .api import NodeProcessor, WidgetPluginBase
+    from .api_wk import PluginBaseWorkspace
 
 
 hookspec = pluggy.HookspecMarker("vsview")
@@ -48,7 +48,7 @@ def vsview_register_toolpanel() -> type[WidgetPluginBase[Any, Any]]:
 
 
 @hookspec(firstresult=True)
-def vsview_get_video_processor() -> type[NodeProcessor[VideoNode]]:
+def vsview_get_video_processor() -> type[NodeProcessor[VideoNode, Any, Any]]:
     """
     Retrieve a processor for the video streams.
 
@@ -60,7 +60,7 @@ def vsview_get_video_processor() -> type[NodeProcessor[VideoNode]]:
 
 
 @hookspec(firstresult=True)
-def vsview_get_audio_processor() -> type[NodeProcessor[AudioNode]]:
+def vsview_get_audio_processor() -> type[NodeProcessor[AudioNode, Any, Any]]:
     """
     Retrieve a processor for the audio streams.
 
@@ -78,11 +78,11 @@ def vsview_get_audio_processor() -> type[NodeProcessor[AudioNode]]:
 
 
 @hookspec
-def vsview_register_workspace() -> type[BaseWorkspace]:
+def vsview_register_workspace() -> type[PluginBaseWorkspace[Any, Any]]:
     """
     Register a new workspace.
 
     Returns:
-        A BaseWorkspace subclass.
+        A PluginBaseWorkspace subclass.
     """
     raise NotImplementedError

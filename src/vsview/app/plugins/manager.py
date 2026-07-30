@@ -23,8 +23,8 @@ from .. import tools
 from . import specs
 
 if TYPE_CHECKING:
-    from ..workspace import BaseWorkspace
     from .api import NodeProcessor, WidgetPluginBase
+    from .api_wk import PluginBaseWorkspace
 
 logger = getLogger(__name__)
 
@@ -80,7 +80,7 @@ def ensure_loaded[T: PluginManager, **P, R](
 
 
 class PluginManager(Singleton):
-    ALLOWED_WORKSPACES: ClassVar[Set[str]] = {"vsview_editor", "vsview_testwk"}
+    ALLOWED_WORKSPACES: ClassVar[Set[str]] = {"vsview_editor"}
 
     def __init__(self) -> None:
         self.manager = pluggy.PluginManager("vsview")
@@ -92,28 +92,30 @@ class PluginManager(Singleton):
 
     @inject_self.cached.property
     @ensure_loaded("entrypoints")
-    def tooldocks(self) -> list[type[WidgetPluginBase]]:
+    def tooldocks(self) -> list[type[WidgetPluginBase[Any, Any]]]:
         return self.manager.hook.vsview_register_tooldock()
 
     @inject_self.cached.property
     @ensure_loaded("entrypoints")
-    def toolpanels(self) -> list[type[WidgetPluginBase]]:
+    def toolpanels(self) -> list[type[WidgetPluginBase[Any, Any]]]:
         return self.manager.hook.vsview_register_toolpanel()
 
     @inject_self.cached.property
     @ensure_loaded("entrypoints")
-    def video_processor(self) -> type[NodeProcessor[VideoNode]] | None:
+    def video_processor(self) -> type[NodeProcessor[VideoNode, Any, Any]] | None:
         return self.manager.hook.vsview_get_video_processor()
 
     @inject_self.cached.property
     @ensure_loaded("entrypoints")
-    def audio_processor(self) -> type[NodeProcessor[AudioNode]] | None:
+    def audio_processor(self) -> type[NodeProcessor[AudioNode, Any, Any]] | None:
         return self.manager.hook.vsview_get_audio_processor()
 
     @inject_self.property
     @ensure_loaded("entrypoints")
-    def all_plugins(self) -> list[type[WidgetPluginBase | NodeProcessor[Any]]]:
-        all_plugins: set[Any] = {*self.tooldocks, *self.toolpanels}
+    def all_plugins(
+        self,
+    ) -> list[type[WidgetPluginBase[Any, Any] | NodeProcessor[Any] | PluginBaseWorkspace[Any, Any]]]:
+        all_plugins: set[Any] = {*self.tooldocks, *self.toolpanels, *self.workspaces}
 
         if vp := self.video_processor:
             all_plugins.add(vp)
@@ -124,7 +126,7 @@ class PluginManager(Singleton):
 
     @inject_self.cached.property
     @ensure_loaded("entrypoints")
-    def workspaces(self) -> list[type[BaseWorkspace]]:
+    def workspaces(self) -> list[type[PluginBaseWorkspace[Any, Any]]]:
         restricted_caller = self.manager.subset_hook_caller(
             "vsview_register_workspace",
             remove_plugins=(p for n, p in self.manager.list_name_plugin() if n not in self.ALLOWED_WORKSPACES),

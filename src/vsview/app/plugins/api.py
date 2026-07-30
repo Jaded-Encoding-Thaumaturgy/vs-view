@@ -51,6 +51,7 @@ from ._interface import (
     _PlaybackProxy,
     _PluginAPI,
     _PluginBaseMeta,
+    _PluginLike,
     _PluginSecrets,
     _TimelineProxy,
     _ViewportProxy,
@@ -699,7 +700,7 @@ class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     Returns None if no settings model is defined for the scope.
     """
 
-    def __init__(self, plugin: _PluginBase[TGlobalSettings, TLocalSettings]) -> None:
+    def __init__(self, plugin: _PluginLike) -> None:
         self._plugin = plugin
 
     @property

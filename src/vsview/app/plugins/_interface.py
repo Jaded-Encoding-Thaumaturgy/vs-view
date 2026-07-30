@@ -6,7 +6,7 @@ from logging import getLogger
 from pathlib import Path
 from threading import Lock
 from types import TracebackType, get_original_bases
-from typing import TYPE_CHECKING, Any, get_args, get_origin, override
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, get_args, get_origin, override
 from weakref import WeakKeyDictionary
 
 import vapoursynth as vs
@@ -29,9 +29,14 @@ if TYPE_CHECKING:
     from vsview.app.workspace import BaseWorkspace, LoaderWorkspace
     from vsview.app.workspace.playback import PlaybackManager
 
-    from .api import PluginGraphicsView, WidgetPluginBase, WorkspaceBlocker, _PluginBase
+    from .api import PluginAPI, PluginGraphicsView, WidgetPluginBase, WorkspaceBlocker
 
 logger = getLogger(__name__)
+
+
+class _PluginLike(Protocol):
+    identifier: ClassVar[str]
+    api: PluginAPI
 
 
 class _SettingsProxy[T: BaseModel]:
@@ -75,7 +80,7 @@ class _SettingsProxy[T: BaseModel]:
 class _PluginSettingsStore:
     def __init__(self, workspace: BaseWorkspace) -> None:
         self._workspace = workspace
-        self._caches: dict[str, WeakKeyDictionary[_PluginBase[Any, Any], BaseModel]] = {
+        self._caches: dict[str, WeakKeyDictionary[_PluginLike, BaseModel]] = {
             "global": WeakKeyDictionary(),
             "local": WeakKeyDictionary(),
         }
@@ -86,7 +91,7 @@ class _PluginSettingsStore:
 
         return self._workspace.content if isinstance(self._workspace, GenericFileWorkspace) else None
 
-    def get(self, plugin: _PluginBase[Any, Any], scope: str) -> BaseModel | None:
+    def get(self, plugin: _PluginLike, scope: str) -> BaseModel | None:
         cache = self._caches[scope]
 
         if plugin in cache:
@@ -110,7 +115,7 @@ class _PluginSettingsStore:
         cache[plugin] = settings
         return settings
 
-    def update(self, plugin: _PluginBase[Any, Any], scope: str, **updates: Any) -> None:
+    def update(self, plugin: _PluginLike, scope: str, **updates: Any) -> None:
         model_cls: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model")
 
         if model_cls is None:
@@ -415,7 +420,7 @@ class _PluginAPI(_PluginLimitedApi):
                     with self.__workspace.env.use(), view.outputs[view.current_tab].get_frame(n) as frame:
                         view.on_current_frame_changed(n, frame)
 
-    def _get_cached_proxy_settings(self, plugin: _PluginBase[Any, Any], scope: str) -> Any:
+    def _get_cached_proxy_settings(self, plugin: _PluginLike, scope: str) -> Any:
         model = self._settings_store.get(plugin, scope)
 
         if model is None:
@@ -423,7 +428,7 @@ class _PluginAPI(_PluginLimitedApi):
 
         return _SettingsProxy(model, lambda k, v: self._settings_store.update(plugin, scope, **{k: v}))
 
-    def _update_settings(self, plugin: _PluginBase[Any, Any], scope: str, **updates: Any) -> None:
+    def _update_settings(self, plugin: _PluginLike, scope: str, **updates: Any) -> None:
         self._settings_store.update(plugin, scope, **updates)
 
     @run_in_loop(return_future=False)
@@ -506,6 +511,7 @@ class _PluginBaseMeta(ObjectType):
 
         # WidgetPluginBase and NodeProcessor are now defined so it's safe to import them
         from .api import NodeProcessor, WidgetPluginBase
+        from .api_wk import PluginBaseWorkspace
 
         for base in get_original_bases(cls):
             if not (origin := get_origin(base)):
@@ -513,7 +519,7 @@ class _PluginBaseMeta(ObjectType):
 
             args = get_args(base)
 
-            if issubclass(origin, WidgetPluginBase):
+            if issubclass(origin, (WidgetPluginBase, PluginBaseWorkspace)):
                 scope = ["global", "local"]
             elif issubclass(origin, NodeProcessor):
                 scope = [None, "global", "local"]
@@ -567,7 +573,7 @@ class _PlaybackProxy(QObject):
 
 
 class _PluginSecrets:
-    def __init__(self, plugin: _PluginBase[Any, Any]) -> None:
+    def __init__(self, plugin: _PluginLike) -> None:
         self.__namespace = plugin.identifier
 
     def __getattr__(self, name: str) -> Any:
