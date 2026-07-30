@@ -42,11 +42,25 @@ class SettingsSignals(QObject):
 
     def _wrap_global_method_signal(self, signal: SignalInstance, slot: Callable[..., Any], *args: Any) -> None:
         weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
-        signal.connect(lambda: m() if (m := weak()) is not None else None, *args)
+
+        def weak_slot() -> None:
+            if (m := weak()) is not None:
+                m()
+            else:
+                signal.disconnect(weak_slot)
+
+        signal.connect(weak_slot, *args)
 
     def _wrap_local_method_signal(self, signal: SignalInstance, slot: Callable[..., Any], *args: Any) -> None:
         weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
-        signal.connect(lambda p: m(p) if (m := weak()) is not None else None, *args)
+
+        def weak_slot(p: str) -> None:
+            if (m := weak()) is not None:
+                m(p)
+            else:
+                signal.disconnect(weak_slot)
+
+        signal.connect(weak_slot, *args)
 
 
 class SettingsManager(Singleton):

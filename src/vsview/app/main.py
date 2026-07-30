@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from functools import partial
@@ -397,6 +398,7 @@ class MainWindow(QMainWindow):
         if Shiboken.isValid(btn.workspace):
             btn.workspace.deleteLater()
 
+        del btn.workspace
         btn.deleteLater()
 
         if not self.nav_container.buttons:
@@ -859,7 +861,8 @@ class WorkspaceToolButton[WorkspaceT: BaseWorkspace](QToolButton, IconReloadMixi
 
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
-        self.register_icon_callback(lambda: self.setIcon(self._make_icon(workspace)))
+        weak_wk = weakref.ref(workspace)
+        self.register_icon_callback(lambda: self.setIcon(self._make_icon(ws)) if (ws := weak_wk()) else None)
 
         # Drag tracking
         self._drag_start_pos: QPoint | None = None
