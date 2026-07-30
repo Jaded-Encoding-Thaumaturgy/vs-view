@@ -1,0 +1,60 @@
+{
+  "name": "vsview-editor-npm",
+  "version": "0.1.0-dev1015",
+  "private": true,
+  "description": "Monaco-based code editor workspace for VSView",
+  "keywords": [
+    "monaco-editor",
+    "pyside6",
+    "qt",
+    "vsview"
+  ],
+  "license": "EUPL-1.2",
+  "author": "Vardë <ichunjo.le.terrible@gmail.com>",
+  "type": "module",
+  "scripts": {
+    "build": "tsc && vite build",
+    "watch": "vite build --watch",
+    "sboms": "cyclonedx-npm --omit dev --sv 1.7 -o sboms-js.json",
+    "lint": "oxlint src/ts/",
+    "format": "oxfmt --write \"**/*.{ts,mts,json,yml,html,css}\"",
+    "format-check": "oxfmt --check src/ts/*.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@codingame/monaco-vscode-api": "^36.0.0",
+    "@codingame/monaco-vscode-configuration-service-override": "^36.0.0",
+    "@codingame/monaco-vscode-editor-api": "^36.0.0",
+    "@codingame/monaco-vscode-extension-api": "^36.0.0",
+    "@codingame/monaco-vscode-extensions-service-override": "^36.0.0",
+    "@codingame/monaco-vscode-languages-service-override": "^36.0.0",
+    "@codingame/monaco-vscode-log-service-override": "^36.0.0",
+    "@codingame/monaco-vscode-model-service-override": "^36.0.0",
+    "@codingame/monaco-vscode-python-default-extension": "^36.0.0",
+    "@codingame/monaco-vscode-textmate-service-override": "^36.0.0",
+    "@codingame/monaco-vscode-theme-defaults-default-extension": "^36.0.0",
+    "@codingame/monaco-vscode-theme-service-override": "^36.0.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@^36.0.0",
+    "vscode": "npm:@codingame/monaco-vscode-extension-api@^36.0.0",
+    "vscode-jsonrpc": "^9.0.1",
+    "vscode-languageclient": "^10.1.0"
+  },
+  "devDependencies": {
+    "@cyclonedx/cyclonedx-npm": "^6.0.0",
+    "@types/node": "^26.1.2",
+    "@types/vscode": "^1.125.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "oxfmt": "^0.61.0",
+    "oxlint": "^1.76.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "dompurify": "^3.4.12",
+    "glob": "^13.0.6"
+  }
+}

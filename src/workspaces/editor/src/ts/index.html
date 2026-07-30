@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vsview Editor</title>
+    <script>
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const windowColorRoleParam = params.get("windowColorRole");
+        const windowTextRoleParam = params.get("windowTextRole");
+        const accentColorParam = params.get("accentColor");
+        document.documentElement.style.setProperty("--initial-bg", windowColorRoleParam);
+        document.documentElement.style.setProperty("--initial-fg", windowTextRoleParam);
+        document.documentElement.style.setProperty("--initial-focusBorder", accentColorParam);
+      })();
+    </script>
+    <link rel="stylesheet" href="./index.css" />
+  </head>
+  <body class="monaco-workbench">
+    <!-- Root application mount point -->
+    <main id="app" class="monaco-workbench"></main>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading Editor...</div>
+    </div>
+
+    <!-- QWebChannel JS from Qt internal resources -->
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

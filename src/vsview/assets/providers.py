@@ -42,7 +42,6 @@ class IconName(StrEnum):
     ARROW_RIGHT = "arrow-right"
     ARROW_CLOCKWISE = "arrow-clockwise"
     ARROW_COUNTER_CLOCKWISE = "arrow-counter-clockwise"
-    # Audio icons
     VOLUME_HIGH = "speaker-high"
     VOLUME_MID = "speaker-low"
     VOLUME_LOW = "speaker-none"
@@ -52,15 +51,19 @@ class IconName(StrEnum):
     CLIPBOARD = "clipboard"
     PLUS = "plus"
     MINUS = "minus"
+    FILE_PLUS = "file-plus"
     FILE_IMPORT = "file-arrow-down"
     FILE_EXPORT = "file-arrow-up"
-    # Scening icons
     SCENE_ADD = "selection-plus"
     MARK_IN = "selection-background"
     MARK_OUT = "selection-foreground"
     FRAME_ADD = "selection"
     SIDEBAR_RIGHT = "sidebar-simple-mirror", "mirror"
     SIDEBAR_LEFT = "sidebar-simple"
+    CODE = "code-simple"
+    TEXT_ALIGN_LEFT = "text-align-left"
+    BRACKETS_ANGLE = "brackets-angle"
+    TERMINAL = "terminal-window"
 
     modifier: str
 
@@ -223,6 +226,10 @@ class MaterialProvider(IconProvider):
         IconName.FRAME_ADD: "plus-box",
         IconName.SIDEBAR_RIGHT: "page-layout-sidebar-right",
         IconName.SIDEBAR_LEFT: "page-layout-sidebar-left",
+        IconName.CODE: "code-tags",
+        IconName.TEXT_ALIGN_LEFT: "format-align-left",
+        IconName.BRACKETS_ANGLE: "code-tags",
+        IconName.TERMINAL: "console",
     }
 
     @property
@@ -286,6 +293,10 @@ class LucideProvider(IconProvider):
         IconName.FRAME_ADD: "square-arrow-right-enter",
         IconName.SIDEBAR_RIGHT: "panel-right-open",
         IconName.SIDEBAR_LEFT: "panel-left-open",
+        IconName.CODE: "code",
+        IconName.TEXT_ALIGN_LEFT: "text-align-start",
+        IconName.BRACKETS_ANGLE: "code",
+        IconName.TERMINAL: "square-terminal",
     }
 
     @property

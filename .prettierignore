@@ -1,6 +1,0 @@
-.venv/
-__pycache__/
-.git/
-submodules/
-*.qss
-docs/

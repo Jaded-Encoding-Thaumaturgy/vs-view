@@ -1,0 +1,21 @@
+{
+  "tabWidth": 2,
+  "printWidth": 100,
+  "proseWrap": "preserve",
+  "ignorePatterns": ["submodules/", "*.qss", "docs/"],
+  "overrides": [
+    {
+      "files": ["*.md"],
+      "options": {
+        "tabWidth": 4,
+        "printWidth": 120
+      }
+    },
+    {
+      "files": ["*.ts"],
+      "options": {
+        "sortImports": true
+      }
+    }
+  ]
+}
