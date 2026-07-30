@@ -4,9 +4,13 @@ import importlib
 import importlib.metadata
 import sys
 import sysconfig
+import textwrap
 from collections.abc import Iterable
+from functools import cache
+from importlib.util import find_spec
 from logging import getLogger
 from pathlib import Path
+from typing import override
 
 logger = getLogger(__name__)
 
@@ -68,3 +72,56 @@ def evict_packages(packages: Iterable[str]) -> None:
             del sys.modules[mod_name]
 
         logger.debug('Evicted package: "%s"', package)
+
+
+@cache
+def get_default_script() -> str:
+    code = ""
+    if find_spec("vstools"):
+        code += "from vstools import core, initialize_clip, vs\n"
+    else:
+        code += "import vapoursynth as vs\n"
+        code += "\n"
+        code += "core = vs.core\n"
+
+    code += "from vsview import set_output\n"
+    code += "\n"
+
+    code += "clip = core.std.BlankClip()\n"
+
+    if find_spec("vstools"):
+        code += "clip = initialize_clip(clip, None)\n"
+    else:
+        code += textwrap.dedent("""
+        clip = core.std.SetFrameProps(
+            clip,
+            _Matrix=vs.MATRIX_RGB,
+            _Primaries=vs.PRIMARIES_BT709,
+            _Transfer=vs.TRANSFER_IEC_61966_2_1,
+        )\n""")
+
+    code += "set_output(clip)\n"
+
+    return code
+
+
+class CodeContent:
+    __slots__ = ("code", "filename")
+
+    def __init__(self, code: str, filename: str) -> None:
+        self.code = code
+        self.filename = filename
+
+    def splitlines(self, keepends: bool = False) -> list[str]:
+        return self.code.splitlines(keepends)
+
+    def __len__(self) -> int:
+        return len(self.code.splitlines(keepends=False))
+
+    @override
+    def __str__(self) -> str:
+        return self.code
+
+    @override
+    def __repr__(self) -> str:
+        return self.filename

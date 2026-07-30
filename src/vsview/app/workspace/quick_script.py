@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import linecache
-import textwrap
-from functools import cache
-from importlib.util import find_spec
 from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
@@ -35,6 +32,7 @@ from ...vsenv import run_in_background, run_in_loop
 from ..icon import IconReloadMixin
 from ..settings import ActionID, SettingsManager, ShortcutManager
 from .loader import VSEngineWorkspace
+from .utils import CodeContent, get_default_script
 
 if TYPE_CHECKING:
     from pygments.style import Style
@@ -412,28 +410,6 @@ class CodeEditorDock(QDockWidget, IconReloadMixin):
             logger.exception("Error saving script:")
 
 
-class CodeContent:
-    __slots__ = ("code", "filename")
-
-    def __init__(self, code: str, filename: str) -> None:
-        self.code = code
-        self.filename = filename
-
-    def splitlines(self, keepends: bool = False) -> list[str]:
-        return self.code.splitlines(keepends)
-
-    def __len__(self) -> int:
-        return len(self.code.splitlines(keepends=False))
-
-    @override
-    def __str__(self) -> str:
-        return self.code
-
-    @override
-    def __repr__(self) -> str:
-        return self.filename
-
-
 class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
     """Workspace for quick script editing and execution."""
 
@@ -524,34 +500,3 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
             self.loaded_once = True  # Mark as loaded. Subsequent runs will reload
         else:
             self.reload_content()
-
-
-@cache
-def get_default_script() -> str:
-    code = ""
-    if find_spec("vstools"):
-        code += "from vstools import core, initialize_clip, vs\n"
-    else:
-        code += "import vapoursynth as vs\n"
-        code += "\n"
-        code += "core = vs.core\n"
-
-    code += "from vsview import set_output\n"
-    code += "\n"
-
-    code += "clip = core.std.BlankClip()\n"
-
-    if find_spec("vstools"):
-        code += "clip = initialize_clip(clip, None)\n"
-    else:
-        code += textwrap.dedent("""
-        clip = core.std.SetFrameProps(
-            clip,
-            _Matrix=vs.MATRIX_RGB,
-            _Primaries=vs.PRIMARIES_BT709,
-            _Transfer=vs.TRANSFER_IEC_61966_2_1,
-        )\n""")
-
-    code += "set_output(clip)\n"
-
-    return code
