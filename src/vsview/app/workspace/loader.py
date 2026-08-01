@@ -421,8 +421,6 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             self._on_tab_changed(current_tab_i, seamless=True, cb_render=on_complete, refresh_plugins=True)
 
-            logger.info("Content reloaded successfully: %r", self.content)
-
             return 0
 
     @run_in_loop(return_future=False)
