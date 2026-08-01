@@ -6,6 +6,46 @@ icon: lucide/book-open
 
 This page provides an overview of the **VSView** interface and its core components.
 
+## Quick Start: Launching VSView
+
+### Command Line Interface
+
+**VSView** detects input types automatically based on file extensions.
+
+| Extension                            | Type               |
+| ------------------------------------ | ------------------ |
+| `.py`, `.vpy`                        | VapourSynth script |
+| `.mkv`, `.mp4`, `.png`, `.jpg`, etc. | Video & Image file |
+
+```bash
+# Open VSView
+vsview
+
+# Open specific files
+vsview script.vpy video.mkv
+```
+
+!!! tip "Advanced CLI options & environment variables"
+
+    VSView supports additional flags for settings management and environment scoping.
+    See the [Configuration & CLI](configuration.md) page for the full reference.
+
+### Registering Outputs in Scripts
+
+Register clips in VapourSynth scripts using `set_output()`:
+
+```python title="example.vpy"
+import vapoursynth as vs
+from vsview import set_output
+
+core = vs.core
+clip = core.bs.VideoSource("video.mkv")
+
+set_output(clip, "Source")
+set_output(clip.std.Invert(), "Inverted")
+```
+
+
 ## Interface at a Glance
 
 **VSView** uses a workspace-based layout to organize scripts and files and provides access to integrated tools.
@@ -64,53 +104,3 @@ Opens the **Settings Dialog**, where you can customize shortcuts, application an
 
 The main area displays the active workspace's content.
 See [Workspaces](workspaces/workspace.md) for more information.
-
----
-
-## Quick Start: Launching VSView
-
-### Command Line Interface
-
-**VSView** detects input types automatically based on file extensions.
-
-| Extension                            | Type               |
-| ------------------------------------ | ------------------ |
-| `.py`, `.vpy`                        | VapourSynth script |
-| `.mkv`, `.mp4`, `.png`, `.jpg`, etc. | Video & Image file |
-
-=== "uv"
-    ```bash
-    # Open VSView
-    uv run vsview
-
-    # Open specific files
-    uv run vsview script.vpy video.mkv
-    ```
-=== "pip"
-    ```bash
-    # Open VSView
-    vsview
-
-    # Open specific files
-    vsview script.vpy video.mkv
-    ```
-
-!!! tip "Advanced CLI options & environment variables"
-
-    VSView supports additional flags for settings management and environment scoping.
-    See the [Configuration & CLI](configuration.md) page for the full reference.
-
-### Registering Outputs in Scripts
-
-Register clips in VapourSynth scripts using `set_output()`:
-
-```python title="example.vpy"
-import vapoursynth as vs
-from vsview import set_output
-
-core = vs.core
-clip = core.bs.VideoSource("video.mkv")
-
-set_output(clip, "Source")
-set_output(clip.std.Invert(), "Inverted")
-```
