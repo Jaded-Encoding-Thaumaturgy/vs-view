@@ -44,7 +44,7 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           python-version: ${{ inputs.python-version }}
-          enable-cache: true
+          enable-cache: false
 
       - name: Build
         run: uv build --package "${{ matrix.package }}" ${{ matrix.build_args }} --out-dir dist --clear

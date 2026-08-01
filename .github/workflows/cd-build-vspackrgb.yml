@@ -31,7 +31,8 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          enable-cache: true
+          python-version: ${{ inputs.python-version }}
+          enable-cache: false
 
       - name: Build wheels
         uses: pypa/cibuildwheel@4726cd35bb13f7bde50cf2761f2499ac7b3aa32c # v4.1
@@ -59,7 +60,7 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           python-version: ${{ inputs.python-version }}
-          enable-cache: true
+          enable-cache: false
 
       - name: Build sdist
         run: uv build --package vspackrgb --sdist --out-dir dist --clear

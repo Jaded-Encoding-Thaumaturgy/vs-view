@@ -30,8 +30,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          python-version: 3.12
-          enable-cache: true
+          python-version: "3.12"
 
       - name: Install dependencies
         run: uv sync --locked --all-extras --all-groups --all-packages
