@@ -4,11 +4,12 @@ icon: lucide/file-stack
 
 # Workspaces
 
-**VSView** currently provides three distinct workspace types:
+**VSView** currently provides three built-in workspace types, and one plugin workspace type:
 
 - [**Script Workspace**](script.md): The primary environment for VapourSynth script development and previewing.
 - [**File Workspace**](file.md): For directly previewing media files without a script.
 - [**Quick Script**](quick-script.md): A workspace for one-off testing and experiments using an integrated code editor.
+- [**Editor Workspace**](editor.md): A workspace for VapourSynth script development using an integrated code editor and Python environment.
 
 These workspaces share the same core interface. The sections below describe behavior that applies to all three unless stated otherwise.
 
