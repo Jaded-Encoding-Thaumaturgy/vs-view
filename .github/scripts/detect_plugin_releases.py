@@ -1,10 +1,6 @@
 """
 Detect plugins that have changes since their last versioningit tag.
 
-Usage:
-
-    python .github/scripts/detect_plugin_releases.py
-
 For each plugin with unreleased changes, writes a PR body markdown file to .github/releases/<plugin>.md
 and outputs the plugin list to GITHUB_OUTPUT.
 
@@ -15,16 +11,18 @@ Exit codes:
     2 - no releases pending
 """
 
+import argparse
 import json
 import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from itertools import chain
 from pathlib import Path
 from typing import Any
 
-PLUGINS_DIR = Path("src/plugins")
-RELEASES_DIR = Path(".github/releases")
+import __main__
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -96,8 +94,8 @@ class PluginChange:
         return "\n".join(lines)
 
 
-def detect_changes() -> list[PluginChange]:
-    plugins_path = REPO_ROOT / PLUGINS_DIR
+def detect_changes(plugins_dir: Path) -> list[PluginChange]:
+    plugins_path = REPO_ROOT / plugins_dir
 
     if not plugins_path.is_dir():
         print(f"Error: plugins directory not found at {plugins_path}", file=sys.stderr)
@@ -110,7 +108,7 @@ def detect_changes() -> list[PluginChange]:
             continue
 
         name = plugin_dir.name
-        rel_path = PLUGINS_DIR / name
+        rel_path = plugins_dir / name
         latest_tag = get_latest_tag(name)
         commit_count = count_commits(rel_path, since_tag=latest_tag)
 
@@ -130,13 +128,38 @@ def detect_changes() -> list[PluginChange]:
 
 
 def main() -> None:
-    changes = detect_changes()
+    parser = argparse.ArgumentParser(
+        description=__main__.__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "plugins_dir",
+        help="The plugins directory to check.",
+        type=Path,
+        metavar="plugins-dir",
+        default=None,
+        nargs="?",
+    )
+    parser.add_argument(
+        "--releases-dir",
+        help="Path to a directory where writing the markdown files.",
+        type=Path,
+        metavar="PATH",
+        default=".github/releases",
+    )
+    args = parser.parse_args()
+    plugins_dir: list[Path] = (
+        [p] if (p := args.plugins_dir) is not None else [Path("src/plugins"), Path("src/workspaces")]
+    )
+    releases_dir: Path = args.releases_dir
+
+    changes = list(chain.from_iterable(detect_changes(p) for p in plugins_dir))
 
     if not changes:
         print("No plugins have unreleased changes.")
         sys.exit(2)
 
-    releases_dir = REPO_ROOT / RELEASES_DIR
+    releases_dir = REPO_ROOT / args.releases_dir
     releases_dir.mkdir(parents=True, exist_ok=True)
 
     for change in changes:
