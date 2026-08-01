@@ -15,6 +15,7 @@ class PackageMetadata(TypedDict):
 SPECIAL_PACKAGES = {
     "vspackrgb": "vspackrgb",
     "vsview-cli": "vsview-cli",
+    "vsview-editor": "vsview-editor",
 }
 
 

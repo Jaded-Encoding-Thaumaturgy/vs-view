@@ -7,10 +7,26 @@ on:
     paths:
       - "**.py"
       - "**/pyproject.toml"
+      - "**.ts"
+      - "**.tsx"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/tsconfig.json"
+      - ".oxfmtrc.json"
+      - "**/.oxlintrc.json"
+      - ".github/workflows/ci-lint.yml"
   pull_request:
     paths:
       - "**.py"
       - "**/pyproject.toml"
+      - "**.ts"
+      - "**.tsx"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/tsconfig.json"
+      - ".oxfmtrc.json"
+      - "**/.oxlintrc.json"
+      - ".github/workflows/ci-lint.yml"
   workflow_dispatch:
 
 permissions:
@@ -20,7 +36,8 @@ env:
   UV_NO_SYNC: "1"
 
 jobs:
-  lint:
+  lint-python:
+    name: Lint Python
     runs-on: ubuntu-latest
 
     steps:
@@ -47,6 +64,47 @@ jobs:
       - name: Running mypy
         if: success() || (failure() && (steps.ruff-check.conclusion == 'failure' || steps.ruff-format.conclusion == 'failure'))
         run: uv run mypy .
+
+      - name: Post webhook for failure
+        if: failure()
+        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@fb70088dc5982abfac889fdded8603be4f5823b6 # v1
+        with:
+          webhook-url: ${{ secrets.WEBHOOK_URL }}
+
+  lint-ts:
+    name: Lint TypeScript
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: src/workspaces/editor
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/workspaces/editor/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run oxlint
+        id: oxlint
+        run: npm run lint
+
+      - name: Run oxfmt check
+        id: oxfmt
+        if: success() || (failure() && steps.oxlint.conclusion == 'failure')
+        run: npm run format-check
+
+      - name: Run tsc typecheck
+        if: success() || (failure() && (steps.oxlint.conclusion == 'failure' || steps.oxfmt.conclusion == 'failure'))
+        run: npx tsc --noEmit
 
       - name: Post webhook for failure
         if: failure()

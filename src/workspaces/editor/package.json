@@ -1,6 +1,6 @@
 {
   "name": "vsview-editor-npm",
-  "version": "0.1.0-dev1013",
+  "version": "0.1.0-dev1015",
   "private": true,
   "description": "Monaco-based code editor workspace for VSView",
   "keywords": [
@@ -18,7 +18,7 @@
     "sboms": "cyclonedx-npm --omit dev --sv 1.7 -o sboms-js.json",
     "lint": "oxlint src/ts/",
     "format": "oxfmt --write \"**/*.{ts,mts,json,yml,html,css}\"",
-    "format-check": "oxfmt --check src/ts/*.ts",
+    "format-check": "oxfmt --check \"**/*.{ts,mts,json,yml,html,css}\"",
     "test": "vitest run",
     "test:watch": "vitest"
   },
