@@ -104,6 +104,7 @@ plugins = [
     "vsview-fftspectrum",
     "vsview-comp",
     "vsview-nativeres",
+    "vsview-editor",
     "vsview-audio-convert",
     "vsview-histogram",
 ]
@@ -160,19 +161,29 @@ url = "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple"
 explicit = true
 
 [tool.uv.workspace]
-members = ["src/vspackrgb", "src/vsview-cli", "src/plugins/*"]
+members = [
+    "src/vspackrgb",
+    "src/vsview-cli",
+    "src/plugins/*",
+    "src/workspaces/*",
+]
 
 [tool.uv.sources]
 vapoursynth-fmtconv = { index = "vs-wheels" }
 vapoursynth-ffms2 = { index = "vs-wheels" }
+# Core
 vspackrgb = { workspace = true }
 vsview-cli = { workspace = true }
-vsview-fftspectrum = { workspace = true }
-vsview-split-planes = { workspace = true }
-vsview-frameprops-extended = { workspace = true }
-vsview-audio-convert = { workspace = true }
+# Toolpanels / Tooldocks
 vsview-comp = { workspace = true }
+vsview-fftspectrum = { workspace = true }
+vsview-frameprops-extended = { workspace = true }
+vsview-split-planes = { workspace = true }
 vsview-histogram = { workspace = true }
+# NodeProcessor
+vsview-audio-convert = { workspace = true }
+# Workspaces
+vsview-editor = { workspace = true }
 
 [tool.mypy]
 mypy_path = "$MYPY_CONFIG_FILE_DIR/stubs"

@@ -1,0 +1,50 @@
+name: Build vsview-editor
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      python-version:
+        required: false
+        type: string
+        default: "3.14"
+
+jobs:
+  build:
+    name: Build vsview-editor
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/workspaces/editor/package-lock.json
+
+      - name: Install Node dependencies
+        run: npm ci
+        working-directory: src/workspaces/editor
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Build
+        run: uv build --package vsview-editor --sdist --wheel --out-dir dist --clear
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dist-vsview-editor
+          path: dist/

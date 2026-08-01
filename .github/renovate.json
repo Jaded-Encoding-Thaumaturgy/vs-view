@@ -1,46 +1,43 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
+    "config:best-practices",
+    "helpers:pinGitHubActionDigests",
     ":automergeMinor",
     ":automergePr",
     ":automergeRequireAllStatusChecks",
     ":disableRateLimiting",
-    ":semanticCommits"
+    ":semanticCommits",
+    ":semanticCommitScopeDisabled",
+    ":semanticCommitTypeAll(deps)"
   ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "groupName": "Security fixes",
+    "addLabels": ["security"]
+  },
   "dependencyDashboard": true,
-  "schedule": [
-    "* 14 * * 1,4"
-  ],
+  "schedule": ["* 14 * * 1,4"],
   "packageRules": [
     {
-      "matchManagers": [
-        "pep621",
-        "pep723"
-      ],
+      "matchManagers": ["pep621", "pep723"],
       "groupName": "Python dependencies"
     },
     {
-      "matchManagers": [
-        "github-actions"
-      ],
+      "matchManagers": ["github-actions"],
       "groupName": "GitHub Actions",
       "pinDigests": true
     },
     {
-      "matchPackageNames": [
-        "astral-sh/setup-uv"
-      ],
-      "matchManagers": [
-        "github-actions"
-      ],
-      "versioning": "semver-coerced"
+      "matchManagers": ["cargo"],
+      "groupName": "Rust dependencies"
     },
     {
-      "matchManagers": [
-        "cargo"
-      ],
-      "groupName": "Rust dependencies"
+      "matchManagers": ["npm"],
+      "groupName": "TS dependencies"
     }
-  ]
+  ],
+  "npm": {
+    "rangeStrategy": "pin"
+  }
 }

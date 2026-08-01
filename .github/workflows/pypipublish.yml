@@ -12,6 +12,7 @@ on:
         options:
           - vsview
           - vsview-cli
+          - vsview-editor
           - vspackrgb
           - audio-convert
           - comp
@@ -57,6 +58,13 @@ jobs:
     needs: [prepare]
     if: needs.prepare.outputs.build-workflow == 'vspackrgb'
     uses: ./.github/workflows/cd-build-vspackrgb.yml
+    with:
+      python-version: ${{ needs.prepare.outputs.python-version }}
+
+  vsview-editor-build:
+    needs: [prepare]
+    if: needs.prepare.outputs.build-workflow == 'vsview-editor'
+    uses: ./.github/workflows/cd-build-vsview-editor.yml
     with:
       python-version: ${{ needs.prepare.outputs.python-version }}
 
@@ -154,6 +162,36 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           python-version: ${{ needs.prepare.outputs.python-version }}
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # release/v1
+
+      - name: Post webhook for failure
+        if: failure()
+        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@fb70088dc5982abfac889fdded8603be4f5823b6 # v1
+        with:
+          webhook-url: ${{ secrets.WEBHOOK_URL }}
+
+  vsview-editor-publish:
+    name: Publish vsview-editor to PyPI
+    needs: [prepare, vsview-editor-build]
+    if: needs.prepare.outputs.build-workflow == 'vsview-editor'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    environment:
+      name: pypi-vsview-editor
+      url: https://pypi.org/p/vsview-editor
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dist-vsview-editor
+          path: dist
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # release/v1

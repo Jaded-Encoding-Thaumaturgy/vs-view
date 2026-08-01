@@ -61,7 +61,7 @@ Copy them into your `vsview/.vscode/settings.json`:
     },
     "[json]": {
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "vscode.json-language-features",
+        "editor.defaultFormatter": "oxc.oxc-vscode",
         "editor.tabSize": 2
     },
     "[toml]": {
@@ -69,7 +69,7 @@ Copy them into your `vsview/.vscode/settings.json`:
         "editor.defaultFormatter": "tamasfe.even-better-toml"
     },
     "[github-actions-workflow]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
+        "editor.defaultFormatter": "oxc.oxc-vscode"
     },
     "files.associations": {
         "*.vpy": "python"

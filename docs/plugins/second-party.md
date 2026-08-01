@@ -27,6 +27,15 @@ Second-party plugins are officially maintained but distributed as separate packa
 
     [:lucide-move-right: Details](#comparison) · [:fontawesome-brands-github: Source](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/comp)
 
+- :lucide-code: **Editor**
+
+    ---
+
+    Monaco-based code editor workspace for VapourSynth scripts.
+
+    [:lucide-move-right: Details](../usage/workspaces/editor.md) · [:fontawesome-brands-github: Source](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/workspaces/editor)
+
+
 - :lucide-activity: **FFT Spectrum**
 
     ---

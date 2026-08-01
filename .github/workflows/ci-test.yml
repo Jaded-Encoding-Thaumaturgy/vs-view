@@ -8,13 +8,17 @@ on:
       - "src/**"
       - "tests/**"
       - "**/pyproject.toml"
-      - ".github/workflows/test.yml"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - ".github/workflows/ci-test.yml"
   pull_request:
     paths:
       - "src/**"
       - "tests/**"
       - "**/pyproject.toml"
-      - ".github/workflows/test.yml"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - ".github/workflows/ci-test.yml"
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -31,7 +35,8 @@ env:
   UV_NO_SYNC: "1"
 
 jobs:
-  test:
+  test-python:
+    name: Test Python (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -83,6 +88,41 @@ jobs:
         env:
           QT_DEBUG_PLUGINS: 1
         run: uv run ${{ steps.setup-pkg.outputs.package_arg }} pytest
+
+      - name: Post webhook for failure
+        if: failure()
+        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@fb70088dc5982abfac889fdded8603be4f5823b6 # v1
+        with:
+          webhook-url: ${{ secrets.WEBHOOK_URL }}
+
+  test-ts:
+    name: Test TypeScript
+    if: ${{ !inputs.package || inputs.package == 'vsview' || inputs.package == 'vsview-editor' }}
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: src/workspaces/editor
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/workspaces/editor/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run vitest
+        run: npm test
+
+      - name: Build frontend bundle
+        run: npm run build
 
       - name: Post webhook for failure
         if: failure()

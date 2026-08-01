@@ -1,0 +1,361 @@
+@import "@xterm/xterm/css/xterm.css";
+
+:root {
+  /* Layout & Font variables */
+  --console-height: 200px;
+  --console-font-family: Consolas, Monaco, "Courier New", monospace;
+  --console-font-size: 13px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--initial-bg, var(--vscode-editor-background, #1e1e1e));
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tab Bar & Tabs */
+#tab-bar {
+  display: flex;
+  flex-direction: row;
+  height: 35px;
+  background-color: var(--vscode-editorGroupHeader-tabsBackground, #252526);
+  border-bottom: 1px solid var(--vscode-tab-border, #1e1e1e);
+  overflow-x: auto;
+  overflow-y: hidden;
+  user-select: none;
+  scrollbar-width: thin;
+}
+
+#tab-bar::-webkit-scrollbar {
+  height: 3px;
+}
+
+#tab-bar::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background, #3e3e42);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 100%;
+  background-color: var(--vscode-tab-inactiveBackground, #2d2d2d);
+  color: var(--vscode-tab-inactiveForeground, #969696);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  border-right: 1px solid var(--vscode-tab-border, #1e1e1e);
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.tab:hover {
+  background-color: var(--vscode-tab-hoverBackground, #333333);
+  color: var(--vscode-tab-hoverForeground, #cccccc);
+}
+
+.tab.active {
+  background-color: var(--vscode-tab-activeBackground, #1e1e1e);
+  color: var(--vscode-tab-activeForeground, #ffffff);
+  border-top: 2px solid
+    var(
+      --vscode-tab-activeBorderTop,
+      var(--vscode-tab-activeBorder, var(--vscode-focusBorder, #007acc))
+    );
+}
+
+.tab.main {
+  border-left: 2px solid var(--vscode-badge-background, #007acc);
+}
+
+.tab-main-badge {
+  background-color: var(--vscode-badge-background, #007acc);
+  color: var(--vscode-badge-foreground, #ffffff);
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.tab-title {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-indicator {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tab-close {
+  display: none;
+  font-size: 14px;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  text-align: center;
+  border-radius: 3px;
+  color: var(--vscode-tab-inactiveForeground, #969696);
+}
+
+.tab:hover .tab-close {
+  display: inline-block;
+}
+
+.tab-close:hover {
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.15));
+  color: var(--vscode-tab-activeForeground, #ffffff);
+}
+
+.tab-dirty-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--vscode-tab-activeForeground, #ffffff);
+  display: inline-block;
+}
+
+.tab.dirty .tab-dirty-dot {
+  display: inline-block;
+}
+
+.tab.dirty:hover .tab-dirty-dot {
+  display: none;
+}
+
+/* Tab Context Menu */
+.tab-context-menu {
+  position: fixed;
+  background-color: var(--vscode-menu-background, #252526);
+  border: 1px solid var(--vscode-menu-border, #454545);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  padding: 4px 0;
+  z-index: 1000;
+  font-size: 12px;
+  color: var(--vscode-menu-foreground, #cccccc);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.tab-context-menu-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  color: var(--vscode-menu-foreground, #cccccc);
+}
+
+.tab-context-menu-item:hover {
+  background-color: var(--vscode-menu-selectionBackground, #094771);
+  color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+/* Console Context Menu */
+.console-context-menu {
+  position: fixed;
+  background-color: var(--vscode-menu-background, #252526);
+  border: 1px solid var(--vscode-menu-border, #454545);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  padding: 4px 0;
+  z-index: 1000;
+  font-size: 12px;
+  color: var(--vscode-menu-foreground, #cccccc);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-width: 160px;
+}
+
+.console-context-menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 12px;
+  cursor: pointer;
+  color: var(--vscode-menu-foreground, #cccccc);
+}
+
+.console-context-menu-item:hover:not(.disabled) {
+  background-color: var(--vscode-menu-selectionBackground, #094771);
+  color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+.console-context-menu-item.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.console-context-menu-shortcut {
+  font-size: 11px;
+  color: var(--vscode-menu-separatorBackground, #888888);
+  margin-left: 16px;
+}
+
+.console-context-menu-item:hover:not(.disabled) .console-context-menu-shortcut {
+  color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+.console-context-menu-separator {
+  height: 1px;
+  background-color: var(--vscode-menu-separatorBackground, #454545);
+  margin: 4px 0;
+}
+
+/* Editor Main Area */
+#editor {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+/* Loading Overlay */
+#loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--initial-bg, var(--vscode-editor-background, #1e1e1e));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  z-index: 9999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  opacity: 1;
+  transition: opacity 0.2s linear;
+}
+
+#loading-overlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid color-mix(in srgb, var(--initial-fg, #858585) 20%, transparent);
+  border-top: 3px solid var(--initial-focusBorder, var(--vscode-focusBorder, #007acc));
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  font-size: 13px;
+  color: var(--initial-fg, var(--vscode-descriptionForeground, #858585));
+  letter-spacing: 0.5px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Console Panel & Resizer */
+.console-resizer {
+  height: 4px;
+  background-color: var(--vscode-panel-border, #2d2d2d);
+  cursor: ns-resize;
+  transition: background-color 0.15s ease;
+  user-select: none;
+  z-index: 10;
+}
+
+.console-resizer:hover,
+.console-resizer.dragging {
+  background-color: var(--vscode-focusBorder, #007acc);
+}
+
+.console-panel {
+  height: var(--console-height);
+  display: flex;
+  flex-direction: column;
+  background-color: var(
+    --vscode-terminal-background,
+    var(--vscode-panel-background, var(--vscode-editor-background, #1e1e1e))
+  );
+  border-top: 1px solid var(--vscode-panel-border, #2d2d2d);
+  overflow: hidden;
+}
+
+.console-panel.hidden,
+.console-resizer.hidden {
+  display: none !important;
+}
+
+.console-header {
+  height: 28px;
+  background-color: var(
+    --vscode-panelHeaderTitle-background,
+    var(--vscode-editorGroupHeader-tabsBackground, #252526)
+  );
+  border-bottom: 1px solid var(--vscode-panel-border, #2d2d2d);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  user-select: none;
+}
+
+.console-title {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-panelTitle-activeForeground, #cccccc);
+}
+
+.console-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.console-btn {
+  background: transparent;
+  border: none;
+  color: var(--vscode-icon-foreground, var(--vscode-descriptionForeground, #858585));
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.console-btn:hover {
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1));
+  color: var(--vscode-tab-activeForeground, #ffffff);
+}
+
+.xterm-container {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 4px;
+  overflow: hidden;
+}
