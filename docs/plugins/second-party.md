@@ -11,14 +11,6 @@ Second-party plugins are officially maintained but distributed as separate packa
 
 <div class="grid cards" markdown>
 
-- :lucide-audio-lines: **Audio Convert**
-
-    ---
-
-    An [AudioNode](https://www.vapoursynth.com/doc/pythonreference.html#vapoursynth.AudioNode) processor for converting audio sample types and resampling audio clips for playback.
-
-    [:lucide-move-right: Details](#audio-convert) · [:fontawesome-brands-github: Source](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/audio-convert)
-
 - :lucide-split-square-horizontal: **Comparison**
 
     ---
@@ -100,30 +92,6 @@ You can install plugins individually or choose one of the pre-configured bundles
         ```
 
 Detailed installation for individual packages can be found in their respective sections below.
-
----
-
-## Audio Convert [ :fontawesome-brands-github: ](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/audio-convert){ title="Source Code" }
-
-=== "pip"
-    ```bash title="Install Audio Convert"
-    pip install vsview-audio-convert
-    ```
-=== "uv"
-    ```bash title="Add Audio Convert"
-    uv add vsview-audio-convert
-    ```
-
-The Audio Convert plugin integrates a specialized [AudioNode](https://www.vapoursynth.com/doc/pythonreference.html#vapoursynth.AudioNode) processor into the **VSView** pipeline for reconciling differences between script audio and system playback capabilities.
-
-### Available Options
-- Sample type conversion
-- Sample rate conversion
-- SoX Quality presets
-
-### VapourSynth Requirements
-- [**ares**](https://github.com/ropagr/VS-AudioResample): Required for SoX quality presets and higher-quality resampling.
-- [**atools**](https://github.com/ropagr/VS-AudioTools): Fallback for basic sample type conversion if `ares` is not installed.
 
 ---
 

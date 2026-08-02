@@ -9,6 +9,14 @@ First-party plugins are official components integrated directly into the **VSVie
 
 <div class="grid cards" markdown>
 
+- :lucide-audio-lines: **Audio Convert**
+
+    ---
+
+    An [AudioNode](https://www.vapoursynth.com/doc/pythonreference.html#vapoursynth.AudioNode) processor for converting audio sample types and resampling audio clips for playback.
+
+    [:lucide-move-right: Details](#audio-convert)
+
 - :lucide-pipette: **Color Picker**
 
     ---
@@ -43,6 +51,14 @@ First-party plugins are official components integrated directly into the **VSVie
 
 
 </div>
+
+---
+
+## Audio Convert
+
+The Audio Convert plugin integrates a specialized [AudioNode](https://www.vapoursynth.com/doc/pythonreference.html#vapoursynth.AudioNode) processor into the **VSView** pipeline for reconciling differences between script audio and system playback capabilities.
+
+Configure a target bidepth, sample type, sample rate and dither type in the **Settings** menu under the section **Plugin - Audio Convert**
 
 ---
 

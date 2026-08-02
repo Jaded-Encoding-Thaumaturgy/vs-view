@@ -10,7 +10,6 @@ resolution-markers = [
 members = [
     "vspackrgb",
     "vsview",
-    "vsview-audio-convert",
     "vsview-cli",
     "vsview-comp",
     "vsview-editor",
@@ -1927,24 +1926,6 @@ wheels = [
 ]
 
 [[package]]
-name = "vapoursynth-ares"
-version = "0.4.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "vapoursynth" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/58/0f/46bdfb8025c9aa9f681cb087039ebada37b01d5719faadfa5892f64b2a22/vapoursynth_ares-0.4.0.tar.gz", hash = "sha256:bc9e734f5b46455d96d6b780607a76afbf9882668fea7216e29c1170a00b5619", size = 42564, upload-time = "2026-06-09T03:49:34.425Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/18/4a/2204227e6b7dcb97ec2fd6610dc2436cc1872373fc6493abf2664483359b/vapoursynth_ares-0.4.0-py3-none-macosx_13_0_arm64.whl", hash = "sha256:ae1fd239eedb5e3bcf99c644b9d356c982a3d314028fe5bb00b7f7b7e63a4380", size = 140571, upload-time = "2026-06-09T03:49:25.145Z" },
-    { url = "https://files.pythonhosted.org/packages/15/0c/e147426fdf2762152ec17d82eff474ffb3fcee5afd5587ae1a50aa0f1c92/vapoursynth_ares-0.4.0-py3-none-macosx_13_0_x86_64.whl", hash = "sha256:7d334ee53c7d527590e0974ed62bd5ed3d7b36307d34f3a7c52e9a44b8fcbf60", size = 207923, upload-time = "2026-06-09T03:49:26.555Z" },
-    { url = "https://files.pythonhosted.org/packages/71/da/dfd030d62fef18bae2bffaf8d9ec99730dabfc2661f954dbe2de0f59e45d/vapoursynth_ares-0.4.0-py3-none-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:d9d70e35d74db82d7240e4e54a8e00e3edb7c47bd1c10a02ca9b29700bf61c29", size = 266182, upload-time = "2026-06-09T03:49:27.772Z" },
-    { url = "https://files.pythonhosted.org/packages/17/4b/6b8ad085b2ae6417c16ff7c4f2ca6c24b8b3fa839c0092b6152583eeb69b/vapoursynth_ares-0.4.0-py3-none-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:78e3c2e69629ee2b8c40e35801408548ca814ee186a43a20ba15b39ff70174c1", size = 328906, upload-time = "2026-06-09T03:49:29.135Z" },
-    { url = "https://files.pythonhosted.org/packages/6d/dd/fe5361d42cf64008e1d5fa0c02a9f0906e651af4047503132788e4154035/vapoursynth_ares-0.4.0-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:2dedf00df405257def04fd21f3112fceecede93aaf43a04782d86d74e173ce85", size = 1160857, upload-time = "2026-06-09T03:49:30.449Z" },
-    { url = "https://files.pythonhosted.org/packages/26/b8/db812f2c9d89ff98155c22e1ef2648e35d8168175f8da3aeb80167f857ad/vapoursynth_ares-0.4.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:7ca7018a95787c9e872e87be551275e91242a6b9fdd438c4826ea5718cdd56b9", size = 1261553, upload-time = "2026-06-09T03:49:31.915Z" },
-    { url = "https://files.pythonhosted.org/packages/e4/76/194e28c33268e47ac7763c7e9f3292b62668a0ab67944b184fd4688da28f/vapoursynth_ares-0.4.0-py3-none-win_amd64.whl", hash = "sha256:a003256e25c5a1d6e52337252f728a1753d272ce3a4473bfbcc3ff79cbca8564", size = 369145, upload-time = "2026-06-09T03:49:33.229Z" },
-]
-
-[[package]]
 name = "vapoursynth-bestsource"
 version = "20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2274,7 +2255,6 @@ dependencies = [
 
 [package.optional-dependencies]
 full = [
-    { name = "vsview-audio-convert" },
     { name = "vsview-comp" },
     { name = "vsview-fftspectrum" },
     { name = "vsview-frameprops-extended" },
@@ -2307,7 +2287,6 @@ dev = [
     { name = "types-pygments" },
     { name = "vspackrgb", extra = ["numba", "numpy"] },
     { name = "vsstubs" },
-    { name = "vsview-audio-convert" },
     { name = "vsview-comp" },
     { name = "vsview-editor" },
     { name = "vsview-fftspectrum" },
@@ -2325,7 +2304,6 @@ index-nonsense = [
     { name = "vapoursynth-ffms2" },
 ]
 plugins = [
-    { name = "vsview-audio-convert" },
     { name = "vsview-comp" },
     { name = "vsview-editor" },
     { name = "vsview-fftspectrum" },
@@ -2355,11 +2333,10 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'", specifier = ">=4.15.0" },
-    { name = "vapoursynth", specifier = ">=75,!=76" },
+    { name = "vapoursynth", specifier = ">=78" },
     { name = "vapoursynth-bestsource", specifier = ">=17.0" },
     { name = "vsjetengine", specifier = ">=1.4.0" },
     { name = "vspackrgb", editable = "src/vspackrgb" },
-    { name = "vsview-audio-convert", marker = "extra == 'full'", editable = "src/plugins/audio-convert" },
     { name = "vsview-cli", editable = "src/vsview-cli" },
     { name = "vsview-comp", marker = "extra == 'full'", editable = "src/plugins/comp" },
     { name = "vsview-comp", marker = "extra == 'recommended'", editable = "src/plugins/comp" },
@@ -2389,7 +2366,6 @@ dev = [
     { name = "types-pygments", specifier = ">=2.20.0" },
     { name = "vspackrgb", extras = ["numba", "numpy"], editable = "src/vspackrgb" },
     { name = "vsstubs", specifier = ">=1.5.0" },
-    { name = "vsview-audio-convert", editable = "src/plugins/audio-convert" },
     { name = "vsview-comp", editable = "src/plugins/comp" },
     { name = "vsview-editor", editable = "src/workspaces/editor" },
     { name = "vsview-fftspectrum", editable = "src/plugins/fftspectrum" },
@@ -2405,7 +2381,6 @@ doc = [
 ]
 index-nonsense = [{ name = "vapoursynth-ffms2", index = "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple" }]
 plugins = [
-    { name = "vsview-audio-convert", editable = "src/plugins/audio-convert" },
     { name = "vsview-comp", editable = "src/plugins/comp" },
     { name = "vsview-editor", editable = "src/workspaces/editor" },
     { name = "vsview-fftspectrum", editable = "src/plugins/fftspectrum" },
@@ -2421,20 +2396,6 @@ test = [
     { name = "pytest-qt", specifier = ">=4.5.0" },
     { name = "pytest-xvfb", specifier = ">=3.1.1" },
     { name = "vspackrgb", extras = ["numba", "numpy"], editable = "src/vspackrgb" },
-]
-
-[[package]]
-name = "vsview-audio-convert"
-source = { editable = "src/plugins/audio-convert" }
-dependencies = [
-    { name = "vapoursynth-ares" },
-    { name = "vsview" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "vapoursynth-ares", specifier = ">=0.4.0" },
-    { name = "vsview", editable = "." },
 ]
 
 [[package]]

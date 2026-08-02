@@ -43,7 +43,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "vapoursynth>=75,!=76",
+    "vapoursynth>=78",
     "vapoursynth-bestsource>=17.0",
     "vsjetengine>=1.4.0",
     "vspackrgb>=1.4.0",
@@ -70,12 +70,7 @@ recommended = [
     "vsview-comp",
 ]
 secrets = ["keyring>=25.7.0"]
-full = [
-    "vsview[recommended]",
-    "vsview-audio-convert",
-    "vsview-histogram",
-    "vsview-nativeres",
-]
+full = ["vsview[recommended]", "vsview-histogram", "vsview-nativeres"]
 
 [dependency-groups]
 dev = [
@@ -105,7 +100,6 @@ plugins = [
     "vsview-comp",
     "vsview-nativeres",
     "vsview-editor",
-    "vsview-audio-convert",
     "vsview-histogram",
 ]
 # Specify this one to it's properly resolved for nativeres.
@@ -167,6 +161,7 @@ members = [
     "src/plugins/*",
     "src/workspaces/*",
 ]
+exclude = ["src/plugins/audio-convert"]
 
 [tool.uv.sources]
 vapoursynth-fmtconv = { index = "vs-wheels" }
@@ -180,8 +175,6 @@ vsview-fftspectrum = { workspace = true }
 vsview-frameprops-extended = { workspace = true }
 vsview-split-planes = { workspace = true }
 vsview-histogram = { workspace = true }
-# NodeProcessor
-vsview-audio-convert = { workspace = true }
 # Workspaces
 vsview-editor = { workspace = true }
 
