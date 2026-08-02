@@ -10,7 +10,7 @@ from inspect import ismethod
 from logging import getLogger
 from pathlib import Path
 from threading import Lock
-from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, Literal, cast
 
 import pluggy
 from jetpytools import Singleton, inject_self
@@ -154,6 +154,21 @@ class PluginManager(Singleton):
     def call_when_loaded(self, cb: Callable[[], Any]) -> None:
         self._notifier.register(cb)
 
+    @property
+    def _plugin_identifiers(self) -> dict[str, str]:
+        identifiers = dict[str, str]()
+        for hook_name in self.manager.hook.__dict__:
+            hc: pluggy.HookCaller = getattr(self.manager.hook, hook_name)
+            for hookimpl in hc.get_hookimpls():
+                try:
+                    res = cast(type[Any], hookimpl.function())
+                    if res:
+                        identifiers[res.identifier] = hookimpl.plugin_name
+                except Exception:
+                    logger.exception("Failed to inspect hook %r in plugin %r", hook_name, hookimpl.plugin_name)
+
+        return identifiers
+
     @run_in_background(name="PluginManagerLoad")
     def _load_worker(self) -> None:
         self.manager.add_hookspecs(specs)
@@ -164,6 +179,9 @@ class PluginManager(Singleton):
             logger.debug("Registering %s first party plugin", name)
             self.manager.register(import_module(f"vsview.app.tools.{name}"))
 
+        first_party_ids = self._plugin_identifiers
+        first_party_names = first_party_ids.values()
+
         logger.debug("Loading entrypoints...")
         try:
             n = self.manager.load_setuptools_entrypoints("vsview")
@@ -173,6 +191,15 @@ class PluginManager(Singleton):
 
         logger.debug("Loaded %d second/third party plugins", n)
         self._entry_points_loaded = True
+
+        for identifier, pluggy_name in self._plugin_identifiers.items():
+            if pluggy_name not in first_party_names and identifier in first_party_ids:
+                logger.warning(
+                    "Skipping third-party plugin %r because it reuses first-party plugin identifier %r",
+                    pluggy_name,
+                    identifier,
+                )
+                self.manager.unregister(name=pluggy_name)
 
         self._register_shortcuts()
         self._construct_settings_registry()
