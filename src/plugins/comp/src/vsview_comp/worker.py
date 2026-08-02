@@ -628,6 +628,7 @@ class SlowPicsWorker:
                 ) as client,
                 LogNiquestsErrors("Slowpics Upload"),
             ):
+                self.progress_bar.update_progress(range=(0, 1), fmt="Starting upload", value=0)
                 logger.debug("Setup client")
                 await self._setup_client(client, cookies)
 
@@ -638,12 +639,13 @@ class SlowPicsWorker:
                 start_resp = await client.post(
                     url=f"/upload/{src.upload_type}",
                     data=src.payload | {"browserId": self.settings.global_.browser_id} | image_hashes,
+                    timeout=60  # With the new hashses this request can take longer
                 )
                 await client.gather(start_resp)
                 comp_data = SlowPicsUploadResponse.model_validate(start_resp.raise_for_status().json())
 
                 collection_url = f"https://slow.pics/c/{comp_data.key}"
-                logger.debug("Starting upload of: %s", collection_url)
+                logger.debug("Starting image upload of: %s", collection_url)
 
                 # Upload images concurrently
                 self.progress_bar.update_progress(range=(0, src.total_images), fmt="Uploading images %v / %m", value=0)
