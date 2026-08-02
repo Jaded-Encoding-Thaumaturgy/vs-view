@@ -481,13 +481,16 @@ class FrameThumbnailList(QListWidget):
 
         menu = QMenu(self)
 
+        frame_count = len(self.selectedItems())
+
+        copy_action = menu.addAction(f"Copy {frame_count} frame number(s)" if frame_count > 1 else "Copy frame number")
+        copy_action.triggered.connect(self.copy_frame_number_selected)
+
         remove_action = menu.addAction(
-            f"Remove {count} frame(s)" if (count := len(self.selectedItems())) > 1 else "Remove frame"
+            f"Remove {frame_count} frame(s)" if frame_count > 1 else "Remove frame"
         )
         remove_action.triggered.connect(self.remove_selected)
 
-        copy_action = menu.addAction(f"Copy {count} frame number(s)" if count > 1 else "Copy frame number")
-        copy_action.triggered.connect(self.copy_frame_number_selected)
 
         menu.exec(self.mapToGlobal(pos))
         menu.deleteLater()
