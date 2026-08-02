@@ -298,11 +298,21 @@ class PluginManager(Singleton):
                 raw = settings_container.plugins.get(plugin.identifier, {})
                 existing = raw.model_dump() if isinstance(raw, BaseModel) else raw
 
-                # Validate existing settings (missing fields will be filled with defaults by Pydantic)
-                try:
-                    validated = model.model_validate(existing)
-                except ValidationError:
-                    logger.exception("The plugin %r has invalid settings:", plugin.identifier)
+                if not (validated := _safe_validate(model, existing, plugin.identifier)):
                     continue
 
                 settings_container.plugins[plugin.identifier] = validated
+
+
+def _safe_validate(model: type[BaseModel], existing: dict[str, Any], identifier: str) -> BaseModel | None:
+    try:
+        return model.model_validate(existing)
+    except ValidationError as e:
+        logger.warning("The plugin %r has invalid settings: \n%s\n\nTrying default values...", identifier, e)
+
+    try:
+        return model()
+    except Exception as e:  # noqa: BLE001
+        logger.error("Couldn't create default settings values for %r\n%s", identifier, e)
+
+    return None
