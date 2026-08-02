@@ -144,4 +144,4 @@ vite.config.ts.timestamp-*
 
 # Repo specific
 web_dist/
-sboms-js.json
+sboms-js.cdx.json

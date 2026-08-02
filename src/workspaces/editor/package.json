@@ -1,6 +1,6 @@
 {
   "name": "vsview-editor-npm",
-  "version": "0.1.0-dev1015",
+  "version": "0.1.0-dev1028",
   "private": true,
   "description": "Monaco-based code editor workspace for VSView",
   "keywords": [
