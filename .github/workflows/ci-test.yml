@@ -35,6 +35,24 @@ env:
   UV_NO_SYNC: "1"
 
 jobs:
+  build-python:
+    name: Test build Python packages
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ["ubuntu-latest", "windows-latest", "macos-latest"]
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Build Packages
+        run: uv build --all-packages --quiet
+
+      - name: Post webhook for failure
+        if: failure()
+        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@fb70088dc5982abfac889fdded8603be4f5823b6 # v1
+        with:
+          webhook-url: ${{ secrets.WEBHOOK_URL }}
+
   test-python:
     name: Test Python (${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -91,9 +109,6 @@ jobs:
         env:
           QT_DEBUG_PLUGINS: 1
         run: uv run ${{ steps.setup-pkg.outputs.package_arg }} pytest
-
-      - name: Build Packages
-        run: uv build --all-packages --quiet
 
       - name: Post webhook for failure
         if: failure()
