@@ -1,6 +1,6 @@
 {
   "name": "vsview-editor-npm",
-  "version": "0.1.0-dev1028",
+  "version": "0.1.0-dev",
   "private": true,
   "description": "Monaco-based code editor workspace for VSView",
   "keywords": [
@@ -14,11 +14,12 @@
   "type": "module",
   "scripts": {
     "build": "tsc && vite build",
+    "build-quiet": "tsc && vite build --logLevel warn",
     "watch": "vite build --watch",
-    "sboms": "cyclonedx-npm --omit dev --sv 1.7 -o sboms-js.json",
+    "sboms": "npm sbom --sbom-format cyclonedx --omit dev --sbom-type application",
     "lint": "oxlint src/ts/",
-    "format": "oxfmt --write \"**/*.{ts,mts,json,yml,html,css}\"",
-    "format-check": "oxfmt --check \"**/*.{ts,mts,json,yml,html,css}\"",
+    "fmt": "oxfmt --write \"**/*.{ts,mts,json,yml,html,css}\"",
+    "fmt:check": "oxfmt --check \"**/*.{ts,mts,json,yml,html,css}\"",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -43,7 +44,6 @@
     "vscode-languageclient": "10.1.0"
   },
   "devDependencies": {
-    "@cyclonedx/cyclonedx-npm": "6.0.0",
     "@types/node": "26.1.2",
     "@types/vscode": "1.125.0",
     "@vitest/coverage-v8": "4.1.10",

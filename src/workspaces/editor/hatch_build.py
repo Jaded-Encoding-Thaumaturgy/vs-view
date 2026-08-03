@@ -1,7 +1,6 @@
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any, override
 
@@ -17,9 +16,9 @@ class CustomBuildHook(BuildHookInterface[WheelBuilderConfig]):
         jsversion = pyversion.base_version
 
         if pyversion.is_devrelease:
-            jsversion += f"-dev{pyversion.dev}"
+            jsversion += "-dev"
 
-        print("Syncing versions...")
+        self.app.display_debug("Syncing versions...")
         if not (npm := shutil.which("npm")):
             raise FileNotFoundError("npm not found in PATH. Cannot sync version.")
 
@@ -30,28 +29,25 @@ class CustomBuildHook(BuildHookInterface[WheelBuilderConfig]):
             stdout=subprocess.DEVNULL,
         )
 
-        print("Generating the npm SBOMs...", file=sys.stderr)
-        if not (npx := shutil.which("npx")):
-            raise FileNotFoundError("npx not found in PATH. Cannot generate JS SBOMs.")
+        if self.target_name != "wheel":
+            self.app.display_debug("Skipping SBOM generation: target_name != wheel")
+            return
+
+        if version == "editable" or len(build_data.setdefault("force_include_editable", [])) > 0:
+            self.app.display_debug("Skipping SBOM generation: editable build")
+            return
+
+        self.app.display_debug("Generating the npm SBOMs..")
 
         sbomsjs_path = Path(self.root) / "sboms-js.cdx.json"
-        cmd: list[Any] = [
-            npx,
-            "@cyclonedx/cyclonedx-npm",
-            "--omit",
-            "dev",
-            "--sv",
-            "1.7",
-            "-o",
-            sbomsjs_path,
-        ]
-        subprocess.run(cmd, check=True, shell=os.name == "nt")
+        with sbomsjs_path.open("w") as f:
+            subprocess.run(["npm", "run", "--silent", "sboms"], check=True, shell=os.name == "nt", stdout=f)
 
         if sbomsjs_path.exists():
-            print(f"{sbomsjs_path.name} found...", file=sys.stderr)
+            self.app.display_debug(f"{sbomsjs_path.name} found...")
             build_data.setdefault("sbom_files", []).append(str(sbomsjs_path.relative_to(self.root)))
         else:
-            print(f"{sbomsjs_path.name} not found.", file=sys.stderr)
+            self.app.display_warning(f"{sbomsjs_path.name} not found.")
 
     @override
     def finalize(self, version: str, build_data: dict[str, Any], artifact_path: str) -> None:
