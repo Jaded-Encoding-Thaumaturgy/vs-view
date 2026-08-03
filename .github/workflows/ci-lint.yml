@@ -106,7 +106,7 @@ jobs:
       - name: Run oxfmt check
         id: oxfmt
         if: success() || (failure() && steps.oxlint.conclusion == 'failure')
-        run: npm run format-check
+        run: npm run fmt:check
 
       - name: Run tsc typecheck
         if: success() || (failure() && (steps.oxlint.conclusion == 'failure' || steps.oxfmt.conclusion == 'failure'))
