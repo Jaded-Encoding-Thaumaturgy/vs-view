@@ -80,7 +80,7 @@ def ensure_loaded[T: PluginManager, **P, R](
 
 
 class PluginManager(Singleton):
-    ALLOWED_WORKSPACES: ClassVar[Set[str]] = {"vsview_editor"}
+    ALLOWED_WORKSPACES: ClassVar[Set[str]] = {"jet_vsview_editor"}
 
     def __init__(self) -> None:
         self.manager = pluggy.PluginManager("vsview")

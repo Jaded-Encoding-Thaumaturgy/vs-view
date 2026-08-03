@@ -417,7 +417,7 @@ class EditorShortcut(StrEnum):
     def __new__(cls, value: str, label: str, default_key: str = "") -> Self:
         obj = str.__new__(cls, value)
         obj._value_ = value
-        obj.definition = ActionDefinition(f"vsview_editor.{value}", label, default_key)
+        obj.definition = ActionDefinition(f"jet_vsview_editor.{value}", label, default_key)
         return obj
 
 
@@ -445,7 +445,7 @@ class EditorWorkspace(VSEngineWorkspace[CodeContent], PluginWorkspace[EditorGlob
 
     content_type = "code"
 
-    identifier = "vsview_editor"
+    identifier = "jet_vsview_editor"
     display_name = "Editor"
 
     shortcuts = (
