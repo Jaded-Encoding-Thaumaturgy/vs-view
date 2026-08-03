@@ -78,6 +78,11 @@ vsview [OPTIONS] [FILES]... [COMMAND]
 
     **Env:** `VSVIEW_HDR`
 
+#### `--file-log`
+:   Enable file logging in the platform's standard log directory.
+
+    **Env:** `VSVIEW_FILE_LOG`
+
 #### `--verbose` / `-v`
 :   Enable verbose output. Repeat to increase verbosity (`-vv`, `-vvv`).
 

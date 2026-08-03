@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import faulthandler
 import io
 import os
@@ -8,11 +9,14 @@ import shutil
 import sys
 from collections.abc import Sequence
 from contextlib import suppress
+from datetime import UTC, datetime
 from itertools import chain
 from logging import DEBUG, getLogger
 from pathlib import Path
 from signal import SIG_DFL, SIGINT, signal
 
+from jetpytools import SPath
+from platformdirs import user_log_path
 from pydantic import BaseModel
 from vsview_cli import parse_args
 
@@ -25,8 +29,17 @@ from .env import getenv_bool, load_dotenv
 from .logging import console, setup_basic_logging, setup_logging
 
 setup_basic_logging()
-
 logger = getLogger(__name__)
+
+IS_GUI_MODE = False
+LOG_DIR = user_log_path("vsview", appauthor=False)
+LOG_PATH = LOG_DIR / f"vsview_{datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S')}.log"
+if LOG_DIR.exists():
+    existing_logs = sorted(LOG_DIR.glob("vsview_*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old_log in existing_logs[9:]:
+        with suppress(OSError):
+            old_log.unlink()
+
 
 # Enable faulthandler to get stack traces on segfaults
 for stream in (console.file, sys.stderr, sys.__stderr__):
@@ -37,6 +50,18 @@ for stream in (console.file, sys.stderr, sys.__stderr__):
         stream.fileno()
         faulthandler.enable(file=stream)
         break
+else:
+    # Running without console handle (pythonw / PYAPP); redirect streams to log file for plugins & faulthandler
+    IS_GUI_MODE = True
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_buffer = open(LOG_PATH, "a", encoding="utf-8")  # noqa: SIM115
+    sys.stdout = log_buffer
+    sys.stderr = log_buffer
+    sys.stderr.write(f"=== VSView {datetime.now(UTC).isoformat()} ===\n")
+    sys.stderr.flush()
+    faulthandler.enable(file=sys.stderr)
+    atexit.register(log_buffer.close)
+    console.width = 200
 
 
 class CLIConfig(BaseModel):
@@ -52,6 +77,7 @@ class CLIConfig(BaseModel):
     arg: dict[str, str]
     qt_arg: list[str]
     hdr: bool
+    file_log: bool
 
 
 class SettingsCommand(BaseModel):
@@ -109,7 +135,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         os.environ["VSVIEW_HDR"] = "true"
 
     # -v -> DEBUG, -vv -> DEBUG - 1, -vvv -> DEBUG - 2, etc.
-    setup_logging(level=DEBUG - max(0, cfg.verbose - 1) if cfg.verbose else None)
+    setup_logging(
+        level=DEBUG - max(0, cfg.verbose - 1) if cfg.verbose else None,
+        log_file=LOG_PATH if cfg.file_log or IS_GUI_MODE else None,
+        is_gui_mode=IS_GUI_MODE,
+    )
 
     # Set signal handler to default to allow Ctrl+C to work
     signal(SIGINT, SIG_DFL)

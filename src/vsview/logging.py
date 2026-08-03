@@ -5,6 +5,7 @@ from logging import (
     ERROR,
     INFO,
     WARNING,
+    FileHandler,
     Filter,
     Formatter,
     LogRecord,
@@ -12,6 +13,7 @@ from logging import (
     captureWarnings,
     getLogger,
 )
+from pathlib import Path
 from threading import main_thread
 from typing import TypeGuard, override
 
@@ -27,6 +29,12 @@ main_thread_name = main_thread().name
 
 def _is_lambda(obj: object) -> TypeGuard[Callable[[], object]]:
     return callable(obj) and getattr(obj, "__name__", None) == "<lambda>"
+
+
+def _format_lambda(record: LogRecord) -> LogRecord:
+    if record.args and record.name.startswith("vsview"):
+        record.args = tuple(arg() if _is_lambda(arg) else arg for arg in record.args)
+    return record
 
 
 def _qt_message_handler(mode: QtMsgType, context: QMessageLogContext, message: str) -> None:
@@ -63,9 +71,7 @@ class EffectiveLevelFilter(Filter):
 class CustomHandler(RichHandler):
     @override
     def format(self, record: LogRecord) -> str:
-        if record.args and record.name.startswith("vsview"):
-            record.args = tuple(arg() if _is_lambda(arg) else arg for arg in record.args)
-        return super().format(record)
+        return super().format(_format_lambda(record))
 
 
 class ThreadAwareFormatter(Formatter):
@@ -75,6 +81,22 @@ class ThreadAwareFormatter(Formatter):
 
         if record.threadName != main_thread_name:
             fmt = f"[{record.threadName}]: {fmt}"
+
+        self._style._fmt = fmt
+        return super().format(record)
+
+
+class FileLogFormatter(Formatter):
+    def __init__(self) -> None:
+        super().__init__(fmt="[{asctime}] [{levelname:<7}] {name}: {message}", datefmt="%Y-%m-%d %H:%M:%S", style="{")
+
+    @override
+    def format(self, record: LogRecord) -> str:
+        record = _format_lambda(record)
+
+        fmt = "[{asctime}] [{levelname:<7}] {name}: {message}"
+        if record.threadName != main_thread_name:
+            fmt = f"[{record.threadName}] {fmt}"
 
         self._style._fmt = fmt
         return super().format(record)
@@ -98,13 +120,16 @@ def setup_logging(
     level: int | None = None,
     vs_level: int | None = None,
     vsview_level: int | None = None,
-    vsengine_level: int | None = INFO,
+    vsengine_level: int | None = None,
     qt_level: int | None = None,
+    log_file: Path | None = None,
+    is_gui_mode: bool = False,
     capture_warnings: bool = True,
 ) -> None:
     qInstallMessageHandler(_qt_message_handler)
 
-    level = fallback(level, INFO)
+    console_level = fallback(level, INFO)
+    custom_handler.setLevel(console_level)
 
     root_logger = getLogger()
 
@@ -112,14 +137,27 @@ def setup_logging(
         root_logger.removeHandler(h)
         h.close()
 
-    root_logger.setLevel(level)
-    root_logger.addHandler(custom_handler)
+    root_level = min(DEBUG, console_level)
+    root_logger.setLevel(root_level)
 
-    # Set levels for specialized loggers—they will all propagate to the root handler
-    getLogger("vapoursynth").setLevel(fallback(vs_level, level))
-    getLogger("vsview").setLevel(fallback(vsview_level, level))
-    getLogger("vsengine").setLevel(fallback(vsengine_level, level))
-    getLogger("qt").setLevel(fallback(qt_level, level))
+    # In GUI mode (pythonw), stderr points to log file
+    # We can omit console handler to prevent duplicate Rich logs
+    if not is_gui_mode:
+        root_logger.addHandler(custom_handler)
+
+    file_handler: FileHandler | None = None
+    if log_file:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = FileHandler(log_file, encoding="utf-8")
+        file_handler.setLevel(root_level)
+        file_handler.setFormatter(FileLogFormatter())
+        root_logger.addHandler(file_handler)
+
+    # Set levels for specialized loggers, they will all propagate to the root handler
+    getLogger("vapoursynth").setLevel(fallback(vs_level, root_level))
+    getLogger("vsview").setLevel(fallback(vsview_level, root_level))
+    getLogger("vsengine").setLevel(fallback(vsengine_level, root_level))
+    getLogger("qt").setLevel(fallback(qt_level, root_level))
 
     if capture_warnings:
         captureWarnings(True)

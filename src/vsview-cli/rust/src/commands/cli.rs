@@ -48,6 +48,10 @@ pub(crate) struct Cli {
     #[arg(long, env = "VSVIEW_HDR")]
     pub hdr: bool,
 
+    /// Enable file logging in the platform's standard log directory.
+    #[arg(long, env = "VSVIEW_FILE_LOG")]
+    pub file_log: bool,
+
     #[command(flatten)]
     pub workspace_config: WorkspaceArgs,
 
