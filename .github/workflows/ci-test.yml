@@ -92,6 +92,9 @@ jobs:
           QT_DEBUG_PLUGINS: 1
         run: uv run ${{ steps.setup-pkg.outputs.package_arg }} pytest
 
+      - name: Build Packages
+        run: uv build --all-packages --quiet
+
       - name: Post webhook for failure
         if: failure()
         uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@fb70088dc5982abfac889fdded8603be4f5823b6 # v1
