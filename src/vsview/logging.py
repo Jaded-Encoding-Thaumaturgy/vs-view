@@ -91,7 +91,7 @@ custom_handler.addFilter(EffectiveLevelFilter())
 
 
 def setup_basic_logging() -> None:
-    basicConfig(handlers=[custom_handler], level=INFO, force=True)
+    basicConfig(handlers=[custom_handler], level=INFO)
 
 
 def setup_logging(
