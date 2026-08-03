@@ -1,11 +1,5 @@
 [build-system]
-requires = [
-    "hatchling>=1.29.0",
-    "packaging",
-    "hatch-js>=0.1.2",
-    "versioningit",
-    "hatch-sbom[uv]>=0.3.0",
-]
+requires = ["hatchling>=1.29.0", "packaging", "hatch-js>=0.1.2", "versioningit"]
 build-backend = "hatchling.build"
 
 [project]
@@ -52,14 +46,6 @@ artifacts = ["src/python/vsview_editor/web_dist/"]
 
 [tool.hatch.build.targets.wheel.hooks.custom]
 path = "hatch_build.py"
-
-[tool.hatch.build.targets.wheel.hooks.sbom]
-source = "uv"
-
-[tool.hatch.build.targets.wheel.hooks.sbom.uv]
-no-dev = true
-frozen = false
-no-sources = true
 
 [tool.hatch.build.hooks.hatch-js]
 path = "."

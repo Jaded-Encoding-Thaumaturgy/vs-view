@@ -2,7 +2,6 @@
 requires = [
     "hatchling",
     "hatch-cython @ git+https://github.com/Varde-s-Forks/hatch-cython.git",
-    "hatch-sbom[uv]>=0.3.0",
     "cython>=3.0.0",
     "setuptools",
     "versioningit",
@@ -65,14 +64,6 @@ dev = ["cython>=3.0.0", "pytest>=9.0.0, <10.0.0"]
 packages = ["src/vspackrgb"]
 # Exclude .pyx source files from wheel
 exclude = ["**/*.pyx"]
-
-[tool.hatch.build.targets.wheel.hooks.sbom]
-source = "uv"
-
-[tool.hatch.build.targets.wheel.hooks.sbom.uv]
-no-dev = true
-frozen = false
-no-sources = true
 
 [tool.hatch.build.targets.wheel.hooks.cython]
 dependencies = ["hatch-cython"]

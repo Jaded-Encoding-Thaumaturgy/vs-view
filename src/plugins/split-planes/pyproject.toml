@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "versioningit", "hatch-sbom[uv]>=0.3.0"]
+requires = ["hatchling", "versioningit"]
 build-backend = "hatchling.build"
 
 [project]
@@ -33,14 +33,6 @@ vsview_split_planes = "vsview_split_planes"
 "Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/split-planes"
 "Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
 "Contact" = "https://discord.gg/XTpc6Fa9eB"
-
-[tool.hatch.build.targets.wheel.hooks.sbom]
-source = "uv"
-
-[tool.hatch.build.targets.wheel.hooks.sbom.uv]
-no-dev = true
-frozen = false
-no-sources = true
 
 [tool.hatch.version]
 source = "versioningit"
