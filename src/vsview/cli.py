@@ -15,7 +15,6 @@ from logging import DEBUG, getLogger
 from pathlib import Path
 from signal import SIG_DFL, SIGINT, signal
 
-from jetpytools import SPath
 from platformdirs import user_log_path
 from pydantic import BaseModel
 from vsview_cli import parse_args
