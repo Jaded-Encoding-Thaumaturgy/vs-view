@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use clap::builder::styling::Styles;
-use clap::{ArgAction, Args, Parser, Subcommand};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use color_print::cstr;
 use pyo3::{PyResult, Python};
 use pyo3::exceptions::{PySystemExit, PyValueError};
@@ -48,15 +48,14 @@ pub(crate) struct Cli {
     #[arg(long, env = "VSVIEW_HDR")]
     pub hdr: bool,
 
-    /// Enable file logging in the platform's standard log directory.
-    #[arg(long, env = "VSVIEW_FILE_LOG")]
-    pub file_log: bool,
-
     #[command(flatten)]
     pub workspace_config: WorkspaceArgs,
 
     #[command(flatten)]
     pub settings_config: SettingsArgs,
+
+    #[command(flatten)]
+    pub logging_config: LoggingArgs,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -107,6 +106,47 @@ pub(crate) struct WorkspaceArgs {
     #[arg(long, env = "VSVIEW_NO_DEFAULT_WORKSPACE")]
     pub no_default_workspace: bool,
 }
+
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub (crate) enum PythonLogLevel {
+    #[value(name = "critical")]
+    Critical = 50,
+    #[value(name = "error")]
+    Error = 40,
+    #[value(name = "warning")]
+    Warning = 30,
+    #[value(name = "info")]
+    Info = 20,
+    #[value(name = "debug")]
+    Debug = 10,
+    #[value(name = "notset")]
+    Notset = 0,
+}
+
+#[derive(Debug, Args)]
+#[allow(clippy::struct_excessive_bools)]
+#[command(next_help_heading = "Logging Options")]
+pub(crate) struct LoggingArgs {
+    /// Enable file logging in the platform's standard log directory.
+    #[arg(long, env = "VSVIEW_FILE_LOG")]
+    pub file_log: bool,
+
+    /// VapourSynth Log level
+    #[allow(clippy::doc_markdown)]
+    #[arg(long, value_enum, value_name = "LEVEL")]
+    pub vapoursynth_log_level: Option<PythonLogLevel>,
+
+    /// VSEngine Log Level
+    #[allow(clippy::doc_markdown)]
+    #[arg(long, value_enum, value_name = "LEVEL")]
+    pub vsengine_log_level: Option<PythonLogLevel>,
+
+    /// Qt Log Level
+    #[arg(long, value_enum, value_name = "LEVEL")]
+    pub qt_log_level: Option<PythonLogLevel>,
+}
+
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Commands {

@@ -80,7 +80,20 @@ fn parse_args(py: Python<'_>, args: Vec<String>, columns: Option<usize>) -> PyRe
     dict.set_item("arg", script_args_to_map(cli.arg))?;
     dict.set_item("qt_arg", cli.qt_arg)?;
     dict.set_item("hdr", cli.hdr)?;
-    dict.set_item("file_log", cli.file_log)?;
+    dict.set_item("file_log", cli.logging_config.file_log)?;
+    dict.set_item(
+        "vapoursynth_log_level",
+        cli.logging_config.vapoursynth_log_level.map(|lvl| lvl as i32),
+    )?;
+    dict.set_item(
+        "vsengine_log_level",
+        cli.logging_config.vsengine_log_level.map(|lvl| lvl as i32),
+    )?;
+    dict.set_item(
+        //
+        "qt_log_level",
+        cli.logging_config.qt_log_level.map(|lvl| lvl as i32),
+    )?;
 
     Ok(dict)
 }

@@ -78,6 +78,9 @@ class CLIConfig(BaseModel):
     qt_arg: list[str]
     hdr: bool
     file_log: bool
+    vapoursynth_log_level: int | None
+    vsengine_log_level: int | None
+    qt_log_level: int | None
 
 
 class SettingsCommand(BaseModel):
@@ -137,6 +140,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     # -v -> DEBUG, -vv -> DEBUG - 1, -vvv -> DEBUG - 2, etc.
     setup_logging(
         level=DEBUG - max(0, cfg.verbose - 1) if cfg.verbose else None,
+        vs_level=cfg.vapoursynth_log_level,
+        vsengine_level=cfg.vsengine_log_level,
+        qt_level=cfg.qt_log_level,
         log_file=LOG_PATH if cfg.file_log or IS_GUI_MODE else None,
         is_gui_mode=IS_GUI_MODE,
     )

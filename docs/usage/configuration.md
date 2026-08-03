@@ -78,11 +78,6 @@ vsview [OPTIONS] [FILES]... [COMMAND]
 
     **Env:** `VSVIEW_HDR`
 
-#### `--file-log`
-:   Enable file logging in the platform's standard log directory.
-
-    **Env:** `VSVIEW_FILE_LOG`
-
 #### `--verbose` / `-v`
 :   Enable verbose output. Repeat to increase verbosity (`-vv`, `-vvv`).
 
@@ -146,6 +141,32 @@ These options control how VSView handles its configuration files.
 :   If `--settings-env` is set and the scoped file doesn't exist yet, seed it from the base `global_settings.json`.
 
     **Env:** `VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT_COPY`
+
+---
+
+## Logging Options
+
+These options control application log verbosity.
+
+#### `--file-log`
+:   Enable file logging in the platform's standard log directory.
+
+    **Env:** `VSVIEW_FILE_LOG`
+
+#### `--vapoursynth-log-level` `LEVEL`
+:   Set the log level for the VapourSynth core environment.
+
+    Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
+
+#### `--vsengine-log-level` `LEVEL`
+:   Set the log level for the VSEngine subsystem.
+
+    Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
+
+#### `--qt-log-level` `LEVEL`
+:   Set the log level for Qt / PySide6 system messages.
+
+    Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
 
 ---
 
