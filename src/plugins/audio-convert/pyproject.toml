@@ -56,6 +56,3 @@ rmprefix = "audio-convert/v"
 distance = "{next_version}.dev{distance}+{vcs}{rev}"
 dirty = "{next_version}+dirty"
 distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.dirty"
-
-[tool.uv.sources]
-vsview = { workspace = true }
