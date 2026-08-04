@@ -1,104 +1,30 @@
 from __future__ import annotations
 
-import atexit
-import faulthandler
-import io
 import os
 import shlex
-import shutil
 import sys
-from collections.abc import Sequence
-from contextlib import suppress
-from datetime import UTC, datetime
 from itertools import chain
 from logging import DEBUG, getLogger
-from pathlib import Path
 from signal import SIG_DFL, SIGINT, signal
-
-from platformdirs import user_log_path
-from pydantic import BaseModel
-from vsview_cli import parse_args
+from typing import Any
 
 from .app.main import Application, MainWindow
 from .app.plugins.manager import PluginManager
 from .app.settings.models import GlobalSettings
 from .app.workspace import BaseWorkspace, PythonScriptWorkspace, QuickScriptWorkspace, VideoFileWorkspace
 from .assets import load_fonts
+from .cli import IS_GUI_MODE, LOG_PATH
+from .config import CLIConfig
 from .env import getenv_bool, load_dotenv
-from .logging import console, setup_basic_logging, setup_logging
+from .logging import console, setup_logging
 
-setup_basic_logging()
 logger = getLogger(__name__)
 
-IS_GUI_MODE = False
-LOG_DIR = user_log_path("vsview", appauthor=False)
-LOG_PATH = LOG_DIR / f"vsview_{datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S')}.log"
-if LOG_DIR.exists():
-    existing_logs = sorted(LOG_DIR.glob("vsview_*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for old_log in existing_logs[9:]:
-        with suppress(OSError):
-            old_log.unlink()
 
-
-# Enable faulthandler to get stack traces on segfaults
-for stream in (console.file, sys.stderr, sys.__stderr__):
-    if not stream:
-        continue
-
-    with suppress(AttributeError, OSError, RuntimeError, ValueError, io.UnsupportedOperation):
-        stream.fileno()
-        faulthandler.enable(file=stream)
-        break
-else:
-    # Running without console handle (pythonw / PYAPP); redirect streams to log file for plugins & faulthandler
-    IS_GUI_MODE = True
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_buffer = open(LOG_PATH, "a", encoding="utf-8")  # noqa: SIM115
-    sys.stdout = log_buffer
-    sys.stderr = log_buffer
-    sys.stderr.write(f"=== VSView {datetime.now(UTC).isoformat()} ===\n")
-    sys.stderr.flush()
-    faulthandler.enable(file=sys.stderr)
-    atexit.register(log_buffer.close)
-    console.width = 200
-
-
-class CLIConfig(BaseModel):
-    settings: SettingsCommand | None
-    files: list[Path]
-    workspace: list[str]
-    no_default_workspace: bool
-    no_settings: bool
-    settings_roaming: bool
-    settings_env: bool
-    settings_env_copy: bool
-    verbose: int
-    arg: dict[str, str]
-    qt_arg: list[str]
-    hdr: bool
-    file_log: bool
-    vapoursynth_log_level: int | None
-    vsengine_log_level: int | None
-    qt_log_level: int | None
-
-
-class SettingsCommand(BaseModel):
-    path: bool = False
-    wipe: SettingsWipeCommand | None = None
-
-
-class SettingsWipeCommand(BaseModel):
-    all: bool = False
-
-
-def main(argv: Sequence[str] | None = None) -> None:
+def main(raw: dict[str, Any]) -> None:
     if not getenv_bool("VSVIEW_NO_DOTENV", False):
         load_dotenv()
 
-    if argv is None:
-        argv = sys.argv[1:]
-
-    raw = parse_args(["vsview", *argv], shutil.get_terminal_size().columns)
     cfg = CLIConfig.model_validate(raw)
 
     if cfg.settings:
