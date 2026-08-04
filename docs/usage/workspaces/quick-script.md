@@ -6,6 +6,8 @@ icon: lucide/file-code
 
 The **Quick Script** workspace is used for testing and experiments. It provides an environment to write and execute VapourSynth code without creating a dedicated script file.
 
+Refer to the [Workspaces Overview](workspace.md) for general workspace layout and viewer controls.
+
 ## Integrated Code Editor
 
 The editor is a **dockable widget**, which can be moved, floated, or docked to different sides of the workspace.

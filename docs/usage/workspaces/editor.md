@@ -32,7 +32,7 @@ Refer to the [Workspaces Overview](workspace.md) for general workspace layout an
 The Editor workspace consists of two main dockable panels:
 
 1. **Code Editor Panel (Left)**: Contains the toolbar, multi-tab bar, Monaco editor viewport, output console, and status bar.
-2. **Preview Stack Panel (Right)**: Displays the rendered video frames and playback controls.
+2. **Preview Stack Panel (Right)**: Displays rendered video frames and playback controls. Refer to the [Workspaces Overview](workspace.md) for general workspace layout and viewer controls.
 
 <figure markdown="span">
     ![](../../assets/workspace_editor_layout.png){ .lightboxOn }
