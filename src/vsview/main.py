@@ -135,12 +135,25 @@ def main(raw: dict[str, Any]) -> None:
             raise SystemExit(app.exit(1))
 
     elif not cfg.no_default_workspace:
-        app.processEvents()
-        # Now create default workspaces
-        with main_window.stack.disable_animation():
-            main_window.script_subaction.trigger()
-            main_window.file_subaction.trigger()
-            main_window.quick_script_subaction.trigger()
-            main_window.button_group.buttons()[0].click()
+        # Run VSView Editor as default workspace when launched from pythonw and PYAPP environment variable
+        if IS_GUI_MODE and getenv_bool("PYAPP"):
+            PluginManager.wait_for_loaded()
+            app.processEvents()
+
+            for workspace in PluginManager.workspaces:
+                if workspace.identifier == "jet_vsview_editor":
+                    main_window.add_workspace(workspace)
+                    break
+            else:
+                logger.critical("The VSView Editor workspace doesn't exist. Broken installation!")
+                raise SystemExit(app.exit(1))
+        else:
+            # Now create default workspaces
+            app.processEvents()
+            with main_window.stack.disable_animation():
+                main_window.script_subaction.trigger()
+                main_window.file_subaction.trigger()
+                main_window.quick_script_subaction.trigger()
+                main_window.button_group.buttons()[0].click()
 
     raise SystemExit(app.exec())
