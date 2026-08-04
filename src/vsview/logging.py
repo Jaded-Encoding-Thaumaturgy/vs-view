@@ -94,9 +94,10 @@ class FileLogFormatter(Formatter):
     def format(self, record: LogRecord) -> str:
         record = _format_lambda(record)
 
-        fmt = "[{asctime}] [{levelname:<7}] {name}: {message}"
         if record.threadName != main_thread_name:
-            fmt = f"[{record.threadName}] {fmt}"
+            fmt = f"[{{asctime}}] [{{levelname:<7}}] {{name}}: [{record.threadName}] {{message}}"
+        else:
+            fmt = "[{asctime}] [{levelname:<7}] {name}: {message}"
 
         self._style._fmt = fmt
         return super().format(record)
@@ -137,7 +138,7 @@ def setup_logging(
         root_logger.removeHandler(h)
         h.close()
 
-    root_level = min(DEBUG, console_level)
+    root_level = min(INFO if is_gui_mode else DEBUG, console_level)
     root_logger.setLevel(root_level)
 
     # In GUI mode (pythonw), stderr points to log file
@@ -156,7 +157,7 @@ def setup_logging(
     # Set levels for specialized loggers, they will all propagate to the root handler
     getLogger("vapoursynth").setLevel(fallback(vs_level, root_level))
     getLogger("vsview").setLevel(fallback(vsview_level, root_level))
-    getLogger("vsengine").setLevel(fallback(vsengine_level, root_level))
+    getLogger("vsengine").setLevel(fallback(vsengine_level, INFO))
     getLogger("qt").setLevel(fallback(qt_level, root_level))
 
     if capture_warnings:
