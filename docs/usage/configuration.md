@@ -93,11 +93,11 @@ vsview [OPTIONS] [FILES]... [COMMAND]
 
     The value is a **workspace slug**. The workspace title lowercased with spaces replaced by hyphens. Built-in slugs:
 
-    | Slug            | Workspace               |
-    | :-------------- | :---------------------- |
-    | `script` | Python Script workspace |
-    | `file`    | Video File workspace    |
-    | `quick-script`  | Quick Script workspace  |
+    | Slug           | Workspace               |
+    | :------------- | :---------------------- |
+    | `script`       | Python Script workspace |
+    | `file`         | Video File workspace    |
+    | `quick-script` | Quick Script workspace  |
 
     Plugin-provided workspaces are also accepted if the plugin is installed.
 
