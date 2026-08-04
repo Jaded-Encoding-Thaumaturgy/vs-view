@@ -72,7 +72,10 @@ class LSPProcessServer(QObject):
             urllib.parse.quote(self.real_uri.replace("file:///", "file:/"), safe=":/"),
         ]
 
-        if not (binary := shutil.which(executable_name := self.config.command[0])):
+        executable_name = Path(self.config.command[0])
+        if executable_name.is_file():
+            binary = executable_name.resolve()
+        elif not (binary := shutil.which(executable_name)):
             logger.error("LSP executable %r for %r not found in PATH.", executable_name, self.config.id)
             return -1
 
@@ -92,7 +95,7 @@ class LSPProcessServer(QObject):
         self.process.errorOccurred.connect(self._on_process_error)
 
         try:
-            self.process.start(binary, self.config.command[1:])
+            self.process.start(str(binary), self.config.command[1:])
         except Exception:
             logger.exception("Failed to launch LSP subprocess for %r:", self.config.id)
 
