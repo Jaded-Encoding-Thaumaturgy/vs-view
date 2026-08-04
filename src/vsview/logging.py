@@ -150,7 +150,7 @@ def setup_logging(
     if log_file:
         log_file.parent.mkdir(parents=True, exist_ok=True)
         file_handler = FileHandler(log_file, encoding="utf-8")
-        file_handler.setLevel(root_level)
+        file_handler.setLevel(DEBUG)
         file_handler.setFormatter(FileLogFormatter())
         root_logger.addHandler(file_handler)
 
