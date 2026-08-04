@@ -70,7 +70,12 @@ recommended = [
     "vsview-comp",
 ]
 secrets = ["keyring>=25.7.0"]
-full = ["vsview[recommended]", "vsview-histogram", "vsview-nativeres"]
+full = [
+    "vsview[recommended]",
+    "vsview-editor",
+    "vsview-histogram",
+    "vsview-nativeres",
+]
 
 [dependency-groups]
 dev = [

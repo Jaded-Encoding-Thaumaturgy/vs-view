@@ -72,7 +72,7 @@ You can install plugins individually or choose one of the pre-configured bundles
 
 !!! tip "Optional: Recommended & Full Bundles"
     * The **recommended** bundle includes **Split Planes**, **FrameProps Extended**, and **Comparison**.
-    * The **full** bundle includes everything in the **recommended** bundle, plus **Audio Convert**, **Histogram**, and the third-party [**Native Resolution**](third-party.md#native-resolution) plugin.
+    * The **full** bundle includes everything in the **recommended** bundle, plus **Histogram**, **Editor**, and the third-party [**Native Resolution**](third-party.md#native-resolution) plugin.
 
     === "pip"
         ```bash title="Install recommended bundle"
