@@ -1748,10 +1748,6 @@ class VideoNode(RawNode):
     fftspectrum_rs: Final[_fftspectrum_rs._VideoNode_bound.Plugin]
     """FFT frequency spectrum."""
 # </attribute/VideoNode_bound/fftspectrum_rs>
-# <attribute/VideoNode_bound/fmtc>
-    fmtc: Final[_fmtc._VideoNode_bound.Plugin]
-    """Format converter"""
-# </attribute/VideoNode_bound/fmtc>
 # <attribute/VideoNode_bound/fpng>
     fpng: Final[_fpng._VideoNode_bound.Plugin]
     """fpng for vapoursynth"""
@@ -1815,10 +1811,6 @@ class AudioNode(RawNode):
     ) -> None: ...
 
 # <plugins/bound/AudioNode>
-# <attribute/AudioNode_bound/ares>
-    ares: Final[_ares._AudioNode_bound.Plugin]
-    """audio sample rate and sample type converter"""
-# </attribute/AudioNode_bound/ares>
 # <attribute/AudioNode_bound/std>
     std: Final[_std._AudioNode_bound.Plugin]
     """VapourSynth Core Functions"""
@@ -1874,10 +1866,6 @@ class Core:
     akarin: Final[_akarin._Core_bound.Plugin]
     """Akarin's Experimental Filters"""
 # </attribute/Core_bound/akarin>
-# <attribute/Core_bound/ares>
-    ares: Final[_ares._Core_bound.Plugin]
-    """audio sample rate and sample type converter"""
-# </attribute/Core_bound/ares>
 # <attribute/Core_bound/avs>
     avs: Final[_avs._Core_bound.Plugin]
     """VapourSynth Avisynth Compatibility"""
@@ -1906,10 +1894,6 @@ class Core:
     fftspectrum_rs: Final[_fftspectrum_rs._Core_bound.Plugin]
     """FFT frequency spectrum."""
 # </attribute/Core_bound/fftspectrum_rs>
-# <attribute/Core_bound/fmtc>
-    fmtc: Final[_fmtc._Core_bound.Plugin]
-    """Format converter"""
-# </attribute/Core_bound/fmtc>
 # <attribute/Core_bound/fpng>
     fpng: Final[_fpng._Core_bound.Plugin]
     """fpng for vapoursynth"""
@@ -1998,20 +1982,6 @@ class _akarin:
             def Tmpl(self, /, prop: _AnyStr | _SequenceLike[_AnyStr], text: _AnyStr | _SequenceLike[_AnyStr]) -> VideoNode: ...
 
 # </implementation/akarin>
-
-# <implementation/ares>
-class _ares:
-    class _Core_bound:
-        class Plugin(_VSPlugin):
-            @_Wrapper.Function
-            def Resample(self, /, clip: AudioNode, sample_rate: _IntLike | None = None, sample_type: _AnyStr | None = None, quality: _AnyStr | None = None, overflow: _AnyStr | None = None, overflow_log: _AnyStr | None = None) -> AudioNode: ...
-
-    class _AudioNode_bound:
-        class Plugin(_VSPlugin):
-            @_Wrapper.Function
-            def Resample(self, /, sample_rate: _IntLike | None = None, sample_type: _AnyStr | None = None, quality: _AnyStr | None = None, overflow: _AnyStr | None = None, overflow_log: _AnyStr | None = None) -> AudioNode: ...
-
-# </implementation/ares>
 
 # <implementation/avs>
 class _avs:
@@ -2177,52 +2147,6 @@ class _fftspectrum_rs:
             def FFTSpectrum(self, /) -> VideoNode: ...
 
 # </implementation/fftspectrum_rs>
-
-# <implementation/fmtc>
-class _fmtc:
-    class _Core_bound:
-        class Plugin(_VSPlugin):
-            @_Wrapper.Function
-            def bitdepth(self, /, clip: VideoNode, csp: _IntLike | None = None, bits: _IntLike | None = None, flt: _IntLike | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None, fulls: _IntLike | None = None, fulld: _IntLike | None = None, dmode: _IntLike | None = None, ampo: _FloatLike | None = None, ampn: _FloatLike | None = None, dyn: _IntLike | None = None, staticnoise: _IntLike | None = None, cpuopt: _IntLike | None = None, patsize: _IntLike | None = None, tpdfo: _IntLike | None = None, tpdfn: _IntLike | None = None, corplane: _IntLike | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def histluma(self, /, clip: VideoNode, full: _IntLike | None = None, amp: _IntLike | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def matrix(self, /, clip: VideoNode, mat: _AnyStr | None = None, mats: _AnyStr | None = None, matd: _AnyStr | None = None, fulls: _IntLike | None = None, fulld: _IntLike | None = None, coef: _FloatLike | _SequenceLike[_FloatLike] | None = None, csp: _IntLike | None = None, col_fam: _IntLike | None = None, bits: _IntLike | None = None, singleout: _IntLike | None = None, cpuopt: _IntLike | None = None, planes: _FloatLike | _SequenceLike[_FloatLike] | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def matrix2020cl(self, /, clip: VideoNode, full: _IntLike | None = None, csp: _IntLike | None = None, bits: _IntLike | None = None, cpuopt: _IntLike | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def nativetostack16(self, /, clip: VideoNode) -> VideoNode: ...
-            @_Wrapper.Function
-            def primaries(self, /, clip: VideoNode, rs: _FloatLike | _SequenceLike[_FloatLike] | None = None, gs: _FloatLike | _SequenceLike[_FloatLike] | None = None, bs: _FloatLike | _SequenceLike[_FloatLike] | None = None, ws: _FloatLike | _SequenceLike[_FloatLike] | None = None, rd: _FloatLike | _SequenceLike[_FloatLike] | None = None, gd: _FloatLike | _SequenceLike[_FloatLike] | None = None, bd: _FloatLike | _SequenceLike[_FloatLike] | None = None, wd: _FloatLike | _SequenceLike[_FloatLike] | None = None, prims: _AnyStr | None = None, primd: _AnyStr | None = None, wconv: _IntLike | None = None, cpuopt: _IntLike | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def resample(self, /, clip: VideoNode, w: _IntLike | None = None, h: _IntLike | None = None, sx: _FloatLike | _SequenceLike[_FloatLike] | None = None, sy: _FloatLike | _SequenceLike[_FloatLike] | None = None, sw: _FloatLike | _SequenceLike[_FloatLike] | None = None, sh: _FloatLike | _SequenceLike[_FloatLike] | None = None, scale: _FloatLike | None = None, scaleh: _FloatLike | None = None, scalev: _FloatLike | None = None, kernel: _AnyStr | _SequenceLike[_AnyStr] | None = None, kernelh: _AnyStr | _SequenceLike[_AnyStr] | None = None, kernelv: _AnyStr | _SequenceLike[_AnyStr] | None = None, impulse: _FloatLike | _SequenceLike[_FloatLike] | None = None, impulseh: _FloatLike | _SequenceLike[_FloatLike] | None = None, impulsev: _FloatLike | _SequenceLike[_FloatLike] | None = None, taps: _IntLike | _SequenceLike[_IntLike] | None = None, tapsh: _IntLike | _SequenceLike[_IntLike] | None = None, tapsv: _IntLike | _SequenceLike[_IntLike] | None = None, a1: _FloatLike | _SequenceLike[_FloatLike] | None = None, a2: _FloatLike | _SequenceLike[_FloatLike] | None = None, a3: _FloatLike | _SequenceLike[_FloatLike] | None = None, a1h: _FloatLike | _SequenceLike[_FloatLike] | None = None, a2h: _FloatLike | _SequenceLike[_FloatLike] | None = None, a3h: _FloatLike | _SequenceLike[_FloatLike] | None = None, a1v: _FloatLike | _SequenceLike[_FloatLike] | None = None, a2v: _FloatLike | _SequenceLike[_FloatLike] | None = None, a3v: _FloatLike | _SequenceLike[_FloatLike] | None = None, kovrspl: _IntLike | _SequenceLike[_IntLike] | None = None, fh: _FloatLike | _SequenceLike[_FloatLike] | None = None, fv: _FloatLike | _SequenceLike[_FloatLike] | None = None, cnorm: _IntLike | _SequenceLike[_IntLike] | None = None, total: _FloatLike | _SequenceLike[_FloatLike] | None = None, totalh: _FloatLike | _SequenceLike[_FloatLike] | None = None, totalv: _FloatLike | _SequenceLike[_FloatLike] | None = None, invks: _IntLike | _SequenceLike[_IntLike] | None = None, invksh: _IntLike | _SequenceLike[_IntLike] | None = None, invksv: _IntLike | _SequenceLike[_IntLike] | None = None, invkstaps: _IntLike | _SequenceLike[_IntLike] | None = None, invkstapsh: _IntLike | _SequenceLike[_IntLike] | None = None, invkstapsv: _IntLike | _SequenceLike[_IntLike] | None = None, csp: _IntLike | None = None, css: _AnyStr | None = None, planes: _FloatLike | _SequenceLike[_FloatLike] | None = None, fulls: _IntLike | None = None, fulld: _IntLike | None = None, center: _IntLike | _SequenceLike[_IntLike] | None = None, cplace: _AnyStr | None = None, cplaces: _AnyStr | None = None, cplaced: _AnyStr | None = None, interlaced: _IntLike | None = None, interlacedd: _IntLike | None = None, tff: _IntLike | None = None, tffd: _IntLike | None = None, flt: _IntLike | None = None, cpuopt: _IntLike | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def stack16tonative(self, /, clip: VideoNode) -> VideoNode: ...
-            @_Wrapper.Function
-            def transfer(self, /, clip: VideoNode, transs: _AnyStr | _SequenceLike[_AnyStr] | None = None, transd: _AnyStr | _SequenceLike[_AnyStr] | None = None, cont: _FloatLike | None = None, gcor: _FloatLike | None = None, bits: _IntLike | None = None, flt: _IntLike | None = None, fulls: _IntLike | None = None, fulld: _IntLike | None = None, logceis: _IntLike | None = None, logceid: _IntLike | None = None, cpuopt: _IntLike | None = None, blacklvl: _FloatLike | None = None, sceneref: _IntLike | None = None, lb: _FloatLike | None = None, lw: _FloatLike | None = None, lws: _FloatLike | None = None, lwd: _FloatLike | None = None, ambient: _FloatLike | None = None, match: _IntLike | None = None, gy: _IntLike | None = None, debug: _IntLike | None = None, sig_c: _FloatLike | None = None, sig_t: _FloatLike | None = None) -> VideoNode: ...
-
-    class _VideoNode_bound:
-        class Plugin(_VSPlugin):
-            @_Wrapper.Function
-            def bitdepth(self, /, csp: _IntLike | None = None, bits: _IntLike | None = None, flt: _IntLike | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None, fulls: _IntLike | None = None, fulld: _IntLike | None = None, dmode: _IntLike | None = None, ampo: _FloatLike | None = None, ampn: _FloatLike | None = None, dyn: _IntLike | None = None, staticnoise: _IntLike | None = None, cpuopt: _IntLike | None = None, patsize: _IntLike | None = None, tpdfo: _IntLike | None = None, tpdfn: _IntLike | None = None, corplane: _IntLike | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def histluma(self, /, full: _IntLike | None = None, amp: _IntLike | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def matrix(self, /, mat: _AnyStr | None = None, mats: _AnyStr | None = None, matd: _AnyStr | None = None, fulls: _IntLike | None = None, fulld: _IntLike | None = None, coef: _FloatLike | _SequenceLike[_FloatLike] | None = None, csp: _IntLike | None = None, col_fam: _IntLike | None = None, bits: _IntLike | None = None, singleout: _IntLike | None = None, cpuopt: _IntLike | None = None, planes: _FloatLike | _SequenceLike[_FloatLike] | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def matrix2020cl(self, /, full: _IntLike | None = None, csp: _IntLike | None = None, bits: _IntLike | None = None, cpuopt: _IntLike | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def nativetostack16(self, /) -> VideoNode: ...
-            @_Wrapper.Function
-            def primaries(self, /, rs: _FloatLike | _SequenceLike[_FloatLike] | None = None, gs: _FloatLike | _SequenceLike[_FloatLike] | None = None, bs: _FloatLike | _SequenceLike[_FloatLike] | None = None, ws: _FloatLike | _SequenceLike[_FloatLike] | None = None, rd: _FloatLike | _SequenceLike[_FloatLike] | None = None, gd: _FloatLike | _SequenceLike[_FloatLike] | None = None, bd: _FloatLike | _SequenceLike[_FloatLike] | None = None, wd: _FloatLike | _SequenceLike[_FloatLike] | None = None, prims: _AnyStr | None = None, primd: _AnyStr | None = None, wconv: _IntLike | None = None, cpuopt: _IntLike | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def resample(self, /, w: _IntLike | None = None, h: _IntLike | None = None, sx: _FloatLike | _SequenceLike[_FloatLike] | None = None, sy: _FloatLike | _SequenceLike[_FloatLike] | None = None, sw: _FloatLike | _SequenceLike[_FloatLike] | None = None, sh: _FloatLike | _SequenceLike[_FloatLike] | None = None, scale: _FloatLike | None = None, scaleh: _FloatLike | None = None, scalev: _FloatLike | None = None, kernel: _AnyStr | _SequenceLike[_AnyStr] | None = None, kernelh: _AnyStr | _SequenceLike[_AnyStr] | None = None, kernelv: _AnyStr | _SequenceLike[_AnyStr] | None = None, impulse: _FloatLike | _SequenceLike[_FloatLike] | None = None, impulseh: _FloatLike | _SequenceLike[_FloatLike] | None = None, impulsev: _FloatLike | _SequenceLike[_FloatLike] | None = None, taps: _IntLike | _SequenceLike[_IntLike] | None = None, tapsh: _IntLike | _SequenceLike[_IntLike] | None = None, tapsv: _IntLike | _SequenceLike[_IntLike] | None = None, a1: _FloatLike | _SequenceLike[_FloatLike] | None = None, a2: _FloatLike | _SequenceLike[_FloatLike] | None = None, a3: _FloatLike | _SequenceLike[_FloatLike] | None = None, a1h: _FloatLike | _SequenceLike[_FloatLike] | None = None, a2h: _FloatLike | _SequenceLike[_FloatLike] | None = None, a3h: _FloatLike | _SequenceLike[_FloatLike] | None = None, a1v: _FloatLike | _SequenceLike[_FloatLike] | None = None, a2v: _FloatLike | _SequenceLike[_FloatLike] | None = None, a3v: _FloatLike | _SequenceLike[_FloatLike] | None = None, kovrspl: _IntLike | _SequenceLike[_IntLike] | None = None, fh: _FloatLike | _SequenceLike[_FloatLike] | None = None, fv: _FloatLike | _SequenceLike[_FloatLike] | None = None, cnorm: _IntLike | _SequenceLike[_IntLike] | None = None, total: _FloatLike | _SequenceLike[_FloatLike] | None = None, totalh: _FloatLike | _SequenceLike[_FloatLike] | None = None, totalv: _FloatLike | _SequenceLike[_FloatLike] | None = None, invks: _IntLike | _SequenceLike[_IntLike] | None = None, invksh: _IntLike | _SequenceLike[_IntLike] | None = None, invksv: _IntLike | _SequenceLike[_IntLike] | None = None, invkstaps: _IntLike | _SequenceLike[_IntLike] | None = None, invkstapsh: _IntLike | _SequenceLike[_IntLike] | None = None, invkstapsv: _IntLike | _SequenceLike[_IntLike] | None = None, csp: _IntLike | None = None, css: _AnyStr | None = None, planes: _FloatLike | _SequenceLike[_FloatLike] | None = None, fulls: _IntLike | None = None, fulld: _IntLike | None = None, center: _IntLike | _SequenceLike[_IntLike] | None = None, cplace: _AnyStr | None = None, cplaces: _AnyStr | None = None, cplaced: _AnyStr | None = None, interlaced: _IntLike | None = None, interlacedd: _IntLike | None = None, tff: _IntLike | None = None, tffd: _IntLike | None = None, flt: _IntLike | None = None, cpuopt: _IntLike | None = None) -> VideoNode: ...
-            @_Wrapper.Function
-            def stack16tonative(self, /) -> VideoNode: ...
-            @_Wrapper.Function
-            def transfer(self, /, transs: _AnyStr | _SequenceLike[_AnyStr] | None = None, transd: _AnyStr | _SequenceLike[_AnyStr] | None = None, cont: _FloatLike | None = None, gcor: _FloatLike | None = None, bits: _IntLike | None = None, flt: _IntLike | None = None, fulls: _IntLike | None = None, fulld: _IntLike | None = None, logceis: _IntLike | None = None, logceid: _IntLike | None = None, cpuopt: _IntLike | None = None, blacklvl: _FloatLike | None = None, sceneref: _IntLike | None = None, lb: _FloatLike | None = None, lw: _FloatLike | None = None, lws: _FloatLike | None = None, lwd: _FloatLike | None = None, ambient: _FloatLike | None = None, match: _IntLike | None = None, gy: _IntLike | None = None, debug: _IntLike | None = None, sig_c: _FloatLike | None = None, sig_t: _FloatLike | None = None) -> VideoNode: ...
-
-# </implementation/fmtc>
 
 # <implementation/fpng>
 class _fpng:

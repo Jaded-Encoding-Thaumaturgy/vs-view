@@ -164,7 +164,6 @@ members = [
 exclude = ["src/plugins/audio-convert"]
 
 [tool.uv.sources]
-vapoursynth-fmtconv = { index = "vs-wheels" }
 vapoursynth-ffms2 = { index = "vs-wheels" }
 # Core
 vspackrgb = { workspace = true }

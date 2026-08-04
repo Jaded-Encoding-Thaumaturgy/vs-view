@@ -2028,24 +2028,6 @@ wheels = [
 ]
 
 [[package]]
-name = "vapoursynth-fmtconv"
-version = "31.1"
-source = { registry = "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple" }
-dependencies = [
-    { name = "vapoursynth" },
-]
-sdist = { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-fmtconv-v31.1/vapoursynth_fmtconv-31.1.tar.gz", hash = "sha256:2013e0fc57314fb50227b4bece6a2222a69f0ef6be8c657bf19afaa2318bd53d" }
-wheels = [
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-fmtconv-v31.1/vapoursynth_fmtconv-31.1-py3-none-macosx_10_13_x86_64.whl", hash = "sha256:14bce68efc337c34bd8ee7b585fb51ffe68bd856571aacc8341cf9bff70290cd" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-fmtconv-v31.1/vapoursynth_fmtconv-31.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:0e1de12f83ab24becd8fe706d3848f30a738f7f10d9189d79796e3f05743c0e6" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-fmtconv-v31.1/vapoursynth_fmtconv-31.1-py3-none-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:137e26b3031d10e8d207eb8a2bfec5eca7dbf5d07410bc908b6ac45a152c4c4e" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-fmtconv-v31.1/vapoursynth_fmtconv-31.1-py3-none-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:055f302e48a1999ff5bdc5b830f0e309822956d2a2128fd74eab7c4bb105da96" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-fmtconv-v31.1/vapoursynth_fmtconv-31.1-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:5141ee00fff87222e50fc18b53efa9efaadc240d3dcd415566963faee2660896" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-fmtconv-v31.1/vapoursynth_fmtconv-31.1-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:a1f60daeaa696d62528ab62c1fa2010461f511ffdba7446c87554bf3ea5ea210" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-fmtconv-v31.1/vapoursynth_fmtconv-31.1-py3-none-win_amd64.whl", hash = "sha256:7da43047ff7526f15a1596da3497061bbdc9bc6c745735b901620e2fd7826c79" },
-]
-
-[[package]]
 name = "vapoursynth-lsmas"
 version = "1296.0.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2512,7 +2494,7 @@ source = { editable = "src/plugins/histogram" }
 dependencies = [
     { name = "numba" },
     { name = "numpy" },
-    { name = "vapoursynth-fmtconv" },
+    { name = "vapoursynth" },
     { name = "vsjetpack" },
     { name = "vsview" },
 ]
@@ -2521,7 +2503,7 @@ dependencies = [
 requires-dist = [
     { name = "numba", specifier = ">=0.62.1" },
     { name = "numpy", specifier = ">=2.4.0" },
-    { name = "vapoursynth-fmtconv", specifier = ">=31", index = "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple" },
+    { name = "vapoursynth", specifier = ">=78" },
     { name = "vsjetpack", specifier = ">=2.1.1" },
     { name = "vsview", editable = "." },
 ]

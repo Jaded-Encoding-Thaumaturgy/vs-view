@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from vsengine import UnifiedFuture
-from vstools import Primaries, Transfer, core, vs
+from vstools import core, vs
 
 from vsview.api import PluginAPI, VideoOutputProxy, WidgetPluginBase, run_in_background, run_in_loop
 
@@ -449,15 +449,20 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
                     self.cie_container.cie_diagram.paint_error("CIE Chromaticity Diagram requires RGB input.")
                     return
 
-                if not (prims := get_fmtc_primaries(frame)):
+                # fmt: off
+                if (
+                    (prims := frame.props.get("_Primaries", vs.PRIMARIES_UNSPECIFIED)) not in vs.ColorPrimaries
+                    or prims == vs.PRIMARIES_UNSPECIFIED
+                ):
+                    # fmt: on
                     self.cie_container.cie_diagram.paint_error(
                         "CIE Chromaticity Diagram requires a valid primaries frame property."
                     )
                     return
 
                 if voutput not in self.cie_nodes:
-                    linear = core.resize.Point(clip, format=vs.RGBS, transfer=Transfer.LINEAR)
-                    xyz = core.fmtc.primaries(linear, prims=prims, primd="ciexyz", wconv=True)
+                    linear = core.resize.Point(clip, format=vs.RGBS, transfer=vs.TRANSFER_LINEAR)
+                    xyz = core.resize.Point(linear, primaries=vs.PRIMARIES_ST428, chromatic_adaptation=True)
                     self.cie_nodes[voutput] = (linear, xyz)
 
                 with (
@@ -588,29 +593,3 @@ def prewarm_numba() -> None:
         process_luma_numba(dummy_src_nc, dummy_dst, bits, 4, sawtooth, is_limited)
 
         logger.debug("Pre-warm numba process_luma_numba is completed")
-
-
-def get_fmtc_primaries(frame: vs.VideoFrame) -> str | None:
-    match frame.props.get("_Primaries", vs.PRIMARIES_UNSPECIFIED):
-        case Primaries.BT709:
-            return "709"
-        case Primaries.BT470_M:
-            return "470m"
-        case Primaries.BT470_BG:
-            return "470bg"
-        case Primaries.ST170_M | Primaries.ST240_M:
-            return "170m"
-        case Primaries.FILM:
-            return "filmc"
-        case Primaries.BT2020:
-            return "2020"
-        case Primaries.ST428:
-            return "ciexyz"
-        case Primaries.ST431_2:
-            return "p3dci"
-        case Primaries.ST432_1:
-            return "p3d65"
-        case Primaries.EBU3213_E:
-            return "3213"
-        case _:
-            return None
