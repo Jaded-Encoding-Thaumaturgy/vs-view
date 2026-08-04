@@ -151,22 +151,25 @@ These options control application log verbosity.
 #### `--file-log`
 :   Enable file logging in the platform's standard log directory.
 
+    - `%LOCALAPPDATA%\vsview\Logs` on Windows
+    - `~/.local/state/vsview/log` on Linux
+    - `~/Library/Logs/vsview` on macOS
+
     **Env:** `VSVIEW_FILE_LOG`
 
 #### `--vapoursynth-log-level` `LEVEL`
 :   Set the log level for the VapourSynth core environment.
-
     Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
+
+    Default to `INFO` or verbosity level if `--verbose` is specified.
 
 #### `--vsengine-log-level` `LEVEL`
-:   Set the log level for the VSEngine subsystem.
-
-    Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
+:   Set the log level for the VSEngine subsystem. Default to `INFO`. Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
 
 #### `--qt-log-level` `LEVEL`
-:   Set the log level for Qt / PySide6 system messages.
+:   Set the log level for Qt / PySide6 system messages. Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
 
-    Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
+    Default to `INFO` or verbosity level if `--verbose` is specified.
 
 ---
 
