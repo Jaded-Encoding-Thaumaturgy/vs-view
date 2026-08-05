@@ -31,12 +31,18 @@ def main(raw: dict[str, Any]) -> None:
         if cfg.settings.path:
             console.print(GlobalSettings.path_env)
         if cfg.settings.wipe:
-            GlobalSettings.path_env.unlink(missing_ok=True)
-            console.print("Global config file successfully deleted.")
+            if GlobalSettings.path_env.exists():
+                GlobalSettings.path_env.unlink()
+                console.print("Global config file successfully deleted.")
+            else:
+                console.print("No global config file found.")
 
             if cfg.settings.wipe.all:
-                GlobalSettings.config_path.rmdirs(missing_ok=True, ignore_errors=True)
-                console.print("Global config path successfully deleted.")
+                if GlobalSettings.config_path.exists():
+                    GlobalSettings.config_path.rmdirs(ignore_errors=True)
+                    console.print("Global config path successfully deleted.")
+                else:
+                    console.print("No global config path found.")
         raise SystemExit(0)
 
     # Setup env vars
