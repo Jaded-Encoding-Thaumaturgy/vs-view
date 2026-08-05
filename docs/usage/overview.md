@@ -6,7 +6,7 @@ icon: lucide/book-open
 
 This page provides an overview of the **VSView** interface and its core components.
 
-## Quick Start: Launching VSView
+## Launching VSView
 
 ### Command Line Interface
 

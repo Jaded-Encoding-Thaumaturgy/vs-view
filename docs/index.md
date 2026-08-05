@@ -22,7 +22,9 @@ icon: lucide/home
 Modern, extensible previewer for [VapourSynth](https://www.vapoursynth.com/),
 **VSView** lets you open scripts, videos or images in one interface, making it easier to preview, inspect and compare sources without switching tools.
 
-Built as a modern replacement for [VSPreview](https://github.com/Jaded-Encoding-Thaumaturgy/vs-preview), **VSView** focuses on cleaner, more maintainable code and straightforward plugin integration through a clear API, making official and community extensions easier to build, maintain, and adopt.
+Built as a modern replacement for [VSPreview](https://github.com/Jaded-Encoding-Thaumaturgy/vs-preview),
+it focuses on cleaner, more maintainable code and straightforward plugin integration through a clear API,
+making official and community extensions easier to build, maintain, and adopt.
 
 ## Quick start
 
