@@ -103,20 +103,6 @@ class Application(QApplication):
             self.setStyleSheet(Path(sheet).read_text())
 
         SettingsManager.signals.globalChanged.connect(self._on_global_settings_changed)
-        self.installEventFilter(self)
-
-    @override
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if (
-            event.type() == QEvent.Type.KeyPress
-            and isinstance(event, QKeyEvent)
-            and event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab)
-            and not isinstance(self.focusWidget(), ShortcutEditor)
-        ):
-            # Consume the event, completely disabling Tab/Shift+Tab focus
-            return True
-
-        return super().eventFilter(watched, event)
 
     def _on_global_settings_changed(self) -> None:
         refresh_widgets = False
@@ -166,6 +152,20 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._setup_shortcuts()
         self._restore_geometry()
+        self.installEventFilter(self)
+
+    @override
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if (
+            event.type() == QEvent.Type.KeyPress
+            and isinstance(event, QKeyEvent)
+            and event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab)
+            and not isinstance(self.focusWidget(), ShortcutEditor)
+        ):
+            # Consume the event, completely disabling Tab/Shift+Tab focus
+            return True
+
+        return super().eventFilter(watched, event)
 
     def _setup_ui(self) -> None:
         # Window Setup
