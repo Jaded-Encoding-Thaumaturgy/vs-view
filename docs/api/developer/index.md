@@ -109,3 +109,4 @@ Most of these symbols are re-exported through the top-level `vsview.api` module 
            - QObjectSet
            - cache_clip
            - path_to_hash
+           - get_console_level

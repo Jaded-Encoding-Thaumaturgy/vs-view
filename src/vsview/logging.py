@@ -138,7 +138,7 @@ def setup_logging(
         root_logger.removeHandler(h)
         h.close()
 
-    root_level = min(INFO if is_gui_mode else DEBUG, console_level)
+    root_level = min(DEBUG, console_level)
     root_logger.setLevel(root_level)
 
     # In GUI mode (pythonw), stderr points to log file
@@ -162,3 +162,8 @@ def setup_logging(
 
     if capture_warnings:
         captureWarnings(True)
+
+
+def get_console_level() -> int:
+    """Return the currently configured log level for console output (accounts for --verbose)."""
+    return custom_handler.level

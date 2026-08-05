@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.text import Text
 
-from vsview.api import QObjectSet
+from vsview.api import QObjectSet, get_console_level
 
 from .web import MonacoBridge
 
@@ -155,6 +155,7 @@ class GlobalConsoleHub(Singleton):
         setattr(Handler, "handle", _protected_handle)
 
         self._log_handler = EditorConsoleHandler(dispatch=lambda s, t: self.dispatch({"stream": s, "text": t}))
+        self._log_handler.setLevel(get_console_level())
         Logger.root.addHandler(self._log_handler)
         self._installed = True
 
