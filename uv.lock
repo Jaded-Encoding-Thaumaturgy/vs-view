@@ -2439,12 +2439,6 @@ dependencies = [
     { name = "vsview" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "hatchling" },
-    { name = "packaging" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "basedpyright", specifier = ">=1.39.9" },
@@ -2452,12 +2446,6 @@ requires-dist = [
     { name = "ruff", specifier = ">=0.16.0" },
     { name = "vsstubs", specifier = ">=2.2.0" },
     { name = "vsview", editable = "." },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "hatchling" },
-    { name = "packaging" },
 ]
 
 [[package]]

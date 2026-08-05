@@ -2,8 +2,6 @@ import * as path from "path";
 
 import { defineConfig } from "vite";
 
-import pkg from "./package.json" with { type: "json" };
-
 export default defineConfig({
   // Use relative paths so file:// loading works in QWebEngineView
   base: "./",
@@ -13,7 +11,6 @@ export default defineConfig({
       "node:fs/promises": path.resolve(import.meta.dirname, "src/ts/stubs/empty.js"),
     },
   },
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   server: { forwardConsole: true },
   worker: { format: "es" },
   build: {

@@ -52,8 +52,6 @@ import type { FileStatResponse } from "../types";
 import { Result } from "../utils/result";
 import { GITHUB_THEMES } from "../utils/theme";
 
-declare const __APP_VERSION__: string;
-
 // Monaco Environment Setup
 self.MonacoEnvironment = {
   getWorker(_moduleId: string, label: string): Worker {
@@ -330,7 +328,7 @@ function registerMainExtension(): RegisterLocalProcessExtensionResult {
     {
       name: "vsview-editor",
       publisher: "vsview",
-      version: __APP_VERSION__,
+      version: "0",
       engines: { vscode: "*" },
       activationEvents: ["onLanguage:python"],
       main: "./extension.js",
