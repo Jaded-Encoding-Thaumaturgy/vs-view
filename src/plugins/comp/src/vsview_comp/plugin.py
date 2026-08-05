@@ -296,9 +296,21 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
 
-        self.frames_count_label = QLabel("0 frames", frame_widget)
+        self.frames_status_stack = QStackedWidget(frame_widget)
+
+        self.frames_count_label = QLabel("0 frames", self.frames_status_stack)
+        self.frames_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.frames_count_label.setStyleSheet("padding-right: 6px; color: palette(placeholder-text); font-weight: 500;")
-        toolbar.addWidget(self.frames_count_label)
+
+        self.thumbnail_progress_label = QLabel("Loading thumbnails...", self.frames_status_stack)
+        self.thumbnail_progress_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.thumbnail_progress_label.setStyleSheet("padding-right: 6px; color: palette(highlight); font-weight: 500;")
+
+        self.frames_status_stack.addWidget(self.frames_count_label)
+        self.frames_status_stack.addWidget(self.thumbnail_progress_label)
+        self.frames_status_stack.setCurrentWidget(self.frames_count_label)
+
+        toolbar.addWidget(self.frames_status_stack)
 
         self.frames_list = FrameThumbnailList(self.api, frame_widget)
         self.frames_list.setToolTip("Double-click to seek to frame. Use 'Delete' to remove.")
@@ -311,6 +323,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             lambda: self.remove_frame_act.setEnabled(len(self.frames_list.selectedItems()) > 0)
         )
         self.frames_list.listSizeChanged.connect(self.on_list_size_changed)
+        self.frames_list.thumbnailProgress.connect(self.on_thumbnail_progress)
 
         self.add_frame_act.triggered.connect(self.frames_list.add_item)
         self.remove_frame_act.triggered.connect(self.frames_list.remove_selected)
@@ -650,6 +663,14 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._update_buttons_state()
         self._update_frames_count()
 
+    def on_thumbnail_progress(self, pending: int, total: int) -> None:
+        if pending > 0:
+            completed = total - pending
+            self.thumbnail_progress_label.setText(f"Loading thumbnails ({completed}/{total})...")
+            self.frames_status_stack.setCurrentWidget(self.thumbnail_progress_label)
+        else:
+            self.frames_status_stack.setCurrentWidget(self.frames_count_label)
+
     def _update_frames_count(self) -> None:
         count = self.frames_list.count()
         self.frames_count_label.setText(f"{count} {'frame' if count == 1 else 'frames'}")
@@ -746,7 +767,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._update_buttons_state()
 
     def on_extract_btn_clicked(self) -> None:
-        def prepare_and_extract() -> None:
+        def prepare_and_extract(*_: Any) -> None:
             def on_done(_: Any) -> None:
                 self.clip_section.setEnabled(True)
                 self.progress_bar.reset_progress()
@@ -776,12 +797,18 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             )
             self._update_buttons_state()
 
+        def execute_extract(*_: Any) -> None:
+            if self.frames_list.has_pending_thumbnails():
+                self.frames_list.wait_for_pending_thumbnails().then(prepare_and_extract, on_loop=True)
+            else:
+                prepare_and_extract()
+
         self.clip_section.setDisabled(True)
 
         if self._pending_select_frames:
-            self._pending_select_frames.map(lambda _: prepare_and_extract(), on_loop=True)
+            self._pending_select_frames.map(execute_extract, on_loop=True)
         else:
-            prepare_and_extract()
+            execute_extract()
 
     def on_tmdb_text_changed(self, text: str) -> None:
         self.tmdb_title = None

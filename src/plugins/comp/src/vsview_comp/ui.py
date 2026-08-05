@@ -77,7 +77,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import Shiboken
 from vapoursynth import VideoFrame, VideoNode
-from vsengine import get_loop
+from vsengine import UnifiedFuture, get_loop
 from vstools import core, get_prop
 
 from vsview.api import (
@@ -317,12 +317,15 @@ class FrameThumbnailList(QListWidget):
     ICON_SIZE = QSize(119, 67)
 
     listSizeChanged = Signal(int)  # delta
+    thumbnailProgress = Signal(int, int)  # (pending, total)
 
     def __init__(self, api: PluginAPI, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.api = api
         self.included_outputs = list[VideoOutputProxy]()
         self._sema = Semaphore(QThreadPool.globalInstance().maxThreadCount() // 2)
+        self._active_thumbnail_futures = set[UnifiedFuture[None]]()
+        self._total_thumbnail_batch = 0
 
         self.setViewMode(QListWidget.ViewMode.IconMode)
         self.setFlow(QListWidget.Flow.LeftToRight)
@@ -346,6 +349,13 @@ class FrameThumbnailList(QListWidget):
 
         self.api.register_on_destroy(lambda: cachedproperty.clear_cache(self))
         self.api.register_on_destroy(lambda: setattr(self, "included_outputs", []))
+
+    @override
+    def clear(self) -> None:
+        self._active_thumbnail_futures.clear()
+        self._total_thumbnail_batch = 0
+        self.thumbnailProgress.emit(0, 0)
+        super().clear()
 
     @override
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -413,7 +423,8 @@ class FrameThumbnailList(QListWidget):
         self.scrollToItem(item)
         self.listSizeChanged.emit(1)
 
-        self.fetch_thumbnail(item)
+        fut = self.fetch_thumbnail(item)
+        self._register_thumbnail_future(fut)
 
     def remove_selected(self) -> None:
         nb = len(self.selectedItems())
@@ -477,6 +488,50 @@ class FrameThumbnailList(QListWidget):
 
         menu.exec(self.mapToGlobal(pos))
         menu.deleteLater()
+
+    def has_pending_thumbnails(self) -> bool:
+        return bool(self._active_thumbnail_futures)
+
+    def wait_for_pending_thumbnails(self) -> UnifiedFuture[None]:
+        done_fut = UnifiedFuture[None]()
+        if not self._active_thumbnail_futures:
+            done_fut.set_result(None)
+            return done_fut
+
+        pending = list(self._active_thumbnail_futures)
+        remaining = len(pending)
+
+        def check(_: Any) -> None:
+            nonlocal remaining
+            remaining -= 1
+            if remaining <= 0 and not done_fut.done():
+                done_fut.set_result(None)
+
+        for f in pending:
+            f.add_done_callback(check)
+
+        return done_fut
+
+    def _register_thumbnail_future(self, fut: UnifiedFuture[Any]) -> None:
+        if fut.done():
+            return
+
+        if not self._active_thumbnail_futures:
+            self._total_thumbnail_batch = 0
+
+        self._total_thumbnail_batch += 1
+        self._active_thumbnail_futures.add(fut)
+
+        def on_done(_: Any) -> None:
+            self._active_thumbnail_futures.discard(fut)
+            if not self._active_thumbnail_futures:
+                self._total_thumbnail_batch = 0
+                self.thumbnailProgress.emit(0, 0)
+            else:
+                self.thumbnailProgress.emit(len(self._active_thumbnail_futures), self._total_thumbnail_batch)
+
+        fut.add_done_callback(on_done)
+        self.thumbnailProgress.emit(len(self._active_thumbnail_futures), self._total_thumbnail_batch)
 
 
 class ProgressBar(QProgressBar):
