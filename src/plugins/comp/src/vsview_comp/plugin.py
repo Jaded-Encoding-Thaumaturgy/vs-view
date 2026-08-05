@@ -170,6 +170,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._extract_paths: list[tuple[int, Path]] | None = None
         self._reported_url = ""
         self.curve_points: Sequence[QPointF] = [QPointF(0.0, 1.0), QPointF(1.0, 1.0)]
+        self.previous_generated_tmdb_title = ""
 
         # Build UI
         main_layout = QVBoxLayout(self)
@@ -810,6 +811,16 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         else:
             execute_extract()
 
+    def update_comp_title_text(self) -> None:
+        if not self.tmdb_title:
+            return
+        voutputs = self.selected_voutputs
+        vs_names = " vs ".join(v.vs_name for v in voutputs)
+        title = self.tmdb_title.format_name(self.settings.global_.tmdb_format, vs_names=vs_names)
+        if not self.collection_name.text() or self.previous_generated_tmdb_title == self.collection_name.text():
+            self.collection_name.setText(title)
+            self.previous_generated_tmdb_title = title
+
     def on_tmdb_text_changed(self, text: str) -> None:
         self.tmdb_title = None
         if not text.strip():
@@ -870,11 +881,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self.tmdb_title = title
 
-        # Automatically set the collection name if it's currently empty
-        if not self.collection_name.text().strip():
-            voutputs = self.selected_voutputs
-            vs_names = " vs ".join(v.vs_name for v in voutputs)
-            self.collection_name.setText(title.format_name(self.settings.global_.tmdb_format, vs_names=vs_names))
+        self.update_comp_title_text()
 
     def on_tags_editing_started(self) -> None:
         if self.tags_popup.has_tags():
@@ -1082,6 +1089,10 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.upload_btn.setEnabled(frames_ready and not needs_extraction)
 
         self._current_outputs = current_outputs
+
+        # if the collection name has been set it was probably via the tmdb title so update
+        if self.collection_name.text():
+            self.update_comp_title_text()
 
     def on_cancel_clicked(self) -> None:
         logger.info("Cancel button clicked, aborting active tasks...")

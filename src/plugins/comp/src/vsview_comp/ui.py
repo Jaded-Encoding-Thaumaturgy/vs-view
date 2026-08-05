@@ -434,6 +434,10 @@ class FrameThumbnailList(QListWidget):
 
         self.listSizeChanged.emit(-nb)
 
+    def copy_frame_number_selected(self) -> None:
+        frames = ",".join(str(item.frame) for item in self.selectedItems() if isinstance(item, ThumbnailItem))
+        QApplication.clipboard().setText(frames)
+
     def get_data(self) -> list[tuple[Time, dict[int, ThumbnailItem.Metadata], FrameSourceProvider]]:
         return [
             (it.time, it.metadata, it.src_provider)
@@ -481,9 +485,12 @@ class FrameThumbnailList(QListWidget):
 
         menu = QMenu(self)
 
-        remove_action = menu.addAction(
-            f"Remove {count} frame(s)" if (count := len(self.selectedItems())) > 1 else "Remove frame"
-        )
+        frame_count = len(self.selectedItems())
+
+        copy_action = menu.addAction(f"Copy {frame_count} frame number(s)" if frame_count > 1 else "Copy frame number")
+        copy_action.triggered.connect(self.copy_frame_number_selected)
+
+        remove_action = menu.addAction(f"Remove {frame_count} frame(s)" if frame_count > 1 else "Remove frame")
         remove_action.triggered.connect(self.remove_selected)
 
         menu.exec(self.mapToGlobal(pos))
