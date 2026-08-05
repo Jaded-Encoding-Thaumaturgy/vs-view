@@ -67,10 +67,7 @@ class LogNiquestsErrors(AbstractContextManager[None], AbstractAsyncContextManage
         exc_val: BaseException | None,
         tb: TracebackType | None,
     ) -> bool | None:
-        if isinstance(exc_val, niquests.HTTPError):
-            logger.error("%s failed: %s", self.ctx_message, exc_val, stacklevel=4)
-            logger.debug("Full traceback", exc_info=exc_val, stacklevel=4)
-            return True
+        self._log_error(exc_val)
         return None
 
     @override
@@ -84,7 +81,13 @@ class LogNiquestsErrors(AbstractContextManager[None], AbstractAsyncContextManage
         exc_val: BaseException | None,
         tb: TracebackType | None,
     ) -> bool | None:
-        return self.__exit__(exc_t, exc_val, tb)
+        self._log_error(exc_val)
+        return None
+
+    def _log_error(self, exc_val: BaseException | None) -> None:
+        if isinstance(exc_val, niquests.HTTPError):
+            logger.error("%s failed: %s", self.ctx_message, exc_val, stacklevel=3)
+            logger.debug("Full traceback", exc_info=exc_val, stacklevel=3)
 
 
 class UploadError(Exception): ...

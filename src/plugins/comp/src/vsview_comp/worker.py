@@ -465,6 +465,7 @@ class TMDBWorker:
         titles = list[TMDBTitle]()
 
         async with (
+            LogNiquestsErrors("TMDB search"),
             niquests.AsyncSession(
                 base_url=self.BASE_URL,
                 timeout=10,
@@ -474,7 +475,6 @@ class TMDBWorker:
                 multiplexed=True,
                 revocation_configuration=REV_CONF,
             ) as client,
-            LogNiquestsErrors("TMDB search"),
         ):
             tv_resp = await client.get("/search/tv", params={"query": query})
             await client.gather(tv_resp)
@@ -574,8 +574,8 @@ class SlowPicsWorker:
     @run_in_background(name="SlowPicsTags")
     def get_tags(self) -> list[Tag]:
         with (
-            niquests.Session(base_url=self.BASE_URL, headers=self.headers) as client,
             LogNiquestsErrors("Slowpics Tags"),
+            niquests.Session(base_url=self.BASE_URL, headers=self.headers) as client,
         ):
             tags = client.get("/api/tags").raise_for_status().json()
             return [Tag(tag["value"], tag["label"].strip()) for tag in tags]
@@ -589,6 +589,7 @@ class SlowPicsWorker:
             return {}
 
         async with (
+            LogNiquestsErrors("Slowpics Login"),
             niquests.AsyncSession(
                 base_url=self.BASE_URL,
                 headers=self.headers,
@@ -597,7 +598,6 @@ class SlowPicsWorker:
                 multiplexed=True,
                 revocation_configuration=REV_CONF,
             ) as client,
-            LogNiquestsErrors("Slowpics Login"),
         ):
             # Grab initial XSRF token
             resp = await client.get("/comparison")
@@ -615,6 +615,7 @@ class SlowPicsWorker:
 
         try:
             async with (
+                LogNiquestsErrors("Slowpics Upload"),
                 niquests.AsyncSession(
                     base_url=self.BASE_URL,
                     pool_maxsize=self.MAX_CONCURRENT_REQUESTS,
@@ -626,7 +627,6 @@ class SlowPicsWorker:
                     multiplexed=True,
                     revocation_configuration=REV_CONF,
                 ) as client,
-                LogNiquestsErrors("Slowpics Upload"),
             ):
                 logger.debug("Setup client")
                 await self._setup_client(client, cookies)
