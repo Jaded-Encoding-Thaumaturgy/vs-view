@@ -239,11 +239,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             self.setToolTip("Plugin disabled: the current workspace doesn't have a local storage.")
 
         # Install event filter to override child tooltips when disabled
-        if not (app := QApplication.instance()):
-            raise SystemError
-
-        app.installEventFilter(self)
-        self.destroyed.connect(lambda: app.removeEventFilter(self) if (app := QApplication.instance()) else None)
+        self.installEventFilter(self)
 
         # Demote the "QIODevice::read (QSslSocket): device not open" log
         # because niquests lets an idle socket linger in memory and this triggers

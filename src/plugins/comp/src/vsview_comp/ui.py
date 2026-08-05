@@ -16,7 +16,6 @@ import vsengine.video
 from jetpytools import cachedproperty, clamp
 from PySide6.QtCore import (
     QBuffer,
-    QCoreApplication,
     QEvent,
     QIODevice,
     QObject,
@@ -581,8 +580,6 @@ class PosterPayload(NamedTuple):
 class AnchoredListPopup(QListWidget):
     def __init__(self, parent: QWidget, target: QWidget) -> None:
         super().__init__(parent)
-        if not (app := QCoreApplication.instance()):
-            raise SystemError
 
         self._target: QWidget | None = target
         self._target_window: QWidget | None = target.window()
@@ -593,10 +590,8 @@ class AnchoredListPopup(QListWidget):
         self.setMaximumHeight(300)
         self.hide()
 
-        app.installEventFilter(self)
         self._target.installEventFilter(self)
         self._target_window.installEventFilter(self)
-
         self._target.destroyed.connect(self._on_target_destroyed)
         self.destroyed.connect(self._cleanup_event_filters)
 
@@ -648,9 +643,6 @@ class AnchoredListPopup(QListWidget):
         self.hide()
 
     def _cleanup_event_filters(self, *_: Any) -> None:
-        if (app := QCoreApplication.instance()) and Shiboken.isValid(app):
-            app.removeEventFilter(self)
-
         if target := self._safe_target():
             target.removeEventFilter(self)
 
