@@ -84,14 +84,10 @@ export class ConsolePanelService implements vscode.Disposable {
     this.terminal.clear();
   }
 
-  public async copySelection(): Promise<void> {
+  public copySelection(): void {
     const selection = this.terminal.getSelection();
-    if (selection) {
-      const res = await Result.fromPromise(navigator.clipboard.writeText(selection));
-      if (!res.ok) {
-        console.warn("Failed to copy console selection to clipboard:", res.error);
-      }
-    }
+    if (!selection) return;
+    Result.tap(BridgeService.getActiveBridge(), (bridge) => bridge.copyToClipboard(selection));
   }
 
   public toggle(forceState?: boolean): void {
@@ -243,7 +239,7 @@ export class ConsolePanelService implements vscode.Disposable {
 
         if (isModifier && key === "c") {
           if (this.terminal.hasSelection()) {
-            void this.copySelection();
+            this.copySelection();
             return false;
           }
         } else if (isModifier && key === "a") {
@@ -256,6 +252,19 @@ export class ConsolePanelService implements vscode.Disposable {
       }
       return true;
     });
+
+    const handleMouseEvents = (e: MouseEvent) => {
+      if (e.button === 2) e.stopPropagation();
+    };
+
+    this.xtermContainer.addEventListener("mousedown", handleMouseEvents, true);
+    this.xtermContainer.addEventListener("mouseup", handleMouseEvents, true);
+    this.disposables.add(
+      toDisposable(() => {
+        this.xtermContainer.removeEventListener("mousedown", handleMouseEvents, true);
+        this.xtermContainer.removeEventListener("mouseup", handleMouseEvents, true);
+      }),
+    );
 
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
@@ -348,14 +357,12 @@ export class ConsolePanelService implements vscode.Disposable {
     menu.id = DOM_IDS.CONSOLE_CONTEXT_MENU;
     menu.className = "console-context-menu";
 
-    const hasSelection = this.terminal.hasSelection();
-
     const items: MenuItem[] = [
       {
         label: "Copy",
         shortcut: "Ctrl+C",
-        action: () => void this.copySelection(),
-        disabled: !hasSelection,
+        action: () => this.copySelection(),
+        disabled: !this.terminal.hasSelection(),
       },
       "separator",
       {

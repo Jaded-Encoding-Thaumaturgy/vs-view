@@ -39,6 +39,9 @@ export interface PythonBridge {
   /** Notify Python that console viewport width has changed (cols). */
   onConsoleResized(cols: number): void;
 
+  /** Copy text to system clipboard via Python Qt host. */
+  copyToClipboard(text: string): void;
+
   /** Get stat metadata for a file on disk. */
   statFile(filepath: string, callback: (res: FileStatResponse | null) => void): void;
 

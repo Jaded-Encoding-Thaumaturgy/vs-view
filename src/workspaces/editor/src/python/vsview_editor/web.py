@@ -12,7 +12,7 @@ from PySide6.QtGui import QPalette, Qt
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineScript
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 
 from vsview.env import getenv_bool
 
@@ -206,6 +206,11 @@ class MonacoBridge(QObject):
     @Slot(int)
     def onConsoleResized(self, cols: int) -> None:
         self.consoleResized.emit(cols)
+
+    @Slot(str)
+    def copyToClipboard(self, text: str) -> None:
+        """Copy text to system clipboard via Qt QApplication."""
+        QApplication.clipboard().setText(text)
 
     @SafeSlot(str, result=dict)
     def statFile(self, filepath: str) -> dict[str, Any] | None:
