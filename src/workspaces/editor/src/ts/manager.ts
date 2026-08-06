@@ -21,11 +21,7 @@ export class MonacoManager implements vscode.Disposable {
       new BridgeService(this.editorService, this.lspService, this.consoleService),
     );
 
-    this.disposables.add(
-      this.bridgeService.onDidReady(() => {
-        this.consoleService.fit();
-      }),
-    );
+    this.disposables.add(this.bridgeService.onDidReady(() => this.consoleService.fit()));
     this.bridgeService.initBridge();
   }
 

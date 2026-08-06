@@ -88,75 +88,32 @@ export class BridgeService implements vscode.Disposable {
   }
 
   private setupConsoleListeners(): void {
-    this.disposables.add(
-      this.consoleService.onDidToggle(() => {
-        this.editorService.layout();
-      }),
-    );
-
-    this.disposables.add(
-      this.consoleService.onDidResize(() => {
-        this.editorService.layout();
-      }),
-    );
+    this.disposables.add(this.consoleService.onDidToggle(() => this.editorService.layout()));
+    this.disposables.add(this.consoleService.onDidResize(() => this.editorService.layout()));
   }
 
   private setupEditorListeners(): void {
+    this.disposables.add(this.editorService.onDidChangeContent(() => this.notifyContentChanged()));
     this.disposables.add(
-      this.editorService.onDidChangeContent(() => {
-        this.notifyContentChanged();
-      }),
+      this.editorService.onDidChangeCursorPosition((e) =>
+        this.bridge?.onCursorPositionChanged(e.position.lineNumber, e.position.column),
+      ),
     );
-
-    this.disposables.add(
-      this.editorService.onDidChangeCursorPosition((e) => {
-        if (this.bridge) {
-          this.bridge.onCursorPositionChanged(e.position.lineNumber, e.position.column);
-        }
-      }),
-    );
-
     this.disposables.add(
       this.editorService.onDidChangeActiveTab((uri) => {
-        if (this.bridge) {
-          this.bridge.onActiveTabChanged(uri || "");
-          this.flushContentChanged();
-        }
+        this.bridge?.onActiveTabChanged(uri || "");
+        this.flushContentChanged();
       }),
     );
-
     this.disposables.add(
       this.editorService.onDidChangeMainTab((uri) => {
-        if (this.bridge) {
-          this.bridge.onMainTabChanged(uri || "");
-          this.flushContentChanged();
-        }
+        this.bridge?.onMainTabChanged(uri || "");
+        this.flushContentChanged();
       }),
     );
-
-    this.disposables.add(
-      this.editorService.onDidRequestSave(() => {
-        if (this.bridge) {
-          this.bridge.requestSave();
-        }
-      }),
-    );
-
-    this.disposables.add(
-      this.editorService.onDidRequestSaveAs(() => {
-        if (this.bridge) {
-          this.bridge.requestSaveAs();
-        }
-      }),
-    );
-
-    this.disposables.add(
-      this.editorService.onDidRequestFormat(() => {
-        if (this.bridge) {
-          this.bridge.requestFormat();
-        }
-      }),
-    );
+    this.disposables.add(this.editorService.onDidRequestSave(() => this.bridge?.requestSave()));
+    this.disposables.add(this.editorService.onDidRequestSaveAs(() => this.bridge?.requestSaveAs()));
+    this.disposables.add(this.editorService.onDidRequestFormat(() => this.bridge?.requestFormat()));
   }
 
   private removeLoadingOverlay(): void {
