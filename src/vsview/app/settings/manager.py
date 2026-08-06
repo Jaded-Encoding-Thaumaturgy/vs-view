@@ -1,6 +1,7 @@
 """Settings manager for vsview."""
 
 import json
+import os
 import weakref
 from collections.abc import Callable
 from inspect import ismethod
@@ -98,7 +99,7 @@ class SettingsManager(Singleton):
         return LocalSettings()
 
     @inject_self.cached
-    def get_local_settings(self, script_path: Path) -> LocalSettings:
+    def get_local_settings(self, script_path: os.PathLike[str]) -> LocalSettings:
         """
         Get local settings for a specific script.
 
@@ -113,13 +114,13 @@ class SettingsManager(Singleton):
         path_hash = path_to_hash(script_path)
 
         if path_hash not in self._local_settings:
-            logger.debug("%s is not in loaded local settings (from %s)", path_hash, script_path)
+            logger.debug("%s is not in loaded local settings (from %s)", path_hash, lambda: Path(script_path).name)
             self._load_local(script_path)
 
         return self._local_settings.get(path_hash) or self.default_local_settings
 
     @inject_self.cached
-    def save_global(self, settings: GlobalSettings | None = None, path: Path | None = None) -> None:
+    def save_global(self, settings: GlobalSettings | None = None, path: os.PathLike[str] | None = None) -> None:
         """Save global settings to disk."""
         try:
             self._signals.aboutToSaveGlobal.emit()
@@ -127,7 +128,7 @@ class SettingsManager(Singleton):
             logger.exception("There was an error when emitting aboutToSaveGlobal")
 
         self._global_settings = settings if settings is not None else self._global_settings
-        path = path or GlobalSettings.path_env
+        path = Path(path or GlobalSettings.path_env)
 
         try:
             if not self._noop:
@@ -139,7 +140,7 @@ class SettingsManager(Singleton):
             logger.exception("Failed to save global settings")
 
     @inject_self.cached
-    def save_local(self, script_path: Path, settings: LocalSettings) -> None:
+    def save_local(self, script_path: os.PathLike[str], settings: LocalSettings) -> None:
         """
         Save local settings for a script to disk.
 
@@ -148,6 +149,8 @@ class SettingsManager(Singleton):
             settings: The local settings to save.
         """
         from ..utils import path_to_hash
+
+        script_path = Path(script_path)
 
         settings_path = self.local_settings_path(script_path)
 
@@ -168,7 +171,7 @@ class SettingsManager(Singleton):
             logger.exception("Failed to save local settings for %s", script_path)
 
     @staticmethod
-    def local_settings_path(script_path: Path) -> Path:
+    def local_settings_path(script_path: os.PathLike[str]) -> Path:
         """
         Get the file path for a script's local settings.
 
@@ -180,7 +183,7 @@ class SettingsManager(Singleton):
         """
         from ..utils import path_to_hash
 
-        return script_path.parent / ".vsjet" / "vsview" / f"{path_to_hash(script_path)}.json"
+        return Path(script_path).parent / ".vsjet" / "vsview" / f"{path_to_hash(script_path)}.json"
 
     def _load_global(self) -> None:
         if self._noop:
@@ -241,8 +244,10 @@ class SettingsManager(Singleton):
                 update={"shortcuts": self._global_settings.shortcuts + missing_shortcuts}
             )
 
-    def _load_local(self, script_path: Path) -> None:
+    def _load_local(self, script_path: os.PathLike[str]) -> None:
         from ..utils import path_to_hash
+
+        script_path = Path(script_path)
 
         path_hash = path_to_hash(script_path)
         settings_path = self.local_settings_path(script_path)
@@ -255,7 +260,7 @@ class SettingsManager(Singleton):
             return
 
         if not settings_path.exists():
-            logger.info("Local settings file does not exist for %s. Using defaults.", script_path.name)
+            logger.debug("Local settings file does not exist for %s. Using defaults.", script_path)
             self._local_settings[path_hash] = fallback_settings
             return
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pkgutil
 import weakref
 from collections.abc import Callable, Set  # noqa: PYI025
@@ -8,7 +9,6 @@ from functools import wraps
 from importlib import import_module
 from inspect import ismethod
 from logging import getLogger
-from pathlib import Path
 from threading import Lock
 from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, Literal, cast
 
@@ -277,10 +277,14 @@ class PluginManager(Singleton):
 
     @inject_self
     @ensure_loaded("wait")
-    def populate_default_settings(self, scope: Literal["global", "local"], file_path: Path | None = None) -> None:
+    def populate_default_settings(
+        self, scope: Literal["global", "local"], file_path: os.PathLike[str] | None = None
+    ) -> None:
         self._populate_default_settings(scope, file_path)
 
-    def _populate_default_settings(self, scope: Literal["global", "local"], file_path: Path | None = None) -> None:
+    def _populate_default_settings(
+        self, scope: Literal["global", "local"], file_path: os.PathLike[str] | None = None
+    ) -> None:
         from ..settings import SettingsManager
 
         if scope == "local" and file_path is not None:
