@@ -180,8 +180,8 @@ class _PluginLimitedApi(QObject):
 
         SettingsManager.signals.connect_global_weak(self._on_global_settings_changed)
         SettingsManager.signals.connect_local_weak(self._on_local_settings_changed)
-        SettingsManager.signals.connect_about_global_weak(self.aboutToSaveGlobal.emit)
-        SettingsManager.signals.connect_about_local_weak(self.aboutToSaveLocal.emit)
+        SettingsManager.signals.connect_about_global_weak(self._on_about_to_save_global)
+        SettingsManager.signals.connect_about_local_weak(self._on_about_to_save_local)
 
     @property
     def _settings_store(self) -> _PluginSettingsStore:
@@ -197,6 +197,12 @@ class _PluginLimitedApi(QObject):
     def _on_local_settings_changed(self, path: str) -> None:
         self._settings_store.invalidate("local")
         self.localSettingsChanged.emit(path)
+
+    def _on_about_to_save_global(self) -> None:
+        self.aboutToSaveGlobal.emit()
+
+    def _on_about_to_save_local(self, path: str) -> None:
+        self.aboutToSaveLocal.emit(path)
 
 
 class _PluginAPI(_PluginLimitedApi):
