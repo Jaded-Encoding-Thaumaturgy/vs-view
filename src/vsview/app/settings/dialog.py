@@ -413,11 +413,11 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         return GlobalSettings.model_validate(data)
 
-    def _get_local_settings_from_ui(self) -> LocalSettings:
+    def _get_local_settings_from_ui(self, base_settings: LocalSettings | None = None) -> LocalSettings:
         if not self._script_path:
             raise ValueError("No script path provided")
 
-        local_settings = SettingsManager.get_local_settings(self._script_path)
+        local_settings = base_settings or SettingsManager.get_local_settings(self._script_path)
 
         # Use existing settings as base to preserve hidden fields
         data = local_settings.model_dump()
@@ -448,7 +448,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         if self._script_path:
             try:
-                SettingsManager.save_local(self._script_path, self._get_local_settings_from_ui())
+                SettingsManager.save_local(self._script_path, self._get_local_settings_from_ui)
             except Exception as e:
                 logger.error("Failed to save local settings with the error: %s", e)
                 logger.debug("Full traceback:", exc_info=e)

@@ -2,14 +2,15 @@
 
 import json
 import os
+import sys
 import weakref
 from collections.abc import Callable
-from inspect import ismethod
+from inspect import Signature, ismethod
 from logging import DEBUG, getLogger
 from pathlib import Path
 from typing import Any
 
-from jetpytools import Singleton, inject_self
+from jetpytools import CustomTypeError, Singleton, inject_self
 from pydantic import ValidationError
 from PySide6.QtCore import QObject, QSignalBlocker, Signal, SignalInstance
 from PySide6.QtWidgets import QApplication
@@ -17,6 +18,11 @@ from rich.pretty import pretty_repr
 
 from ...env import getenv_bool
 from .models import GlobalSettings, LocalSettings
+
+if sys.version_info >= (3, 13):
+    from typing import TypeIs
+else:
+    from typing_extensions import TypeIs
 
 logger = getLogger(__name__)
 
@@ -140,13 +146,17 @@ class SettingsManager(Singleton):
             logger.exception("Failed to save global settings")
 
     @inject_self.cached
-    def save_local(self, script_path: os.PathLike[str], settings: LocalSettings) -> None:
+    def save_local(
+        self,
+        script_path: os.PathLike[str],
+        settings: LocalSettings | Callable[[LocalSettings], LocalSettings] | Callable[[], LocalSettings] | None = None,
+    ) -> None:
         """
         Save local settings for a script to disk.
 
         Args:
             script_path: Path to the script file.
-            settings: The local settings to save.
+            settings: The local settings to save, or a callable returning them.
         """
         from ..utils import path_to_hash
 
@@ -159,12 +169,26 @@ class SettingsManager(Singleton):
         except Exception:
             logger.exception("There was an error when emitting aboutToSaveLocal")
 
-        self._local_settings[path_to_hash(script_path)] = settings
+        current_settings = self.get_local_settings(script_path)
+
+        if callable(settings):
+            if _callable_one_param(settings):
+                resolved_settings = settings(current_settings)
+            elif _callable_no_param(settings):
+                resolved_settings = settings()
+            else:
+                raise CustomTypeError
+        elif settings is not None:
+            resolved_settings = settings
+        else:
+            resolved_settings = current_settings
+
+        self._local_settings[path_to_hash(script_path)] = resolved_settings
 
         try:
             if not self._noop:
                 settings_path.parent.mkdir(parents=True, exist_ok=True)
-                settings_path.write_text(settings.model_dump_json(indent=2), encoding="utf-8")
+                settings_path.write_text(resolved_settings.model_dump_json(indent=2), encoding="utf-8")
                 logger.debug("Saved local settings for %s to: %s", script_path, settings_path)
             self._signals.localChanged.emit(str(settings_path))
         except Exception:
@@ -282,3 +306,11 @@ class SettingsManager(Singleton):
         except json.JSONDecodeError:
             logger.exception("Failed to parse local settings JSON for %s", script_path)
             self._local_settings[path_hash] = fallback_settings
+
+
+def _callable_one_param(obj: object) -> TypeIs[Callable[[LocalSettings], LocalSettings]]:
+    return callable(obj) and len(Signature.from_callable(obj).parameters) == 1
+
+
+def _callable_no_param(obj: object) -> TypeIs[Callable[[], LocalSettings]]:
+    return callable(obj) and len(Signature.from_callable(obj).parameters) == 0
