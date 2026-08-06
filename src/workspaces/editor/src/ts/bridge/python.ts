@@ -126,8 +126,9 @@ export class BridgeService implements vscode.Disposable {
     );
 
     this.disposables.add(
-      this.editorService.onDidChangeMainTab(() => {
+      this.editorService.onDidChangeMainTab((uri) => {
         if (this.bridge) {
+          this.bridge.onMainTabChanged(uri || "");
           this.flushContentChanged();
         }
       }),

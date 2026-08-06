@@ -41,6 +41,8 @@ class MonacoBridge(QObject):
     """Called when editor cursor position changes (line, column)."""
     activeTabChanged = Signal(str)
     """Called when the active tab in Monaco changes."""
+    mainTabChanged = Signal(str)
+    """Called when the Main script tab in Monaco changes."""
     saveRequested = Signal()
     """Called when Monaco requests saving the current script."""
     saveAsRequested = Signal()
@@ -186,6 +188,10 @@ class MonacoBridge(QObject):
     @Slot(str)
     def onActiveTabChanged(self, uri: str) -> None:
         self.activeTabChanged.emit(uri)
+
+    @Slot(str)
+    def onMainTabChanged(self, uri: str) -> None:
+        self.mainTabChanged.emit(uri)
 
     @Slot()
     def requestSave(self) -> None:

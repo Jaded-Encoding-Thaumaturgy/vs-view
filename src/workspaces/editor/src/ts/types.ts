@@ -24,6 +24,9 @@ export interface PythonBridge {
   /** Notify Python that the active tab's URI has changed. */
   onActiveTabChanged(uri: string): void;
 
+  /** Notify Python that the Main script tab's URI has changed. */
+  onMainTabChanged(uri: string): void;
+
   /** Request Python to save the active document. */
   requestSave(): void;
 
