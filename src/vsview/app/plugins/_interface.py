@@ -87,9 +87,9 @@ class _PluginSettingsStore:
 
     @property
     def file_path(self) -> Path | None:
-        from vsview.app.workspace.file import GenericFileWorkspace
+        from vsview.app.workspace import BaseGenericFileWorkspace
 
-        return self._workspace.content if isinstance(self._workspace, GenericFileWorkspace) else None
+        return self._workspace.current_file_path if isinstance(self._workspace, BaseGenericFileWorkspace) else None
 
     def get(self, plugin: _PluginLike, scope: str) -> BaseModel | None:
         cache = self._caches[scope]
