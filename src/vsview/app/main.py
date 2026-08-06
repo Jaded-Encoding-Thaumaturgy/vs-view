@@ -64,8 +64,8 @@ from .settings.models import WindowGeometry
 from .utils import check_leaks
 from .views import StatusWidget
 from .workspace import (
+    BaseGenericFileWorkspace,
     BaseWorkspace,
-    GenericFileWorkspace,
     LoaderWorkspace,
     PythonScriptWorkspace,
     QuickScriptWorkspace,
@@ -505,7 +505,9 @@ class MainWindow(QMainWindow):
         # Get current workspace's script path if available
         dialog = SettingsDialog(
             wk.content
-            if isinstance((wk := self.stack.currentWidget()), GenericFileWorkspace) and hasattr(wk, "content")
+            if isinstance((wk := self.stack.currentWidget()), BaseGenericFileWorkspace)
+            and hasattr(wk, "content")
+            and Path(wk.content).exists()
             else None,
             self,
         )

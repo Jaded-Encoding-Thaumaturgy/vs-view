@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
@@ -115,10 +116,10 @@ class ShortcutWidgets:
 
 
 class SettingsDialog(QDialog, IconReloadMixin):
-    def __init__(self, script_path: Path | None = None, parent: QWidget | None = None) -> None:
+    def __init__(self, script_path: os.PathLike[str] | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self._script_path = script_path
+        self._script_path = Path(script_path) if script_path else None
 
         # Store original settings for cancel
         self._original_global = SettingsManager.global_settings.model_copy(deep=True)
