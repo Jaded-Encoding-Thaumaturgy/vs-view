@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Self, override
 
 from jetpytools import cachedproperty, classproperty
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt, Slot
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Qt, Slot
 from PySide6.QtGui import QKeyEvent, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
@@ -18,9 +18,12 @@ from PySide6.QtWidgets import (
     QLabel,
     QScrollArea,
     QSpinBox,
+    QSplitter,
     QTabWidget,
     QTimeEdit,
     QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -40,6 +43,8 @@ NORMAL_STYLE = ""
 # Apparently missing from PySide6
 QWIDGETSIZE_MAX = 16777215
 
+PLUGIN_PREFIX = "Plugin"
+
 logger = getLogger(__name__)
 
 
@@ -57,22 +62,50 @@ class WheelEventFilter(QObject):
         return True
 
 
-class SettingsTab(QScrollArea):
+class SettingsTab(QWidget):
     def __init__(self, tab_name: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.tab_name = tab_name
+        self._sections = list[tuple[QTreeWidgetItem, Accordion]]()
+        self._updating_scroll = False
+        self._updating_tree = False
 
-        self.setWidgetResizable(True)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setFrameShape(QScrollArea.Shape.NoFrame)
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # Container widget
-        self.container = QWidget(self)
+        self.splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        main_layout.addWidget(self.splitter)
+
+        # Left navigation tree
+        self.tree = QTreeWidget(self.splitter)
+        self.tree.setHeaderHidden(True)
+        self.tree.setAnimated(True)
+        self.tree.setIndentation(12)
+        self.tree.setStyleSheet("QTreeWidget::item { padding: 4px 2px; }")
+        self.tree.currentItemChanged.connect(self._on_tree_selection_changed)
+
+        # Right scroll area
+        self.scroll_area = QScrollArea(self.splitter)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        # Container widget for scroll area
+        self.container = QWidget(self.scroll_area)
         self.container_layout = QVBoxLayout(self.container)
-        self.container_layout.setContentsMargins(16, 16, 16, 16)
-        self.container_layout.setSpacing(16)
+        self.container_layout.setContentsMargins(4, 8, 8, 8)
+        self.container_layout.setSpacing(8)
 
-        self.setWidget(self.container)
+        self.scroll_area.setWidget(self.container)
+        self.scroll_area.verticalScrollBar().valueChanged.connect(self._on_scroll_changed)
+
+        self.splitter.addWidget(self.tree)
+        self.splitter.addWidget(self.scroll_area)
+        self.splitter.setCollapsible(0, False)
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setSizes([200, 600])
 
     def __enter__(self) -> Self:
         return self
@@ -83,9 +116,100 @@ class SettingsTab(QScrollArea):
     def add_section(self, section: Accordion) -> None:
         self.container_layout.addWidget(section)
 
+        title = section.header.text().strip()
+        if title.startswith(f"{PLUGIN_PREFIX} - "):
+            parts = title.removeprefix(f"{PLUGIN_PREFIX} - ").split(" - ")
+            current_parent = self._get_or_create_parent_item("Plugins")
+
+            for i, part in enumerate(parts):
+                is_leaf = i == len(parts) - 1
+                child = self._find_child_item(current_parent, part)
+                if child is None:
+                    child = QTreeWidgetItem(current_parent, [part])
+                    current_parent.setExpanded(True)
+                if is_leaf or child.data(0, Qt.ItemDataRole.UserRole) is None:
+                    child.setData(0, Qt.ItemDataRole.UserRole, section)
+                current_parent = child
+
+            item = current_parent
+        else:
+            item = QTreeWidgetItem(self.tree, [title])
+            item.setData(0, Qt.ItemDataRole.UserRole, section)
+
+        self._sections.append((item, section))
+
     def finalize(self) -> None:
         """Add stretch at the end to push sections to the top."""
         self.container_layout.addStretch(1)
+        if self._sections:
+            self.tree.setCurrentItem(self._sections[0][0])
+
+    def _get_or_create_parent_item(self, parent_title: str) -> QTreeWidgetItem:
+        if item := self._find_child_item(self.tree, parent_title):
+            return item
+        parent_item = QTreeWidgetItem(self.tree, [parent_title])
+        parent_item.setExpanded(True)
+        return parent_item
+
+    def _find_child_item(self, parent: QTreeWidget | QTreeWidgetItem, title: str) -> QTreeWidgetItem | None:
+        if isinstance(parent, QTreeWidget):
+            count = parent.topLevelItemCount()
+            get_item = parent.topLevelItem
+        else:
+            count = parent.childCount()
+            get_item = parent.child
+        for i in range(count):
+            item = get_item(i)
+            if item and item.text(0) == title:
+                return item
+        return None
+
+    @Slot(QTreeWidgetItem, QTreeWidgetItem)
+    def _on_tree_selection_changed(self, current: QTreeWidgetItem | None, previous: QTreeWidgetItem | None) -> None:
+        if current is None or self._updating_tree:
+            return
+
+        section: Accordion | None = current.data(0, Qt.ItemDataRole.UserRole)
+        if section is None:
+            return
+
+        if not section.header.isChecked():
+            section.header.setChecked(True)
+
+        self._updating_scroll = True
+        try:
+            self.scroll_area.ensureWidgetVisible(section, 0, 12)
+        finally:
+            self._updating_scroll = False
+
+    @Slot(int)
+    def _on_scroll_changed(self, value: int) -> None:
+        if self._updating_scroll or not self._sections:
+            return
+
+        viewport = self.scroll_area.viewport()
+        viewport_top = viewport.rect().top()
+        closest_item: QTreeWidgetItem | None = None
+        min_diff = float("inf")
+
+        for item, section in self._sections:
+            if not section.isVisible():
+                continue
+            section_y = section.mapTo(viewport, QPoint(0, 0)).y()
+            diff = abs(section_y - viewport_top)
+            if section_y <= viewport_top + 50 and diff < min_diff:
+                min_diff = diff
+                closest_item = item
+
+        if closest_item is None and self._sections:
+            closest_item = self._sections[0][0]
+
+        if closest_item and closest_item != self.tree.currentItem():
+            self._updating_tree = True
+            try:
+                self.tree.setCurrentItem(closest_item)
+            finally:
+                self._updating_tree = False
 
 
 class ShortcutEditor(QKeySequenceEdit):
@@ -132,8 +256,8 @@ class SettingsDialog(QDialog, IconReloadMixin):
         self._wheel_filter = WheelEventFilter(self)
 
         self.setWindowTitle("Settings")
-        self.setMinimumSize(600, 500)
-        self.resize(700, 600)
+        self.setMinimumSize(750, 550)
+        self.resize(950, 650)
 
         self._setup_ui()
         self._load_settings_to_ui()
@@ -276,7 +400,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
             # Check if this is a plugin shortcut
             if first_component in self._plugin_names:
-                group_name = f"Plugin - {self._plugin_names[first_component]}"
+                group_name = f"{PLUGIN_PREFIX} - {self._plugin_names[first_component]}"
             else:
                 group_name = first_component.title()
 

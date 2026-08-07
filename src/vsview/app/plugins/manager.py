@@ -238,7 +238,7 @@ class PluginManager(Singleton):
         # ShortcutManager._check_conflicts()
 
     def _construct_settings_registry(self) -> None:
-        from ..settings.dialog import SettingsDialog
+        from ..settings.dialog import PLUGIN_PREFIX, SettingsDialog
         from ..settings.models import SettingEntry, extract_settings
 
         def extract_plugin_settings(model: type, plugin_id: str, section_prefix: str) -> list[SettingEntry]:
@@ -259,7 +259,7 @@ class PluginManager(Singleton):
             if global_model is None and local_model is None:
                 continue
 
-            section_prefix = f"Plugin - {display_name}"
+            section_prefix = f"{PLUGIN_PREFIX} - {display_name}"
 
             if global_model is not None:
                 global_entries.extend(extract_plugin_settings(global_model, identifier, section_prefix))
