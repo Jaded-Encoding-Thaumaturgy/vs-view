@@ -20,7 +20,17 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QBrush, QColor, QMouseEvent, QPainter, QPaintEvent, QPalette, QResizeEvent, QShowEvent
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QHideEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPalette,
+    QResizeEvent,
+    QShowEvent,
+)
 from PySide6.QtWidgets import (
     QBoxLayout,
     QButtonGroup,
@@ -286,7 +296,14 @@ class CustomLoadingPage(QWidget):
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
 
-        QTimer.singleShot(0, self._start_animation)
+        if self.icon_animation.state() != QAbstractAnimation.State.Running:
+            QTimer.singleShot(0, self._start_animation)
+
+    @override
+    def hideEvent(self, event: QHideEvent) -> None:
+        super().hideEvent(event)
+
+        self.icon_animation.stop()
 
     def _start_animation(self) -> None:
         self.icon_animation.setStartValue(0)
