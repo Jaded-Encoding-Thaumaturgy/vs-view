@@ -1,6 +1,7 @@
 from typing import Annotated, Any, Literal, override
 
 from pydantic import BaseModel
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QHBoxLayout, QWidget
 from vapoursynth import VideoNode
 from vstools import ColorRange, DitherType, depth, initialize_input, join, split, stack_planes
@@ -77,6 +78,7 @@ class FFTSpectrumPlugin(WidgetPluginBase[GlobalSettings]):
 
         self.api.globalSettingsChanged.connect(self.on_settings_changed)
 
+    @Slot()
     def on_settings_changed(self) -> None:
         self.view.set_autofit(self.settings.global_.autofit)
         self.view.refresh()

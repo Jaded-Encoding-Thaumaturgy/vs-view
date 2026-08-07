@@ -449,6 +449,7 @@ class _PluginAPI(_PluginLimitedApi):
             if self._is_truly_visible(plugin):
                 plugin.on_playback_stopped()
 
+    @Slot(QContextMenuEvent)
     def _on_view_context_menu(self, event: QContextMenuEvent) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):

@@ -7,7 +7,7 @@ from logging import getLogger
 from typing import Any, Literal
 
 from jetpytools import Singleton, inject_self
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import QWidget
 
@@ -201,6 +201,7 @@ class ShortcutManager(Singleton):
     def _update_shortcut(self, action_id: str, shortcut: QShortcut) -> None:
         shortcut.setKey(QKeySequence(self.get_key(action_id)))
 
+    @Slot()
     def _on_settings_changed(self) -> None:
         logger.debug("Hot-reloading shortcuts...")
 

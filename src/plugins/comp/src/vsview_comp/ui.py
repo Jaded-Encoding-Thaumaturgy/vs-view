@@ -27,6 +27,7 @@ from PySide6.QtCore import (
     Qt,
     QThreadPool,
     Signal,
+    Slot,
 )
 from PySide6.QtGui import (
     QBrush,
@@ -190,10 +191,12 @@ class OutputItemWidget(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         event.accept()
 
+    @Slot(bool)
     def _on_check(self, state: bool) -> None:
         self.included = state
         self.inclusionChanged.emit(state)
 
+    @Slot(str)
     def _on_name(self, text: str) -> None:
         self.vs_name = text
         self.nameChanged.emit(text)
@@ -235,6 +238,7 @@ class OutputDropdown(QPushButton):
 
         self._update_text()
 
+    @Slot()
     def _update_text(self) -> None:
         included = [w for w in self.items if w.included]
 
@@ -390,6 +394,8 @@ class FrameThumbnailList(QListWidget):
 
         return out
 
+    @Slot()
+    @Slot(bool)
     def add_item(
         self,
         frame: int | None = None,
@@ -425,6 +431,7 @@ class FrameThumbnailList(QListWidget):
         fut = self.fetch_thumbnail(item)
         self._register_thumbnail_future(fut)
 
+    @Slot()
     def remove_selected(self) -> None:
         nb = len(self.selectedItems())
 
@@ -474,6 +481,7 @@ class FrameThumbnailList(QListWidget):
             if isinstance(it := self.item(i), ThumbnailItem):
                 it.update_metadata(idx)
 
+    @Slot(QPoint)
     def show_context_menu(self, pos: QPoint) -> None:
         if not self.itemAt(pos):
             return
@@ -637,11 +645,13 @@ class AnchoredListPopup(QListWidget):
         self._target = None
         return None
 
+    @Slot()
     def _on_target_destroyed(self) -> None:
         self._target = None
         self._target_window = None
         self.hide()
 
+    @Slot()
     def _cleanup_event_filters(self, *_: Any) -> None:
         if target := self._safe_target():
             target.removeEventFilter(self)
@@ -733,6 +743,7 @@ class TMDBListPopup(AnchoredListPopup):
             reply.abort()
             reply.deleteLater()
 
+    @Slot(QNetworkReply)
     def _on_poster_downloaded(self, reply: QNetworkReply) -> None:
         if not (payload := self._poster_replies.pop(reply, None)):
             reply.deleteLater()
@@ -1071,6 +1082,7 @@ class TagsLineEdit(QWidget):
     def clear(self) -> None:
         self._input.clear()
 
+    @Slot()
     def _on_tags_changed(self) -> None:
         if self._tag_order:
             self._input.setPlaceholderText("")
@@ -1120,6 +1132,7 @@ class TagsListPopup(AnchoredListPopup):
         self.update_geometry()
         self.show()
 
+    @Slot(QListWidgetItem)
     def _on_item_selected(self, item: QListWidgetItem) -> None:
         if not (data := item.data(Qt.ItemDataRole.UserRole)):
             return
@@ -1155,6 +1168,7 @@ class PlaceholderLineEdit(QLineEdit):
             popup.hide()
         return None
 
+    @Slot(str)
     def _on_completer_activated(self, s: str) -> None:
         t, p = self.text(), self.cursorPosition()
         i = t.rfind("{", 0, p)
@@ -1203,9 +1217,11 @@ class BrowserIDWidget(QWidget, IconReloadMixin):
     def id(self, value: str) -> None:
         self.browser_id_lbl.setText(value)
 
+    @Slot()
     def on_regenerate_id_btn_clicked(self) -> None:
         self.id = str(uuid4())
 
+    @Slot()
     def on_copy_btn_clicked(self) -> None:
         QApplication.clipboard().setText(self.browser_id_lbl.text())
         QToolTip.showText(QCursor.pos(), "Copied!", self.copy_btn)
@@ -1539,5 +1555,6 @@ class ProbabilityCurveDialog(QDialog):
     def points(self) -> Sequence[QPointF]:
         return self.curve_widget.points
 
+    @Slot()
     def on_reset(self) -> None:
         self.curve_widget.points = [QPointF(0.0, 1.0), QPointF(1.0, 1.0)]

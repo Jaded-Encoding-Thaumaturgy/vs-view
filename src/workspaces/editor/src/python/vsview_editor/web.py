@@ -112,10 +112,12 @@ class MonacoBridge(QObject):
         """Notify JS to disconnect an LSP client (or all clients if server_id is None)."""
         self.dispatch("lsp.disconnect", {"id": server_id} if server_id is not None else {})
 
+    @Slot()
     def toggle_word_wrap(self) -> None:
         """Toggle word wrap in Monaco."""
         self.dispatch("editor.toggleWordWrap")
 
+    @Slot()
     def toggle_console(self) -> None:
         """Toggle the output console panel in frontend."""
         self.dispatch("console.toggle")
@@ -132,14 +134,17 @@ class MonacoBridge(QObject):
         """Push updated Monaco editor options JSON to JavaScript."""
         self.dispatch("editor.updateOptions", {"optionsJson": options_json})
 
+    @Slot()
     def trigger_save(self) -> None:
         """Notify JS to flush content and trigger save request."""
         self.dispatch("editor.triggerSave")
 
+    @Slot()
     def trigger_save_as(self) -> None:
         """Notify JS to flush content and trigger save-as request."""
         self.dispatch("editor.triggerSaveAs")
 
+    @Slot()
     def trigger_format(self) -> None:
         """Notify JS to flush content and trigger format request."""
         self.dispatch("editor.triggerFormat")

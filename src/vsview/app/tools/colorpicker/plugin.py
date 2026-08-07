@@ -12,7 +12,7 @@ from typing import Annotated, Any, override
 import vapoursynth as vs
 from jetpytools import clamp
 from pydantic import BaseModel
-from PySide6.QtCore import QPoint, QSize, Qt
+from PySide6.QtCore import QPoint, QSize, Qt, Slot
 from PySide6.QtGui import QContextMenuEvent, QCursor, QImage, QMouseEvent, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -500,6 +500,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
         return results
 
+    @Slot(bool)
     def on_eyedropper_toggle(self, checked: bool) -> None:
         if checked:
             self.tracking = TrackingState.ACTIVE

@@ -286,6 +286,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         if c := self.local_settings.view.last_center:
             v.update_center(c.toTuple())
 
+    @Slot(int, float, bool)
     def _on_playback_settings_changed(self, seek_step: int, speed: float, uncapped: bool) -> None:
         self.local_settings.playback.seek_step = seek_step
         self.local_settings.playback.speed = speed
@@ -298,6 +299,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         self.tab_manager.sync_scroll_btn.setChecked(self.local_settings.synchronization.sync_scroll)
         self.tab_manager.autofit_btn.setChecked(self.local_settings.synchronization.autofit_all_views)
 
+    @Slot()
     @requires_content
     def _on_autosave_timer_timeout(self) -> None:
         if (path := self.current_file_path) is not None:

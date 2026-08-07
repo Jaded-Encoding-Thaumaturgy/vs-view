@@ -348,6 +348,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         return 0
 
+    @Slot()
     @run_in_background(name="ReloadContent")
     def reload_content(self) -> int:
         if not self.playback.can_reload:
@@ -482,6 +483,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.loop.from_thread(screenshot.deleteLater)
             del screenshot
 
+    @Slot()
     @run_in_loop(return_future=False)
     def clear_failed_load(self) -> None:
         if self._is_failed:
@@ -587,6 +589,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.debug("Full traceback:", exc_info=True)
             return None
 
+    @Slot(int)
     def _on_tab_changed(
         self,
         index: int,
@@ -705,9 +708,11 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         self.statusOutputChanged.emit(voutput.info._replace(sar=self.tab_manager.current_view.display_sar))
 
+    @Slot()
     def _on_reload_failed(self) -> None:
         self.load_content(self.content)
 
+    @Slot()
     def _copy_current_frame_to_clipboard(self) -> None:
         frame = self.tbar.playback_container.frame_edit.value()
 
@@ -716,6 +721,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.statusLoadingFinished.emit(f"Copied frame {frame}")
         logger.info("Copied frame %d to clipboard", frame)
 
+    @Slot()
     def _copy_current_time_to_clipboard(self) -> None:
         timestamp = self.tbar.playback_container.time_edit.time().toString("H:mm:ss.zzz")
 
@@ -769,6 +775,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 i, self.global_settings.view_tools.panels.get(plugin_type.identifier, True)
             )
 
+    @Slot(bool)
     def _on_dock_toggle(self, checked: bool) -> None:
         for dock in self.docks:
             if self.global_settings.view_tools.docks.get(dock.objectName(), True):
@@ -791,10 +798,12 @@ class LoaderWorkspace[T](BaseWorkspace):
             w.on_hide()
             dock.truly_visible = False
 
+    @Slot(bool)
     def _sync_toolpanel_btn(self, visible: bool) -> None:
         with QSignalBlocker(self.tab_manager.toggle_toolpanel_btn):
             self.tab_manager.toggle_toolpanel_btn.setChecked(visible)
 
+    @Slot(bool)
     def _on_splitter_visibility_changed(self, visible: bool = True) -> None:
         if not isinstance(w := self.plugin_splitter.plugin_tabs.currentWidget(), WidgetPluginBase):
             return
@@ -806,6 +815,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         else:
             w.on_hide()
 
+    @Slot(int, int)
     def _on_splitter_tab_changed(self, new_index: int, old_index: int) -> None:
         if isinstance(w := self.plugin_splitter.plugin_tabs.widget(new_index), WidgetPluginBase):
             with self.env.use():

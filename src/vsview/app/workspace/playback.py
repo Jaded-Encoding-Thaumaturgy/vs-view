@@ -706,6 +706,7 @@ class PlaybackManager(QObject):
         if self.state.is_playing:
             self._restart_playback()
 
+    @Slot(int, bool, int)
     def _on_play_zone(self, zone_frames: int, loop: bool, step: int) -> None:
         """Play a specific zone of frames."""
         if not (voutput := self._outputs_manager.current_voutput):
@@ -724,6 +725,7 @@ class PlaybackManager(QObject):
         self._tbar.playback_container.play_pause_btn.setChecked(True)
         self._start_playback(play_range=play_range, loop=loop)
 
+    @Slot(float)
     def _on_audio_delay_changed(self, delay_s: float) -> None:
         """Handle audio delay change from UI."""
         if self.state.is_playing:
@@ -733,6 +735,7 @@ class PlaybackManager(QObject):
             for aoutput in self._outputs_manager.aoutputs:
                 aoutput.prepare_audio(delay_s, self._api)
 
+    @Slot(int)
     def _on_audio_output_changed(self, index: int) -> None:
         """Handle audio output selection change."""
         self.audioOutputChanged.emit(index)
@@ -750,6 +753,7 @@ class PlaybackManager(QObject):
         if aoutput := self._outputs_manager.current_aoutput:
             aoutput.volume = volume
 
+    @Slot(bool)
     def _on_mute_changed(self, is_muted: bool) -> None:
         if is_muted:
             self._stop_audio()

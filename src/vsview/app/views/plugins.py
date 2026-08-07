@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from typing import override
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import QDockWidget, QHBoxLayout, QLabel, QSplitter, QTabBar, QTabWidget, QWidget
 
 from ...assets import IconName
@@ -86,6 +86,7 @@ class PluginSplitter(QSplitter, IconReloadMixin):
 
         self.plugin_tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.LeftSide, label_widget)
 
+    @Slot(bool)
     def toggle_right_panel(self, visible: bool) -> None:
         if visible:
             if self.last_sizes == [1, 0]:
@@ -96,6 +97,7 @@ class PluginSplitter(QSplitter, IconReloadMixin):
             self.last_sizes = self.sizes()
             self.setSizes([1, 0])
 
+    @Slot(int)
     def _on_plugin_tab_changed(self, index: int) -> None:
         # Only emit if right panel is visible
         if self.is_right_panel_visible:

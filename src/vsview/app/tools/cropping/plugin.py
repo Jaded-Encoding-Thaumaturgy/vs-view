@@ -186,9 +186,11 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self._apply_view_selection(rect)
 
     # Hook
+    @Slot()
     def clear_selection(self) -> None:
         self.api.current_view.clear_rect_selection()
 
+    @Slot(bool)
     def on_region_toggled(self, checked: bool) -> None:
         self.api.current_view.rect_selection_enabled = checked
 
@@ -200,6 +202,7 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         QToolTip.showText(QCursor.pos(), "Copied!", btn)
         self.api.statusMessage.emit(f"Copied to clipboard: {label.text()}")
 
+    @Slot()
     def _on_global_settings_changed(self) -> None:
         self.left_spin.setSingleStep(self.settings.global_.mod)
         self.right_spin.setSingleStep(self.settings.global_.mod)

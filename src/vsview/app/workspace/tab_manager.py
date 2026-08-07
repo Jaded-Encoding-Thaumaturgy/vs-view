@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Self, overload, override
 
 from jetpytools import fallback
 from PySide6.QtCore import QSignalBlocker, QSize, Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPaintDevice, QPixmap
+from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QToolButton, QVBoxLayout, QWidget
 from vapoursynth import VideoFrame
 
@@ -79,6 +79,8 @@ class PlayHeadToolButton(QToolButton, IconReloadMixin):
             self.rightClicked.emit(True)
         return super().mouseReleaseEvent(e)
 
+    @Slot()
+    @Slot(bool)
     def set_state(self, clicked: bool | None = None, state: int | None = None) -> None:
         if state is None:
             state = next(self._state_cycle)
@@ -332,7 +334,8 @@ class TabManager(QWidget, IconReloadMixin):
                 else:
                     tabs.tabBar().show()
 
-    @Slot(QPaintDevice, object, object)
+    @Slot(QImage, object, float)
+    @Slot(QPixmap, object, float)
     @run_in_loop(return_future=False)
     def update_current_view(
         self,
@@ -360,6 +363,7 @@ class TabManager(QWidget, IconReloadMixin):
                 backing_frame.close()
 
     # SIGNALS
+    @Slot(int)
     def _on_tab_changed(self, index: int) -> None:
         if index < 0:
             return
@@ -387,6 +391,7 @@ class TabManager(QWidget, IconReloadMixin):
 
         self.tabChanged.emit(index)
 
+    @Slot(float)
     def _on_zoom_changed(self, zoom: float) -> None:
         """Handle zoom change events from GraphicsView widgets."""
         if (idx := self.tabs.indexOf(self.current_view)) >= 0:
@@ -403,10 +408,12 @@ class TabManager(QWidget, IconReloadMixin):
 
                 self.tabs.get_tab_label(i).zoom = zoom
 
+    @Slot(bool)
     def _on_sync_zoom_changed(self, checked: bool) -> None:
         if checked:
             self._on_zoom_changed(self.current_view.current_zoom)
 
+    @Slot(bool)
     def _on_global_autofit_changed(self, enabled: bool, under_reload: bool = False) -> None:
         for i, view in enumerate(self.tabs.views()):
             with QSignalBlocker(view):

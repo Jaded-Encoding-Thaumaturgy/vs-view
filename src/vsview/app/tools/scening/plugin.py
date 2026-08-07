@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Annotated, Self, override
 import pluggy
 from jetpytools import cachedproperty, classproperty, flatten, to_arr
 from pydantic import BaseModel, ConfigDict, Field
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, Qt, Slot
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -423,6 +423,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.scenes_view.viewport().update()
         self._update_action_labels()
 
+    @Slot()
     def on_new_scene(self) -> None:
         new_scene = SceneRow(color=next(self._color_gen), name=f"New Scene {str(next(self._counter)).zfill(2)}")
 
@@ -430,6 +431,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.scenes_view.scrollTo(idx)
         self.scenes_view.setCurrentIndex(idx)
 
+    @Slot()
     def on_import_scene(self) -> None:
         load_plugins()
 
@@ -472,6 +474,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
         return scenes
 
+    @Slot()
     def on_export_scene(self) -> None:
         load_plugins()
 
@@ -505,6 +508,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         except Exception:
             logger.exception("Error exporting file: %s", file)
 
+    @Slot()
     def on_remove_scene_triggered(self) -> None:
         if not (selected_indexes := self.scenes_view.selectionModel().selectedRows()):
             return
@@ -513,6 +517,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
         self.scenes_model.remove_scene(rows)
 
+    @Slot()
     def on_scene_selection_changed(self) -> None:
         if selected_indexes := self.scenes_view.selectionModel().selectedRows():
             self.range_container.setEnabled(True)
@@ -544,6 +549,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
             self.api.timeline.clear_notches(scene.notch_id for scene in self.settings.local_.scenes)
 
+    @Slot()
     def on_cycle_toolbar_style(self) -> None:
         if (current_style := self.scenes_toolbar.toolButtonStyle()) != self.range_toolbar.toolButtonStyle():
             logger.warning("Toolbar styles mismatch. Forcing update.")
@@ -552,6 +558,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.settings.global_.toolbar_style = next(styles)
         self._update_toolbar_style()
 
+    @Slot()
     def on_range_selection_changed(self) -> None:
         selected = self.ranges_view.selectionModel().selectedRows()
 
@@ -561,6 +568,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             )
             self.api.playback.seek(start)
 
+    @Slot(bool)
     def on_range_start_toggle(self, checked: bool) -> None:
         if checked:
             self._pending_start = self.api.current_frame if self.api.timeline.mode == "frame" else self.api.current_time
@@ -571,6 +579,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             self._pending_start = None
             self.add_range_action.setDisabled(True)
 
+    @Slot(bool)
     def on_range_end_toggle(self, checked: bool) -> None:
         if checked:
             self._pending_end = self.api.current_frame if self.api.timeline.mode == "frame" else self.api.current_time
@@ -581,6 +590,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             self._pending_end = None
             self.add_range_action.setDisabled(True)
 
+    @Slot()
     def on_add_range_triggered(self) -> None:
         selected_indexes = self.scenes_view.selectionModel().selectedRows()
 
@@ -592,6 +602,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         scene: SceneRow = index.data(self.scenes_model.SceneRowRole)
         self._add_range(self._pending_start, self._pending_end, scene)
 
+    @Slot()
     def on_add_frame_triggered(self) -> None:
         selected_indexes = self.scenes_view.selectionModel().selectedRows()
 
@@ -604,6 +615,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         current = self.api.current_frame if self.api.timeline.mode == "frame" else self.api.current_time
         self._add_range(current, current, scene)
 
+    @Slot()
     def on_remove_range_triggered(self) -> None:
         if not (selected_indexes := self.ranges_view.selectionModel().selectedRows()):
             return
@@ -618,15 +630,19 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
         self.api.timeline.update()
 
+    @Slot()
     def on_seek_prev_bound(self) -> None:
         self._seek_to_neighbor(self._get_visible_range_boundaries(), forward=False)
 
+    @Slot()
     def on_seek_next_bound(self) -> None:
         self._seek_to_neighbor(self._get_visible_range_boundaries(), forward=True)
 
+    @Slot()
     def on_seek_prev_range(self) -> None:
         self._seek_to_neighbor(self._get_visible_range_boundaries(starts_only=True), forward=False)
 
+    @Slot()
     def on_seek_next_range(self) -> None:
         self._seek_to_neighbor(self._get_visible_range_boundaries(starts_only=True), forward=True)
 
@@ -652,6 +668,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
         self.api.timeline.add_notch(scene.notch_id, [r.to_tuple()], scene.color, r.label, r.id)
 
+    @Slot()
     def _persist_scenes(self) -> None:
         scenes = self.scenes_model.scenes.copy()
         self.settings.local_.scenes = scenes
@@ -659,6 +676,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         if scenes:
             self._color_gen.send(scenes[-1].color)
 
+    @Slot(object)
     def _refresh_scene_on_timeline(self, scene: SceneRow, *, update: bool = True) -> None:
         self.api.timeline.clear_notches(scene.notch_id, update=False)
 
@@ -669,6 +687,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         if update:
             self.api.timeline.update()
 
+    @Slot(object, object)
     def _refresh_range_on_timeline(self, r: RangeFrame | RangeTime, scene: SceneRow, *, update: bool = True) -> None:
         self.api.timeline.discard_notch(scene.notch_id, [r.to_tuple()], r.id, update=False)
         self.api.timeline.add_notch(scene.notch_id, [r.to_tuple()], scene.color, r.label, r.id, update=False)
@@ -679,6 +698,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
     def _selected_ranges(self) -> list[RangeFrame | RangeTime]:
         return [idx.data(self.ranges_model.RangeRole) for idx in self.ranges_view.selectionModel().selectedRows()]
 
+    @Slot()
     def _copy_ranges_frames(self) -> None:
         v = self.api.current_voutput
         text = ", ".join(str(r.as_frames(v)) for r in self._selected_ranges())
@@ -724,6 +744,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
         QApplication.clipboard().setText(f"[{text}]")
 
+    @Slot(QPoint)
     def _on_ranges_context_menu(self, pos: QPoint) -> None:
         if not self.ranges_view.selectionModel().selectedRows():
             return
@@ -777,6 +798,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             if idx > 0:
                 self.api.playback.seek(points[idx - 1])
 
+    @Slot()
     def _update_ranges_header_width(self) -> None:
         rows = self.ranges_model.rowCount()
         width = self.ranges_view.verticalHeader().fontMetrics().horizontalAdvance(str(rows)) + 12
@@ -792,6 +814,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         set_text(self.add_range_action, ShortcutDefinition.VALIDATE_RANGE.definition, "Add range")
         set_text(self.add_frame_action, ShortcutDefinition.ADD_SINGLE_FRAME.definition, "Add frame")
 
+    @Slot()
     def _update_toolbar_style(self) -> None:
         style = self.settings.global_.toolbar_style
         self.scenes_toolbar.setToolButtonStyle(style)

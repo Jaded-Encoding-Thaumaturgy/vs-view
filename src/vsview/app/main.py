@@ -19,6 +19,7 @@ from PySide6.QtCore import (
     QSize,
     Qt,
     QTimer,
+    Slot,
 )
 from PySide6.QtGui import (
     QAction,
@@ -36,6 +37,7 @@ from PySide6.QtGui import (
     QPalette,
 )
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QApplication,
     QButtonGroup,
     QFrame,
@@ -104,6 +106,7 @@ class Application(QApplication):
 
         SettingsManager.signals.globalChanged.connect(self._on_global_settings_changed)
 
+    @Slot()
     def _on_global_settings_changed(self) -> None:
         refresh_widgets = False
 
@@ -487,14 +490,17 @@ class MainWindow(QMainWindow):
             self.showMaximized()
 
     # SIGNALS
+    @Slot()
     def _on_load_script(self) -> None:
         btn = self.add_workspace(PythonScriptWorkspace)
         btn.workspace.load_btn.click()
 
+    @Slot()
     def _on_load_file(self) -> None:
         btn = self.add_workspace(VideoFileWorkspace)
         btn.workspace.load_btn.click()
 
+    @Slot()
     def _on_open_settings_when_plugins_loaded(self) -> None:
         if not self.plugin_manager.loaded:
             logger.warning("Plugins are still loading...")
@@ -545,16 +551,19 @@ class MainWindow(QMainWindow):
 
         menu.deleteLater()
 
+    @Slot(QPoint)
     def _on_sidebar_context_menu_requested(self, pos: QPoint) -> None:
         btn = self.sender()
         if isinstance(btn, WorkspaceToolButton):
             self._show_sidebar_context_menu(pos, btn)
 
+    @Slot()
     def _on_clear_action_triggered(self) -> None:
         action = self.sender()
         if isinstance(action, QAction) and (btn := action.property("btn")):
             self._on_clear_action(btn)
 
+    @Slot()
     def _on_delete_workspace_triggered(self) -> None:
         action = self.sender()
         if isinstance(action, QAction) and (btn := action.property("btn")):
@@ -577,6 +586,7 @@ class MainWindow(QMainWindow):
             self.setUpdatesEnabled(True)
             self.update()
 
+    @Slot()
     def _populate_workspace_menu(self) -> None:
         def populate_wk_menu() -> None:
             self.workspace_submenu.addSeparator()
@@ -627,6 +637,7 @@ class MainWindow(QMainWindow):
             action.toggled.connect(on_toggled)
             menu.addAction(action)
 
+    @Slot()
     def _populate_tooldocks_menu(self) -> None:
         self.plugin_manager.call_when_loaded(
             lambda: self._populate_plugin_menu(
@@ -637,6 +648,7 @@ class MainWindow(QMainWindow):
             )
         )
 
+    @Slot()
     def _populate_toolpanels_menu(self) -> None:
         self.plugin_manager.call_when_loaded(
             lambda: self._populate_plugin_menu(
@@ -647,13 +659,16 @@ class MainWindow(QMainWindow):
             )
         )
 
+    @Slot(QAbstractButton)
     def _on_sidebar_button_clicked(self, btn: WorkspaceToolButton[Any]) -> None:
         self.stack.animate_to_widget(btn.workspace)
 
+    @Slot(bool)
     def _on_view_sidebar_action_triggered(self, checked: bool) -> None:
         self.sidebar.setVisible(checked)
         self.settings_manager.global_settings.appearance.sidebar_visible = checked
 
+    @Slot(int)
     def _on_stack_current_changed(self, index: int) -> None:
         old_widget = self.stack.last_widget
 
@@ -741,6 +756,7 @@ class StackedWidget(QStackedWidget):
         finally:
             self.animations_enabled = True
 
+    @Slot()
     def _finish_animation(self) -> None:
         if self._overlay is not None:
             self._overlay.deleteLater()

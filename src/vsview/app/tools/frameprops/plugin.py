@@ -13,7 +13,7 @@ import pluggy
 import vapoursynth as vs
 from jetpytools import fallback
 from pydantic import BaseModel
-from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QPoint, QSignalBlocker, QSize, Qt, Signal
+from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QPoint, QSignalBlocker, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QAction, QImage, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QApplication,
@@ -95,6 +95,7 @@ class FramePropsViewMixin:
 
         return RowData(raw_key, raw_value)
 
+    @Slot(QPoint)
     def _show_context_menu(self: FramePropsTreeView | FramePropsTableView, pos: QPoint) -> None:  # type: ignore[misc]
         if not (index := self.indexAt(pos)).isValid():
             return
@@ -312,6 +313,7 @@ class FramePropsTreeView(QTreeView, FramePropsViewMixin):
         if auto_resize_0:
             self.resizeColumnToContents(0)
 
+    @Slot(bool)
     def set_show_formatted(self, show: bool) -> None:
         if show:
             self.header().showSection(FramePropsModel.FORMATTED_COLUMN)
@@ -332,6 +334,7 @@ class FramePropsTreeView(QTreeView, FramePropsViewMixin):
 
         self.doItemsLayout()
 
+    @Slot(int, int, int)
     def _on_section_resized(self, logical_index: int, old_size: int, new_size: int) -> None:
         if logical_index == 1 and old_size != new_size:
             self.doItemsLayout()
@@ -710,6 +713,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         if (key := self.current_preview_key) in props and isinstance(props[key], vs.VideoFrame):
             self.preview_view.set_frame(props[key])
 
+    @Slot(str)
     def status_message(self, message: str) -> None:
         if len(msg_lines := message.split("\n")) > 1:
             self.api.statusMessage.emit(f"{self.display_name}: {msg_lines[0]}...")
@@ -733,6 +737,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
         return toggle, row
 
+    @Slot(int)
     def _on_history_selected(self, index: int) -> None:
         if index < 0:
             return
@@ -743,16 +748,19 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
             self.update_nav_buttons()
             self.refresh_preview(frame)
 
+    @Slot()
     def _on_prev_clicked(self) -> None:
         current_index = self.history_combo.currentIndex()
         if current_index > 0:
             self.history_combo.setCurrentIndex(current_index - 1)
 
+    @Slot()
     def _on_next_clicked(self) -> None:
         current_index = self.history_combo.currentIndex()
         if current_index < self.history_combo.count() - 1:
             self.history_combo.setCurrentIndex(current_index + 1)
 
+    @Slot(object, str)
     def _show_preview(self, frame: vs.VideoFrame, key_name: str) -> None:
         self.current_preview_key = key_name
 
@@ -761,6 +769,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
         self.splitter.setSizes([int(self.splitter.height() * 0.6), int(self.splitter.height() * 0.4)])
 
+    @Slot()
     @run_in_loop(return_future=False)
     def _hide_preview(self) -> None:
         self.splitter.setSizes([1, 0])
@@ -769,6 +778,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         with suppress(AttributeError):
             del self.current_preview_key
 
+    @Slot(int, int)
     def _on_tree_column_resized(self, index: int, size: int) -> None:
         widths = (self.settings.local_.tree_column_widths or {}).copy()
         widths[index] = size

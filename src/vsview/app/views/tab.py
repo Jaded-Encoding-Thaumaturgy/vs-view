@@ -9,7 +9,7 @@ from logging import getLogger
 from typing import Any, override
 
 from jetpytools import copy_signature
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QTabWidget, QWidget
 
@@ -139,6 +139,7 @@ class TabViewWidget(QTabWidget):
         yield
         self.setDisabled(False)
 
+    @Slot(int)
     def _on_current_changed(self, index: int) -> None:
         if index == -1:
             return

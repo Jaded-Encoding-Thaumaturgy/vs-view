@@ -6,6 +6,7 @@ from typing import override
 
 import numpy as np
 from jetpytools import fallback
+from PySide6.QtCore import Slot
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -471,97 +472,120 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
                 ):
                     self.cie_container.update_histogram(linear_frame, xyz_frame)
 
+    @Slot(int)
     def on_tab_changed(self, index: int) -> None:
         self.settings.global_.selected_tab = index
         self.update_histogram()
 
+    @Slot(int)
     def on_levels_bin_resolution_changed(self, index: int) -> None:
         self.settings.global_.levels.bin_res = self.levels_bin_combo.currentData()
         self.update_histogram()
 
+    @Slot(float)
     def on_levels_factor_changed(self, value: float) -> None:
         self.settings.global_.levels.factor = value
         self.update_histogram()
 
+    @Slot(int)
     def on_levels_unsafe_zones_changed(self, state: int) -> None:
         self.settings.global_.levels.show_unsafe = self.levels_unsafe_checkbox.isChecked()
         self.update_histogram()
 
+    @Slot(int)
     def on_waveform_unsafe_changed(self, state: int) -> None:
         self.settings.global_.waveform.show_zones = self.waveform_zones_checkbox.isChecked()
         self.update_histogram()
 
+    @Slot(int)
     def on_waveform_dynamic_gain_changed(self, state: int) -> None:
         self.settings.global_.waveform.dynamic_gain = self.waveform_dynamic_checkbox.isChecked()
         self.update_histogram()
 
+    @Slot(float)
     def on_waveform_gain_changed(self, value: float) -> None:
         self.settings.global_.waveform.gain = value
         self.update_histogram()
 
+    @Slot(int)
     def on_waveform_mode_changed(self, index: int) -> None:
         self.settings.global_.waveform.mode = self.waveform_mode_combo.currentData()
         self.update_histogram()
 
+    @Slot(int)
     def on_waveform_resolution_changed(self, index: int) -> None:
         self.settings.global_.waveform.res = self.waveform_res_combo.currentData()
         self.update_histogram()
 
+    @Slot(int)
     def on_vectorscope_mode_changed(self, index: int) -> None:
         mode = self.vectorscope_mode_combo.currentData()
         self.settings.global_.vectorscope.mode = mode
         self.vectorscope_luma_spin.setEnabled(mode == "chroma_wheel")
         self.update_histogram()
 
+    @Slot(int)
     def on_vectorscope_resolution_changed(self, index: int) -> None:
         self.settings.global_.vectorscope.res = self.vectorscope_res_combo.currentData()
         self.update_histogram()
 
+    @Slot(int)
     def on_vectorscope_matrix_changed(self, index: int) -> None:
         self.settings.global_.vectorscope.matrix = self.vectorscope_matrix_combo.currentData()
         self.update_histogram()
 
-    def on_vectorscope_luma_changed(self, value: int) -> None:
+    @Slot(float)
+    def on_vectorscope_luma_changed(self, value: float) -> None:
         self.settings.global_.vectorscope.luma = value
         self.update_histogram()
 
+    @Slot(int)
     def on_luma_shift_changed(self, index: int) -> None:
         self.settings.global_.luma.shift = self.luma_shift_combo.currentData()
         self.luma_container.view.refresh()
 
+    @Slot(int)
     def on_luma_sawtooth_changed(self, state: int) -> None:
         self.settings.global_.luma.sawtooth = self.luma_sawtooth_checkbox.isChecked()
         self.luma_container.view.refresh()
 
+    @Slot(int)
     def on_cie_mode_changed(self, index: int) -> None:
         self.settings.global_.cie.mode = self.cie_mode_combo.currentData()
         self.update_histogram()
 
+    @Slot(int)
     def on_cie_render_mode_changed(self, index: int) -> None:
         self.settings.global_.cie.render_mode = self.cie_render_mode_combo.currentData()
         self.update_histogram()
 
+    @Slot(int)
     def on_cie_resolution_changed(self, index: int) -> None:
         self.settings.global_.cie.res = self.cie_res_combo.currentData()
         self.update_histogram()
 
+    @Slot(int)
     def on_cie_rec709_changed(self, state: int) -> None:
         self.settings.global_.cie.show_rec709 = self.cie_rec709_checkbox.isChecked()
         self.update_histogram()
 
+    @Slot(int)
     def on_cie_rec601_changed(self, state: int) -> None:
         self.settings.global_.cie.show_rec601 = self.cie_rec601_checkbox.isChecked()
         self.update_histogram()
 
+    @Slot(int)
     def on_cie_dcip3_changed(self, state: int) -> None:
         self.settings.global_.cie.show_dcip3 = self.cie_dcip3_checkbox.isChecked()
         self.update_histogram()
 
+    @Slot(int)
     def on_cie_rec2020_changed(self, state: int) -> None:
         self.settings.global_.cie.show_rec2020 = self.cie_rec2020_checkbox.isChecked()
         self.update_histogram()
 
-    def on_cie_luma_changed(self, value: int) -> None:
+    @Slot(float)
+    def on_cie_luma_changed(self, value: float) -> None:
         self.settings.global_.cie.luma = value
         self.update_histogram()
 

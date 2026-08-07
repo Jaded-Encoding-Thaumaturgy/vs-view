@@ -6,7 +6,7 @@ from typing import override
 
 from jetpytools import to_arr
 from pydantic import TypeAdapter, ValidationError
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QColor, QMouseEvent
 from PySide6.QtWidgets import (
     QColorDialog,
@@ -115,6 +115,7 @@ class ColorPickerInput(QWidget):
         if not self.hex_edit.hasFocus():
             self.hex_edit.setText(self._color.name().upper())
 
+    @Slot()
     def _on_hex_edited(self) -> None:
         text = self.hex_edit.text()
         if QColor.isValidColorName(text):
@@ -123,6 +124,7 @@ class ColorPickerInput(QWidget):
         else:
             self._update_ui()  # Revert to current color if invalid
 
+    @Slot()
     def _pick_color(self) -> None:
         color = QColorDialog.getColor(
             self._color,
@@ -193,6 +195,7 @@ class ListEditWidget[T](QWidget, IconReloadMixin):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
+    @Slot()
     def _on_dialog_finished(self, result: int) -> None:
         if not result:
             return
@@ -202,6 +205,7 @@ class ListEditWidget[T](QWidget, IconReloadMixin):
 
         self.dialog.setTextValue("")
 
+    @Slot()
     def _remove_selected(self) -> None:
         for item in self.list_widget.selectedItems():
             self.list_widget.takeItem(self.list_widget.row(item))
@@ -269,11 +273,13 @@ class PathListEditWidget(QWidget, IconReloadMixin):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
+    @Slot()
     def _add_directory(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Select Directory")
         if path:
             self.list_widget.addItem(path)
 
+    @Slot()
     def _remove_selected(self) -> None:
         for item in self.list_widget.selectedItems():
             self.list_widget.takeItem(self.list_widget.row(item))
@@ -317,11 +323,13 @@ class FilePickerWidget(QWidget, IconReloadMixin):
         layout.addWidget(self.browse_btn)
         layout.addWidget(self.clear_btn)
 
+    @Slot()
     def _browse_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, self.dialog_title, self.line_edit.text(), self.file_filter)
         if path:
             self.line_edit.setText(path)
 
+    @Slot()
     def _clear_selection(self) -> None:
         self.line_edit.setText(None)
 

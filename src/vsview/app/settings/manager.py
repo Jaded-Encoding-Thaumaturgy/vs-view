@@ -12,7 +12,7 @@ from typing import Any
 
 from jetpytools import CustomTypeError, Singleton, inject_self
 from pydantic import ValidationError
-from PySide6.QtCore import QObject, QSignalBlocker, Signal, SignalInstance
+from PySide6.QtCore import QObject, QSignalBlocker, Signal, SignalInstance, Slot
 from PySide6.QtWidgets import QApplication
 from rich.pretty import pretty_repr
 
@@ -50,6 +50,7 @@ class SettingsSignals(QObject):
     def _wrap_global_method_signal(self, signal: SignalInstance, slot: Callable[..., Any], *args: Any) -> None:
         weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
 
+        @Slot()
         def weak_slot() -> None:
             if (m := weak()) is not None:
                 m()
@@ -61,6 +62,7 @@ class SettingsSignals(QObject):
     def _wrap_local_method_signal(self, signal: SignalInstance, slot: Callable[..., Any], *args: Any) -> None:
         weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
 
+        @Slot(str)
         def weak_slot(p: str) -> None:
             if (m := weak()) is not None:
                 m(p)

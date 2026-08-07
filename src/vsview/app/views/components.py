@@ -4,6 +4,7 @@ from typing import Any, override
 
 from jetpytools import copy_signature
 from PySide6.QtCore import (
+    QAbstractAnimation,
     QAbstractTableModel,
     QEasingCurve,
     QEvent,
@@ -218,6 +219,7 @@ class SegmentedControl(QWidget):
             )
             btn.setPalette(palette)
 
+    @Slot(int)
     def _on_button_clicked(self, button_id: int) -> None:
         self._update_button_colors()
         self.segmentChanged.emit(button_id)
@@ -292,8 +294,9 @@ class CustomLoadingPage(QWidget):
         self.icon_animation.setEndValue(0)
         self.icon_animation.start()
 
+    @Slot(int)
     def _update_bounce(self, value: int) -> None:
-        self.icon_label.setContentsMargins(0, 0, 0, int(value))
+        self.icon_label.setContentsMargins(0, 0, 0, value)
 
 
 class AnimatedToggle(QCheckBox):
@@ -461,6 +464,7 @@ class Accordion(QFrame):
         self.content_layout.addLayout(layout)
         return layout
 
+    @Slot(bool)
     def on_toggle(self, checked: bool) -> None:
         self.header.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
 

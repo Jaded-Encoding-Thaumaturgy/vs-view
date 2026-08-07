@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Self, override
 
 from jetpytools import cachedproperty, classproperty
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt, Slot
 from PySide6.QtGui import QKeyEvent, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
@@ -236,6 +236,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         return tab
 
+    @Slot()
     def _on_provider_changed(self) -> None:
         provider_combo = self._global_widgets.get("appearance.icon_provider")
         weight_combo = self._global_widgets.get("appearance.icon_weight")
@@ -433,10 +434,12 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         return LocalSettings.model_validate(data)
 
+    @Slot()
     def _on_ok(self) -> None:
         if self._on_apply():
             self.accept()
 
+    @Slot(result=bool)
     def _on_apply(self) -> bool:
         try:
             global_settings = self._get_global_settings_from_ui()
@@ -456,6 +459,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         return True
 
+    @Slot()
     def _on_shortcut_changed(self) -> None:
         key_to_actions = dict[str, list[str]]()
 

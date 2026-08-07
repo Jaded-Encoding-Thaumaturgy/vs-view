@@ -1030,6 +1030,7 @@ class Timeline(QWidget):
         self.set_sizes()
         self.update()
 
+    @Slot(int)
     def _on_mode_segment_changed(self, index: int) -> None:
         self.mode = "frame" if index == 0 else "time"
 
@@ -1556,11 +1557,13 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
             self.audioDelayChanged.emit(self.audio_delay)
 
+    @Slot(int)
     def _on_seek_step_changed(self, value: int) -> None:
         self.settings.seek_step = value
         self.reset_seek_step_to_global_action.setEnabled(value != SettingsManager.global_settings.timeline.seek_step)
         self._emit_settings()
 
+    @Slot()
     def _on_reset_seek_step(self) -> None:
         # Update spinbox to show global value
         global_seek = SettingsManager.global_settings.timeline.seek_step
@@ -1588,6 +1591,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
             else round(50 + ((speed - 1.0) / (self.speed_slider_max - 1.0)) * 50)
         )
 
+    @Slot(int)
     def _on_speed_slider_changed(self, value: int) -> None:
         self.settings.speed = self._slider_to_speed(value)
         speed_text = f"{self.settings.speed:.2f}x"
@@ -1597,6 +1601,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         self._emit_settings()
 
+    @Slot()
     def _on_reset_speed(self) -> None:
         self.settings.speed = 1.0
 
@@ -1606,6 +1611,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.speed_slider.setToolTip("1.00x")
         self._emit_settings()
 
+    @Slot(bool)
     def _on_uncap_changed(self, checked: bool) -> None:
         self.settings.uncapped = checked
         self.speed_slider.setEnabled(not checked)
@@ -1615,6 +1621,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
     def _emit_settings(self) -> None:
         self.settingsChanged.emit(self.settings.seek_step, self.settings.speed, self.settings.uncapped)
 
+    @Slot(object, object)
     def _on_zone_frames_changed(self, new_frame: int, old_frame: int) -> None:
         self.settings.zone_frames = new_frame
 
@@ -1623,6 +1630,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
             with QSignalBlocker(self.zone_time_edit):
                 self.zone_time_edit.setTime(self.cum_durations[new_frame - 1].to_qtime() if new_frame > 0 else QTime())
 
+    @Slot(QTime, QTime)
     def _on_zone_time_changed(self, new_time: QTime, old_time: QTime) -> None:
         # Convert time to frames
         if self.cum_durations:
@@ -1633,13 +1641,16 @@ class PlaybackContainer(QWidget, IconReloadMixin):
             with QSignalBlocker(self.zone_frame_spinbox):
                 self.zone_frame_spinbox.setValue(frames)
 
+    @Slot()
     def _on_play_zone_clicked(self) -> None:
         self.playZone.emit(self.settings.zone_frames, self.settings.loop, self.settings.step)
         self.context_menu.close()
 
+    @Slot(bool)
     def _on_loop_changed(self, checked: bool) -> None:
         self.settings.loop = checked
 
+    @Slot(int)
     def _on_step_changed(self, value: int) -> None:
         if value == 0:
             new_value = 1 if self.settings.step < 0 else -1
@@ -1652,11 +1663,13 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         self.settings.step = value
 
+    @Slot(bool)
     def _on_mute_clicked(self, checked: bool) -> None:
         self._is_muted = checked
         self._update_mute_icon()
         self.muteChanged.emit(self._is_muted)
 
+    @Slot(int)
     def _on_volume_changed(self, value: int) -> None:
         self._volume = value / 1000.0
         volume_text = f"Volume: {self._volume * 100:.0f}%"
@@ -1674,6 +1687,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         self.volumeChanged.emit(self._volume)
 
+    @Slot(float)
     def _on_audio_delay_changed(self, value: float) -> None:
         self._audio_delay = value / 1000
         self.reset_audio_delay_to_global_action.setEnabled(
@@ -1681,6 +1695,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         )
         self.audioDelayChanged.emit(self._audio_delay)
 
+    @Slot()
     def _on_reset_audio_delay(self) -> None:
         global_delay = SettingsManager.global_settings.playback.audio_delay
         self._audio_delay = global_delay

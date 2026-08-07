@@ -3,6 +3,7 @@ from typing import Annotated, Any, Literal, assert_never, override
 
 from jetpytools import fallback
 from pydantic import BaseModel
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QBoxLayout, QDoubleSpinBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QWidgetAction
 from vapoursynth import VideoNode
 from vstools import scale_mask, stack_planes
@@ -105,6 +106,7 @@ class SplitPlanesPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):
 
         self.api.globalSettingsChanged.connect(self.on_settings_changed)
 
+    @Slot()
     def on_settings_changed(self) -> None:
         self.view.autofit = fallback(self.settings.local_.autofit, self.settings.global_.autofit)
         self.view.refresh()
@@ -211,6 +213,7 @@ class SplitPlanesView(PluginGraphicsView):
             case _:
                 assert_never(offset)
 
+    @Slot(int)
     def on_offset_segment_changed(self, index: int) -> None:
         self.fixed_spinbox_container.setEnabled(index == 0)
         parent = self.parent()
@@ -227,6 +230,7 @@ class SplitPlanesView(PluginGraphicsView):
 
         self.refresh()
 
+    @Slot(float)
     def on_offset_spinbox_changed(self, value: float) -> None:
         if self.offset_segment.index == 0:
             self.parent().update_local_settings(offset_chroma=value)

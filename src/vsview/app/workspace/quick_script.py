@@ -208,9 +208,11 @@ class CodeEditor(QPlainTextEdit):
         self._highlight_current_line()
         self.line_number_area.update()
 
+    @Slot(int)
     def _update_line_number_area_width(self, _: int) -> None:
         self.setViewportMargins(self.line_number_area_width, 0, 0, 0)
 
+    @Slot(QRect, int)
     def _update_line_number_area(self, rect: QRect, dy: int) -> None:
         if dy:
             self.line_number_area.scroll(0, dy)
@@ -220,6 +222,7 @@ class CodeEditor(QPlainTextEdit):
         if rect.contains(self.viewport().rect()):
             self._update_line_number_area_width(0)
 
+    @Slot()
     def _highlight_current_line(self) -> None:
         extra_selections = list[QTextEdit.ExtraSelection]()
 
@@ -351,6 +354,7 @@ class CodeEditorDock(QDockWidget, IconReloadMixin):
 
         SettingsManager.signals.connect_global_weak(self._apply_theme)
 
+    @Slot()
     def _apply_theme(self) -> None:
         style = get_style_by_name(SettingsManager.global_settings.appearance.editor_theme)
 
@@ -492,6 +496,7 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
         self.disable_reloading = False
         self.loaded_once = False  # Reset so next run does fresh load_content
 
+    @Slot()
     def _on_run_clicked(self) -> None:
         self.content = CodeContent(self.code_dock.editor.toPlainText(), self.filename)
 

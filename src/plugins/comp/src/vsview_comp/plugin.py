@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from jetpytools import SupportsString
 from pydantic import BaseModel, Field
-from PySide6.QtCore import QEvent, QObject, QPointF, QSignalBlocker, Qt, QTime, QTimer
+from PySide6.QtCore import QEvent, QObject, QPointF, QSignalBlocker, Qt, QTime, QTimer, Slot
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QApplication,
@@ -630,6 +630,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self.frames_list.update_thumbnails(voutput.vs_index)
 
+    @Slot()
     def set_progress_bar_on_top(self) -> None:
         self.progress_stack.setCurrentWidget(self.progress_container)
         self.progress_stack.show()
@@ -638,27 +639,33 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.progress_stack.setCurrentWidget(self.reported_url_container)
         self.progress_stack.show()
 
+    @Slot(object, object)
     def on_frame_edit_start_changed(self, new: Frame, old: Frame) -> None:
         self.frame_edit_end.setMinimum(new)
         self.time_edit_start.setTime(self.api.current_voutput.frame_to_time(new).to_qtime())
 
+    @Slot(object, object)
     def on_frame_edit_end_changed(self, new: Frame, old: Frame) -> None:
         self.frame_edit_start.setMaximum(new)
         self.time_edit_end.setTime(self.api.current_voutput.frame_to_time(new).to_qtime())
 
+    @Slot(QTime, QTime)
     def on_time_edit_start_changed(self, new: QTime, old: QTime) -> None:
         self.time_edit_end.setMinimumTime(new)
         self.frame_edit_start.setValue(self.api.current_voutput.time_to_frame(Time.from_qtime(new)))
 
+    @Slot(QTime, QTime)
     def on_time_edit_end_changed(self, new: QTime, old: QTime) -> None:
         self.time_edit_start.setMaximumTime(new)
         self.frame_edit_end.setValue(self.api.current_voutput.time_to_frame(Time.from_qtime(new)))
 
+    @Slot(int)
     def on_list_size_changed(self, delta: int) -> None:
         self._extraction_finished = False
         self._update_buttons_state()
         self._update_frames_count()
 
+    @Slot(int, int)
     def on_thumbnail_progress(self, pending: int, total: int) -> None:
         if pending > 0:
             completed = total - pending
@@ -680,9 +687,11 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self.frames_count_label.setStyleSheet(f"padding-right: 6px; color: {color}; font-weight: 500;")
 
+    @Slot(object, object)
     def on_random_frame_count_changed(self, new: Frame, old: Frame) -> None:
         self._update_buttons_state()
 
+    @Slot()
     def on_curve_button_clicked(self) -> None:
         dialog = ProbabilityCurveDialog(
             self.curve_points,
@@ -693,6 +702,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.curve_points = dialog.points
 
+    @Slot()
     def on_add_multiple_frames(self) -> None:
         text, ok = QInputDialog.getText(
             self,
@@ -719,6 +729,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             else:
                 logger.warning("Skipping invalid frame number: %s", f)
 
+    @Slot()
     def on_select_frames_clicked(self) -> None:
         worker = SelectFrameWorker(self.api, self)
 
@@ -762,6 +773,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         )
         self._update_buttons_state()
 
+    @Slot()
     def on_extract_btn_clicked(self) -> None:
         def prepare_and_extract(*_: Any) -> None:
             def on_done(_: Any) -> None:
@@ -806,6 +818,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         else:
             execute_extract()
 
+    @Slot(str)
     def on_tmdb_text_changed(self, text: str) -> None:
         self.tmdb_title = None
         if not text.strip():
@@ -815,6 +828,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self.tmdb_debounce_timer.start()
 
+    @Slot()
     def on_tmdb_editing_finished(self) -> None:
         text = self.tmdb_name.text().strip()
 
@@ -832,6 +846,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.tmdb_title = None
         self.tmdb_popup.hide()
 
+    @Slot()
     def perform_tmdb_search(self) -> None:
         if not (query := self.tmdb_name.text().strip()):
             self.tmdb_popup.hide()
@@ -856,6 +871,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             .then(on_success, on_error, on_loop=True)
         )
 
+    @Slot(QListWidgetItem)
     def on_tmdb_item_selected(self, item: QListWidgetItem) -> None:
         title: TMDBTitle = item.data(Qt.ItemDataRole.UserRole)
 
@@ -872,6 +888,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             vs_names = " vs ".join(v.vs_name for v in voutputs)
             self.collection_name.setText(title.format_name(self.settings.global_.tmdb_format, vs_names=vs_names))
 
+    @Slot()
     def on_tags_editing_started(self) -> None:
         if self.tags_popup.has_tags():
             self.on_tags_input_changed()
@@ -898,14 +915,18 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             .add_loop_callback(lambda _: QApplication.restoreOverrideCursor())
         )
 
+    @Slot()
+    @Slot(str)
     def on_tags_input_changed(self, *_: Any) -> None:
         self.tags_popup.show_filtered(self.tags.input_text(), set(self.tags.selected_tags()))
 
+    @Slot(str, str)
     def on_tag_item_selected(self, value: str, label: str) -> None:
         self.tags.add_tag(value, label)
         self.tags.clear()
         self.on_tags_input_changed()
 
+    @Slot()
     def on_upload_btn_clicked(self) -> None:
         if not self._extract_paths:
             logger.error("No extracted frames to upload")
@@ -916,6 +937,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._pending_upload = self._prepare_and_upload(data)
         self._update_buttons_state()
 
+    @Slot()
     def on_do_all_btn_clicked(self) -> None:
         self.on_extract_btn_clicked()
 
@@ -1047,6 +1069,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         if message is not None:
             QMessageBox.critical(self, "Upload Error", str(message))
 
+    @Slot()
     def _update_buttons_state(self) -> None:
         current_outputs = self.outputs_dropdown.included_outputs
 
@@ -1079,6 +1102,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self._current_outputs = current_outputs
 
+    @Slot()
     def on_cancel_clicked(self) -> None:
         logger.info("Cancel button clicked, aborting active tasks...")
         if self._pending_select_frames and not self._pending_select_frames.done() and self._select_frames_worker:
@@ -1090,6 +1114,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             self.slowpics_worker.cancel()
         self.progress_stack.hide()
 
+    @Slot()
     def on_url_copy_btn_clicked(self) -> None:
         QApplication.clipboard().setText(self._reported_url)
         QToolTip.showText(QCursor.pos(), "Copied!", self.url_copy_btn)

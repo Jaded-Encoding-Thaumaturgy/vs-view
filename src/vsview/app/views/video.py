@@ -1098,13 +1098,16 @@ class BaseGraphicsView(QGraphicsView):
             self._rect_selection_overlay.shade_opacity = settings.shade_opacity
             self._rect_selection_overlay.selection_color = settings.selection_outline_color
 
+    @Slot(float)
     def _apply_zoom_value(self, value: float) -> None:
         self.setTransform(QTransform().scale(value, value))
         self._sync_hdr_transform()
 
+    @Slot()
     def _on_autofit_action(self) -> None:
         self.set_autofit(not self.autofit)
 
+    @Slot(int)
     def _on_slider_value_changed(self, value: int) -> None:
         zoom = self.slider_to_zoom(value)
         zoom_text = f"{zoom:.2f}x"
@@ -1243,6 +1246,7 @@ class GraphicsView(BaseGraphicsView):
         if value:
             self.zoomChanged.emit(self.current_zoom)
 
+    @Slot()
     @override
     def _on_autofit_action(self) -> None:
         super()._on_autofit_action()

@@ -179,6 +179,7 @@ class StatusWidget(IconReloadMixin, QWidget):
         SettingsManager.signals.localChanged.disconnect(self._on_settings_changed)
         super().deleteLater()
 
+    @Slot(str)
     def start_loading(self, message: str) -> None:
         """Display a loading message with spinner indicator."""
         self._is_loading = True
@@ -188,6 +189,7 @@ class StatusWidget(IconReloadMixin, QWidget):
         self.message_text_label.setText(message)
         self._spinner_timer.start()
 
+    @Slot(str)
     def stop_loading(self, completed_message: str = "Completed", *, error: bool = False) -> None:
         """
         Hide the loading indicator and show a completion or error message.
@@ -200,6 +202,7 @@ class StatusWidget(IconReloadMixin, QWidget):
         self.message_text_label.setText(completed_message)
         self._message_timer.start(SettingsManager.global_settings.status_message_timeout)
 
+    @Slot(str)
     def error_loading(self, error_message: str) -> None:
         """
         Display an error message with an error icon.
@@ -208,6 +211,7 @@ class StatusWidget(IconReloadMixin, QWidget):
         """
         return self.stop_loading(error_message, error=True)
 
+    @Slot(object)
     def set_output_info(self, info: OutputInfo) -> None:
         """
         Update the persistent output information display.
@@ -294,6 +298,7 @@ class StatusWidget(IconReloadMixin, QWidget):
             self.message_icon_label.clear()
             self.message_text_label.clear()
 
+    @Slot(str)
     def _on_settings_changed(self, path: str = "", message: str = "Settings saved") -> None:
         self._reload_icons()  # Hot-reload icons on settings change
         self._show_settings_saved(path, message)
