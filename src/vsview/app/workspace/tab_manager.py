@@ -357,7 +357,9 @@ class TabManager(QWidget, IconReloadMixin):
                 else QPixmap.fromImage(image, Qt.ImageConversionFlag.NoFormatConversion)
             )
             self.current_view.set_pixmap(pixmap, image if isinstance(image, QImage) else None)
-            self.current_view.set_sar(sar)
+
+            if sar is not None:
+                self.current_view.set_sar(sar)
         finally:
             if backing_frame:
                 backing_frame.close()
