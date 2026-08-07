@@ -748,7 +748,7 @@ class BaseGraphicsView(QGraphicsView):
             return
 
         self._sar = sar
-        has_sar = isclose(sar, 1.0)
+        has_sar = not isclose(sar, 1.0)
 
         if self.apply_sar_action.isEnabled() != has_sar:
             self.apply_sar_action.setEnabled(has_sar)
