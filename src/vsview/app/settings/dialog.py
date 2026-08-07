@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QKeySequenceEdit,
     QLabel,
@@ -82,7 +83,8 @@ class SettingsTab(QWidget):
         self.tree.setHeaderHidden(True)
         self.tree.setAnimated(True)
         self.tree.setIndentation(12)
-        self.tree.setStyleSheet("QTreeWidget::item { padding: 4px 2px; }")
+        self.tree.setFrameShape(QFrame.Shape.NoFrame)
+        self.tree.setStyleSheet("QTreeWidget { border: none; } QTreeWidget::item { padding: 4px 2px; }")
         self.tree.currentItemChanged.connect(self._on_tree_selection_changed)
 
         # Right scroll area

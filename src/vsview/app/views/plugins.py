@@ -36,7 +36,7 @@ class PluginSplitter(QSplitter, IconReloadMixin):
         # Sync container to match TabManager layout alignment
         self.right_corner_container = QWidget(self)
         self.right_corner_layout = QHBoxLayout(self.right_corner_container)
-        self.right_corner_layout.setContentsMargins(4, 0, 4, 0)
+        self.right_corner_layout.setContentsMargins(4, 4, 4, 4)
         self.right_corner_layout.setSpacing(0)
 
         self.close_btn = self.make_tool_button(IconName.X_CIRCLE, "Collapse Plugin Panel", self.right_corner_container)

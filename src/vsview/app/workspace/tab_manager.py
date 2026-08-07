@@ -145,8 +145,8 @@ class TabManager(QWidget, IconReloadMixin):
         # Sync controls container
         self.sync_container = QWidget(self)
         self.sync_layout = QHBoxLayout(self.sync_container)
-        self.sync_layout.setContentsMargins(4, 0, 4, 0)
-        self.sync_layout.setSpacing(2)
+        self.sync_layout.setContentsMargins(4, 4, 4, 4)
+        self.sync_layout.setSpacing(1)
 
         self.sync_playhead_btn = PlayHeadToolButton(self)
         self.sync_zoom_btn = self.make_tool_button(
