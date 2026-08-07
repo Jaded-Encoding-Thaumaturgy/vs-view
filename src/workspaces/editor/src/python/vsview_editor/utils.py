@@ -2,7 +2,7 @@ import sys
 from collections.abc import Callable
 from functools import wraps
 from logging import getLogger
-from typing import Any, Generic, TypeVar, overload
+from typing import Any, Generic, TypeVar, overload, override
 
 from PySide6.QtCore import Slot
 
@@ -59,3 +59,28 @@ class SafeSlot(Generic[FallbackT]):
                 return self._fallback
 
         return Slot(*self._types, **self._kwargs)(wrapper)
+
+
+class ContentPath:
+    __slots__ = ("code", "filename")
+
+    def __init__(self, code: str, filename: str) -> None:
+        self.code = code
+        self.filename = filename
+
+    def __fspath__(self) -> str:
+        return self.filename
+
+    def __len__(self) -> int:
+        return len(self.code)
+
+    @override
+    def __str__(self) -> str:
+        return self.code
+
+    @override
+    def __repr__(self) -> str:
+        return self.filename
+
+    def splitlines(self, keepends: bool = False) -> list[str]:
+        return self.code.splitlines(keepends)

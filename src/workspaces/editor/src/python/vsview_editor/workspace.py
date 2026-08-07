@@ -6,7 +6,7 @@ import subprocess
 from enum import StrEnum
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Self, override
+from typing import Any, Literal, Self, override
 from uuid import uuid4
 
 from jetpytools import SPath, fallback
@@ -36,13 +36,15 @@ from vsview.api import (
 )
 from vsview.api._helpers import output_metadata
 from vsview.api.workspace import PluginWorkspace
-from vsview.app.workspace import CodeContent, VSEngineWorkspace, get_default_script
+from vsview.app.settings import SettingsManager
+from vsview.app.workspace import BaseGenericFileWorkspace, VSEngineWorkspace, get_default_script
 from vsview.vsenv import QtEventLoop, create_environment
 
 from .console import GlobalConsoleHub
 from .lsp import LSP_BASEDPYRIGHT_CONFIG, LSPProcessManager
 from .settings import EditorGlobalSettings
 from .stubs import get_stubs_dir
+from .utils import ContentPath
 from .web import MonacoEditorWidget
 
 logger = getLogger(__name__)
@@ -57,6 +59,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     ICON_COLOR = QPalette.ColorRole.ToolTipText
 
     runClicked = Signal()
+    activeFileChanged = Signal(object)  # Unused
+    mainFileChanged = Signal(object)
     statusSavingScriptStarted = Signal(str)
     statusSavingScriptFinished = Signal(str)
 
@@ -75,15 +79,18 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self.api = api
         self.settings = settings
 
-        self._current_filepath: Path | None = None
-        self._current_tab_uri: str | None = None
+        self._active_filepath: Path | None = None
+        self._active_tab_uri: str | None = None
+        self._main_filepath: Path | None = None
+        self._main_tab_uri: str | None = None
         self._default_content = get_default_script()
         self._initial_content_set = False
 
         self.editor = MonacoEditorWidget(self)
         self.editor.bridge.editorReady.connect(self._on_editor_ready)
         self.editor.bridge.cursorPositionChanged.connect(self._on_cursor_changed)
-        self.editor.bridge.activeTabChanged.connect(self._on_active_tab_changed)
+        self.editor.bridge.activeTabChanged.connect(lambda uri: self._on_tab_changed(uri, "active"))
+        self.editor.bridge.mainTabChanged.connect(lambda uri: self._on_tab_changed(uri, "main"))
         self.editor.bridge.saveRequested.connect(self._on_save_clicked)
         self.editor.bridge.saveAsRequested.connect(self._on_save_as_clicked)
         self.editor.bridge.formatRequested.connect(self._on_format_clicked)
@@ -240,6 +247,10 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         return super().deleteLater()
 
     @property
+    def main_filepath(self) -> Path | None:
+        return self._main_filepath
+
+    @property
     def _env_stubs(self) -> ManagedEnvironment:
         if not hasattr(self, "_env_stubs_internal"):
             self._env_stubs_internal = create_environment()
@@ -262,7 +273,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self._generate_stubs(force=False)
 
         # Launch LSP process & server
-        script_dir = self._current_filepath.parent if self._current_filepath else Path.cwd()
+        script_dir = self._active_filepath.parent if self._active_filepath else Path.cwd()
         port = self.lsp_manager.start_server(config=LSP_BASEDPYRIGHT_CONFIG, workspace_dir=script_dir)
         if port > 0:
             self.editor.bridge.connect_lsp(port, LSP_BASEDPYRIGHT_CONFIG)
@@ -271,23 +282,23 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     def _on_cursor_changed(self, line: int, col: int) -> None:
         self.cursor_label.setText(f"Ln {line}, Col {col}")
 
-    @Slot(str)
-    def _on_active_tab_changed(self, uri: str) -> None:
-        self._current_tab_uri = uri or None
+    def _on_tab_changed(self, uri: str, kind: Literal["active", "main"]) -> None:
+        setattr(self, f"_{kind}_tab_uri", uri or None)
         if not uri:
-            self._current_filepath = None
-            return
-        url = QUrl(uri)
-        local_path = url.toLocalFile()
-        if url.scheme() == "file" and not local_path.startswith(("/workspace", "\\workspace")):
-            self._current_filepath = Path(local_path)
+            setattr(self, f"_{kind}_filepath", None)
         else:
-            self._current_filepath = None
+            url = QUrl(uri)
+            local_path = url.toLocalFile()
+            if url.scheme() == "file" and not local_path.startswith(("/workspace", "\\workspace")):
+                setattr(self, f"_{kind}_filepath", Path(local_path))
+            else:
+                setattr(self, f"_{kind}_filepath", None)
+        getattr(self, f"{kind}FileChanged").emit(getattr(self, f"_{kind}_filepath"))
 
     @Slot()
     def _on_save_clicked(self) -> None:
-        if self._current_filepath:
-            self._save_script(self._current_filepath, self.editor.bridge.content)
+        if self._active_filepath:
+            self._save_script(self._active_filepath, self.editor.bridge.content)
         else:
             self._on_save_as_clicked()
 
@@ -300,8 +311,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             "VapourSynth Script (*.vpy);;All Files (*)",
         )
         if filepath:
-            self._current_filepath = Path(filepath)
-            self._save_script(self._current_filepath, self.editor.bridge.content)
+            self._active_filepath = Path(filepath)
+            self._save_script(self._active_filepath, self.editor.bridge.content)
 
     @Slot()
     def _on_format_clicked(self) -> None:
@@ -326,7 +337,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
     @Slot()
     def _on_new_clicked(self) -> None:
-        self._current_filepath = None
+        self._active_filepath = None
         self.editor.bridge.open_tab(
             f"file:///workspace/untitled_{uuid4().hex[:4]}.py",
             get_default_script(),
@@ -346,7 +357,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             try:
                 p = Path(filepath)
                 content = p.read_text(encoding="utf-8")
-                self._current_filepath = p
+                self._active_filepath = p
                 self.editor.bridge.open_tab(p.as_uri(), content, language="python", is_main=False)
             except Exception:
                 logger.exception("Error opening script:")
@@ -357,7 +368,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         try:
             filepath.write_text(content, encoding="utf-8")
             self.statusSavingScriptFinished.emit("Saved")
-            self.loop.from_thread(self.editor.bridge.tab_saved, filepath.as_uri(), self._current_tab_uri or "")
+            self.loop.from_thread(self.editor.bridge.tab_saved, filepath.as_uri(), self._active_tab_uri or "")
         except Exception:
             logger.exception("Error saving script:")
 
@@ -437,7 +448,11 @@ class StackDock(QDockWidget):
         self.setWidget(container)
 
 
-class EditorWorkspace(VSEngineWorkspace[CodeContent], PluginWorkspace[EditorGlobalSettings, None]):
+class EditorWorkspace(
+    BaseGenericFileWorkspace[ContentPath],
+    VSEngineWorkspace[ContentPath],
+    PluginWorkspace[GlobalSettings, LocalSettings],
+):
     """Workspace with a Monaco editor for writing and running VapourSynth scripts."""
 
     title = "Editor"
@@ -461,7 +476,10 @@ class EditorWorkspace(VSEngineWorkspace[CodeContent], PluginWorkspace[EditorGlob
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.filename = (SPath.cwd() / f"<vsview editor {uuid4().hex[:8].upper()}>").to_str()
+        self.content = ContentPath(
+            get_default_script(),
+            (SPath.cwd() / f"<vsview editor {uuid4().hex[:8].upper()}>").to_str(),
+        )
         self.loaded_once = False
 
         self.setDockNestingEnabled(True)
@@ -471,6 +489,7 @@ class EditorWorkspace(VSEngineWorkspace[CodeContent], PluginWorkspace[EditorGlob
 
         self.code_dock = MonacoEditorDock(self, self.loop, self.api, self.settings)
         self.code_dock.runClicked.connect(self._on_run_clicked)
+        self.code_dock.mainFileChanged.connect(self._on_main_file_changed)
         self.code_dock.statusSavingScriptStarted.connect(self.statusLoadingStarted.emit)
         self.code_dock.statusSavingScriptFinished.connect(self.statusLoadingFinished.emit)
 
@@ -484,6 +503,11 @@ class EditorWorkspace(VSEngineWorkspace[CodeContent], PluginWorkspace[EditorGlob
         self.stack.setCurrentWidget(self.loaded_page)
 
         self.api.globalSettingsChanged.connect(self.code_dock._on_settings_changed)
+    @property
+    @override
+    def current_file_path(self) -> ContentPath | None:
+        return ContentPath(p.read_text(), str(p)) if (p := self.code_dock.main_filepath) and p.is_file() else None
+
 
     @override
     def deleteLater(self) -> None:
@@ -500,7 +524,7 @@ class EditorWorkspace(VSEngineWorkspace[CodeContent], PluginWorkspace[EditorGlob
     @property
     @override
     def _script_kwargs(self) -> dict[str, Any]:
-        return {"filename": self.filename}
+        return {"filename": self.content.filename}
 
     @override
     def on_connected(self) -> None:
@@ -517,18 +541,18 @@ class EditorWorkspace(VSEngineWorkspace[CodeContent], PluginWorkspace[EditorGlob
     @override
     def loader(self) -> None:
         # Register source with linecache so traceback can display source lines for virtual files
-        linecache.cache[self.filename] = (
-            len(self.content),
+        linecache.cache[self.content.filename] = (
+            len(self.content.code),
             None,
             self.content.splitlines(keepends=True),
-            self.filename,
+            self.content.filename,
         )
 
         return super().loader()
 
     @override
     def reload_content(self, code: str | None = None) -> UnifiedFuture[int]:
-        self.content = CodeContent(fallback(code, self.code_dock.editor.bridge.content), self.filename)
+        self.content = ContentPath(fallback(code, self.code_dock.editor.bridge.content), self.content.filename)
 
         if not self.loaded_once:
             self.loaded_once = True
@@ -556,6 +580,15 @@ class EditorWorkspace(VSEngineWorkspace[CodeContent], PluginWorkspace[EditorGlob
         self.stack.setCurrentWidget(self.loaded_page)
         self.disable_reloading = False
         self.loaded_once = False  # Reset so next run does fresh load_content
+
+    @Slot(object)
+    def _on_main_file_changed(self, new_path: Path | None) -> None:
+        if new_path:
+            self.content = ContentPath(new_path.read_text(), str(new_path))
+
+            if new_path.is_file():
+                self.init_load()
+                self.api.localSettingsChanged.emit(str(SettingsManager.local_settings_path(new_path)))
 
     def _on_run_clicked(self) -> None:
         with GlobalConsoleHub.bind_execution(self.code_dock.editor.bridge):
