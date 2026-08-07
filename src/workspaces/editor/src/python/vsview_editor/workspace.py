@@ -3,6 +3,7 @@ from __future__ import annotations
 import linecache
 import shutil
 import subprocess
+from base64 import b64decode, b64encode
 from enum import StrEnum
 from logging import getLogger
 from pathlib import Path
@@ -10,8 +11,8 @@ from typing import Any, Literal, Self, override
 from uuid import uuid4
 
 from jetpytools import SPath, fallback
-from PySide6.QtCore import QSize, Qt, QUrl, QUrlQuery, Signal, Slot
-from PySide6.QtGui import QPalette
+from PySide6.QtCore import QByteArray, QSize, Qt, QTimer, QUrl, QUrlQuery, Signal, Slot
+from PySide6.QtGui import QPalette, QShowEvent
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QSizePolicy,
+    QTabWidget,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -42,7 +44,7 @@ from vsview.vsenv import QtEventLoop, create_environment
 
 from .console import GlobalConsoleHub
 from .lsp import LSP_BASEDPYRIGHT_CONFIG, LSPProcessManager
-from .settings import EditorGlobalSettings
+from .settings import GlobalSettings, LocalSettings
 from .stubs import get_stubs_dir
 from .utils import ContentPath
 from .web import MonacoEditorWidget
@@ -69,12 +71,13 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         parent: QWidget,
         loop: QtEventLoop,
         api: PluginAPI,
-        settings: PluginSettings[EditorGlobalSettings, None],
+        settings: PluginSettings[GlobalSettings, LocalSettings],
     ) -> None:
         super().__init__("Code Editor", parent)
         self.setFeatures(
             QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
+        self.setObjectName(self.__class__.__name__)
         self.loop = loop
         self.api = api
         self.settings = settings
@@ -440,6 +443,7 @@ class StackDock(QDockWidget):
         self.setFeatures(
             QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
+        self.setObjectName(self.__class__.__name__)
         container = QFrame(self, frameShape=QFrame.Shape.StyledPanel, frameShadow=QFrame.Shadow.Sunken)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -481,11 +485,17 @@ class EditorWorkspace(
             (SPath.cwd() / f"<vsview editor {uuid4().hex[:8].upper()}>").to_str(),
         )
         self.loaded_once = False
-
-        self.setDockNestingEnabled(True)
+        self._initial_docks_resized = False
+        self._saved_dock_sizes: tuple[int, int] | None = None
 
         self.tbar.setVisible(False)
         self.content_area.setVisible(False)
+
+        self.setDockNestingEnabled(True)
+        self.setTabPosition(Qt.DockWidgetArea.LeftDockWidgetArea, QTabWidget.TabPosition.North)
+        self.setTabPosition(Qt.DockWidgetArea.RightDockWidgetArea, QTabWidget.TabPosition.North)
+        self.setTabPosition(Qt.DockWidgetArea.TopDockWidgetArea, QTabWidget.TabPosition.North)
+        self.setTabPosition(Qt.DockWidgetArea.BottomDockWidgetArea, QTabWidget.TabPosition.North)
 
         self.code_dock = MonacoEditorDock(self, self.loop, self.api, self.settings)
         self.code_dock.runClicked.connect(self._on_run_clicked)
@@ -503,11 +513,19 @@ class EditorWorkspace(
         self.stack.setCurrentWidget(self.loaded_page)
 
         self.api.globalSettingsChanged.connect(self.code_dock._on_settings_changed)
+        self.api.aboutToSaveLocal.connect(self._on_about_to_save_local)
+
     @property
     @override
     def current_file_path(self) -> ContentPath | None:
         return ContentPath(p.read_text(), str(p)) if (p := self.code_dock.main_filepath) and p.is_file() else None
 
+    @override
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        if not self._initial_docks_resized:
+            self._initial_docks_resized = True
+            QTimer.singleShot(0, self._apply_default_dock_sizes)
 
     @override
     def deleteLater(self) -> None:
@@ -552,6 +570,7 @@ class EditorWorkspace(
 
     @override
     def reload_content(self, code: str | None = None) -> UnifiedFuture[int]:
+        self._save_current_dock_sizes()
         self.content = ContentPath(fallback(code, self.code_dock.editor.bridge.content), self.content.filename)
 
         if not self.loaded_once:
@@ -571,6 +590,7 @@ class EditorWorkspace(
         self.content_area.setVisible(True)
         self.tbar.setVisible(True)
         self.stack.setCurrentWidget(self.loaded_page)
+        QTimer.singleShot(0, self._restore_dock_sizes)
 
     @run_in_loop(return_future=False)
     @override
@@ -580,6 +600,35 @@ class EditorWorkspace(
         self.stack.setCurrentWidget(self.loaded_page)
         self.disable_reloading = False
         self.loaded_once = False  # Reset so next run does fresh load_content
+        QTimer.singleShot(0, self._restore_dock_sizes)
+
+    def _apply_default_dock_sizes(self) -> None:
+        if (w := self.width()) > 0:
+            code_w = max(1, w // 3)
+            stack_w = max(1, w - code_w)
+            self.resizeDocks([self.code_dock, self.stack_dock], [code_w, stack_w], Qt.Orientation.Horizontal)
+            self._saved_dock_sizes = (code_w, stack_w)
+
+    def _save_current_dock_sizes(self) -> None:
+        if self.code_dock.isVisible() and self.stack_dock.isVisible():
+            cw = self.code_dock.width()
+            sw = self.stack_dock.width()
+            if cw > 0 and sw > 0:
+                self._saved_dock_sizes = (cw, sw)
+
+    def _restore_dock_sizes(self) -> None:
+        if state := self.settings.local_.dock_state:
+            res = self.restoreState(QByteArray(b64decode(state)))
+            if not res:
+                logger.warning("Failed to restore dock state")
+            return
+
+        if self._saved_dock_sizes and all(s > 0 for s in self._saved_dock_sizes):
+            self.resizeDocks(
+                [self.code_dock, self.stack_dock],
+                self._saved_dock_sizes,
+                Qt.Orientation.Horizontal,
+            )
 
     @Slot(object)
     def _on_main_file_changed(self, new_path: Path | None) -> None:
@@ -590,6 +639,13 @@ class EditorWorkspace(
                 self.init_load()
                 self.api.localSettingsChanged.emit(str(SettingsManager.local_settings_path(new_path)))
 
+    @Slot()
     def _on_run_clicked(self) -> None:
+        self._save_current_dock_sizes()
         with GlobalConsoleHub.bind_execution(self.code_dock.editor.bridge):
             self.reload_content(code=self.code_dock.editor.bridge.main_content)
+
+    @Slot(str)
+    def _on_about_to_save_local(self, filepath: str) -> None:
+        if self.current_file_path:
+            self.settings.local_.dock_state = b64encode(self.saveState().data()).decode("ascii")

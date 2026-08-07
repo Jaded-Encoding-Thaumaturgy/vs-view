@@ -6,7 +6,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from vsview.api import Checkbox, Dropdown, LineEdit, Spin
+from vsview.api import Checkbox, Dropdown, LineEdit, LocalSettingsModel, Spin
 
 from .stubs import get_stubs_dir
 
@@ -236,8 +236,12 @@ class EditorOptionsSettings(BaseModel):
     ] = Field(default=True, alias="editor.bracketPairColorization.enabled")
 
 
-class EditorGlobalSettings(BaseModel):
+class GlobalSettings(BaseModel):
     model_config = ConfigDict(validate_by_name=True, validate_by_alias=True)
 
     options: EditorOptionsSettings = Field(default_factory=EditorOptionsSettings)
     basedpyright: BasedpyrightSettings = Field(default_factory=BasedpyrightSettings)
+
+
+class LocalSettings(LocalSettingsModel):
+    dock_state: str | None = None
