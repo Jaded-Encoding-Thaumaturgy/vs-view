@@ -594,7 +594,7 @@ class EditorWorkspace(
 
             if reply == QMessageBox.StandardButton.Save:
                 if local_path := WorkspaceUri(uri).local_path:
-                    self.code_dock.save_script(local_path, self.code_dock.editor.bridge.content)
+                    self.code_dock.save_script(local_path, self.code_dock.editor.bridge.content).result()
                 else:
                     filepath, _ = QFileDialog.getSaveFileName(
                         self,
@@ -605,7 +605,7 @@ class EditorWorkspace(
                     if not filepath:
                         return False
 
-                    self.code_dock.save_script(Path(filepath), self.code_dock.editor.bridge.content)
+                    self.code_dock.save_script(Path(filepath), self.code_dock.editor.bridge.content).result()
 
         return True
 
