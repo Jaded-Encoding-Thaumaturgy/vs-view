@@ -455,19 +455,21 @@ class KeyboardLayoutMapper(Singleton):
         self._cache[cache_key] = result_seq = QKeySequence(QKeyCombination(modifiers, new_key))
         return result_seq
 
-    @fallback_logged
-    def _translate_win32(self, upper_base: str) -> str | None:
-        u32 = ctypes.windll.user32
-        hkl = u32.GetKeyboardLayout(0)
-        sc = QWERTY_SCAN_CODES[upper_base]
-        vk = u32.MapVirtualKeyExW(sc, 1, hkl)  # MAPVK_VSC_TO_VK
-        if vk > 0:
-            key_state = (ctypes.c_ubyte * 256)()
-            buf = ctypes.create_unicode_buffer(5)
-            ret = u32.ToUnicodeEx(vk, sc, key_state, buf, 5, 0, hkl)
-            if ret > 0 and buf.value:
-                return buf.value
-        return None
+    if sys.platform == "win32":
+
+        @fallback_logged
+        def _translate_win32(self, upper_base: str) -> str | None:
+            u32 = ctypes.windll.user32
+            hkl = u32.GetKeyboardLayout(0)
+            sc = QWERTY_SCAN_CODES[upper_base]
+            vk = u32.MapVirtualKeyExW(sc, 1, hkl)  # MAPVK_VSC_TO_VK
+            if vk > 0:
+                key_state = (ctypes.c_ubyte * 256)()
+                buf = ctypes.create_unicode_buffer(5)
+                ret = u32.ToUnicodeEx(vk, sc, key_state, buf, 5, 0, hkl)
+                if ret > 0 and buf.value:
+                    return buf.value
+            return None
 
     @fallback_logged
     def _translate_darwin(self, upper_base: str) -> str | None:
