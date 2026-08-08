@@ -499,9 +499,12 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
     @Slot()
     def _on_run_clicked(self) -> None:
         self.content = CodeContent(self.code_dock.editor.toPlainText(), self.filename)
+        self.code_dock.run_btn.setDisabled(True)
 
         if not self.loaded_once:
-            self.load_content(self.content)
+            f = self.load_content(self.content)
             self.loaded_once = True  # Mark as loaded. Subsequent runs will reload
         else:
-            self.reload_content()
+            f = self.reload_content()
+
+        f.add_loop_callback(lambda _: self.code_dock.run_btn.setEnabled(True))

@@ -704,8 +704,12 @@ class EditorWorkspace(
     @Slot()
     def _on_run_clicked(self) -> None:
         self._save_current_dock_sizes()
+        self.code_dock.run_btn.setDisabled(True)
+
         with GlobalConsoleHub.bind_execution(self.code_dock.editor.bridge):
-            self.reload_content(code=self.code_dock.editor.bridge.main_content)
+            f = self.reload_content(code=self.code_dock.editor.bridge.main_content)
+
+        f.add_loop_callback(lambda _: self.code_dock.run_btn.setEnabled(True))
 
     @Slot(str)
     def _on_about_to_save_local(self, filepath: str) -> None:
