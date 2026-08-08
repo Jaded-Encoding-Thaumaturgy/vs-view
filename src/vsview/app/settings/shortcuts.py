@@ -470,6 +470,10 @@ class KeyboardLayoutMapper(Singleton):
                 if ret > 0 and buf.value:
                     return buf.value
             return None
+    else:
+
+        def _translate_win32(self, upper_base: str) -> None:
+            return None
 
     @fallback_logged
     def _translate_darwin(self, upper_base: str) -> str | None:
