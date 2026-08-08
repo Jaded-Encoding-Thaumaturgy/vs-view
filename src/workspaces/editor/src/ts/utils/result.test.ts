@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import { Err, Ok, Result } from "./result";
+import { Err, Ok, Result, ResultAsync } from "./result";
 
 describe("Result utility", () => {
   describe("type inference", () => {
@@ -182,6 +182,72 @@ describe("Result utility", () => {
         (e as Error).message.toUpperCase(),
       );
       expect(res.toPlain()).toEqual({ ok: false, error: "TIMEOUT" });
+    });
+  });
+
+  describe("ResultAsync", () => {
+    it("should allow fluent map, mapErr, and andThen chaining on fromPromise", async () => {
+      const res = await Result.fromPromise(Promise.resolve(21))
+        .map((n) => n * 2)
+        .mapErr((e: Error) => e.message)
+        .andThen((n) => Result.ok(`total: ${n}`));
+
+      expect(res.unwrap()).toBe("total: 42");
+    });
+
+    it("should support async map and mapErr callbacks", async () => {
+      const okRes = await ResultAsync.fromResult(Result.ok(5))
+        .map(async (n) => n + 10)
+        .unwrap();
+      expect(okRes).toBe(15);
+
+      const errRes = await ResultAsync.fromResult(Result.err("fail"))
+        .mapErr(async (e) => `async-${e}`)
+        .toPlain();
+      expect(errRes).toEqual({ ok: false, error: "async-fail" });
+    });
+
+    it("should short circuit on err variant during map & andThen", async () => {
+      const spyMap = vi.fn();
+      const spyAndThen = vi.fn();
+
+      const res = await Result.fromPromise(Promise.reject(new Error("initial failure")))
+        .map(spyMap)
+        .andThen(spyAndThen);
+
+      expect(spyMap).not.toHaveBeenCalled();
+      expect(spyAndThen).not.toHaveBeenCalled();
+      expect(res.ok).toBe(false);
+      expect(await res.unwrapOr("fallback")).toBe("fallback");
+    });
+
+    it("should support tap side-effects asynchronously", async () => {
+      const spy = vi.fn();
+      const res = await Result.fromPromise(Promise.resolve("data")).tap(async (val) => {
+        spy(val);
+      });
+
+      expect(spy).toHaveBeenCalledWith("data");
+      expect(res.unwrap()).toBe("data");
+    });
+
+    it("should support match pattern matching asynchronously", async () => {
+      const okMatch = await Result.fromPromise(Promise.resolve(10)).match({
+        ok: (val) => val * 2,
+        err: () => 0,
+      });
+      expect(okMatch).toBe(20);
+
+      const errMatch = await Result.fromPromise(Promise.reject(new Error("err"))).match({
+        ok: () => "ok",
+        err: (e) => e.message,
+      });
+      expect(errMatch).toBe("err");
+    });
+
+    it("should handle unwrap rejections on Err", async () => {
+      const resultAsync = Result.fromPromise(Promise.reject(new Error("unwrap test")));
+      await expect(resultAsync.unwrap()).rejects.toThrow("unwrap test");
     });
   });
 });

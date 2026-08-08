@@ -292,29 +292,25 @@ export class BridgeService implements vscode.Disposable {
   }
 
   private async applyLspSettings(section: string, jsonSettings: string): Promise<void> {
-    const parseResult = Result.fromThrowable(
-      () => JSON.parse(jsonSettings) as Record<string, string | boolean>,
-    );
-    if (!parseResult.ok) {
-      console.error(`Failed to parse LSP settings for section '${section}':`, parseResult.error);
-      return;
-    }
-
-    const raw = parseResult.value;
-    (
-      await Result.fromPromise(async () => {
-        const conf = vscode.workspace.getConfiguration();
-        for (const [key, value] of Object.entries(raw)) {
-          await conf.update(key, value, vscode.ConfigurationTarget.Workspace);
-        }
-      })
-    ).match({
-      ok: () => console.debug(`Updated LSP configuration for '${section}':`, JSON.stringify(raw)),
-      err: (err) =>
-        console.error(
-          `Failed to apply LSP settings for '${section}' to workspace configuration:`,
-          err,
-        ),
+    Result.fromThrowable(() => JSON.parse(jsonSettings) as Record<string, string | boolean>).match({
+      ok: async (raw) => {
+        await Result.fromPromise(async () => {
+          const conf = vscode.workspace.getConfiguration();
+          for (const [key, value] of Object.entries(raw)) {
+            await conf.update(key, value, vscode.ConfigurationTarget.Workspace);
+          }
+        }).match({
+          ok: () =>
+            console.debug(`Updated LSP configuration for '${section}':`, JSON.stringify(raw)),
+          err: (err) =>
+            console.error(
+              `Failed to apply LSP settings for '${section}' to workspace configuration:`,
+              err,
+            ),
+        });
+      },
+      err: async (err) =>
+        console.error(`Failed to parse LSP settings for section '${section}':`, err),
     });
   }
 }

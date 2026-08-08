@@ -126,6 +126,118 @@ export class Err<E = Error> {
 
 export type Result<T, E = Error> = Ok<T, E> | Err<E>;
 
+export class ResultAsync<T, E = Error> implements PromiseLike<Result<T, E>> {
+  /**
+   * Creates a ResultAsync from an existing Result or Promise<Result>.
+   */
+  static fromResult<T, E = Error>(
+    result: Result<T, E> | PromiseLike<Result<T, E>>,
+  ): ResultAsync<T, E> {
+    return new ResultAsync(Promise.resolve(result));
+  }
+
+  constructor(private readonly promise: Promise<Result<T, E>>) {}
+
+  /**
+   * Implements PromiseLike to allow awaiting the ResultAsync directly.
+   */
+  then<R1 = Result<T, E>, R2 = never>(
+    onfulfilled?: ((value: Result<T, E>) => R1 | PromiseLike<R1>) | null,
+    onrejected?: ((reason: unknown) => R2 | PromiseLike<R2>) | null,
+  ): Promise<R1 | R2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  /**
+   * Transforms the contained value if Ok, otherwise leaves Err untouched.
+   */
+  map<U>(fn: (val: T) => U | PromiseLike<U>): ResultAsync<U, E> {
+    return new ResultAsync<U, E>(
+      this.promise.then(async (res): Promise<Result<U, E>> => {
+        if (!res.ok) return res as unknown as Result<U, E>;
+        return Result.ok(await fn(res.value));
+      }),
+    );
+  }
+
+  /**
+   * Transforms the contained error if Err, otherwise leaves Ok untouched.
+   */
+  mapErr<F>(fn: (err: E) => F | PromiseLike<F>): ResultAsync<T, F> {
+    return new ResultAsync<T, F>(
+      this.promise.then(async (res): Promise<Result<T, F>> => {
+        if (res.ok) return Result.ok<T>(res.value);
+        return Result.err<F>(await fn(res.error));
+      }),
+    );
+  }
+
+  /**
+   * Chains another fallible operation (sync or async) if Ok.
+   */
+  andThen<U, F = E>(
+    fn: (val: T) => Result<U, F> | ResultAsync<U, F> | PromiseLike<Result<U, F>>,
+  ): ResultAsync<U, E | F> {
+    return new ResultAsync<U, E | F>(
+      this.promise.then(async (res): Promise<Result<U, E | F>> => {
+        if (!res.ok) return res as unknown as Result<U, E | F>;
+        return await fn(res.value);
+      }),
+    );
+  }
+
+  /**
+   * Runs a side-effect function (sync or async) with the value if Ok without modifying the Result.
+   */
+  tap(fn: (val: T) => void | PromiseLike<void>): ResultAsync<T, E> {
+    return new ResultAsync(
+      this.promise.then(async (res) => {
+        if (res.ok) await fn(res.value);
+        return res;
+      }),
+    );
+  }
+
+  /**
+   * Pattern matches over the Result state asynchronously.
+   */
+  async match<U>(matchers: {
+    ok: (val: T) => U | PromiseLike<U>;
+    err: (err: E) => U | PromiseLike<U>;
+  }): Promise<U> {
+    const res = await this.promise;
+    if (res.ok) {
+      return matchers.ok(res.value);
+    }
+    return matchers.err(res.error);
+  }
+
+  /**
+   * Returns the contained Ok value, or throws the error if Err.
+   */
+  async unwrap(): Promise<T> {
+    return (await this.promise).unwrap();
+  }
+
+  /**
+   * Returns the contained Ok value, or the provided fallback value if Err.
+   */
+  async unwrapOr<U>(fallback: U | PromiseLike<U>): Promise<T | U> {
+    const res = await this.promise;
+    if (res.ok) {
+      return res.value;
+    }
+    return fallback;
+  }
+
+  /**
+   * Converts the Result into a plain JSON-serializable object asynchronously.
+   */
+  async toPlain(): Promise<{ ok: true; value: T } | { ok: false; error: E }> {
+    return (await this.promise).toPlain();
+  }
+}
+
 export const Result = {
   /**
    * Creates an Ok variant containing value T.
@@ -155,20 +267,24 @@ export const Result = {
   },
 
   /**
-   * Wraps an asynchronous Promise or function in a Promise<Result>.
+   * Wraps an asynchronous Promise or function in a ResultAsync.
    */
-  async fromPromise<T, E = Error>(
+  fromPromise<T, E = Error>(
     promiseOrFn: PromiseLike<T> | (() => PromiseLike<T> | T),
     errorMapper?: (e: unknown) => E,
-  ): Promise<Result<T, E>> {
-    try {
-      const value = typeof promiseOrFn === "function" ? await promiseOrFn() : await promiseOrFn;
-      return Result.ok(value);
-    } catch (e) {
-      const err = errorMapper
-        ? errorMapper(e)
-        : ((e instanceof Error ? e : new Error(String(e))) as E);
-      return Result.err(err);
-    }
+  ): ResultAsync<T, E> {
+    const promise = (async () => {
+      try {
+        const value = typeof promiseOrFn === "function" ? await promiseOrFn() : await promiseOrFn;
+        return Result.ok<T>(value);
+      } catch (e) {
+        const err = errorMapper
+          ? errorMapper(e)
+          : ((e instanceof Error ? e : new Error(String(e))) as E);
+        return Result.err<E>(err);
+      }
+    })();
+
+    return new ResultAsync(promise);
   },
 };
