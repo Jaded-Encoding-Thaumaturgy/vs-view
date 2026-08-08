@@ -1,3 +1,5 @@
+__lazy_modules__ = ["PySide6"]
+
 from collections.abc import Callable
 from logging import (
     CRITICAL,
