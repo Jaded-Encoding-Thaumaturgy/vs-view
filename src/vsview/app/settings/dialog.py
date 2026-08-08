@@ -34,7 +34,7 @@ from ..icon import IconReloadMixin
 from ..views.components import Accordion
 from .manager import SettingsManager
 from .models import GlobalSettings, LocalSettings, SettingEntry, ShortcutConfig, extract_settings
-from .shortcuts import ShortcutManager
+from .shortcuts import KeyboardLayoutMapper, ShortcutManager
 
 # Style for shortcut editors with conflicts
 # Must target internal QLineEdit since QKeySequenceEdit is a compound widget
@@ -238,7 +238,8 @@ class ShortcutWidgets:
     editors: dict[str, ShortcutEditor] = field(default_factory=dict)
     reset_buttons: dict[str, QToolButton] = field(default_factory=dict)
     conflict_labels: dict[str, QLabel] = field(default_factory=dict)
-    original_shortcuts: dict[str, str] = field(default_factory=dict)
+    original_shortcuts: dict[str, QKeySequence] = field(default_factory=dict)
+    is_custom_flags: dict[str, bool] = field(default_factory=dict)
 
 
 class SettingsDialog(QDialog, IconReloadMixin):
@@ -256,6 +257,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
         self._global_widgets = dict[str, QWidget]()
         self._local_widgets = dict[str, QWidget]()
         self._wheel_filter = WheelEventFilter(self)
+        self._updating_shortcuts_ui = False
 
         self.setWindowTitle("Settings")
         self.setMinimumSize(750, 550)
@@ -416,6 +418,9 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
                 # Create an editor for each shortcut action in this group
                 for aid in actions:
+                    config = SettingsManager.global_settings.get_shortcut_config(aid)
+                    self._shortcut_widgets.is_custom_flags[aid] = config.is_custom if config is not None else False
+
                     definition = ShortcutManager.definitions[aid]
                     current_key = SettingsManager.global_settings.get_key(aid)
                     self._shortcut_widgets.original_shortcuts[aid] = current_key
@@ -427,10 +432,11 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
                     editor = ShortcutEditor(
                         self,
-                        keySequence=QKeySequence(current_key),
+                        keySequence=current_key,
                         clearButtonEnabled=True,
                         maximumSequenceLength=1,
                     )
+                    editor.keySequenceChanged.connect(lambda _, aid=aid: self._on_shortcut_user_edited(aid))
                     editor.keySequenceChanged.connect(self._on_shortcut_changed)
                     row_layout.addWidget(editor)
 
@@ -518,10 +524,13 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
     def _get_global_settings_from_ui(self) -> GlobalSettings:
         # Build shortcuts from UI editors
-        shortcuts = [
-            ShortcutConfig(action_id=aid, key_sequence=self._shortcut_widgets.editors[aid].keySequence().toString())
-            for aid in self._shortcut_widgets.editors
-        ]
+        shortcuts = list[ShortcutConfig]()
+        for aid, editor in self._shortcut_widgets.editors.items():
+            is_custom = self._shortcut_widgets.is_custom_flags.get(aid, False)
+            definition = ShortcutManager.definitions.get(aid)
+            default_key = definition.default_key if definition else ""
+            key_seq = editor.keySequence() if is_custom else QKeySequence(default_key)
+            shortcuts.append(ShortcutConfig(action_id=aid, key_sequence=key_seq, is_custom=is_custom))
 
         # Use existing settings as base to preserve hidden fields
         data = SettingsManager.global_settings.model_dump()
@@ -585,6 +594,10 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         return True
 
+    def _on_shortcut_user_edited(self, aid: str) -> None:
+        if not self._updating_shortcuts_ui:
+            self._shortcut_widgets.is_custom_flags[aid] = True
+
     @Slot()
     def _on_shortcut_changed(self) -> None:
         key_to_actions = dict[str, list[str]]()
@@ -625,7 +638,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
                 conflict_label.setToolTip(f"Conflicts with: {', '.join(conflicting_with)}")
 
     @cachedproperty
-    def _default_shortcuts(self) -> dict[str, str]:
+    def _default_shortcuts(self) -> dict[str, QKeySequence]:
         return {aid: d.default_key for aid, d in ShortcutManager.definitions.items()}
 
     @cachedproperty
@@ -635,5 +648,11 @@ class SettingsDialog(QDialog, IconReloadMixin):
         return {plugin.identifier: plugin.display_name for plugin in PluginManager.all_plugins}
 
     def _reset_shortcut(self, aid: str) -> None:
-        default_key = self._default_shortcuts.get(aid, "")
-        self._shortcut_widgets.editors[aid].setKeySequence(QKeySequence(default_key))
+        self._updating_shortcuts_ui = True
+        try:
+            self._shortcut_widgets.is_custom_flags[aid] = False
+            default_key = self._default_shortcuts.get(aid, QKeySequence())
+            translated = KeyboardLayoutMapper.translate_qwerty_to_active(default_key)
+            self._shortcut_widgets.editors[aid].setKeySequence(translated)
+        finally:
+            self._updating_shortcuts_ui = False

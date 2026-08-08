@@ -1,13 +1,17 @@
 """Shortcut manager for hot-reloadable keyboard shortcuts."""
 
+import ctypes
+import ctypes.util
 import operator
+import sys
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
+from functools import wraps
 from logging import getLogger
-from typing import Any, Literal
+from typing import Any, Final, Literal, cast
 
-from jetpytools import Singleton, inject_self
-from PySide6.QtCore import Qt, Slot
+from jetpytools import CustomNotImplementedError, Singleton, inject_self
+from PySide6.QtCore import QKeyCombination, Qt, Slot
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import QWidget
 
@@ -156,9 +160,15 @@ class ShortcutManager(Singleton):
             logger.warning("Cannot unregister shortcut: action ID %r is not registered", action_id)
 
     @inject_self
-    def get_key(self, action_id: str) -> str:
-        """Get the current key sequence for an action from settings."""
-        return SettingsManager.global_settings.get_key(action_id)
+    def get_key(self, action_id: str) -> QKeySequence:
+        """Get the current key sequence for an action from settings, applying layout mapping if default."""
+        if (config := SettingsManager.global_settings.get_shortcut_config(action_id)) is None:
+            return QKeySequence()
+
+        if config.is_custom or (definition := self._definitions.get(action_id)) is None:
+            return config.key_sequence
+
+        return KeyboardLayoutMapper.translate_qwerty_to_active(definition.default_key)
 
     @inject_self
     def get_hierarchy(self, action_id: str) -> Literal[0, 1, 2, 3]:
@@ -187,10 +197,10 @@ class ShortcutManager(Singleton):
         key = self.get_key(action_id)
         action.setShortcut(key)
 
-        if not key:
+        if key.isEmpty():
             return
 
-        native = QKeySequence(key).toString(QKeySequence.SequenceFormat.NativeText)
+        native = key.toString(QKeySequence.SequenceFormat.NativeText)
 
         if (original := action.property("original_tooltip")) is None:
             original = action.toolTip()
@@ -199,7 +209,7 @@ class ShortcutManager(Singleton):
         action.setToolTip(f"{original} ({native})" if original else f"({native})")
 
     def _update_shortcut(self, action_id: str, shortcut: QShortcut) -> None:
-        shortcut.setKey(QKeySequence(self.get_key(action_id)))
+        shortcut.setKey(self.get_key(action_id))
 
     @Slot()
     def _on_settings_changed(self) -> None:
@@ -224,10 +234,10 @@ class ShortcutManager(Singleton):
         key_map = dict[str, list[str]]()
 
         for action_id in self._definitions:
-            if not (key := self.get_key(action_id)):
+            if (key := self.get_key(action_id)).isEmpty():
                 continue
 
-            key_map.setdefault(key, []).append(action_id)
+            key_map.setdefault(key.toString(), []).append(action_id)
 
         for key, action_ids in key_map.items():
             if len(action_ids) > 1:
@@ -237,3 +247,306 @@ class ShortcutManager(Singleton):
                     key,
                     ", ".join(labels),
                 )
+
+
+# QWERTY physical key hardware scan codes (US QWERTY standard)
+QWERTY_SCAN_CODES: Final[Mapping[str, int]] = {
+    # Number row
+    "1": 0x02,
+    "2": 0x03,
+    "3": 0x04,
+    "4": 0x05,
+    "5": 0x06,
+    "6": 0x07,
+    "7": 0x08,
+    "8": 0x09,
+    "9": 0x0A,
+    "0": 0x0B,
+    "-": 0x0C,
+    "=": 0x0D,
+    # QWERTY row
+    "Q": 0x10,
+    "W": 0x11,
+    "E": 0x12,
+    "R": 0x13,
+    "T": 0x14,
+    "Y": 0x15,
+    "U": 0x16,
+    "I": 0x17,
+    "O": 0x18,
+    "P": 0x19,
+    "[": 0x1A,
+    "]": 0x1B,
+    "\\": 0x2B,
+    # ASDF row
+    "A": 0x1E,
+    "S": 0x1F,
+    "D": 0x20,
+    "F": 0x21,
+    "G": 0x22,
+    "H": 0x23,
+    "J": 0x24,
+    "K": 0x25,
+    "L": 0x26,
+    ";": 0x27,
+    "'": 0x28,
+    # ZXCV row
+    "Z": 0x2C,
+    "X": 0x2D,
+    "C": 0x2E,
+    "V": 0x2F,
+    "B": 0x30,
+    "N": 0x31,
+    "M": 0x32,
+    "/": 0x35,
+    "`": 0x29,
+    # Shifted symbol aliases
+    "!": 0x02,
+    "@": 0x03,
+    "#": 0x04,
+    "$": 0x05,
+    "%": 0x06,
+    "^": 0x07,
+    "&": 0x08,
+    "*": 0x09,
+    "(": 0x0A,
+    ")": 0x0B,
+    "_": 0x0C,
+    "+": 0x0D,
+    "{": 0x1A,
+    "}": 0x1B,
+    "|": 0x2B,
+    ":": 0x27,
+    '"': 0x28,
+    "<": 0x33,
+    ">": 0x34,
+    "?": 0x35,
+    "~": 0x29,
+}
+
+# macOS virtual keycodes mapping for standard QWERTY layout
+MACOS_KEYCODES: Final[Mapping[str, int]] = {
+    "1": 18,
+    "2": 19,
+    "3": 20,
+    "4": 21,
+    "5": 23,
+    "6": 22,
+    "7": 26,
+    "8": 28,
+    "9": 25,
+    "0": 29,
+    "-": 27,
+    "=": 24,
+    "Q": 12,
+    "W": 13,
+    "E": 14,
+    "R": 15,
+    "T": 17,
+    "Y": 16,
+    "U": 32,
+    "I": 34,
+    "O": 31,
+    "P": 35,
+    "[": 33,
+    "]": 30,
+    "\\": 42,
+    "A": 0,
+    "S": 1,
+    "D": 2,
+    "F": 3,
+    "G": 5,
+    "H": 4,
+    "J": 38,
+    "K": 40,
+    "L": 37,
+    ";": 41,
+    "'": 39,
+    "Z": 6,
+    "X": 7,
+    "C": 8,
+    "V": 9,
+    "B": 11,
+    "N": 45,
+    "M": 46,
+    ",": 43,
+    ".": 47,
+    "/": 44,
+    "`": 50,
+    # Shifted symbol aliases
+    "!": 18,
+    "@": 19,
+    "#": 20,
+    "$": 21,
+    "%": 23,
+    "^": 22,
+    "&": 26,
+    "*": 28,
+    "(": 25,
+    ")": 29,
+    "_": 27,
+    "+": 24,
+    "{": 33,
+    "}": 30,
+    "|": 42,
+    ":": 41,
+    '"': 39,
+    "<": 43,
+    ">": 47,
+    "?": 44,
+    "~": 50,
+}
+
+
+def fallback_logged[T: KeyboardLayoutMapper, R](func: Callable[[T, str], R]) -> Callable[[T, str], R | None]:
+    @wraps(func)
+    def wrapper(self: T, upper_base: str) -> R | None:
+        try:
+            return func(self, upper_base)
+        except Exception as e:
+            logger.warning("Layout translation failed for %s: %s", func, e)
+            logger.debug("Full traceback:", exc_info=e)
+            return None
+
+    return wrapper
+
+
+class KeyboardLayoutMapper(Singleton):
+    def __init__(self) -> None:
+        self._cache = dict[tuple[str, QKeySequence], QKeySequence]()
+
+    @inject_self
+    def translate_qwerty_to_active(self, key_sequence: QKeySequence) -> QKeySequence:
+        if key_sequence.isEmpty():
+            return QKeySequence()
+
+        if (cache_key := (sys.platform, key_sequence)) in self._cache:
+            return self._cache[cache_key]
+
+        if key_sequence.count() != 1:
+            logger.warning("Key sequence unsupported %s", key_sequence)
+            return QKeySequence()
+
+        comb = cast(QKeyCombination, key_sequence[0])  # type: ignore[index]
+        modifiers = comb.keyboardModifiers()
+        upper_base = QKeySequence(comb.key()).toString(QKeySequence.SequenceFormat.PortableText).upper()
+
+        if upper_base not in QWERTY_SCAN_CODES:
+            self._cache[cache_key] = key_sequence
+            return key_sequence
+
+        if sys.platform == "win32":
+            translated_char = self._translate_win32(upper_base)
+        elif sys.platform == "darwin":
+            translated_char = self._translate_darwin(upper_base)
+        elif sys.platform.startswith("linux"):
+            translated_char = self._translate_linux(upper_base)
+        else:
+            raise CustomNotImplementedError
+
+        if not translated_char:
+            self._cache[cache_key] = key_sequence
+            return key_sequence
+
+        if translated_char.isalpha():
+            translated_char = translated_char.upper()
+
+        new_key = cast(QKeyCombination, QKeySequence(translated_char)[0]).key()  # type: ignore[index]
+        self._cache[cache_key] = result_seq = QKeySequence(QKeyCombination(modifiers, new_key))
+        return result_seq
+
+    @fallback_logged
+    def _translate_win32(self, upper_base: str) -> str | None:
+        u32 = ctypes.windll.user32
+        hkl = u32.GetKeyboardLayout(0)
+        sc = QWERTY_SCAN_CODES[upper_base]
+        vk = u32.MapVirtualKeyExW(sc, 1, hkl)  # MAPVK_VSC_TO_VK
+        if vk > 0:
+            key_state = (ctypes.c_ubyte * 256)()
+            buf = ctypes.create_unicode_buffer(5)
+            ret = u32.ToUnicodeEx(vk, sc, key_state, buf, 5, 0, hkl)
+            if ret > 0 and buf.value:
+                return buf.value
+        return None
+
+    @fallback_logged
+    def _translate_darwin(self, upper_base: str) -> str | None:
+        if upper_base not in MACOS_KEYCODES or not (carbon_path := ctypes.util.find_library("Carbon")):
+            return None
+
+        carbon = ctypes.cdll.LoadLibrary(carbon_path)
+        mac_keycode = MACOS_KEYCODES[upper_base]
+
+        # Get current keyboard input source layout data pointer
+        tis_source = carbon.TISCopyCurrentKeyboardInputSource()
+        if not tis_source:
+            return None
+
+        # kTISPropertyUnicodeKeyLayoutData = "TISPropertyUnicodeKeyLayoutData"
+        layout_data_ptr = carbon.TISGetInputSourceProperty(
+            tis_source, ctypes.c_void_p.in_dll(carbon, "kTISPropertyUnicodeKeyLayoutData")
+        )
+        if not layout_data_ptr:
+            return None
+
+        buf = ctypes.create_unicode_buffer(4)
+        length = ctypes.c_uint32(0)
+        dead_key_state = ctypes.c_uint32(0)
+
+        # UCKeyTranslate(layout_data, keycode, action, modifiers, keyboard_type, options, state, max_len, len, buf)
+        res = carbon.UCKeyTranslate(
+            layout_data_ptr,
+            ctypes.c_uint16(mac_keycode),
+            ctypes.c_uint16(0),  # kUCKeyActionDisplay
+            ctypes.c_uint32(0),  # no modifiers
+            ctypes.c_uint32(0),  # LMGetKbdType()
+            ctypes.c_uint32(0),  # kUCKeyTranslateNoDeadKeysBit
+            ctypes.byref(dead_key_state),
+            ctypes.c_uint32(4),
+            ctypes.byref(length),
+            buf,
+        )
+        if res == 0 and length.value > 0 and buf.value:
+            return buf.value
+
+        return None
+
+    @fallback_logged
+    def _translate_linux(self, upper_base: str) -> str | None:
+        xkb_path = ctypes.util.find_library("xkbcommon") or "libxkbcommon.so.0"
+        libxkb = ctypes.cdll.LoadLibrary(xkb_path)
+
+        # Define function return types
+        libxkb.xkb_context_new.restype = ctypes.c_void_p
+        libxkb.xkb_keymap_new_from_names.restype = ctypes.c_void_p
+        libxkb.xkb_state_new.restype = ctypes.c_void_p
+        libxkb.xkb_state_key_get_utf8.restype = ctypes.c_int
+
+        ctx = libxkb.xkb_context_new(0)
+        if not ctx:
+            return None
+
+        keymap = libxkb.xkb_keymap_new_from_names(ctx, None, 0)
+        if not keymap:
+            libxkb.xkb_context_unref(ctx)
+            return None
+
+        state = libxkb.xkb_state_new(keymap)
+        if not state:
+            libxkb.xkb_keymap_unref(keymap)
+            libxkb.xkb_context_unref(ctx)
+            return None
+
+        # EVDEV keycode = QWERTY hardware scancode + 8
+        evdev_keycode = QWERTY_SCAN_CODES[upper_base] + 8
+        buf = ctypes.create_string_buffer(8)
+        ret = libxkb.xkb_state_key_get_utf8(state, ctypes.c_uint32(evdev_keycode), buf, 8)
+
+        libxkb.xkb_state_unref(state)
+        libxkb.xkb_keymap_unref(keymap)
+        libxkb.xkb_context_unref(ctx)
+
+        if ret > 0 and buf.value:
+            return buf.value.decode("utf-8")
+
+        return None

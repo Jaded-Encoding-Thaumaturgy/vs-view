@@ -115,8 +115,16 @@ def extract_settings(
 class ShortcutConfig(BaseModel):
     """Configuration for a single keyboard shortcut."""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     action_id: str
-    key_sequence: Annotated[str, AfterValidator(lambda v: v if not QKeySequence(v).isEmpty() else "")]
+    key_sequence: Annotated[
+        QKeySequence,
+        BeforeValidator(QKeySequence),
+        AfterValidator(lambda seq: seq if not seq.isEmpty() else QKeySequence()),
+        PlainSerializer(lambda seq: seq.toString(QKeySequence.SequenceFormat.PortableText), return_type=str),
+    ]
+    is_custom: bool = False
 
 
 class AppearanceSettings(BaseModel):
@@ -737,9 +745,15 @@ class GlobalSettings(BaseSettings):
     view_tools: ViewTools = ViewTools()
     qt_settings: QtSettings = QtSettings()
 
-    def get_key(self, action_id: str) -> str:
+    def get_shortcut_config(self, action_id: str) -> ShortcutConfig | None:
+        """Get the ShortcutConfig for a specific action."""
+        return next((s for s in self.shortcuts if s.action_id == action_id), None)
+
+    def get_key(self, action_id: str) -> QKeySequence:
         """Get the key sequence for a specific action."""
-        return next((s.key_sequence for s in self.shortcuts if s.action_id == action_id), "")
+        from .shortcuts import ShortcutManager
+
+        return ShortcutManager.get_key(action_id)
 
     @classproperty.cached
     @classmethod

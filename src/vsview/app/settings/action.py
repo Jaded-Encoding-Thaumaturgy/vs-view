@@ -1,6 +1,8 @@
 from enum import StrEnum
 from typing import Self, override
 
+from PySide6.QtGui import QKeySequence
+
 
 class ActionDefinition(str):
     """
@@ -10,18 +12,20 @@ class ActionDefinition(str):
     label: str
     """Human-readable display label"""
 
-    default_key: str
+    default_key: QKeySequence
     """Default key sequence (can be empty)"""
 
     def __new__(cls, id: str, label: str, default_key: str = "") -> Self:
         self = super().__new__(cls, id)
         self.label = label
-        self.default_key = default_key
+        self.default_key = QKeySequence(default_key)
         return self
 
     @override
     def __repr__(self) -> str:
-        return f"ActionDefinition({super().__repr__()}, label={self.label!r}, default_key={self.default_key!r})"
+        return (
+            f"ActionDefinition({super().__repr__()}, label={self.label!r}, default_key={self.default_key.toString()!r})"
+        )
 
 
 class ActionID(StrEnum):
