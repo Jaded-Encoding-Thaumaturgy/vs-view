@@ -1,5 +1,7 @@
+from collections.abc import Sequence
 from typing import Any, ClassVar, Generic
 
+from vsview.app.settings.action import ActionDefinition
 from vsview.app.workspace import BaseWorkspace, LoaderWorkspace
 
 from ._interface import _PluginBaseMeta
@@ -14,6 +16,13 @@ class PluginBaseWorkspace(BaseWorkspace, Generic[TGlobalSettings, TLocalSettings
 
     display_name: ClassVar[str]
     """Display name for the plugin."""
+
+    shortcuts: ClassVar[Sequence[ActionDefinition]] = ()
+    """
+    Keyboard shortcuts for this workspace.
+
+    Each ActionDefinition ID must start with "{identifier}." prefix.
+    """
 
 
 class PluginWorkspace(
