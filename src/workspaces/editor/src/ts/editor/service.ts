@@ -47,17 +47,12 @@ export class EditorService implements vscode.Disposable {
 
     this.tabBarView = this.disposables.add(
       new TabBarView({
-        onSelectTab: (uri) => {
-          Result.mapErr(this.selectTab(uri), (err) => console.error("Failed to select tab:", err));
-        },
-        onCloseTab: (uri) => {
-          Result.mapErr(this.closeTab(uri), (err) => console.error("Failed to close tab:", err));
-        },
-        onSetMainTab: (uri) => {
-          Result.mapErr(this.setMainTab(uri), (err) =>
-            console.error("Failed to set main tab:", err),
-          );
-        },
+        onSelectTab: (uri) =>
+          this.selectTab(uri).mapErr((err) => console.error("Failed to select tab:", err)),
+        onCloseTab: (uri) =>
+          this.closeTab(uri).mapErr((err) => console.error("Failed to close tab:", err)),
+        onSetMainTab: (uri) =>
+          this.setMainTab(uri).mapErr((err) => console.error("Failed to set main tab:", err)),
       }),
     );
 
@@ -91,9 +86,7 @@ export class EditorService implements vscode.Disposable {
     this.editor.addAction({
       id: "vsview.generateStubs",
       label: "VapourSynth: Generate Stubs",
-      run: () => {
-        Result.tap(BridgeService.getActiveBridge(), (bridge) => bridge.requestGenerateStubs());
-      },
+      run: () => BridgeService.getActiveBridge().unwrapOr(undefined)?.requestGenerateStubs(),
     });
 
     // Initialize default main tab

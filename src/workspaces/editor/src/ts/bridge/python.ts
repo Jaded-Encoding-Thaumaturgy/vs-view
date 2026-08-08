@@ -161,8 +161,7 @@ export class BridgeService implements vscode.Disposable {
       if (typeof command === "string") {
         let payload: Record<string, unknown> = {};
         if (payloadJson) {
-          const parsed = Result.fromThrowable(() => JSON.parse(payloadJson));
-          payload = Result.match(parsed, {
+          payload = Result.fromThrowable(() => JSON.parse(payloadJson)).match({
             ok: (val) =>
               typeof val === "object" && val !== null ? (val as Record<string, unknown>) : {},
             err: (e) => {
@@ -302,14 +301,14 @@ export class BridgeService implements vscode.Disposable {
     }
 
     const raw = parseResult.value;
-    const updateResult = await Result.fromPromise(async () => {
-      const conf = vscode.workspace.getConfiguration();
-      for (const [key, value] of Object.entries(raw)) {
-        await conf.update(key, value, vscode.ConfigurationTarget.Workspace);
-      }
-    });
-
-    Result.match(updateResult, {
+    (
+      await Result.fromPromise(async () => {
+        const conf = vscode.workspace.getConfiguration();
+        for (const [key, value] of Object.entries(raw)) {
+          await conf.update(key, value, vscode.ConfigurationTarget.Workspace);
+        }
+      })
+    ).match({
       ok: () => console.debug(`Updated LSP configuration for '${section}':`, JSON.stringify(raw)),
       err: (err) =>
         console.error(

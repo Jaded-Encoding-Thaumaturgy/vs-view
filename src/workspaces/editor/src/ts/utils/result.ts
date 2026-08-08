@@ -1,57 +1,143 @@
-/**
- * A simple Result type for error handling.
- *
- * @template T The type of the successful value.
- * @template E The type of the error value (defaults to Error).
- */
-export type Result<T, E = Error> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: E };
+export class Ok<T, E = never> {
+  readonly ok = true as const;
+  constructor(readonly value: T) {}
+
+  /**
+   * Transforms the contained value if Ok, otherwise leaves Err untouched.
+   */
+  map<U>(fn: (val: T) => U): Result<U, E> {
+    return new Ok(fn(this.value));
+  }
+
+  /**
+   * Transforms the contained error if Err, otherwise leaves Ok untouched.
+   */
+  mapErr<F>(_fn: (err: E) => F): Result<T, F> {
+    return new Ok<T, F>(this.value);
+  }
+
+  /**
+   * Chains another fallible operation if Ok, returning its Result.
+   */
+  andThen<U, F = E>(fn: (val: T) => Result<U, F>): Result<U, E | F> {
+    return fn(this.value);
+  }
+
+  /**
+   * Runs a side-effect function with the value if Ok without modifying the Result.
+   */
+  tap(fn: (val: T) => void): this {
+    fn(this.value);
+    return this;
+  }
+
+  /**
+   * Pattern matches over the Result state.
+   */
+  match<U>(matchers: { ok: (val: T) => U; err: (err: E) => U }): U {
+    return matchers.ok(this.value);
+  }
+
+  /**
+   * Returns the contained Ok value, or throws the error if Err.
+   */
+  unwrap(): T {
+    return this.value;
+  }
+
+  /**
+   * Returns the contained Ok value, or the provided fallback value if Err.
+   */
+  unwrapOr<U>(_fallback: U): T {
+    return this.value;
+  }
+
+  /**
+   * Converts the Result into a plain JSON-serializable object.
+   */
+  toPlain() {
+    return { ok: true as const, value: this.value };
+  }
+}
+
+export class Err<E = Error> {
+  readonly ok = false as const;
+  constructor(readonly error: E) {}
+
+  /**
+   * Transforms the contained value if Ok, otherwise leaves Err untouched.
+   */
+  map<U>(_fn: (val: never) => U): Result<U, E> {
+    return this as unknown as Result<U, E>;
+  }
+
+  /**
+   * Transforms the contained error if Err, otherwise leaves Ok untouched.
+   */
+  mapErr<F>(fn: (err: E) => F): Result<never, F> {
+    return new Err<F>(fn(this.error));
+  }
+
+  /**
+   * Chains another fallible operation if Ok, returning its Result.
+   */
+  andThen<U, F = E>(_fn: (val: never) => Result<U, F>): Result<U, E | F> {
+    return this as unknown as Result<U, E | F>;
+  }
+
+  /**
+   * Runs a side-effect function with the value if Ok without modifying the Result.
+   */
+  tap(_fn: (val: never) => void): this {
+    return this;
+  }
+
+  /**
+   * Pattern matches over the Result state.
+   */
+  match<U>(matchers: { ok: (val: never) => U; err: (err: E) => U }): U {
+    return matchers.err(this.error);
+  }
+
+  /**
+   * Returns the contained Ok value, or throws the error if Err.
+   */
+  unwrap(): never {
+    if (this.error instanceof Error) {
+      throw this.error;
+    }
+    throw new Error(String(this.error));
+  }
+
+  /**
+   * Returns the contained Ok value, or the provided fallback value if Err.
+   */
+  unwrapOr<U>(fallback: U): U {
+    return fallback;
+  }
+
+  /**
+   * Converts the Result into a plain JSON-serializable object.
+   */
+  toPlain() {
+    return { ok: false as const, error: this.error };
+  }
+}
+
+export type Result<T, E = Error> = Ok<T, E> | Err<E>;
 
 export const Result = {
   /**
    * Creates an Ok variant containing value T.
    */
-  ok<T>(value: T): Result<T, never> {
-    return { ok: true, value };
+  ok<T>(value: T): Ok<T, never> {
+    return new Ok(value);
   },
-
   /**
    * Creates an Err variant containing error E.
    */
-  err<E>(error: E): Result<never, E> {
-    return { ok: false, error };
-  },
-
-  /**
-   * Transforms the contained value if Ok, otherwise leaves Err untouched.
-   */
-  map<T, E, U>(result: Result<T, E>, fn: (val: T) => U): Result<U, E> {
-    return result.ok ? Result.ok(fn(result.value)) : result;
-  },
-
-  /**
-   * Transforms the contained error if Err, otherwise leaves Ok untouched.
-   */
-  mapErr<T, E, F>(result: Result<T, E>, fn: (err: E) => F): Result<T, F> {
-    return result.ok ? result : Result.err(fn(result.error));
-  },
-
-  /**
-   * Runs a side-effect function with the value if Ok without modifying the Result.
-   */
-  tap<T, E>(result: Result<T, E>, fn: (val: T) => void): Result<T, E> {
-    if (result.ok) {
-      fn(result.value);
-    }
-    return result;
-  },
-
-  /**
-   * Pattern matches over the Result state.
-   */
-  match<T, E, U>(result: Result<T, E>, matchers: { ok: (val: T) => U; err: (err: E) => U }): U {
-    return result.ok ? matchers.ok(result.value) : matchers.err(result.error);
+  err<E>(error: E): Err<E> {
+    return new Err(error);
   },
 
   /**
