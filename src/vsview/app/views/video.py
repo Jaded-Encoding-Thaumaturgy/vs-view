@@ -741,9 +741,7 @@ class BaseGraphicsView(QGraphicsView):
         half_pixel = 0.5 / zoom
         self.centerOn(center_x + half_pixel, center_y + half_pixel)
 
-    def set_sar(self, sar: float | None = None) -> None:
-        sar = sar or 1.0
-
+    def set_sar(self, sar: float) -> None:
         if self._sar == sar:
             return
 
