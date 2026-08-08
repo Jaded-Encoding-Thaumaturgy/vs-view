@@ -657,7 +657,6 @@ class EditorWorkspace(
         self.content_area.setVisible(False)
         self.tbar.setVisible(False)
         self.stack.setCurrentWidget(self.loaded_page)
-        self.disable_reloading = False
         self.loaded_once = False  # Reset so next run does fresh load_content
         if not self._initial_docks_resized:
             self._initial_docks_resized = True
