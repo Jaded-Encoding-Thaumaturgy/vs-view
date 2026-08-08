@@ -435,6 +435,8 @@ class EditorShortcut(StrEnum):
     TOGGLE_CONSOLE = "toggle_console", "Toggle Console", "Ctrl+`"
     RUN_SCRIPT = "run_script", "Run Script", "F5"
     GENERATE_STUBS = "generate_stubs", "Generate Stubs", ""
+    FOCUS_CODE_EDITOR = "focus_code_editor", "Focus Code Editor", "Ctrl+F1"
+    FOCUS_PREVIEW = "focus_preview", "Focus Preview", "Ctrl+F2"
 
     def __new__(cls, value: str, label: str, default_key: str = "") -> Self:
         obj = str.__new__(cls, value)
@@ -484,6 +486,8 @@ class EditorWorkspace(
         EditorShortcut.TOGGLE_WORD_WRAP.definition,
         EditorShortcut.TOGGLE_CONSOLE.definition,
         EditorShortcut.RUN_SCRIPT.definition,
+        EditorShortcut.FOCUS_CODE_EDITOR.definition,
+        EditorShortcut.FOCUS_PREVIEW.definition,
     )
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -520,6 +524,8 @@ class EditorWorkspace(
 
         self.stack.setCurrentWidget(self.loaded_page)
 
+        self.api.register_shortcut(EditorShortcut.FOCUS_CODE_EDITOR.definition, self._focus_code_dock, self)
+        self.api.register_shortcut(EditorShortcut.FOCUS_PREVIEW.definition, self._focus_preview_dock, self)
         self.api.globalSettingsChanged.connect(self.code_dock._on_settings_changed)
         self.api.aboutToSaveLocal.connect(self._on_about_to_save_local)
 
@@ -708,6 +714,18 @@ class EditorWorkspace(
             f = self.reload_content(code=self.code_dock.editor.bridge.main_content)
 
         f.add_loop_callback(lambda _: self.code_dock.run_btn.setEnabled(True))
+
+    @Slot()
+    def _focus_code_dock(self) -> None:
+        self.code_dock.show()
+        self.code_dock.raise_()
+        self.code_dock.editor.setFocus()
+
+    @Slot()
+    def _focus_preview_dock(self) -> None:
+        self.stack_dock.show()
+        self.stack_dock.raise_()
+        self.stack_dock.setFocus()
 
     @Slot(str)
     def _on_about_to_save_local(self, filepath: str) -> None:
