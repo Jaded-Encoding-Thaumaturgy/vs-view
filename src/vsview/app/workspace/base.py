@@ -70,9 +70,15 @@ class BaseWorkspace(QMainWindow):
         self.clear_environment()
         return super().deleteLater()
 
-    def on_connected(self) -> None: ...
+    def on_connected(self) -> None:
+        """Lifecycle hook called when this workspace is activated and brought into focus."""
 
-    def on_disconnected(self) -> None: ...
+    def on_disconnected(self) -> None:
+        """Lifecycle hook called when this workspace is deactivated or removed from focus."""
+
+    def confirm_close(self) -> bool:
+        """Confirm if workspace can be closed. Returns True to proceed, False to cancel."""
+        return True
 
     def clear_environment(self) -> None:
         if env := getattr(self, "script", self._env):

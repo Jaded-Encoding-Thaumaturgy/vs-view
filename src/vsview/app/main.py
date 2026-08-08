@@ -336,6 +336,11 @@ class MainWindow(QMainWindow):
 
     @override
     def closeEvent(self, event: QCloseEvent) -> None:
+        for btn in self.nav_container.buttons:
+            if Shiboken.isValid(btn.workspace) and not btn.workspace.confirm_close():
+                event.ignore()
+                return
+
         self._save_geometry()
 
         # We're deleting the current workspace at the end
@@ -383,6 +388,9 @@ class MainWindow(QMainWindow):
         return btn
 
     def delete_workspace(self, btn: WorkspaceToolButton[BaseWorkspace]) -> None:
+        if Shiboken.isValid(btn.workspace) and not btn.workspace.confirm_close():
+            return
+
         self.disconnect_workspace()
 
         # Switching to another workspace before deleting the workspace and the environment,
