@@ -3,7 +3,6 @@ from __future__ import annotations
 import linecache
 import shutil
 import subprocess
-from base64 import b64decode, b64encode
 from enum import StrEnum
 from logging import getLogger
 from pathlib import Path
@@ -11,7 +10,7 @@ from typing import Any, Literal, Self, override
 from uuid import uuid4
 
 from jetpytools import SPath, fallback
-from PySide6.QtCore import QByteArray, QSize, Qt, QTimer, QUrl, QUrlQuery, Signal, Slot
+from PySide6.QtCore import QSize, Qt, QTimer, QUrl, QUrlQuery, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QPalette, QShowEvent
 from PySide6.QtWidgets import (
     QDockWidget,
@@ -678,7 +677,7 @@ class EditorWorkspace(
 
     def _restore_dock_sizes(self) -> None:
         if state := self.settings.local_.dock_state:
-            res = self.restoreState(QByteArray(b64decode(state)))
+            res = self.restoreState(state)
             if not res:
                 logger.warning("Failed to restore dock state")
             return
@@ -713,4 +712,4 @@ class EditorWorkspace(
     @Slot(str)
     def _on_about_to_save_local(self, filepath: str) -> None:
         if self.current_file_path:
-            self.settings.local_.dock_state = b64encode(self.saveState().data()).decode("ascii")
+            self.settings.local_.dock_state = bytes(self.saveState().data())

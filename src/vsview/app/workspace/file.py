@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from base64 import b64decode, b64encode
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from contextlib import suppress
@@ -12,7 +11,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Concatenate, NamedTuple, overload, override
 
 from jetpytools import cachedproperty, to_arr
-from PySide6.QtCore import QByteArray, QSignalBlocker, Qt, QTimer, Slot
+from PySide6.QtCore import QSignalBlocker, Qt, QTimer, Slot
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import QFileDialog, QWidget
 from vapoursynth import VideoNode
@@ -160,7 +159,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
             # Save layout state
             self.local_settings.layout.plugin_splitter_sizes = self.plugin_splitter.sizes()
             self.local_settings.layout.plugin_tab_index = self.plugin_splitter.plugin_tabs.currentIndex()
-            self.local_settings.layout.dock_state = b64encode(self.dock_container.saveState().data()).decode("ascii")
+            self.local_settings.layout.dock_state = bytes(self.dock_container.saveState().data())
 
     @override
     def init_load(self, frame: int | None = None, time: float | None = None, tab_index: int | None = None) -> None:
@@ -269,7 +268,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         self._sync_toolpanel_btn(self.plugin_splitter.is_right_panel_visible)
 
         if layout.dock_state:
-            self.dock_container.restoreState(QByteArray(b64decode(layout.dock_state)))
+            self.dock_container.restoreState(layout.dock_state)
 
         dock_visible = any(not dock.isHidden() for dock in self.docks)
         self.dock_toggle_btn.setChecked(dock_visible)

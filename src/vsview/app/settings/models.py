@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from base64 import b64decode, b64encode
 from collections.abc import Callable
 from datetime import time, timedelta
 from logging import getLogger
@@ -644,6 +645,12 @@ PluginsType = Annotated[
     ),
 ]
 
+Base64Bytes = Annotated[
+    bytes | None,
+    BeforeValidator(lambda v: b64decode(v) if isinstance(v, str) else v),
+    PlainSerializer(lambda v: b64encode(v).decode("ascii") if isinstance(v, bytes) else None, return_type=str | None),
+]
+
 
 class GlobalSettings(BaseSettings):
     """
@@ -873,7 +880,7 @@ class LayoutSettings(BaseModel):
     plugin_tab_index: int = 0
     """Currently selected plugin tab index"""
 
-    dock_state: str | None = None
+    dock_state: Base64Bytes = None
     """Base64-encoded QMainWindow.saveState() byte array for dock positions"""
 
 

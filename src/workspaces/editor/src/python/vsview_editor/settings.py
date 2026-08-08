@@ -7,6 +7,7 @@ from typing import Annotated, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field
 
 from vsview.api import Checkbox, Dropdown, LineEdit, LocalSettingsModel, Spin
+from vsview.app.settings.models import Base64Bytes
 
 from .stubs import get_stubs_dir
 
@@ -244,4 +245,4 @@ class GlobalSettings(BaseModel):
 
 
 class LocalSettings(LocalSettingsModel):
-    dock_state: str | None = None
+    dock_state: Base64Bytes = None
