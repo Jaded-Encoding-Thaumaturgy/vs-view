@@ -590,7 +590,9 @@ class EditorWorkspace(
         self.content_area.setVisible(True)
         self.tbar.setVisible(True)
         self.stack.setCurrentWidget(self.loaded_page)
-        QTimer.singleShot(0, self._restore_dock_sizes)
+        if not self._initial_docks_resized:
+            self._initial_docks_resized = True
+            QTimer.singleShot(0, self._restore_dock_sizes)
 
     @run_in_loop(return_future=False)
     @override
@@ -600,7 +602,9 @@ class EditorWorkspace(
         self.stack.setCurrentWidget(self.loaded_page)
         self.disable_reloading = False
         self.loaded_once = False  # Reset so next run does fresh load_content
-        QTimer.singleShot(0, self._restore_dock_sizes)
+        if not self._initial_docks_resized:
+            self._initial_docks_resized = True
+            QTimer.singleShot(0, self._restore_dock_sizes)
 
     def _apply_default_dock_sizes(self) -> None:
         if (w := self.width()) > 0:
@@ -638,6 +642,7 @@ class EditorWorkspace(
             if new_path.is_file():
                 self.init_load()
                 self.api.localSettingsChanged.emit(str(SettingsManager.local_settings_path(new_path)))
+        self._restore_dock_sizes()
 
     @Slot()
     def _on_run_clicked(self) -> None:
