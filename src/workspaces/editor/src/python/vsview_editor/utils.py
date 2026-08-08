@@ -2,9 +2,10 @@ import sys
 from collections.abc import Callable
 from functools import wraps
 from logging import getLogger
+from pathlib import Path
 from typing import Any, Generic, TypeVar, overload, override
 
-from PySide6.QtCore import Slot
+from PySide6.QtCore import QUrl, Slot
 
 if sys.version_info >= (3, 13):
     FallbackT = TypeVar("FallbackT", default=None)
@@ -59,6 +60,17 @@ class SafeSlot(Generic[FallbackT]):
                 return self._fallback
 
         return Slot(*self._types, **self._kwargs)(wrapper)
+
+
+class WorkspaceUri(QUrl):
+    @property
+    def local_path(self) -> Path | None:
+        local_path = self.toLocalFile()
+        return (
+            Path(local_path)
+            if self.scheme() == "file" and not local_path.startswith(("/workspace", "\\workspace"))
+            else None
+        )
 
 
 class ContentPath:

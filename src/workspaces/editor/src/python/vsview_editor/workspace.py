@@ -12,13 +12,14 @@ from uuid import uuid4
 
 from jetpytools import SPath, fallback
 from PySide6.QtCore import QByteArray, QSize, Qt, QTimer, QUrl, QUrlQuery, Signal, Slot
-from PySide6.QtGui import QPalette, QShowEvent
+from PySide6.QtGui import QCloseEvent, QPalette, QShowEvent
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QSizePolicy,
     QTabWidget,
     QToolBar,
@@ -46,8 +47,8 @@ from .console import GlobalConsoleHub
 from .lsp import LSP_BASEDPYRIGHT_CONFIG, LSPProcessManager
 from .settings import GlobalSettings, LocalSettings
 from .stubs import get_stubs_dir
-from .utils import ContentPath
-from .web import MonacoEditorWidget
+from .utils import ContentPath, WorkspaceUri
+from .web import MonacoEditorWidget, TabInfo
 
 logger = getLogger(__name__)
 
@@ -88,11 +89,13 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self._main_tab_uri: str | None = None
         self._default_content = get_default_script()
         self._initial_content_set = False
+        self._open_tabs = list[TabInfo]()
 
         self.editor = MonacoEditorWidget(self)
         self.editor.bridge.editorReady.connect(self._on_editor_ready)
         self.editor.bridge.cursorPositionChanged.connect(self._on_cursor_changed)
         self.editor.bridge.activeTabChanged.connect(lambda uri: self._on_tab_changed(uri, "active"))
+        self.editor.bridge.tabStateChanged.connect(self._on_tab_state_changed)
         self.editor.bridge.mainTabChanged.connect(lambda uri: self._on_tab_changed(uri, "main"))
         self.editor.bridge.saveRequested.connect(self._on_save_clicked)
         self.editor.bridge.saveAsRequested.connect(self._on_save_as_clicked)
@@ -259,6 +262,10 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             self._env_stubs_internal = create_environment()
         return self._env_stubs_internal
 
+    @property
+    def dirty_tabs(self) -> list[TabInfo]:
+        return [t for t in self._open_tabs if t.get("isDirty", False)]
+
     @Slot()
     def _on_editor_ready(self) -> None:
         """Initialize script and start LSP bridge when Monaco is ready."""
@@ -285,15 +292,17 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     def _on_cursor_changed(self, line: int, col: int) -> None:
         self.cursor_label.setText(f"Ln {line}, Col {col}")
 
+    @Slot(list)
+    def _on_tab_state_changed(self, tabs: list[TabInfo]) -> None:
+        self._open_tabs = tabs
+
     def _on_tab_changed(self, uri: str, kind: Literal["active", "main"]) -> None:
         setattr(self, f"_{kind}_tab_uri", uri or None)
         if not uri:
             setattr(self, f"_{kind}_filepath", None)
         else:
-            url = QUrl(uri)
-            local_path = url.toLocalFile()
-            if url.scheme() == "file" and not local_path.startswith(("/workspace", "\\workspace")):
-                setattr(self, f"_{kind}_filepath", Path(local_path))
+            if local_path := WorkspaceUri(uri).local_path:
+                setattr(self, f"_{kind}_filepath", local_path)
             else:
                 setattr(self, f"_{kind}_filepath", None)
         getattr(self, f"{kind}FileChanged").emit(getattr(self, f"_{kind}_filepath"))
@@ -301,7 +310,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     @Slot()
     def _on_save_clicked(self) -> None:
         if self._active_filepath:
-            self._save_script(self._active_filepath, self.editor.bridge.content)
+            self.save_script(self._active_filepath, self.editor.bridge.content)
         else:
             self._on_save_as_clicked()
 
@@ -315,7 +324,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         )
         if filepath:
             self._active_filepath = Path(filepath)
-            self._save_script(self._active_filepath, self.editor.bridge.content)
+            self.save_script(self._active_filepath, self.editor.bridge.content)
 
     @Slot()
     def _on_format_clicked(self) -> None:
@@ -366,7 +375,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
                 logger.exception("Error opening script:")
 
     @run_in_background(name="SaveScript")
-    def _save_script(self, filepath: Path, content: str) -> None:
+    def save_script(self, filepath: Path, content: str) -> None:
         self.statusSavingScriptStarted.emit("Saving script...")
         try:
             filepath.write_text(content, encoding="utf-8")
@@ -528,6 +537,13 @@ class EditorWorkspace(
             QTimer.singleShot(0, self._apply_default_dock_sizes)
 
     @override
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self.confirm_close():
+            super().closeEvent(event)
+        else:
+            event.ignore()
+
+    @override
     def deleteLater(self) -> None:
         GlobalConsoleHub.unregister(self.code_dock.editor.bridge)
         self.code_dock.editor.bridge.disconnect_lsp()
@@ -551,6 +567,47 @@ class EditorWorkspace(
     @override
     def on_disconnected(self) -> None:
         GlobalConsoleHub.unregister(self.code_dock.editor.bridge)
+
+    @override
+    def confirm_close(self) -> bool:
+        if not (tabs := self.code_dock.dirty_tabs):
+            return True
+
+        for tab in tabs:
+            uri = tab.get("uri", "")
+            title = tab.get("title", "Untitled")
+
+            self.code_dock.editor.bridge.select_tab(uri)
+
+            reply = QMessageBox.question(
+                self,
+                "Save Changes?",
+                f"'{title}' has unsaved changes. Do you want to save them?",
+                QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save,
+            )
+
+            if reply == QMessageBox.StandardButton.Cancel:
+                return False
+
+            if reply == QMessageBox.StandardButton.Save:
+                if local_path := WorkspaceUri(uri).local_path:
+                    self.code_dock.save_script(local_path, self.code_dock.editor.bridge.content)
+                else:
+                    filepath, _ = QFileDialog.getSaveFileName(
+                        self,
+                        f"Save {title}",
+                        "",
+                        "VapourSynth Script (*.vpy *.py);;All Files (*)",
+                    )
+                    if not filepath:
+                        return False
+
+                    self.code_dock.save_script(Path(filepath), self.code_dock.editor.bridge.content)
+
+        return True
 
     @override
     def get_output_metadata(self) -> dict[int, str]:

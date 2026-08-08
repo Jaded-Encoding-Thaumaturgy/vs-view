@@ -24,6 +24,9 @@ export interface PythonBridge {
   /** Notify Python that the active tab's URI has changed. */
   onActiveTabChanged(uri: string): void;
 
+  /** Notify Python of open tabs state metadata. */
+  onTabStateChanged(tabs: TabInfo[]): void;
+
   /** Notify Python that the Main script tab's URI has changed. */
   onMainTabChanged(uri: string): void;
 

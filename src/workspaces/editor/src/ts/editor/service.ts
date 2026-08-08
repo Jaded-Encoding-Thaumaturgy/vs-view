@@ -627,6 +627,8 @@ export class EditorService implements vscode.Disposable {
     tabInfos.sort((a, b) => (a.isMain ? -1 : b.isMain ? 1 : 0));
 
     this.tabBarView.render(tabInfos, this.activeUri);
+
+    BridgeService.getActiveBridge().unwrapOr(undefined)?.onTabStateChanged(tabInfos);
   }
 
   private normalizeUri(uriInput: string): monaco.Uri {
