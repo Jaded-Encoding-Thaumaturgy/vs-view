@@ -5,9 +5,9 @@ __all__ = ["catch_output", "is_preview", "set_output"]
 if TYPE_CHECKING:
     from .api import catch_output, is_preview, set_output
 else:
-    # The cli module is the main entry point, so it has to be loaded first before anything else
+    # The main module is the entry point, so it has to be loaded first before anything else
     # to avoid any circular import
-    import vsview.cli
+    import vsview.main
 
     def __getattr__(name: str) -> Any:
         from importlib import import_module

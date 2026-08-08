@@ -13,10 +13,9 @@ from .app.plugins.manager import PluginManager
 from .app.settings.models import GlobalSettings
 from .app.workspace import BaseWorkspace, PythonScriptWorkspace, QuickScriptWorkspace, VideoFileWorkspace
 from .assets import load_fonts
-from .cli import IS_GUI_MODE, LOG_PATH
 from .config import CLIConfig
 from .env import getenv_bool, load_dotenv
-from .logging import console, setup_logging
+from .logging import IS_GUI_MODE, LOG_PATH, console, setup_logging
 
 logger = getLogger(__name__)
 
