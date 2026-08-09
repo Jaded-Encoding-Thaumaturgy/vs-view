@@ -11,7 +11,7 @@ from importlib.resources.abc import Traversable
 from typing import ClassVar, Self, override
 
 from PySide6.QtCore import QSize
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QColor, QPixmap, Qt
 
 from .utils import load_svg
 
@@ -184,7 +184,7 @@ class PhosphorProvider(IconProvider):
         match name.modifier:
             case "mirror":
                 img = svg.toImage()
-                img.mirror(horizontally=True)
+                img.flip(Qt.Orientation.Horizontal)
                 svg = QPixmap(img)
             case _:
                 raise NotImplementedError
