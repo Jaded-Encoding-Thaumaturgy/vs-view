@@ -1105,9 +1105,9 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
     @Slot()
     def on_cancel_clicked(self) -> None:
         logger.info("Cancel button clicked, aborting active tasks...")
-        if self._pending_select_frames and not self._pending_select_frames.done() and self._select_frames_worker:
+        if self._select_frames_worker:
             self._select_frames_worker.cancel()
-        if self._pending_extract_frames and not self._pending_extract_frames.done() and self._extract_frames_worker:
+        if self._extract_frames_worker:
             self._extract_frames_worker.cancel()
         if self._pending_upload and not self._pending_upload.done():
             self._is_upload_cancelled = True

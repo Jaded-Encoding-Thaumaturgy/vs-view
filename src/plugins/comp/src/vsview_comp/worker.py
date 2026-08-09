@@ -54,8 +54,7 @@ class ExtractFramesWorker:
         self.data = parent.frames_list.get_data()
         self.voutputs = parent.selected_voutputs
         self.packer = Packer(8)
-        self._is_cancelled = False
-        self._lock = threading.Lock()
+        self._cancel_event = threading.Event()
 
         if not (storage := self.api.get_local_storage(parent)):
             raise NotImplementedError
@@ -63,8 +62,7 @@ class ExtractFramesWorker:
 
     @property
     def is_cancelled(self) -> bool:
-        with self._lock:
-            return self._is_cancelled
+        return self._cancel_event.is_set()
 
     @run_in_background(name="ExtractFrames")
     def run(self) -> list[tuple[int, Path]]:
@@ -72,8 +70,7 @@ class ExtractFramesWorker:
             return self._extract()
 
     def cancel(self) -> None:
-        with self._lock:
-            self._is_cancelled = True
+        self._cancel_event.set()
 
     def _extract(self) -> list[tuple[int, Path]]:
         self.progress_bar.update_progress(
@@ -184,7 +181,7 @@ class SelectFrameWorker:
         self.curve_points = parent.curve_points
         self.allowed_frame_searches = parent.settings.global_.allowed_frame_searches
         self.brightness_candidates = parent.settings.global_.brightness_candidates
-        self.is_cancelled = False
+        self._cancel_event = threading.Event()
 
         # Existing frames to avoid duplicates
         v = self.api.current_voutput
@@ -202,13 +199,17 @@ class SelectFrameWorker:
         self.should_check_pict = len(self.pict_types) < 3 and parent.pict_types_supported
         self.should_check_combed = not parent.combed_cb.isChecked()
 
+    @property
+    def is_cancelled(self) -> bool:
+        return self._cancel_event.is_set()
+
     @run_in_background(name="SelectFrames")
     def run(self) -> list[tuple[Time, FrameSourceProvider]]:
         with self.api.blocker(), self.api.vs_context():
             return self.get()
 
     def cancel(self) -> None:
-        self.is_cancelled = True
+        self._cancel_event.set()
 
     def get(self) -> list[tuple[Time, FrameSourceProvider]]:
         if not (frame_range := self._get_frame_range()):
@@ -561,12 +562,16 @@ class SlowPicsWorker:
         self.secrets = secrets
         self.progress_bar = progress_bar
         self.headers = get_slowpics_headers()
-        self.is_cancelled = False
+        self._cancel_event = threading.Event()
         self._upload_task: asyncio.Task[Any] | None = None
         self._upload_loop: asyncio.AbstractEventLoop | None = None
 
+    @property
+    def is_cancelled(self) -> bool:
+        return self._cancel_event.is_set()
+
     def cancel(self) -> None:
-        self.is_cancelled = True
+        self._cancel_event.set()
         if self._upload_task and self._upload_loop:
             with suppress(Exception):
                 self._upload_loop.call_soon_threadsafe(self._upload_task.cancel)
@@ -608,7 +613,7 @@ class SlowPicsWorker:
 
     @run_in_background(name="SlowPicsUpload")
     async def upload(self, *, src: SlowPicsSources, cookies: dict[str, str]) -> str:
-        self.is_cancelled = False
+        self._cancel_event.clear()
         self._upload_task = asyncio.current_task()
         self._upload_loop = asyncio.get_running_loop()
         self._sema = asyncio.Semaphore(self.MAX_CONCURRENT_REQUESTS)
