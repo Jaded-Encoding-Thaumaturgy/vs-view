@@ -387,7 +387,7 @@ class MainWindow(QMainWindow):
 
         return btn
 
-    def delete_workspace(self, btn: WorkspaceToolButton[BaseWorkspace]) -> None:
+    def delete_workspace[WorkspaceT: BaseWorkspace](self, btn: WorkspaceToolButton[WorkspaceT]) -> None:
         if Shiboken.isValid(btn.workspace) and not btn.workspace.confirm_close():
             return
 
@@ -577,7 +577,7 @@ class MainWindow(QMainWindow):
         if isinstance(action, QAction) and (btn := action.property("btn")):
             self.delete_workspace(btn)
 
-    def _on_clear_action(self, btn: WorkspaceToolButton[BaseWorkspace]) -> None:
+    def _on_clear_action[WorkspaceT: BaseWorkspace](self, btn: WorkspaceToolButton[WorkspaceT]) -> None:
         old_index = self.nav_container.buttons.index(btn)
         workspace_type = type(btn.workspace)
 
@@ -785,7 +785,7 @@ class DraggableNavContainer(QWidget):
         self._layout.setSpacing(8)
         self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.buttons = list[WorkspaceToolButton[BaseWorkspace]]()
+        self.buttons = list[WorkspaceToolButton[Any]]()
         self._drop_index = -1
         self.setAcceptDrops(True)
 
