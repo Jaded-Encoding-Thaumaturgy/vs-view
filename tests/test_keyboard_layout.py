@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from PySide6.QtGui import QKeySequence
+from PySide6.QtWidgets import QApplication
 
 from vsview.app.settings.action import ActionID
 from vsview.app.settings.manager import SettingsManager
@@ -302,7 +303,7 @@ def test_linux_ctypes_failures_and_cleanup(monkeypatch: pytest.MonkeyPatch) -> N
     mock_libxkb.xkb_state_unref.assert_not_called()
 
 
-def test_shortcut_manager_get_key(qapp: Any) -> None:
+def test_shortcut_manager_get_key(qapp: QApplication) -> None:
     manager = ShortcutManager()
 
     manager.get_key(ActionID.RELOAD)

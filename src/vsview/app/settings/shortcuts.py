@@ -460,6 +460,20 @@ class KeyboardLayoutMapper(Singleton):
         if (windll := getattr(ctypes, "windll", None)) is None:
             return None
         u32 = windll.user32
+        u32.GetKeyboardLayout.restype = ctypes.c_void_p
+        u32.MapVirtualKeyExW.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p]
+        u32.MapVirtualKeyExW.restype = ctypes.c_uint
+        u32.ToUnicodeEx.argtypes = [
+            ctypes.c_uint,
+            ctypes.c_uint,
+            ctypes.POINTER(ctypes.c_ubyte),
+            ctypes.c_wchar_p,
+            ctypes.c_int,
+            ctypes.c_uint,
+            ctypes.c_void_p,
+        ]
+        u32.ToUnicodeEx.restype = ctypes.c_int
+
         hkl = u32.GetKeyboardLayout(0)
         sc = QWERTY_SCAN_CODES[upper_base]
         vk = u32.MapVirtualKeyExW(sc, 1, hkl)  # MAPVK_VSC_TO_VK
