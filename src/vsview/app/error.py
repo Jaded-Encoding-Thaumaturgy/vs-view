@@ -3,7 +3,7 @@ from logging import getLogger
 from pathlib import Path
 from traceback import TracebackException
 
-from PySide6.QtGui import QFontMetrics
+from PySide6.QtGui import QFontMetrics, Qt
 from PySide6.QtWidgets import QGridLayout, QMessageBox, QSpacerItem, QStyle, QWidget
 from vsengine.vpy import ExecutionError
 
@@ -94,6 +94,7 @@ def show_error(error: ExecutionError, parent: QWidget, user_script_path: str | N
     msg.setWindowTitle("Error")
     msg.setText(error_message)
     msg.setFont(font)
+    msg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
     if isinstance(layout := msg.layout(), QGridLayout):
         spacer = QSpacerItem(max_width, 0)
