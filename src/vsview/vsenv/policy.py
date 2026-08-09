@@ -45,8 +45,7 @@ def get_policy(flags: CoreCreationFlags = ENABLE_GRAPH_INSPECTION | DISABLE_LIBR
 
     if _policy is None:
         if has_policy():
-            raise RuntimeError("Policy already exists")
-
+            raise RuntimeError("A Policy already exists")
         _policy = CustomPolicy(ThreadLocalStore(), flags)
         _policy.register()
 
@@ -54,10 +53,11 @@ def get_policy(flags: CoreCreationFlags = ENABLE_GRAPH_INSPECTION | DISABLE_LIBR
 
 
 def unregister_policy() -> None:
-    get_policy().unregister()
-
     global _policy
-    _policy = None
+    if _policy is not None:
+        if _policy.is_registered:
+            _policy.unregister()
+        _policy = None
 
 
 def create_environment(*, set_logger: bool = True) -> ManagedEnvironment:
@@ -68,12 +68,12 @@ def create_environment(*, set_logger: bool = True) -> ManagedEnvironment:
 
 def unset_environment() -> None:
     """Unset the current environment in the global policy."""
-
     # Since we're not storing the previous environments when switching workspaces,
     # when creating a new environment, it would result in vsengine trying to restore
     # the old environment reference from the store, resolving to a dead object.
     # Setting the current environment to None here ensures to remove it from the store.
-    get_policy().managed.set_environment(None)
+    if _policy is not None:
+        _policy.managed.set_environment(None)
 
 
 def clear_environment(
