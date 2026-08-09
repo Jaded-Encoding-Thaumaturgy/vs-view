@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 from collections.abc import Callable, Coroutine
+from concurrent.futures import CancelledError
 from functools import wraps
 from inspect import iscoroutinefunction
 from logging import getLogger
@@ -11,7 +13,7 @@ from typing import Any, Literal, Protocol, cast, overload, override
 from PySide6.QtCore import QObject, QRunnable, QThread, QThreadPool, Signal, Slot
 from PySide6.QtWidgets import QApplication
 from vsengine.futures import UnifiedFuture
-from vsengine.loops import EventLoop, get_loop
+from vsengine.loops import Cancelled, EventLoop, get_loop
 
 type _CoroutineFunc[**P, R] = Callable[P, Coroutine[Any, Any, R]]
 type _Func[**P, R] = Callable[P, R]
@@ -24,6 +26,12 @@ class QtEventLoop(QObject, EventLoop):
 
     _invoke = Signal(int)
 
+    @property
+    def is_cancelled(self) -> bool:
+        """Check if the event loop has been cancelled."""
+        with self._lock:
+            return self._cancelled
+
     @override
     def attach(self) -> None:
         self._lock = Lock()
@@ -31,13 +39,16 @@ class QtEventLoop(QObject, EventLoop):
         self._tasks_lock = Lock()
         self._active_tasks = Counter[str]()
         self._pending = dict[int, Callable[[], None]]()
+        self._cancelled = False
         self._invoke.connect(self._on_invoke)
 
     @override
     def detach(self) -> None:
+        self.cancel()
         self.wait_for_threads(5000)
         self._invoke.disconnect(self._on_invoke)
-        self._pending.clear()
+        with self._lock:
+            self._pending.clear()
 
     @Slot(int)
     def _on_invoke(self, task_id: int) -> None:
@@ -57,7 +68,10 @@ class QtEventLoop(QObject, EventLoop):
             try:
                 result = func(*args, **kwargs)
             except BaseException as e:
-                _logger.debug(e, exc_info=True)
+                if isinstance(e, (Cancelled, CancelledError, asyncio.CancelledError)):
+                    _logger.debug("Task cancelled: %s", e)
+                else:
+                    _logger.debug(e, exc_info=True)
                 fut.set_exception(e)
             else:
                 fut.set_result(result)
@@ -97,7 +111,10 @@ class QtEventLoop(QObject, EventLoop):
                 try:
                     result = func(*args, **kwargs)
                 except BaseException as e:
-                    _logger.debug(e, exc_info=True)
+                    if isinstance(e, (Cancelled, CancelledError, asyncio.CancelledError)):
+                        _logger.debug("Task %r cancelled: %s", name, e)
+                    else:
+                        _logger.debug(e, exc_info=True)
                     fut.set_exception(e)
                 else:
                     fut.set_result(result)
@@ -107,6 +124,32 @@ class QtEventLoop(QObject, EventLoop):
 
         QThreadPool.globalInstance().start(QRunnable.create(wrapper))
         return fut
+
+    @override
+    def next_cycle(self) -> UnifiedFuture[None]:
+        """
+        Pass control back to the event loop.
+
+        If the loop is marked as cancelled, the returned future raises `Cancelled`.
+        """
+        fut = UnifiedFuture[None]()
+        with self._lock:
+            if self._cancelled:
+                fut.set_exception(Cancelled())
+                return fut
+
+        self.from_thread(fut.set_result, None)
+        return fut
+
+    def cancel(self) -> None:
+        """Mark the event loop as cancelled."""
+        with self._lock:
+            self._cancelled = True
+
+    def reset_cancel(self) -> None:
+        """Reset cancellation state."""
+        with self._lock:
+            self._cancelled = False
 
     def wait_for_threads(self, timeout_ms: int = 500) -> None:
         """
@@ -277,8 +320,6 @@ def run_in_background(func: Any = None, *, name: str | None = None) -> Any:
 
 
 def _run_coro[R](coro: Coroutine[Any, Any, R]) -> R:
-    import asyncio
-
     try:
         return asyncio.run(coro)
     except RuntimeError:
