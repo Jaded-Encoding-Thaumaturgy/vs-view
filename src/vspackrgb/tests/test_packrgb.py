@@ -261,6 +261,7 @@ def test_pack_rgba32f_32bit(backend_name: str) -> None:
             assert dest[out_idx + 3] == 0x3F800000  # 1.0f bits
 
 
+@pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
 def test_helpers_packrgb_integration(backend_name: str) -> None:
     width, height = 16, 16
@@ -284,6 +285,7 @@ def test_helpers_packrgb_integration(backend_name: str) -> None:
     assert out[3] == 255  # A
 
 
+@pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
 def test_helpers_packrgb_rgba16f(backend_name: str) -> None:
     width, height = 8, 8
@@ -315,6 +317,7 @@ def test_helpers_packrgb_rgba16f(backend_name: str) -> None:
     assert out[3] == 0x3C00  # A
 
 
+@pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
 def test_helpers_packrgb_rgbs(backend_name: str) -> None:
     width, height = 8, 8
@@ -342,6 +345,7 @@ def test_helpers_packrgb_rgbs(backend_name: str) -> None:
     assert out[3] == to_bits(1.0)  # A
 
 
+@pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
 def test_helpers_packrgb_frame_no_alpha(backend_name: str) -> None:
     width, height = 16, 16
@@ -366,6 +370,7 @@ def test_helpers_packrgb_frame_no_alpha(backend_name: str) -> None:
         assert out[3] == 255  # A
 
 
+@pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
 def test_helpers_packrgb_frame_explicit_alpha(backend_name: str) -> None:
     width, height = 16, 16
@@ -388,6 +393,7 @@ def test_helpers_packrgb_frame_explicit_alpha(backend_name: str) -> None:
     assert out_alpha[3] == 150
 
 
+@pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
 def test_helpers_packrgb_frame_alpha_prop(backend_name: str) -> None:
     width, height = 16, 16
