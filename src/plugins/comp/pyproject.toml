@@ -28,7 +28,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "vsview[secrets]>=0.8.0",
+    "vsview[secrets]>=0.10.0",
     "vsjetpack>=2.1.1",
     "pathvalidate>=3.3.1",
     "jinja2>=3.1.6",
