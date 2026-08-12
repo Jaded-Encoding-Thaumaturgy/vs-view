@@ -2,6 +2,12 @@ name: PyApp Build
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      - "**.py"
+      - "**/pyproject.toml"
+      - ".github/workflows/cd-build-pyapp.yml"
   workflow_dispatch:
 
 permissions:
