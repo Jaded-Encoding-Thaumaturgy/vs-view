@@ -65,6 +65,8 @@ Install and launch directly from your terminal:
     uv run vsview script.vpy video.mkv
     ```
 
+Or download the pre-built binaries on the [GitHub Releases](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/releases).
+
 ## Documentation map
 
 - [Installation](installation.md): Requirements, `pip`/`uv` install, and development setup.
