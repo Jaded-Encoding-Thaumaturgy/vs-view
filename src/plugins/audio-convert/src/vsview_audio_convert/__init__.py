@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from logging import getLogger
 from typing import Annotated, override
 
@@ -72,4 +73,9 @@ class AudioConvert(NodeProcessor[AudioNode, GlobalSettings]):
 
 @hookimpl
 def vsview_get_audio_processor() -> type[AudioConvert]:
+    warnings.warn(
+        "AudioConvert is deprecated and has been integrated into VSView v0.10.0 as first-party plugin.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return AudioConvert
