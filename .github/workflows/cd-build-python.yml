@@ -47,6 +47,8 @@ jobs:
           enable-cache: false
 
       - name: Build
+        env:
+          UV_CACHE_DIR: ${{ runner.temp }}/uv-cache
         run: uv build --package "${{ matrix.package }}" ${{ matrix.build_args }} --out-dir dist --clear
 
       - name: Upload artifact
