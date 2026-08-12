@@ -16,6 +16,7 @@ on:
           - vspackrgb
           - audio-convert
           - comp
+          - editor
           - fftspectrum
           - frameprops-extended
           - histogram
