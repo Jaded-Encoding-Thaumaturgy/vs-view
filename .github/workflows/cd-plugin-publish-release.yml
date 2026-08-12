@@ -70,6 +70,6 @@ jobs:
 
       - name: Post webhook for failure
         if: failure()
-        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@fb70088dc5982abfac889fdded8603be4f5823b6 # v1
+        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@91fe776034ecf9ce8da83bfe4074e7af12e43c9f # v1
         with:
           webhook-url: ${{ secrets.WEBHOOK_URL }}
