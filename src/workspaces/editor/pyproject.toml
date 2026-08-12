@@ -52,11 +52,11 @@ targets = ["src/python/vsview_editor/web_dist/index.html"]
 source = "versioningit"
 
 [tool.versioningit.vcs]
-match = ["vsview-editor/v*"]
-default-tag = "vsview-editor/v0.0.0"
+match = ["editor/v*"]
+default-tag = "editor/v0.0.0"
 
 [tool.versioningit.tag2version]
-rmprefix = "vsview-editor/v"
+rmprefix = "editor/v"
 
 [tool.versioningit.format]
 distance = "{next_version}.dev{distance}+{vcs}{rev}"
