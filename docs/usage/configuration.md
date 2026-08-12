@@ -202,6 +202,179 @@ Manage application settings via the CLI.
 An alternative to the `--version` flag.
 
 ---
+
+## Standalone Environment Management (`env`)
+
+Pre-built standalone executables feature an embedded Python runtime managed via the `vsview env` CLI command namespace.
+
+### Subcommands
+
+#### `vsview env pip` `[ARGS]...`
+:   Directly invoke `pip` using the standalone executable's embedded Python runtime.
+
+    Use this command to install VapourSynth plugins or other Python dependencies:
+
+    === "PowerShell (Windows)"
+
+        ```powershell
+        # Install additional plugins or package bundles
+        .\VSView.exe env pip install vsjetpack[full,nvidia] --extra-index-url https://pypi.nvidia.com/
+
+        # List installed packages in the executable environment
+        .\VSView.exe env pip list
+
+        # Uninstall a package
+        .\VSView.exe env pip uninstall <package_name>
+        ```
+
+    === "Bash / Zsh (macOS & Linux)"
+
+        ```bash
+        # Install additional plugins or package bundles
+        ./VSView env pip install "vsjetpack[full,gpu,cl,vulkan]" 
+
+        # List installed packages in the executable environment
+        ./VSView env pip list
+
+        # Uninstall a package
+        ./VSView env pip uninstall <package_name>
+        ```
+
+#### `vsview env python` `[ARGS]...`
+:   Directly invoke the standalone executable's embedded Python interpreter.
+
+    === "PowerShell (Windows)"
+
+        ```powershell
+        # Verify installed module in embedded Python
+        .\VSView.exe env python -c "import vapoursynth; print(vapoursynth.__version__)"
+        ```
+
+    === "Bash / Zsh (macOS & Linux)"
+
+        ```bash
+        # Verify installed module in embedded Python
+        ./VSView env python -c "import vapoursynth; print(vapoursynth.__version__)"
+        ```
+
+#### `vsview env python-path`
+:   Output the absolute path to the embedded Python executable powering the standalone application and exit.
+
+    === "PowerShell (Windows)"
+
+        ```powershell
+        .\VSView.exe env python-path
+        ```
+
+    === "Bash / Zsh (macOS & Linux)"
+
+        ```bash
+        ./VSView env python-path
+        ```
+
+#### `vsview env update`
+:   Upgrades VSView to the latest version inside the standalone executable environment.
+
+    This upgrades `vsview` and its direct dependencies in-place, leaving custom installed packages and plugins intact.
+
+    **Options:**
+
+    - `--pre`: Allow upgrading to pre-release and development versions.
+    - `--restore` / `-r`: Wipe the environment first and perform a clean re-installation with full build extras (e.g. `vsview[all]`).
+
+    === "PowerShell (Windows)"
+
+        ```powershell
+        # Standard update
+        .\VSView.exe env update
+
+        # Include pre-release versions
+        .\VSView.exe env update --pre
+
+        # Wipe and clean re-install with default build extras
+        .\VSView.exe env update --restore
+        ```
+
+    === "Bash / Zsh (macOS & Linux)"
+
+        ```bash
+        # Standard update
+        ./VSView env update
+
+        # Include pre-release versions
+        ./VSView env update --pre
+
+        # Wipe and clean re-install with default build extras
+        ./VSView env update --restore
+        ```
+
+#### `vsview env restore`
+:   Reset and reinstall the embedded Python environment back to its original clean state.
+
+    === "PowerShell (Windows)"
+
+        ```powershell
+        .\VSView.exe env restore
+        ```
+
+    === "Bash / Zsh (macOS & Linux)"
+
+        ```bash
+        ./VSView env restore
+        ```
+
+#### `vsview env remove`
+:   Delete the standalone executable's environment directory from disk.
+
+    === "PowerShell (Windows)"
+
+        ```powershell
+        .\VSView.exe env remove
+        ```
+
+    === "Bash / Zsh (macOS & Linux)"
+
+        ```bash
+        ./VSView env remove
+        ```
+
+#### `vsview env cache` `[dist|pip|uv]`
+:   Inspect or manage cached distribution archives, pip wheels, or uv cache assets used by the standalone executable launcher.
+
+    Available cache targets:
+
+    * `dist`: Cached compressed Python runtime archive.
+    * `pip`: Cached `pip` wheels and package download artifacts.
+    * `uv`: Cached `uv` installer binaries and resolution data.
+
+    !!! tip "Safe Disk Cleanup"
+
+        Removing any cached asset (`--remove` or `-r`) is completely safe and reclaims disk space without affecting your active VSView environment.
+        Archives are automatically recreated or re-downloaded if needed later (e.g. during `restore`).
+
+    Pass `-r` / `--remove` to wipe a specific cached asset:
+
+    === "PowerShell (Windows)"
+
+        ```powershell
+        # Show Python distribution cache location
+        .\VSView.exe env cache dist
+
+        # Safely remove Python distribution archive to free space
+        .\VSView.exe env cache dist --remove
+        ```
+
+    === "Bash / Zsh (macOS & Linux)"
+
+        ```bash
+        # Show Python distribution cache location
+        ./VSView env cache dist
+
+        # Safely remove Python distribution archive to free space
+        ./VSView env cache dist --remove
+        ```
+
+---
 ## Environment Files (.env)
 
 VSView automatically searches for and loads `.env` files on startup.

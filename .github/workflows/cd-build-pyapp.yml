@@ -1,0 +1,186 @@
+name: PyApp Build
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VSVIEW_PYTHON_VERSION: "3.14"
+  UV_NO_SYNC: true
+
+jobs:
+  build-windows:
+    name: Windows x86_64
+    runs-on: windows-2025
+
+    strategy:
+      fail-fast: false
+      matrix:
+        offline: ["offline", "online"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build PyApp binary
+        id: build
+        uses: ./.github/actions/build-pyapp
+        with:
+          rust-target: x86_64-pc-windows-msvc
+          offline: ${{ matrix.offline == 'offline' }}
+          windows-icon-path: ${{ github.workspace }}/src/pyapp/icons/windows/vsview.ico
+
+      - name: Get VSView version
+        id: version
+        shell: bash
+        run: echo "value=$(uvx hatch version)" >> "$GITHUB_OUTPUT"
+
+      - name: Rename executable with version
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          EXEC="VSView${{ matrix.offline == 'offline' && '-offline' || '' }}"
+          TARGET_NAME="VSView-${VERSION}-windows-x86_64${{ matrix.offline == 'offline' && '-offline' || '' }}.exe"
+          mv "dist/${EXEC}.exe" "dist/${TARGET_NAME}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: vsview-pyapp-${{ steps.version.outputs.value }}-windows-x86_64${{ matrix.offline == 'offline' && '-offline' || '' }}
+          path: |
+            dist/*.exe
+
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        offline: ["offline", "online"]
+
+    name: Linux x86_64 (${{ matrix.offline }})
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build PyApp binary
+        id: build
+        uses: ./.github/actions/build-pyapp
+        with:
+          rust-target: x86_64-unknown-linux-gnu
+          offline: ${{ matrix.offline == 'offline' }}
+
+      - name: Get VSView version
+        id: version
+        shell: bash
+        run: echo "value=$(uvx hatch version)" >> "$GITHUB_OUTPUT"
+
+      - name: Package Linux distribution
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          OFFLINE_SUFFIX="${{ matrix.offline == 'offline' && '-offline' || '' }}"
+          EXEC="VSView${OFFLINE_SUFFIX}"
+          PKG_NAME="VSView-${VERSION}-linux-x86_64${OFFLINE_SUFFIX}"
+
+          mkdir -p "dist/${PKG_NAME}/icons"
+          cp "dist/${EXEC}" "dist/${PKG_NAME}/${EXEC}"
+          cp src/pyapp/install.sh "dist/${PKG_NAME}/"
+          cp -r src/pyapp/icons/linux/* "dist/${PKG_NAME}/icons/"
+          chmod +x "dist/${PKG_NAME}/install.sh" "dist/${PKG_NAME}/${EXEC}"
+
+          tar -czvf "dist/${PKG_NAME}.tar.gz" -C dist "${PKG_NAME}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: vsview-pyapp-${{ steps.version.outputs.value }}-linux-x86_64${{ matrix.offline == 'offline' && '-offline' || '' }}
+          path: dist/*.tar.gz
+
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        offline: ["offline", "online"]
+
+    name: macOS arm64 (${{ matrix.offline }})
+    runs-on: macos-26
+
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build PyApp binary
+        id: build
+        uses: ./.github/actions/build-pyapp
+        with:
+          rust-target: aarch64-apple-darwin
+          offline: ${{ matrix.offline == 'offline' }}
+
+      - name: Get VSView version
+        id: version
+        shell: bash
+        run: echo "value=$(uvx hatch version)" >> "$GITHUB_OUTPUT"
+
+      - name: Create macOS app bundle and DMG
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          OFFLINE_SUFFIX="${{ matrix.offline == 'offline' && '-offline' || '' }}"
+          EXEC="VSView${OFFLINE_SUFFIX}"
+          TARGET_NAME="VSView-${VERSION}-macos-arm64${OFFLINE_SUFFIX}.dmg"
+
+          uv run vsapp bundle "dist/${EXEC}" "${VERSION}" \
+            --env src/pyapp/.env.example \
+            --iconset-dir src/pyapp/icons/macos/vsview.iconset \
+            --output dist/AppBundle
+
+          mkdir dmg_staging
+          ditto dist/AppBundle "dmg_staging/${EXEC}.app"
+          ln -s /Applications dmg_staging/Applications
+          hdiutil create -volname "${EXEC}" -srcfolder dmg_staging -ov -format UDZO "dist/${TARGET_NAME}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: vsview-pyapp-${{ steps.version.outputs.value }}-macos-arm64${{ matrix.offline == 'offline' && '-offline' || '' }}
+          path: |
+            dist/*.dmg
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-linux, build-macos]
+    if: startsWith(github.ref, 'refs/tags/vsview/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          files: release-assets/*
+          draft: true
+          generate_release_notes: true

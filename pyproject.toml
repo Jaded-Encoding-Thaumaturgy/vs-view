@@ -86,6 +86,7 @@ dev = [
     "objgraph>=3.6.2",
     "graphviz>=0.21",
     "types-pygments>=2.20.0",
+    "vsview-pyapp",
     { include-group = "test" },
     { include-group = "plugins" },
 ]
@@ -172,6 +173,7 @@ exclude = ["src/plugins/audio-convert"]
 vapoursynth-ffms2 = { index = "vs-wheels" }
 # Core
 vspackrgb = { workspace = true }
+vsview-pyapp = { path = "src/pyapp", editable = true }
 vsview-cli = { workspace = true }
 # Toolpanels / Tooldocks
 vsview-comp = { workspace = true }

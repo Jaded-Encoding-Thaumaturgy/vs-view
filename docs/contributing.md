@@ -42,6 +42,14 @@ uv run vsview
 
 ---
 
+## Packaging & Distribution
+
+VSView can be packaged as a standalone executable using [PyApp](https://github.com/Varde-s-Forks/pyapp) and the custom `vsapp` CLI tool.
+
+For detailed instructions, see the **[Packaging & Distribution](packaging.md)** guide.
+
+---
+
 ## Recommended Editor Settings
 
 ### VSCode / VSCodium

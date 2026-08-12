@@ -51,7 +51,10 @@ Copyright &copy; 2026 Jaded Encoding Thaumaturgy
 nav = [
     { "Home" = "index.md" },
     { "Installation" = "installation.md" },
-    { "Contributing" = "contributing.md" },
+    { "Development" = [
+        { "Contributing" = "contributing.md" },
+        { "Packaging" = "packaging.md" },
+    ] },
     { "Usage" = [
         { "Usage Overview" = "usage/overview.md" },
         { "Workspace" = "usage/workspaces/workspace.md" },
