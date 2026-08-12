@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 from collections.abc import Callable, Coroutine
-from concurrent.futures import CancelledError
+from concurrent.futures import CancelledError, ThreadPoolExecutor
 from functools import wraps
 from inspect import iscoroutinefunction
 from logging import getLogger
@@ -323,4 +323,5 @@ def _run_coro[R](coro: Coroutine[Any, Any, R]) -> R:
     try:
         return asyncio.run(coro)
     except RuntimeError:
-        return asyncio.run_coroutine_threadsafe(coro, asyncio.get_running_loop()).result()
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix=coro.__name__) as pool:
+            return pool.submit(asyncio.run, coro).result()
