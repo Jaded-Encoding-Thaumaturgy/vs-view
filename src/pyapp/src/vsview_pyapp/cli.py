@@ -41,8 +41,8 @@ logger.addHandler(handler)
 logger.setLevel(INFO)
 
 BASE_URL = "https://github.com/astral-sh/python-build-standalone/releases/download"
-PYTHON_BUILD_STANDALONE_TAG = "20260728"
-PYTHON_VERSION = "3.14.6"
+PYTHON_BUILD_STANDALONE_VERSION = "3.14.7+20260807"
+PYTHON_VERSION, PYTHON_BUILD_STANDALONE_TAG = PYTHON_BUILD_STANDALONE_VERSION.split("+")
 
 DISTRO_URLS = {
     (

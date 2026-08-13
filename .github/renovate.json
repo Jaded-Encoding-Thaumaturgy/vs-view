@@ -41,6 +41,15 @@
       "groupName": "TS dependencies"
     }
   ],
+  "customDatasources": {
+    "python-build-standalone": {
+      "defaultRegistryUrlTemplate": "https://api.github.com/repos/astral-sh/python-build-standalone/releases",
+      "format": "json",
+      "transformTemplates": [
+        "{\"releases\": $[].assets[$match(name, /^cpython-3\\.14\\.\\d+\\+\\d{8}-x86_64-pc-windows-msvc-install_only_stripped\\.tar\\.gz$/)].{\"version\": $substringBefore($substringAfter(name, \"cpython-\"), \"-x86_64\")}}"
+      ]
+    }
+  },
   "customManagers": [
     {
       "customType": "regex",
@@ -54,11 +63,11 @@
       "customType": "regex",
       "managerFilePatterns": ["/src/pyapp/src/vsview_pyapp/cli\\.py$/"],
       "matchStrings": [
-        "PYTHON_BUILD_STANDALONE_TAG\\s*=\\s*\"(?<currentValue>.*)\""
+        "PYTHON_BUILD_STANDALONE_VERSION\\s*=\\s*\"(?<currentValue>.*)\""
       ],
       "depNameTemplate": "astral-sh/python-build-standalone",
-      "datasourceTemplate": "github-releases",
-      "versioningTemplate": "regex:^(?<major>\\d{4})(?<minor>\\d{2})(?<patch>\\d{2})$"
+      "datasourceTemplate": "custom.python-build-standalone",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\+(?<build>\\d+)$"
     }
   ],
   "npm": {
