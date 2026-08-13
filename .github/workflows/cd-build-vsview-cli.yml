@@ -45,7 +45,7 @@ jobs:
           path: dist/*.tar.gz
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@4726cd35bb13f7bde50cf2761f2499ac7b3aa32c # v4.1
+        uses: pypa/cibuildwheel@1828c10ab37f080699c7b81cea34097c684a7074 # v4.2
         with:
           package-dir: src/vsview-cli
           output-dir: wheelhouse
