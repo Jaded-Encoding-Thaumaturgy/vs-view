@@ -43,10 +43,10 @@
   ],
   "customDatasources": {
     "python-build-standalone": {
-      "defaultRegistryUrlTemplate": "https://api.github.com/repos/astral-sh/python-build-standalone/releases",
+      "defaultRegistryUrlTemplate": "https://api.github.com/repos/{{packageName}}/releases",
       "format": "json",
       "transformTemplates": [
-        "{\"releases\": $[].assets[$match(name, /^cpython-3\\.14\\.\\d+\\+\\d{8}-x86_64-pc-windows-msvc-install_only_stripped\\.tar\\.gz$/)].{\"version\": $substringBefore($substringAfter(name, \"cpython-\"), \"-x86_64\")}}"
+        "{\"releases\": [$[].assets[$match(name, /^cpython-3\\.14\\.\\d+\\+\\d{8}-x86_64-pc-windows-msvc-install_only_stripped\\.tar\\.gz$/)].{\"version\": $substringBefore($substringAfter(name, \"cpython-\"), \"-x86_64\")}}]}"
       ]
     }
   },
