@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from enum import StrEnum
 from functools import cache
 from logging import getLogger
-from typing import Literal, override
+from typing import override
 
 import numpy as np
 import vapoursynth as vs
@@ -69,7 +69,7 @@ class VectorScopeMatrix(StrEnum):
     ST240_M = "st240m"
 
     @property
-    def yuv_to_rgb_mat(self) -> np.ndarray[tuple[Literal[3], Literal[3]], np.dtype[np.float32]]:
+    def yuv_to_rgb_mat(self) -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
         return _YUV_TO_RGB_MATS[self]
 
     @property
