@@ -98,7 +98,7 @@ test = [
     "pytest-xvfb>=3.1.1",
     "vspackrgb[numba,numpy]",
 ]
-doc = ["mkdocstrings[python]>=1.0.3", "zensical==0.0.52", "ruff"]
+doc = ["mkdocstrings[python]>=1.0.3", "zensical==0.0.54", "ruff"]
 plugins = [
     "vsview-frameprops-extended",
     "vsview-split-planes",
