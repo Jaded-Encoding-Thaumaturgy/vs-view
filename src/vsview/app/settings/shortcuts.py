@@ -530,7 +530,7 @@ class KeyboardLayoutMapper(Singleton):
     @fallback_logged
     def _translate_linux(self, upper_base: str) -> str | None:
         xkb_path = ctypes.util.find_library("xkbcommon") or "libxkbcommon.so.0"
-        libxkb = ctypes.cdll.LoadLibrary(xkb_path)
+        libxkb = ctypes.CDLL(xkb_path)
 
         # Define function signatures so ctypes does not truncate opaque pointers to C ints.
         libxkb.xkb_context_new.argtypes = [ctypes.c_int]

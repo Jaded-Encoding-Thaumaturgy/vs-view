@@ -233,7 +233,7 @@ def test_linux_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     EVDEV_OFFSET = 8
 
     mock_libxkb = MagicMock()
-    monkeypatch.setattr(ctypes.cdll, "LoadLibrary", lambda path: mock_libxkb)
+    monkeypatch.setattr(ctypes, "CDLL", lambda path: mock_libxkb)
 
     mock_libxkb.xkb_context_new.return_value = MOCK_CTX_PTR
     mock_libxkb.xkb_keymap_new_from_names.return_value = MOCK_KEYMAP_PTR
@@ -282,7 +282,7 @@ def test_linux_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_linux_ctypes_failures_and_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "platform", "linux")
     mock_libxkb = MagicMock()
-    monkeypatch.setattr(ctypes.cdll, "LoadLibrary", lambda path: mock_libxkb)
+    monkeypatch.setattr(ctypes, "CDLL", lambda path: mock_libxkb)
 
     MOCK_CTX_PTR = 100
     MOCK_KEYMAP_PTR = 200
