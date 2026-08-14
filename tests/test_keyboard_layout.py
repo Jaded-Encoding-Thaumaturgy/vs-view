@@ -259,6 +259,20 @@ def test_linux_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     )  # XKB_KEYMAP_COMPILE_NO_FLAGS = 0
     mock_libxkb.xkb_state_new.assert_called_once_with(MOCK_KEYMAP_PTR)
 
+    # ctypes otherwise assumes C int arguments, truncating opaque pointers on 64-bit platforms.
+    assert mock_libxkb.xkb_context_new.argtypes == [ctypes.c_int]
+    assert mock_libxkb.xkb_context_unref.argtypes == [ctypes.c_void_p]
+    assert mock_libxkb.xkb_keymap_new_from_names.argtypes == [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+    assert mock_libxkb.xkb_keymap_unref.argtypes == [ctypes.c_void_p]
+    assert mock_libxkb.xkb_state_new.argtypes == [ctypes.c_void_p]
+    assert mock_libxkb.xkb_state_unref.argtypes == [ctypes.c_void_p]
+    assert mock_libxkb.xkb_state_key_get_utf8.argtypes == [
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_char),
+        ctypes.c_size_t,
+    ]
+
     # Verify C resource cleanup (unref calls)
     mock_libxkb.xkb_state_unref.assert_called_once_with(MOCK_STATE_PTR)
     mock_libxkb.xkb_keymap_unref.assert_called_once_with(MOCK_KEYMAP_PTR)

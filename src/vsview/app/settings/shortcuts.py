@@ -532,10 +532,27 @@ class KeyboardLayoutMapper(Singleton):
         xkb_path = ctypes.util.find_library("xkbcommon") or "libxkbcommon.so.0"
         libxkb = ctypes.cdll.LoadLibrary(xkb_path)
 
-        # Define function return types
+        # Define function signatures so ctypes does not truncate opaque pointers to C ints.
+        libxkb.xkb_context_new.argtypes = [ctypes.c_int]
         libxkb.xkb_context_new.restype = ctypes.c_void_p
+        libxkb.xkb_context_unref.argtypes = [ctypes.c_void_p]
+        libxkb.xkb_context_unref.restype = None
+
+        libxkb.xkb_keymap_new_from_names.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
         libxkb.xkb_keymap_new_from_names.restype = ctypes.c_void_p
+        libxkb.xkb_keymap_unref.argtypes = [ctypes.c_void_p]
+        libxkb.xkb_keymap_unref.restype = None
+
+        libxkb.xkb_state_new.argtypes = [ctypes.c_void_p]
         libxkb.xkb_state_new.restype = ctypes.c_void_p
+        libxkb.xkb_state_unref.argtypes = [ctypes.c_void_p]
+        libxkb.xkb_state_unref.restype = None
+        libxkb.xkb_state_key_get_utf8.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_char),
+            ctypes.c_size_t,
+        ]
         libxkb.xkb_state_key_get_utf8.restype = ctypes.c_int
 
         ctx = libxkb.xkb_context_new(0)
