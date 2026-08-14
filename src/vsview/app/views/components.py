@@ -9,6 +9,7 @@ from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
     QModelIndex,
+    QParallelAnimationGroup,
     QPoint,
     QPointF,
     QPropertyAnimation,
@@ -442,6 +443,7 @@ class Accordion(QFrame):
         self.header.setChecked(not collapsed)
         self.header.setArrowType(Qt.ArrowType.DownArrow if not collapsed else Qt.ArrowType.RightArrow)
         self.header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.header.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.header.setSizePolicy(
             self.header.sizePolicy().horizontalPolicy(),
             self.header.sizePolicy().verticalPolicy(),
@@ -456,13 +458,23 @@ class Accordion(QFrame):
         self.content_layout.setSpacing(8)
         self.main_layout.addWidget(self.content)
 
-        self.animation = QPropertyAnimation(self.content, b"maximumHeight")
-        # FIXME: A larger duration just seems to increase flickering and ghosting during collapsing
-        self.animation.setDuration(80)
-        self.animation.setEasingCurve(QEasingCurve.Type.Linear)
+        self.animation = QParallelAnimationGroup(self)
+        self.anim_content = QPropertyAnimation(self.content, b"maximumHeight")
+        self.anim_self = QPropertyAnimation(self, b"maximumHeight")
+        self.animation.addAnimation(self.anim_content)
+        self.animation.addAnimation(self.anim_self)
+
+        self.anim_content.setDuration(120)
+        self.anim_self.setDuration(120)
+        self.anim_content.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self.anim_self.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self.animation.finished.connect(self._on_animation_finished)
 
         if collapsed:
             self.content.setMaximumHeight(0)
+            self.content.setMinimumHeight(0)
+            self.content.hide()
+            self.setMaximumHeight(self.header.sizeHint().height() + 4)
 
     def add_widget(self, widget: QWidget) -> None:
         self.content_layout.addWidget(widget)
@@ -481,21 +493,41 @@ class Accordion(QFrame):
         self.content_layout.addLayout(layout)
         return layout
 
+    @Slot()
+    def _on_animation_finished(self) -> None:
+        if not self.header.isChecked():
+            self.content.hide()
+            self.setMaximumHeight(self.header.sizeHint().height() + 4)
+        else:
+            self.setMaximumHeight(16777215)
+            self.content.setMaximumHeight(16777215)
+        self.content.setUpdatesEnabled(True)
+
     @Slot(bool)
     def on_toggle(self, checked: bool) -> None:
         self.header.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
 
         self.animation.stop()
 
+        header_h = self.header.sizeHint().height() + 4
+        content_h = self.content.sizeHint().height()
+        total_h = header_h + content_h
+
         if checked:
-            self.content.setMaximumHeight(0)
-            self.animation.setStartValue(0)
-            self.animation.setEndValue(self.content.sizeHint().height())
+            self.content.show()
+            self.content.setUpdatesEnabled(True)
+            self.content.setMinimumHeight(0)
+            self.anim_content.setStartValue(0)
+            self.anim_content.setEndValue(content_h)
+            self.anim_self.setStartValue(header_h)
+            self.anim_self.setEndValue(total_h)
         else:
-            # Collapse
-            self.content.setMaximumHeight(self.content.sizeHint().height())
-            self.animation.setStartValue(self.content.sizeHint().height())
-            self.animation.setEndValue(0)
+            self.content.setUpdatesEnabled(False)
+            self.content.setMinimumHeight(0)
+            self.anim_content.setStartValue(self.content.height())
+            self.anim_content.setEndValue(0)
+            self.anim_self.setStartValue(self.height())
+            self.anim_self.setEndValue(header_h)
 
         self.animation.start()
 

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Self, override
 
 from jetpytools import cachedproperty, classproperty
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Qt, Slot
+from PySide6.QtCore import QAbstractAnimation, QCoreApplication, QEvent, QObject, QPoint, Qt, Slot
 from PySide6.QtGui import QKeyEvent, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
@@ -186,7 +186,11 @@ class SettingsTab(QWidget):
 
     @Slot(int)
     def _on_scroll_changed(self, value: int) -> None:
-        if self._updating_scroll or not self._sections:
+        if (
+            self._updating_scroll
+            or not self._sections
+            or any(s.animation.state() == QAbstractAnimation.State.Running for _, s in self._sections)
+        ):
             return
 
         viewport = self.scroll_area.viewport()
