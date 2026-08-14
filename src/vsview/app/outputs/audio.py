@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from array import array
+from collections.abc import Mapping
 from contextlib import suppress
 from enum import Enum, auto
 from fractions import Fraction
@@ -28,7 +29,7 @@ logger = getLogger(__name__)
 class AudioMetadata(NamedTuple):
     name: str
     downmix: bool | None
-    kwargs: dict[str, Any]
+    kwargs: Mapping[str, Any]
 
 
 class PrettyChannelsLayout(Enum):

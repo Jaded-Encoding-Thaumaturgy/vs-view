@@ -30,7 +30,7 @@ class VideoMetadata(NamedTuple):
     framedurs: Sequence[float] | None
     alpha_prop: Literal[True] | None
     hdr: bool | None
-    kwargs: dict[str, Any]
+    kwargs: Mapping[str, Any]
 
 
 class VideoOutput:

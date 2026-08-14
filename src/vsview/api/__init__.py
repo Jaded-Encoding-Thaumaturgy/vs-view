@@ -48,7 +48,7 @@ from ..logging import get_console_level
 from ..types import Frame, Time
 from ..vsenv import run_in_background, run_in_loop
 from .info import is_preview
-from .output import catch_output, set_output
+from .output import catch_output, get_output, get_outputs, set_output
 
 __all__ = [
     "AbstractTableModel",
@@ -101,6 +101,8 @@ __all__ = [
     "cache_clip",
     "catch_output",
     "get_console_level",
+    "get_output",
+    "get_outputs",
     "get_packer",
     "hookimpl",
     "is_preview",

@@ -8,20 +8,25 @@ import sys
 from collections.abc import Callable, Iterable, Sequence
 from functools import wraps
 from logging import getLogger
+from types import MappingProxyType
 from typing import Any, Literal, SupportsFloat, assert_never, overload
 
 import vapoursynth as vs
-from jetpytools import CustomValueError, flatten, to_arr
+from jetpytools import CustomRuntimeError, CustomValueError, flatten, to_arr
 
 from ..app.outputs import AudioMetadata, VideoMetadata
 from ._helpers import output_metadata as _output_metadata
-
-_logger = getLogger(__name__)
 
 type VideoNodeIterable = Iterable[vs.VideoNode | VideoNodeIterable]
 type AudioNodeIterable = Iterable[vs.AudioNode | AudioNodeIterable]
 type RawNodeIterable = Iterable[vs.RawNode | RawNodeIterable]
 type OutputNode = vs.VideoNode | vs.AudioNode | vs.RawNode | VideoNodeIterable | AudioNodeIterable | RawNodeIterable
+
+if sys.version_info < (3, 15):
+    frozendict = MappingProxyType
+
+
+_logger = getLogger(__name__)
 
 # ScenesT = Keyframes | list[tuple[int, int]] | list[Keyframes | list[tuple[int, int]]] | None
 
@@ -336,6 +341,58 @@ def catch_output[**P, N: OutputNode](
         return decorator(func)
 
     return decorator
+
+
+def get_output(index: int = 0) -> VideoMetadata | AudioMetadata:
+    """
+    Retrieve metadata for a registered output.
+
+    Args:
+        index: The output index to retrieve. Defaults to 0.
+
+    Returns:
+        The metadata associated with the output.
+
+    Raises:
+        CustomRuntimeError: The function is called outside a VSView script or its script file cannot be determined.
+        KeyError: No output is registered at ``index``.
+    """
+    if not (script_module := sys.modules.get("__vsview__")):
+        raise CustomRuntimeError(
+            "Output metadata is available only while running a script through VSView; "
+            "the '__vsview__' module is unavailable."
+        )
+
+    if not (file := getattr(script_module, "__file__", None)):
+        raise CustomRuntimeError(
+            "Unable to identify the current VSView script because '__vsview__.__file__' is missing."
+        )
+
+    return _output_metadata[file][index]
+
+
+def get_outputs() -> frozendict[int, VideoMetadata | AudioMetadata]:
+    """
+    Retrieve metadata for all registered outputs.
+
+    Returns:
+        An immutable mapping of output indices to their metadata.
+
+    Raises:
+        CustomRuntimeError: The function is called outside a VSView script or its script file cannot be determined.
+    """
+    if not (script_module := sys.modules.get("__vsview__")):
+        raise CustomRuntimeError(
+            "Output metadata is available only while running a script through VSView; "
+            "the '__vsview__' module is unavailable."
+        )
+
+    if not (file := getattr(script_module, "__file__", None)):
+        raise CustomRuntimeError(
+            "Unable to identify the current VSView script because '__vsview__.__file__' is missing."
+        )
+
+    return frozendict(_output_metadata[file])
 
 
 def _resolve_var_name(obj: Any, *, frame_depth: int = 1) -> str | None:
