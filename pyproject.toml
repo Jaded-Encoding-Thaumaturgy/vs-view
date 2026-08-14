@@ -93,6 +93,7 @@ dev = [
 test = [
     "pytest>=9.0.0, <10.0.0",
     "pytest-cov>=7.0.0",
+    "pytest-env>=1.7.0",
     "pytest-mock>=3.15.0",
     "pytest-qt>=4.5.0",
     "pytest-xvfb>=3.1.1",
@@ -183,6 +184,9 @@ vsview-split-planes = { workspace = true }
 vsview-histogram = { workspace = true }
 # Workspaces
 vsview-editor = { workspace = true }
+
+[tool.pytest]
+env = ["QT_QPA_PLATFORM=offscreen"]
 
 [tool.mypy]
 mypy_path = "$MYPY_CONFIG_FILE_DIR/stubs"
