@@ -146,8 +146,8 @@ def test_darwin_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
 
     mock_carbon = MagicMock()
     monkeypatch.setattr(
-        ctypes.cdll,
-        "LoadLibrary",
+        ctypes,
+        "CDLL",
         lambda path: mock_carbon if path == "/System/Library/Frameworks/Carbon.framework/Carbon" else MagicMock(),
     )
     monkeypatch.setattr(ctypes.c_void_p, "in_dll", lambda lib, name: ctypes.c_void_p(MOCK_LAYOUT_DATA_PTR))
@@ -181,6 +181,30 @@ def test_darwin_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     translated = mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A"))
     assert translated == QKeySequence("Ctrl+Q")
     mock_carbon.TISCopyCurrentKeyboardInputSource.assert_called_once()
+    mock_carbon.CFDataGetBytePtr.assert_called_once_with(MOCK_PROP_DATA)
+    mock_carbon.CFRelease.assert_called_once_with(MOCK_TIS_SOURCE)
+
+    # ctypes otherwise assumes C int returns/arguments, truncating opaque pointers on 64-bit platforms.
+    assert mock_carbon.TISCopyCurrentKeyboardInputSource.restype == ctypes.c_void_p
+    assert mock_carbon.TISGetInputSourceProperty.argtypes == [ctypes.c_void_p, ctypes.c_void_p]
+    assert mock_carbon.TISGetInputSourceProperty.restype == ctypes.c_void_p
+    assert mock_carbon.UCKeyTranslate.argtypes == [
+        ctypes.c_void_p,
+        ctypes.c_uint16,
+        ctypes.c_uint16,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+    ]
+    assert mock_carbon.UCKeyTranslate.restype == ctypes.c_int32
+    assert mock_carbon.CFDataGetBytePtr.argtypes == [ctypes.c_void_p]
+    assert mock_carbon.CFDataGetBytePtr.restype == ctypes.c_void_p
+    assert mock_carbon.CFRelease.argtypes == [ctypes.c_void_p]
+    assert mock_carbon.CFRelease.restype is None
 
 
 def test_darwin_ctypes_failures(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -202,7 +226,7 @@ def test_darwin_ctypes_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ctypes.util, "find_library", lambda lib: "/path/to/Carbon")
     mock_carbon = MagicMock()
     mock_carbon.TISCopyCurrentKeyboardInputSource.return_value = 0
-    monkeypatch.setattr(ctypes.cdll, "LoadLibrary", lambda path: mock_carbon)
+    monkeypatch.setattr(ctypes, "CDLL", lambda path: mock_carbon)
 
     assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
     mapper._cache.clear()
