@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 from collections.abc import Callable, Coroutine
-from concurrent.futures import CancelledError, ThreadPoolExecutor
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from functools import wraps
 from inspect import iscoroutinefunction
 from logging import getLogger
@@ -140,6 +140,11 @@ class QtEventLoop(QObject, EventLoop):
 
         self.from_thread(fut.set_result, None)
         return fut
+
+    @override
+    async def await_future[T](self, future: Future[T]) -> T:
+        with self.wrap_cancelled():
+            return await asyncio.wrap_future(future)
 
     def cancel(self) -> None:
         """Mark the event loop as cancelled."""
