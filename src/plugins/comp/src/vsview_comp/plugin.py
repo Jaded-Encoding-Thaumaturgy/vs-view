@@ -321,7 +321,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.frames_list.listSizeChanged.connect(self.on_list_size_changed)
         self.frames_list.thumbnailProgress.connect(self.on_thumbnail_progress)
 
-        self.add_frame_act.triggered.connect(self.frames_list.add_item)
+        self.add_frame_act.triggered.connect(lambda: self.frames_list.add_item())
         self.remove_frame_act.triggered.connect(self.frames_list.remove_selected)
 
         frame_row.addWidget(toolbar)
