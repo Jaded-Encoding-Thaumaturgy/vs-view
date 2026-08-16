@@ -23,7 +23,7 @@ _logger = getLogger(__name__)
 
 class CustomPolicy(Policy):
     @override
-    def new_environment(self, *, set_logger: bool = True) -> ManagedEnvironment:
+    def new_environment(self, flags_creation: int | None = None, *, set_logger: bool = True) -> ManagedEnvironment:
         _logger.debug("Creating new VS environment")
 
         data = self.api.create_environment(self.flags_creation)
