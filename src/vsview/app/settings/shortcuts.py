@@ -490,7 +490,28 @@ class KeyboardLayoutMapper(Singleton):
         if upper_base not in MACOS_KEYCODES or not (carbon_path := ctypes.util.find_library("Carbon")):
             return None
 
-        carbon = ctypes.cdll.LoadLibrary(carbon_path)
+        carbon = ctypes.CDLL(carbon_path)
+        carbon.TISCopyCurrentKeyboardInputSource.restype = ctypes.c_void_p
+        carbon.TISGetInputSourceProperty.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        carbon.TISGetInputSourceProperty.restype = ctypes.c_void_p
+        carbon.UCKeyTranslate.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_uint16,
+            ctypes.c_uint16,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+        ]
+        carbon.UCKeyTranslate.restype = ctypes.c_int32
+        # CoreFoundation symbols resolve through the Carbon handle
+        carbon.CFDataGetBytePtr.argtypes = [ctypes.c_void_p]
+        carbon.CFDataGetBytePtr.restype = ctypes.c_void_p
+        carbon.CFRelease.argtypes = [ctypes.c_void_p]
+        carbon.CFRelease.restype = None
         mac_keycode = MACOS_KEYCODES[upper_base]
 
         # Get current keyboard input source layout data pointer
@@ -499,10 +520,13 @@ class KeyboardLayoutMapper(Singleton):
             return None
 
         # kTISPropertyUnicodeKeyLayoutData = "TISPropertyUnicodeKeyLayoutData"
-        layout_data_ptr = carbon.TISGetInputSourceProperty(
+        # The property is a CFDataRef wrapping the UCKeyboardLayout bytes
+        layout_data = carbon.TISGetInputSourceProperty(
             tis_source, ctypes.c_void_p.in_dll(carbon, "kTISPropertyUnicodeKeyLayoutData")
         )
+        layout_data_ptr = carbon.CFDataGetBytePtr(layout_data) if layout_data else None
         if not layout_data_ptr:
+            carbon.CFRelease(tis_source)
             return None
 
         buf = ctypes.create_unicode_buffer(4)
@@ -510,18 +534,22 @@ class KeyboardLayoutMapper(Singleton):
         dead_key_state = ctypes.c_uint32(0)
 
         # UCKeyTranslate(layout_data, keycode, action, modifiers, keyboard_type, options, state, max_len, len, buf)
-        res = carbon.UCKeyTranslate(
-            layout_data_ptr,
-            ctypes.c_uint16(mac_keycode),
-            ctypes.c_uint16(0),  # kUCKeyActionDisplay
-            ctypes.c_uint32(0),  # no modifiers
-            ctypes.c_uint32(0),  # LMGetKbdType()
-            ctypes.c_uint32(0),  # kUCKeyTranslateNoDeadKeysBit
-            ctypes.byref(dead_key_state),
-            ctypes.c_uint32(4),
-            ctypes.byref(length),
-            buf,
-        )
+        try:
+            res = carbon.UCKeyTranslate(
+                layout_data_ptr,
+                ctypes.c_uint16(mac_keycode),
+                ctypes.c_uint16(0),  # kUCKeyActionDisplay
+                ctypes.c_uint32(0),  # no modifiers
+                ctypes.c_uint32(0),  # LMGetKbdType()
+                ctypes.c_uint32(0),  # kUCKeyTranslateNoDeadKeysBit
+                ctypes.byref(dead_key_state),
+                ctypes.c_uint32(4),
+                ctypes.byref(length),
+                buf,
+            )
+        finally:
+            # layout_data is owned by the source, so release it
+            carbon.CFRelease(tis_source)
         if res == 0 and length.value > 0 and buf.value:
             return buf.value
 
