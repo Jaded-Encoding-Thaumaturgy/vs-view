@@ -1080,7 +1080,7 @@ class FrameEdit(QSpinBox):
         self.old_value = self.value()
 
     @override
-    def validate(self, input_text: str, pos: int) -> object:
+    def validate(self, input_text: str, pos: int) -> tuple[QValidator.State, str, int]:
         if input_text.isdigit():
             val = int(input_text)
 

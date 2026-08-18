@@ -719,7 +719,7 @@ class StackedWidget(QStackedWidget):
         super().removeWidget(widget)
 
     def animate_to_widget(self, widget: QWidget, *, animated: bool = True) -> None:
-        if (current := self.currentWidget()) is widget or widget is None:
+        if (current := self.currentWidget()) is widget or widget is None or current is None:
             return
 
         if not animated or not self.animations_enabled:
