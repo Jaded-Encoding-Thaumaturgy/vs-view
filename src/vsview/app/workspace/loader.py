@@ -493,10 +493,10 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.playback.stop()
         self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
 
+        self.clear_environment()
+
         with QSignalBlocker(self.tab_manager.tabs):
             self.tab_manager.tabs.clear()
-
-        self.clear_environment()
 
         self.statusLoadingErrored.emit("Error while loading content")
         self.set_error_page()

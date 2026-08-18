@@ -99,6 +99,7 @@ class TabViewWidget(QTabWidget):
 
         for view in self.views():
             view.clear_scene()
+            view.blockSignals(True)
             view.deleteLater()
 
         return super().clear()
@@ -119,7 +120,7 @@ class TabViewWidget(QTabWidget):
 
     def views(self) -> Iterator[GraphicsView]:
         for i in range(self.count()):
-            widget = self.widget(i)
+            widget = super().widget(i)
             if isinstance(widget, GraphicsView):
                 yield widget
 
