@@ -249,7 +249,7 @@ class PlaybackManager(QObject):
                 cb_render(fut)
 
         def on_error(exc: BaseException) -> None:
-            logger.error("Frame render failed with the message: %r", exc)
+            logger.error("Frame render failed with the message: %s", exc)
 
             if cb_render:
                 cb_render(fut)
@@ -282,9 +282,14 @@ class PlaybackManager(QObject):
                 with voutput.prepared_clip.get_frame(n) as frame:
                     logger.debug("Frame %d rendered", n)
                     image = voutput.packer.frame_to_qimage(frame).copy()
-            except (TimeoutError, ConnectionError):
-                raise
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
+                if (
+                    isinstance(e, (TimeoutError, ConnectionError))  # no fmt
+                    # Check the string representations if the error was emitted from VapourSynth
+                    or any(err in str(e) for err in ("TimeoutError", "ConnectionError"))
+                ):
+                    raise
+
                 try:
                     voutput.vs_output.clip.get_frame(n).close()
                 except Exception as exc_user:
