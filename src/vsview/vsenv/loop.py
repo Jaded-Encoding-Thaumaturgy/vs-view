@@ -76,6 +76,10 @@ class QtEventLoop(QObject, EventLoop):
             else:
                 fut.set_result(result)
 
+        if QThread.currentThread() == self.thread():
+            wrapper()
+            return fut
+
         with self._lock:
             task_id = self._counter
             self._counter += 1

@@ -483,7 +483,6 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.loop.from_thread(screenshot.deleteLater)
             del screenshot
 
-    @Slot()
     @run_in_loop(return_future=False)
     def clear_failed_load(self) -> None:
         if self._is_failed:
