@@ -171,7 +171,11 @@ class FrameBuffer:
                 f = UnifiedFuture.from_future(pf).then(lambda frame: frame.close(), fail_get).catch(fail_close)
                 pending.append(f)
 
-        wait(pending)
+        _, undone = wait(pending, timeout=2.0)
+
+        if undone:
+            logger.warning("Failed to clean up %d frame(s) during buffer clear", len(undone))
+
         del bundles
         gc_collect()
 
@@ -290,7 +294,11 @@ class AudioBuffer:
             f = UnifiedFuture.from_future(b.future).then(lambda frame: frame.close(), fail_get).catch(fail_close)
             pending.append(f)
 
-        wait(pending)
+        _, undone = wait(pending, timeout=2.0)
+
+        if undone:
+            logger.warning("Failed to clean up %d frame(s) during buffer clear", len(undone))
+
         del bundles
         gc_collect()
 
