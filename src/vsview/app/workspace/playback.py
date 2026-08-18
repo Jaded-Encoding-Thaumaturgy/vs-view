@@ -282,6 +282,8 @@ class PlaybackManager(QObject):
                 with voutput.prepared_clip.get_frame(n) as frame:
                     logger.debug("Frame %d rendered", n)
                     image = voutput.packer.frame_to_qimage(frame).copy()
+            except (TimeoutError, ConnectionError):
+                raise
             except Exception as e:  # noqa: BLE001
                 try:
                     voutput.vs_output.clip.get_frame(n).close()
