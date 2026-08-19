@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING, Any
 
-__all__ = ["catch_output", "is_preview", "set_output"]
+__all__ = ["catch_output", "get_reload_count", "get_state", "is_preview", "is_reload", "set_output"]
 
 if TYPE_CHECKING:
-    from .api import catch_output, is_preview, set_output
+    from .api import catch_output, get_reload_count, get_state, is_preview, is_reload, set_output
 else:
     # The main module is the entry point, so it has to be loaded first before anything else
     # to avoid any circular import

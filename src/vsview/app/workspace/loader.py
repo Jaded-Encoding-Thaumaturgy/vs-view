@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from vsengine.policy import ManagedEnvironment
 from vsengine.vpy import ExecutionError, Script, load_code, load_script
 
+from ...api.info import Context
 from ...types import Frame
 from ...vsenv import gc_collect, run_in_background, run_in_loop, unset_environment
 from ..outputs import AudioOutput, OutputsManager, VideoOutput
@@ -41,7 +42,7 @@ from ..views.video import ViewState
 from .base import BaseWorkspace
 from .playback import PlaybackManager
 from .tab_manager import PlayHeadToolButton, TabManager
-from .utils import evict_packages, find_local_packages
+from .utils import State, evict_packages, find_local_packages
 
 loader_lock = Lock()
 logger = getLogger(__name__)
@@ -62,6 +63,7 @@ class LoaderWorkspace[T](BaseWorkspace):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
+        self.reload_count = 0
         self._is_failed = False
 
         self.stack = QStackedWidget(self)
@@ -382,6 +384,8 @@ class LoaderWorkspace[T](BaseWorkspace):
             # 2. Reset Environment
             self.clear_environment()
             gc_collect()
+
+            self.reload_count += 1
 
             with loader_lock:
                 # 2.5. Hot-reload local packages
@@ -836,6 +840,12 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.vsargs = dict[str, Any]()
+        self.persistent_state = State()
+
+    @override
+    def deleteLater(self) -> None:
+        self.persistent_state.clear()
+        return super().deleteLater()
 
     @property
     def _script_content(self) -> Any:
@@ -858,8 +868,15 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
 
     @override
     def loader(self) -> None:
+        ctx = Context(
+            reload_count=self.reload_count,
+            is_reload=self.reload_count > 0,
+            persistent_state=self.persistent_state,
+        )
+
         module = ModuleType("__vsview__")
         module.__dict__.update(self.vsargs)
+        module.__dict__.update(__vsview_context__=ctx)
 
         match self.content_type:
             case "script":
@@ -869,10 +886,17 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
                     self.env,
                     module=module,
                     chdir=chdir,
+                    inline=False,
                     **self._script_kwargs,
                 )
             case "code":
-                self.script = load_code(self._script_content, self.env, module=module, **self._script_kwargs)
+                self.script = load_code(
+                    self._script_content,
+                    self.env,
+                    module=module,
+                    inline=False,
+                    **self._script_kwargs,
+                )
             case _:
                 assert_never(self.content_type)
 

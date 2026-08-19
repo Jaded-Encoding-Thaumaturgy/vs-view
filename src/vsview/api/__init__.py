@@ -47,7 +47,7 @@ from ..app.views.video import BaseGraphicsView
 from ..logging import get_console_level
 from ..types import Frame, Time
 from ..vsenv import run_in_background, run_in_loop
-from .info import is_preview
+from .info import Context, get_reload_count, get_state, is_preview, is_reload
 from .output import catch_output, get_output, get_outputs, set_output
 
 __all__ = [
@@ -60,6 +60,7 @@ __all__ = [
     "Checkbox",
     "ColorPicker",
     "ColorPickerInput",
+    "Context",
     "CustomSpinBox",
     "DoubleSpin",
     "Dropdown",
@@ -104,8 +105,11 @@ __all__ = [
     "get_output",
     "get_outputs",
     "get_packer",
+    "get_reload_count",
+    "get_state",
     "hookimpl",
     "is_preview",
+    "is_reload",
     "load_icon",
     "path_to_hash",
     "run_in_background",

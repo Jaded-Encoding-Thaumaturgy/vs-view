@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import importlib
 import importlib.metadata
+import inspect
 import sys
 import sysconfig
 import textwrap
+from collections import UserDict
 from collections.abc import Iterable
 from functools import cache
 from importlib.util import find_spec
 from logging import getLogger
 from pathlib import Path
-from typing import override
+from typing import Any, override
+
+import vapoursynth
 
 logger = getLogger(__name__)
 
@@ -125,3 +129,36 @@ class CodeContent:
     @override
     def __repr__(self) -> str:
         return self.filename
+
+
+class State(UserDict[Any, Any]):
+    @override
+    def __setitem__(self, key: Any, item: Any) -> None:
+        if is_from_vs_module(key) or is_from_vs_module(item):
+            raise ValueError(f"Cannot store VapourSynth objects in persistent state for key {key!r}.")
+
+        return super().__setitem__(key, item)
+
+
+def is_from_vs_module(obj: Any) -> bool:
+    """Returns true if the obj is a VapourSynth object or was defined in the vapoursynth module."""
+    if isinstance(
+        obj,
+        (
+            vapoursynth.VideoNode,
+            vapoursynth.AudioNode,
+            vapoursynth.VideoFrame,
+            vapoursynth.AudioFrame,
+            vapoursynth.Core,
+            vapoursynth.Environment,
+            vapoursynth.Plugin,
+            vapoursynth.Function,
+            vapoursynth.RawNode,
+        ),
+    ):
+        return True
+
+    if (mod_name := getattr(obj, "__module__", None)) and (mod := sys.modules.get(mod_name)) and mod is vapoursynth:
+        return True
+
+    return bool((mod := inspect.getmodule(type(obj))) and mod is vapoursynth)

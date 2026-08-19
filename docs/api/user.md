@@ -13,3 +13,6 @@ The user-facing API is used primarily within VapourSynth scripts to register nod
            - set_output
            - catch_output
            - is_preview
+           - is_reload
+           - get_reload_count
+           - get_state
