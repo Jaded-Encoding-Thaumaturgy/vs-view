@@ -64,6 +64,7 @@ class IconName(StrEnum):
     TEXT_ALIGN_LEFT = "text-align-left"
     BRACKETS_ANGLE = "brackets-angle"
     TERMINAL = "terminal-window"
+    MONITOR_UP = "monitor-arrow-up"
 
     modifier: str
 
@@ -230,6 +231,7 @@ class MaterialProvider(IconProvider):
         IconName.TEXT_ALIGN_LEFT: "format-align-left",
         IconName.BRACKETS_ANGLE: "code-tags",
         IconName.TERMINAL: "console",
+        IconName.MONITOR_UP: "monitor-share",
     }
 
     @property
@@ -297,6 +299,7 @@ class LucideProvider(IconProvider):
         IconName.TEXT_ALIGN_LEFT: "text-align-start",
         IconName.BRACKETS_ANGLE: "code",
         IconName.TERMINAL: "square-terminal",
+        IconName.MONITOR_UP: "monitor-up",
     }
 
     @property
