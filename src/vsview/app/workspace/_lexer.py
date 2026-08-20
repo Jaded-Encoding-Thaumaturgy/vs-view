@@ -46,7 +46,7 @@ class StatefulPythonLexer(PythonLexer):
 
                 if isinstance(action, _TokenType):
                     yield pos, action, m.group()
-                else:
+                elif callable(action):
                     yield from action(self, m)
 
                 pos = m.end()
