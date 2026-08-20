@@ -185,6 +185,7 @@ vsview-split-planes = { workspace = true }
 vsview-histogram = { workspace = true }
 # Workspaces
 vsview-editor = { workspace = true }
+vsview-remote = { workspace = true }
 
 [tool.pytest]
 testpaths = ["tests"]

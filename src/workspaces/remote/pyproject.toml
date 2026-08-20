@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling>=1.32.0", "versioningit"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vsview-remote"
+description = "A VSView plugin that provides remote execution for VapourSynth, leveraging the vsremote library."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "Vardë", email = "ichunjo.le.terrible@gmail.com" }]
+maintainers = [
+    { name = "Vardë", email = "ichunjo.le.terrible@gmail.com" },
+    { name = "Jaded Encoding Thaumaturgy", email = "jaded.encoding.thaumaturgy@gmail.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+dependencies = ["vsview[secrets]>=0.11.0", "vsremote>=0.2.0"]
+dynamic = ["version"]
+
+[project.entry-points.vsview]
+vsview_remote = "vsview_remote"
+
+[tool.hatch.version]
+source = "versioningit"
+
+[tool.versioningit.vcs]
+match = ["remote/v*"]
+default-tag = "remote/v0.0.0"
+
+[tool.versioningit.tag2version]
+rmprefix = "remote/v"
+
+[tool.versioningit.format]
+distance = "{next_version}.dev{distance}+{vcs}{rev}"
+dirty = "{next_version}+dirty"
+distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.dirty"
+
+[tool.uv.sources]
+vsview = { workspace = true }
