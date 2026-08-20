@@ -28,8 +28,8 @@ logger = getLogger(__name__)
 
 class AudioMetadata(NamedTuple):
     name: str
-    downmix: bool | None
-    kwargs: Mapping[str, Any]
+    downmix: bool | None = None
+    kwargs: Mapping[str, Any] | None = None
 
 
 class PrettyChannelsLayout(Enum):
@@ -93,7 +93,7 @@ class AudioOutput:
             if metadata and metadata.downmix is not None
             else SettingsManager.global_settings.playback.downmix
         )
-        self.kwargs = metadata.kwargs if metadata else {}
+        self.kwargs = metadata.kwargs if metadata and metadata.kwargs else {}
         self.chanels_layout = PrettyChannelsLayout(tuple(self.vs_output.channels))
 
         self._cache_delay_audio = LRUCache[float, vs.AudioNode]()

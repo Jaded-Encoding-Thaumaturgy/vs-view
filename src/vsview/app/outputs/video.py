@@ -27,10 +27,10 @@ logger = getLogger(__name__)
 
 class VideoMetadata(NamedTuple):
     name: str
-    framedurs: Sequence[float] | None
-    alpha_prop: Literal[True] | None
-    hdr: bool | None
-    kwargs: Mapping[str, Any]
+    framedurs: Sequence[float] | None = None
+    alpha_prop: Literal[True] | None = None
+    hdr: bool | None = None
+    kwargs: Mapping[str, Any] | None = None
 
 
 class VideoOutput:
@@ -46,7 +46,7 @@ class VideoOutput:
         self.packer = packer
         self.vs_name = metadata.name if metadata else f"Clip {vs_index}"  # Matches vsview.set_output
         self.framedurs = metadata.framedurs if metadata else None
-        self.kwargs = metadata.kwargs if metadata else {}
+        self.kwargs = metadata.kwargs if metadata and metadata.kwargs else {}
         self._alpha_prop: Literal[True] | None = metadata.alpha_prop if metadata else None
 
         if self._alpha_prop:
