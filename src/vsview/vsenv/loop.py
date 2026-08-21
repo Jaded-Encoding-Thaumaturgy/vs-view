@@ -274,6 +274,15 @@ def run_in_loop(func: Any = None, *, return_future: bool = True) -> Any:
     ```
     """
 
+    def _log_task(f: Future[Any]) -> None:
+        if (e := f.exception()) is None:
+            return
+
+        if isinstance(e, (Cancelled, CancelledError, asyncio.CancelledError)):
+            _logger.debug("Task cancelled: %s", e)
+        else:
+            _logger.debug(e, exc_info=e)
+
     def decorator(fn: Any) -> Any:
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -281,7 +290,12 @@ def run_in_loop(func: Any = None, *, return_future: bool = True) -> Any:
                 raise CustomTypeError("The current running loop isn't QtEventLoop")
 
             if iscoroutinefunction(fn):
-                fut = loop.from_thread(_run_coro, fn(*args, **kwargs))
+                if QThread.currentThread() == loop.thread() and (async_loop := _get_asyncio_running_loop()):
+                    task = async_loop.create_task(fn(*args, **kwargs))
+                    fut = UnifiedFuture.from_future(task)
+                    fut.add_done_callback(_log_task)
+                else:
+                    fut = loop.from_thread(asyncio.run, fn(*args, **kwargs))
             else:
                 # Delegate to from_thread to marshal execution to the main loop
                 fut = loop.from_thread(fn, *args, **kwargs)
@@ -331,7 +345,7 @@ def run_in_background(func: Any = None, *, name: str | None = None) -> Any:
             func_name = name or fn.__name__
 
             return (
-                loop.to_thread_named(func_name, _run_coro, fn(*args, **kwargs))
+                loop.to_thread_named(func_name, asyncio.run, fn(*args, **kwargs))
                 if iscoroutinefunction(fn)
                 else loop.to_thread_named(func_name, fn, *args, **kwargs)
             )
@@ -341,9 +355,8 @@ def run_in_background(func: Any = None, *, name: str | None = None) -> Any:
     return decorator if func is None else decorator(func)
 
 
-def _run_coro[R](coro: Coroutine[Any, Any, R]) -> R:
+def _get_asyncio_running_loop() -> asyncio.AbstractEventLoop | None:
     try:
-        return asyncio.run(coro)
+        return asyncio.get_running_loop()
     except RuntimeError:
-        with ThreadPoolExecutor(max_workers=1, thread_name_prefix=coro.__name__) as pool:
-            return pool.submit(asyncio.run, coro).result()
+        return None

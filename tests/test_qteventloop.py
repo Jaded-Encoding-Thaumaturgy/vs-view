@@ -12,7 +12,7 @@ from pytestqt.qtbot import QtBot
 from vsengine.futures import UnifiedFuture
 from vsengine.loops import Cancelled, set_loop
 
-from vsview.vsenv.loop import QtEventLoop, _run_coro, run_in_background, run_in_loop
+from vsview.vsenv.loop import QtEventLoop, run_in_background, run_in_loop
 
 
 @pytest.fixture
@@ -320,20 +320,69 @@ def test_run_in_background_decorator(qt_loop: QtEventLoop) -> None:
     assert fut3.result(timeout=2.0) == "hello world"
 
 
-def test_run_coro_existing_event_loop() -> None:
-    # Direct execution without running loop
-    async def coro_simple() -> str:
-        return "simple"
+def test_run_coro_existing_event_loop(qt_loop: QtEventLoop) -> None:
+    main_thread = threading.current_thread()
 
-    assert _run_coro(coro_simple()) == "simple"
+    @run_in_loop
+    async def coro1() -> str:
+        @run_in_loop
+        async def innercoro() -> str:
+            assert threading.current_thread() == main_thread
+            return "simple"
 
-    # Fallback execution when an asyncio loop is already running in current thread
-    async def outer_main() -> str:
-        async def inner_coro() -> str:
-            await asyncio.sleep(0.01)
-            return "inner_ok"
+        return await innercoro()
 
-        return _run_coro(inner_coro())
+    assert coro1().result(timeout=2.0) == "simple"
 
-    result = asyncio.run(outer_main())
-    assert result == "inner_ok"
+
+def test_run_coro_existing_event_loop_exception(qt_loop: QtEventLoop) -> None:
+    main_thread = threading.current_thread()
+
+    @run_in_loop
+    async def coro1() -> str:
+        @run_in_loop
+        async def innercoro() -> str:
+            assert threading.current_thread() == main_thread
+            raise ValueError("inner failure")
+
+        return await innercoro()
+
+    fut = coro1()
+    with pytest.raises(ValueError, match="inner failure"):
+        fut.result(timeout=2.0)
+
+    @run_in_loop
+    async def coro2() -> str:
+        @run_in_loop
+        async def innercoro() -> str:
+            assert threading.current_thread() == main_thread
+            raise asyncio.CancelledError
+
+        return await innercoro()
+
+    fut = coro2()
+    with pytest.raises(Cancelled):
+        fut.result(timeout=2.0)
+
+
+def test_run_coro_existing_event_loop_nested(qt_loop: QtEventLoop) -> None:
+    main_thread = threading.current_thread()
+
+    @run_in_loop
+    async def level1() -> str:
+        assert threading.current_thread() == main_thread
+
+        @run_in_loop
+        async def level2() -> str:
+            assert threading.current_thread() == main_thread
+
+            @run_in_loop
+            async def level3() -> str:
+                assert threading.current_thread() == main_thread
+                return "deep"
+
+            return await level3()
+
+        return await level2()
+
+    assert level1().result(timeout=2.0) == "deep"
