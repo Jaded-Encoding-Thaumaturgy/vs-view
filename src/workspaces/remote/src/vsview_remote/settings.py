@@ -4,11 +4,24 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel
 
-from vsview.api import Checkbox, Dropdown, LineEdit, Spin
+from vsview.api import Checkbox, Dropdown, LineEdit, SecretLineEdit, Spin
+
+from ._metadata import AUTH_CONTEXT, AUTH_KEY, CURVE_CONTEXT, CURVE_KEY, WORKSPACE_ID
 
 
 class GlobalSettings(BaseModel):
     address: Annotated[str, LineEdit(label="Address", tooltip="Remote server address")] = "tcp://127.0.0.1:5555"
+    auth_token: Annotated[
+        str | None,
+        SecretLineEdit(
+            label="Auth Token",
+            namespace=WORKSPACE_ID,
+            context=AUTH_CONTEXT,
+            key=AUTH_KEY,
+            placeholder_text="Optional authentication token",
+            tooltip="Optional authentication token for the remote server",
+        ),
+    ] = None
     compression: Annotated[
         Literal["zstd", "none"],
         Dropdown(
@@ -66,4 +79,15 @@ class GlobalSettings(BaseModel):
     curve_public_key: Annotated[
         str | None,
         LineEdit(label="Curve Client Public Key", tooltip="Client public key for CurveZMQ authentication"),
+    ] = None
+    curve_secret_key: Annotated[
+        str | None,
+        SecretLineEdit(
+            label="Curve Client Secret Key",
+            namespace=WORKSPACE_ID,
+            context=CURVE_CONTEXT,
+            key=CURVE_KEY,
+            placeholder_text="Client secret key (optional)",
+            tooltip="Client secret key for CurveZMQ encryption",
+        ),
     ] = None

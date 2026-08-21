@@ -24,6 +24,7 @@ from vsremote import RemoteAuthenticationError, RemoteClient, RemoteTimeoutError
 
 from vsview.api import CustomSpinBox, PluginSecrets, PluginSettings, run_in_background, run_in_loop
 
+from ._metadata import AUTH_CONTEXT, AUTH_KEY, CURVE_CONTEXT, CURVE_KEY
 from .settings import GlobalSettings
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,7 @@ class RemoteConnectionDialog(QDialog):
             echoMode=QLineEdit.EchoMode.PasswordEchoOnEdit,
             placeholderText="Optional authentication token",
         )
+        self.token_edit.setText(self.auth_token or "")
 
         self.compression_combo = QComboBox(form_frame)
         self.compression_combo.addItems(["zstd", "none"])
@@ -164,11 +166,11 @@ class RemoteConnectionDialog(QDialog):
 
     @property
     def auth_token(self) -> str | None:
-        return self.secrets.get("auth", "token")
+        return self.secrets.get(AUTH_CONTEXT, AUTH_KEY)
 
     @property
     def curve_secret_key(self) -> str | None:
-        return self.secrets.get("curve", "secret_key")
+        return self.secrets.get(CURVE_CONTEXT, CURVE_KEY)
 
     @override
     def exec(self) -> int:

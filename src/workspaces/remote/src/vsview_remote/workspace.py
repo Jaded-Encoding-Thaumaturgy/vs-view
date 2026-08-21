@@ -13,6 +13,7 @@ from vsview.app.error import show_error
 from vsview.app.outputs import VideoMetadata
 from vsview.app.workspace import PythonScriptWorkspace
 
+from ._metadata import AUTH_CONTEXT, AUTH_KEY, CURVE_CONTEXT, CURVE_KEY, WORKSPACE_ID
 from .dialog import ConnectionConfig, RemoteConnectionDialog
 from .settings import GlobalSettings
 
@@ -26,7 +27,7 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
 
     content_type = "script"
 
-    identifier = "jet_vsview_remote"
+    identifier = WORKSPACE_ID
     display_name = "Remote"
 
     CONFIGURE_CONNECTION: ClassVar[ActionDefinition] = ActionDefinition(
@@ -56,25 +57,25 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
 
     @property
     def auth_token(self) -> str | None:
-        return self.secrets.get("auth", "token")
+        return self.secrets.get(AUTH_CONTEXT, AUTH_KEY)
 
     @auth_token.setter
     def auth_token(self, value: str | None) -> None:
         if value:
-            self.secrets.set("auth", "token", value)
+            self.secrets.set(AUTH_CONTEXT, AUTH_KEY, value)
         else:
-            self.secrets.delete("auth", "token")
+            self.secrets.delete(AUTH_CONTEXT, AUTH_KEY)
 
     @property
     def curve_secret_key(self) -> str | None:
-        return self.secrets.get("curve", "secret_key")
+        return self.secrets.get(CURVE_CONTEXT, CURVE_KEY)
 
     @curve_secret_key.setter
     def curve_secret_key(self, value: str | None) -> None:
         if value:
-            self.secrets.set("curve", "secret_key", value)
+            self.secrets.set(CURVE_CONTEXT, CURVE_KEY, value)
         else:
-            self.secrets.delete("curve", "secret_key")
+            self.secrets.delete(CURVE_CONTEXT, CURVE_KEY)
 
     @property
     def client(self) -> RemoteClient:
