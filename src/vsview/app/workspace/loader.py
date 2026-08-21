@@ -844,8 +844,11 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
 
     @override
     def deleteLater(self) -> None:
-        self.persistent_state.clear()
-        return super().deleteLater()
+        try:
+            return super().deleteLater()
+        finally:
+            self.persistent_state.clear()
+            self.persistent_state = State()
 
     @property
     def _script_content(self) -> Any:
