@@ -30,7 +30,7 @@ from vsengine.vpy import ExecutionError, Script, load_code, load_script
 
 from ...api.info import Context
 from ...types import Frame
-from ...vsenv import gc_collect, run_in_background, run_in_loop, unset_environment
+from ...vsenv import clear_environment, gc_collect, run_in_background, run_in_loop, unset_environment
 from ..outputs import AudioOutput, OutputsManager, VideoOutput
 from ..plugins.api import PluginAPI, WidgetPluginBase
 from ..settings import ActionID, ShortcutManager
@@ -918,3 +918,11 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
             e.__traceback__ = None
 
             raise RuntimeError("Script execution failed") from None
+
+    @override
+    def _dispose_environment(self) -> None:
+        if hasattr(self, "script"):
+            clear_environment(self.script)
+            del self.script
+        else:
+            super()._dispose_environment()

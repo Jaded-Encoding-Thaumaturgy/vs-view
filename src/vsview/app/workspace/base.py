@@ -81,5 +81,9 @@ class BaseWorkspace(QMainWindow):
         return True
 
     def clear_environment(self) -> None:
-        if env := getattr(self, "script", self._env):
-            clear_environment(env)
+        self._dispose_environment()
+
+    def _dispose_environment(self) -> None:
+        if self._env:
+            clear_environment(self._env)
+            self._env = None
