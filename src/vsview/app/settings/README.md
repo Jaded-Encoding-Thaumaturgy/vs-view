@@ -49,16 +49,17 @@ class GlobalSettings(BaseModel):
 
 Defined in `metadata.py`:
 
-| Type             | Annotation Example                                                           |
-| ---------------- | ---------------------------------------------------------------------------- |
-| `Checkbox`       | `Annotated[bool, Checkbox(label="Enabled", text="Check me")]`                |
-| `Dropdown`       | `Annotated[str, Dropdown(label="Mode", items=[("A", "a")])]`                 |
-| `Spin`           | `Annotated[int, Spin(label="Size", min=0, max=100, suffix="px")]`            |
-| `DoubleSpin`     | `Annotated[float, DoubleSpin(label="Val", min=0, max=1)]`                    |
-| `PlainTextEdit`  | `Annotated[list[float], PlainTextEdit(label="List", value_type=float)]`      |
-| `WidgetTimeEdit` | `Annotated[QTime, WidgetTimeEdit(label="Interval", display_format="mm:ss")]` |
-| `ColorPicker`    | `Annotated[str, ColorPicker(label="Color")]`                                 |
-| `Login`          | `Annotated[str, Login(label="API Key", namespace="...", context="...")]`     |
+| Type             | Annotation Example                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------ |
+| `Checkbox`       | `Annotated[bool, Checkbox(label="Enabled", text="Check me")]`                                    |
+| `Dropdown`       | `Annotated[str, Dropdown(label="Mode", items=[("A", "a")])]`                                     |
+| `Spin`           | `Annotated[int, Spin(label="Size", min=0, max=100, suffix="px")]`                                |
+| `DoubleSpin`     | `Annotated[float, DoubleSpin(label="Val", min=0, max=1)]`                                        |
+| `PlainTextEdit`  | `Annotated[list[float], PlainTextEdit(label="List", value_type=float)]`                          |
+| `WidgetTimeEdit` | `Annotated[QTime, WidgetTimeEdit(label="Interval", display_format="mm:ss")]`                     |
+| `ColorPicker`    | `Annotated[str, ColorPicker(label="Color")]`                                                     |
+| `Login`          | `Annotated[str, Login(label="API Key", namespace="...", context="...")]`                         |
+| `SecretLineEdit` | `Annotated[str \| None, SecretLineEdit(label="Key", namespace="...", context="...", key="...")]` |
 
 ### Value Transforms (for unit conversion)
 
