@@ -186,6 +186,7 @@ vsview-histogram = { workspace = true }
 vsview-editor = { workspace = true }
 
 [tool.pytest]
+testpaths = ["tests"]
 env = ["QT_QPA_PLATFORM=offscreen"]
 
 [tool.mypy]
