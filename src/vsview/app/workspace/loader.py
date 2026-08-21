@@ -872,6 +872,7 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
             reload_count=self.reload_count,
             is_reload=self.reload_count > 0,
             persistent_state=self.persistent_state,
+            on_workspace_destroy=self.register_on_destroy,
         )
 
         module = ModuleType("__vsview__")

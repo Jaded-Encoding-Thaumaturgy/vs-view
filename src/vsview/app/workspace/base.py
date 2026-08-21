@@ -1,4 +1,7 @@
-from typing import ClassVar, override
+from collections.abc import Callable
+from functools import partial
+from logging import getLogger
+from typing import Any, ClassVar, override
 
 from jetpytools import CustomTypeError
 from PySide6.QtWidgets import QFrame, QMainWindow, QVBoxLayout, QWidget
@@ -10,6 +13,8 @@ from ...assets import IconName
 from ...vsenv import QtEventLoop, clear_environment, create_environment
 from ..settings import SettingsManager
 from ..settings.models import GlobalSettings
+
+logger = getLogger(__name__)
 
 
 class BaseWorkspace(QMainWindow):
@@ -32,6 +37,10 @@ class BaseWorkspace(QMainWindow):
         self.current_layout.setContentsMargins(0, 0, 0, 0)
 
         self._env: ManagedEnvironment | None = None
+        self._on_destroy_callbacks = dict[
+            tuple[Callable[..., Any], tuple[Any, ...], tuple[tuple[str, Any], ...]],
+            Callable[[], Any],
+        ]()
 
     @property
     def loop(self) -> QtEventLoop:
@@ -68,8 +77,24 @@ class BaseWorkspace(QMainWindow):
         """Return the global settings for this workspace."""
         return SettingsManager.global_settings
 
+    def register_on_destroy[**P, R](self, cb: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> Callable[P, R]:
+        """Register a callback to run when this workspace is destroyed."""
+        key = cb, args, tuple(kwargs.items())
+        pcb = partial(cb, *args, **kwargs)
+
+        if key not in self._on_destroy_callbacks:
+            self._on_destroy_callbacks[key] = pcb
+
+        return cb
+
+    def unregister_on_destroy[**P, R](self, cb: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> None:
+        """Unregister a previously registered on_destroy callback."""
+        key = cb, args, tuple(kwargs.items())
+        self._on_destroy_callbacks.pop(key, None)
+
     @override
     def deleteLater(self) -> None:
+        self._run_on_destroy_callbacks()
         self.clear_environment()
         return super().deleteLater()
 
@@ -90,3 +115,12 @@ class BaseWorkspace(QMainWindow):
         if self._env:
             clear_environment(self._env)
             self._env = None
+
+    def _run_on_destroy_callbacks(self) -> None:
+        logger.debug("Running on_destroy callbacks")
+        for callback in reversed(self._on_destroy_callbacks.values()):
+            try:
+                callback()
+            except Exception:
+                logger.exception("Error running on_destroy callback %r on workspace %r", callback, self)
+        self._on_destroy_callbacks.clear()

@@ -47,7 +47,7 @@ from ..app.views.video import BaseGraphicsView
 from ..logging import get_console_level
 from ..types import Frame, Time
 from ..vsenv import run_in_background, run_in_loop
-from .info import Context, get_reload_count, get_state, is_preview, is_reload
+from .info import Context, get_cached, get_reload_count, get_state, is_preview, is_reload, register_on_workspace_destroy
 from .output import catch_output, get_output, get_outputs, set_output
 
 __all__ = [
@@ -101,6 +101,7 @@ __all__ = [
     "WidgetTimeEdit",
     "cache_clip",
     "catch_output",
+    "get_cached",
     "get_console_level",
     "get_output",
     "get_outputs",
@@ -112,6 +113,7 @@ __all__ = [
     "is_reload",
     "load_icon",
     "path_to_hash",
+    "register_on_workspace_destroy",
     "run_in_background",
     "run_in_loop",
     "set_output",
