@@ -267,7 +267,8 @@ def run_in_loop(func: Any = None, *, return_future: bool = True) -> Any:
     def decorator(fn: Any) -> Any:
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            loop = cast(QtEventLoop, get_loop())
+            if not isinstance(loop := get_loop(), QtEventLoop):
+                raise CustomTypeError("The current running loop isn't QtEventLoop")
 
             if iscoroutinefunction(fn):
                 fut = loop.from_thread(_run_coro, fn(*args, **kwargs))
@@ -314,7 +315,9 @@ def run_in_background(func: Any = None, *, name: str | None = None) -> Any:
     def decorator(fn: Any) -> Any:
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            loop = cast(QtEventLoop, get_loop())
+            if not isinstance(loop := get_loop(), QtEventLoop):
+                raise CustomTypeError("The current running loop isn't QtEventLoop")
+
             func_name = name or fn.__name__
 
             return (

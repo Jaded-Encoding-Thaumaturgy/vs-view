@@ -1,5 +1,6 @@
-from typing import ClassVar, cast, override
+from typing import ClassVar, override
 
+from jetpytools import CustomTypeError
 from PySide6.QtWidgets import QFrame, QMainWindow, QVBoxLayout, QWidget
 from vapoursynth import AudioNode, VideoOutputTuple
 from vsengine.loops import get_loop
@@ -35,7 +36,9 @@ class BaseWorkspace(QMainWindow):
     @property
     def loop(self) -> QtEventLoop:
         """Return the global event loop."""
-        return cast(QtEventLoop, get_loop())
+        if not isinstance(loop := get_loop(), QtEventLoop):
+            raise CustomTypeError("The current running loop isn't QtEventLoop")
+        return loop
 
     @property
     def env(self) -> ManagedEnvironment:
