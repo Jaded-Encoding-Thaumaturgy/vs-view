@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Annotated, Self, override
 import pluggy
 from jetpytools import cachedproperty, classproperty, flatten, to_arr
 from pydantic import BaseModel, ConfigDict, Field
-from PySide6.QtCore import QPoint, Qt, Slot
+from PySide6.QtCore import QPoint, QSignalBlocker, Qt, Slot
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from vsview.api import (
     ActionDefinition,
+    Checkbox,
     Dropdown,
     Frame,
     IconName,
@@ -71,8 +72,10 @@ class ShortcutDefinition(StrEnum):
 
     REMOVE_SCENE = "remove_scene", "Remove selected scene", "Delete"
 
-    TOGGLE_RANGE_START = "toggle_range_start", "Toggle Range Start", "Q"
-    TOGGLE_RANGE_END = "toggle_range_end", "Toggle Range End", "W"
+    TOGGLE_RANGE_START = "toggle_range_start", "Toggle range start", "Q"
+    TOGGLE_RANGE_END = "toggle_range_end", "Toggle range end", "W"
+    TOGGLE_FIRST_FRAME = "toggle_first_frame", "Toggle range start as first frame", "Ctrl+Home"
+    TOGGLE_LAST_FRAME = "toggle_last_frame", "Toggle range end as last frame", "Ctrl+End"
     VALIDATE_RANGE = "validate_range", "Validate selected range", "E"
     ADD_SINGLE_FRAME = "add_single_frame", "Add Single Frame", "R"
     REMOVE_RANGE = "remove_range", "Remove selected range", "Delete"
@@ -105,6 +108,15 @@ class GlobalSettings(BaseModel):
             tooltip="Select the style for the toolbars.",
         ),
     ] = Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+
+    exclusive: Annotated[
+        bool,
+        Checkbox(
+            label="Enable exclusive (Python-style) ranges",
+            text="",
+            tooltip='If toggled, the "Toggle range end as last frame" will insert the last frame number + 1.',
+        ),
+    ] = False
 
     last_selected_parser: str = ""
 
@@ -343,6 +355,18 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             self.range_end_action,
             context=Qt.ShortcutContext.WindowShortcut,
         )
+        self.api.register_shortcut(
+            ShortcutDefinition.TOGGLE_FIRST_FRAME.definition,
+            self.on_first_frame_toggle,
+            self.range_container,
+            context=Qt.ShortcutContext.WindowShortcut,
+        )
+        self.api.register_shortcut(
+            ShortcutDefinition.TOGGLE_LAST_FRAME.definition,
+            self.on_last_frame_toggle,
+            self.range_container,
+            context=Qt.ShortcutContext.WindowShortcut,
+        )
         self.api.register_action(
             ShortcutDefinition.VALIDATE_RANGE.definition,
             self.add_range_action,
@@ -579,6 +603,19 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             self._pending_start = None
             self.add_range_action.setDisabled(True)
 
+    @Slot()
+    def on_first_frame_toggle(self) -> None:
+        if self.range_start_action.isChecked():
+            self.range_start_action.setChecked(False)
+            return
+
+        with QSignalBlocker(self.range_start_action):
+            self.range_start_action.setChecked(True)
+        self._pending_start = Frame() if self.api.timeline.mode == "frame" else Time()
+
+        if self.range_end_action.isChecked():
+            self.add_range_action.setEnabled(True)
+
     @Slot(bool)
     def on_range_end_toggle(self, checked: bool) -> None:
         if checked:
@@ -589,6 +626,31 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         else:
             self._pending_end = None
             self.add_range_action.setDisabled(True)
+
+    @Slot()
+    def on_last_frame_toggle(self) -> None:
+        if self.range_end_action.isChecked():
+            self.range_end_action.setChecked(False)
+            return
+
+        with QSignalBlocker(self.range_end_action):
+            self.range_end_action.setChecked(True)
+
+        v = self.api.current_voutput
+        num_frames = v.vs_output.clip.num_frames
+
+        match self.settings.global_.exclusive, self.api.timeline.mode:
+            case False, "frame":
+                self._pending_end = Frame(num_frames - 1)
+            case True, "frame":
+                self._pending_end = Frame(num_frames)
+            case False, "time":
+                self._pending_end = v.frame_to_time(num_frames - 1)
+            case True, "time":
+                self._pending_end = v.frame_to_time(num_frames)
+
+        if self.range_start_action.isChecked():
+            self.add_range_action.setEnabled(True)
 
     @Slot()
     def on_add_range_triggered(self) -> None:
