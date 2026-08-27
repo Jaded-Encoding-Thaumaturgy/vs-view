@@ -255,13 +255,13 @@ class _PluginAPI(_PluginLimitedApi):
                 success = self._lock.acquire(blocking=block, timeout=t)
                 if success and not self.locked:
                     self.locked = True
-                    getattr(api, "_PluginAPI__busy_callers").add(caller or self)
+                    getattr(api, "_PluginAPI__busy_callers").add(caller or api)
                 return success
 
             def release(self) -> None:
                 if self.locked:
                     self.locked = False
-                    getattr(api, "_PluginAPI__busy_callers").discard(caller or self)
+                    getattr(api, "_PluginAPI__busy_callers").discard(caller or api)
                     self._lock.release()
 
         return WorkspaceBlocker()

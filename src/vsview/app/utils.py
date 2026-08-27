@@ -270,56 +270,64 @@ class QObjectCounter[T: QObject](Container[T], Sized):
     Refcount QObjects while cleaning up entries when Qt destroys the object.
     """
 
-    __slots__ = ("_cleanup", "_counts")
+    __slots__ = ("_cleanup", "_counts", "_lock")
 
     def __init__(self) -> None:
         self._counts = weakref.WeakKeyDictionary[T, int]()
         self._cleanup = weakref.WeakKeyDictionary[T, Callable[..., None]]()
+        self._lock = threading.RLock()
 
     @override
     def __contains__(self, value: object) -> bool:
-        return value in self._counts
+        with self._lock:
+            return value in self._counts
 
     @override
     def __len__(self) -> int:
-        return len(self._counts)
+        with self._lock:
+            return len(self._counts)
 
     def __bool__(self) -> bool:
-        return bool(self._counts)
+        with self._lock:
+            return bool(self._counts)
 
     def count(self, value: T) -> int:
-        return self._counts.get(value, 0)
+        with self._lock:
+            return self._counts.get(value, 0)
 
     def add(self, value: T) -> int:
-        if value in self._counts:
-            self._counts[value] += 1
-            return self._counts[value]
+        with self._lock:
+            if value in self._counts:
+                self._counts[value] += 1
+                return self._counts[value]
 
-        ref = weakref.ref(value)
+            ref = weakref.ref(value)
 
-        def cleanup(*_: object) -> None:
-            if obj := ref():
-                self._counts.pop(obj, None)
-                self._cleanup.pop(obj, None)
+            def cleanup(*_: object) -> None:
+                with self._lock:
+                    if obj := ref():
+                        self._counts.pop(obj, None)
+                        self._cleanup.pop(obj, None)
 
-        self._counts[value] = 1
-        self._cleanup[value] = cleanup
-        value.destroyed.connect(cleanup)
+            self._counts[value] = 1
+            self._cleanup[value] = cleanup
+            value.destroyed.connect(cleanup)
 
-        return 1
+            return 1
 
     def discard(self, value: T) -> int:
-        count = self._counts.get(value)
+        with self._lock:
+            count = self._counts.get(value)
 
-        if count is None:
-            return 0
+            if count is None:
+                return 0
 
-        if count <= 1:
-            self._counts.pop(value, None)
-            self._cleanup.pop(value, None)
-            return 0
+            if count <= 1:
+                self._counts.pop(value, None)
+                self._cleanup.pop(value, None)
+                return 0
 
-        count -= 1
-        self._counts[value] = count
+            count -= 1
+            self._counts[value] = count
 
-        return count
+            return count
