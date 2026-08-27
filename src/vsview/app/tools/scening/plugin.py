@@ -314,7 +314,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         )
         self.copy_frames_action.triggered.connect(self._copy_ranges_frames)
 
-        self.remove_range_action = QAction("Remove selected range", self.ranges_view)
+        self.remove_range_action = QAction(self.ranges_view)
         self.remove_range_action.triggered.connect(self.on_remove_range_triggered)
 
         self.ranges_view.addActions([self.copy_frames_action, self.remove_range_action])
@@ -825,6 +825,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         menu.addAction("Copy labels", self._copy_ranges_labels)
         menu.addSeparator()
 
+        self.remove_range_action.setText("Remove selected range" + ("s" if len(selected_rows) > 1 else ""))
         menu.addAction(self.remove_range_action)
 
         menu.exec(self.ranges_view.viewport().mapToGlobal(pos))
