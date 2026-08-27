@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
 
 [dependencies]
-clap-cargo = "0.18.3"
+clap-cargo = "0.19.0"
 color-print = "0.3.7"
 pyo3-stub-gen = "0.23.0"
 
