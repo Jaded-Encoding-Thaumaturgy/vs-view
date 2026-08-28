@@ -770,6 +770,14 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
         If you need to update the UI, use the `@run_in_loop` decorator.
         """
 
+    def on_workspace_destroy(self) -> None:
+        """
+        Called when the workspace is destroyed.
+
+        Execution Thread: **Main or Background**.
+        If you need to update the UI, use the `@run_in_loop` decorator.
+        """
+
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
         """
         Called when the current video output changes.

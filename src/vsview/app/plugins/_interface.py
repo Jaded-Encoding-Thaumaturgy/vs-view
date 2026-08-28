@@ -327,6 +327,13 @@ class _PluginAPI(_PluginLimitedApi):
             except Exception:
                 logger.exception("%s: Failed for plugin %r", plugin.on_workspace_loaded, plugin.identifier)
 
+    def _on_workspace_destroy(self) -> None:
+        for plugin in self.__workspace.plugins:
+            try:
+                plugin.on_workspace_destroy()
+            except Exception:
+                logger.exception("%s: Failed for plugin %r", plugin.on_workspace_destroy, plugin.identifier)
+
     def _on_current_voutput_changed(self, refresh: bool = False) -> None:
         # Notify all visible plugin views of output change.
         for plugin in self.__workspace.plugins:
