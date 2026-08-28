@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import shutil
+import sys
 from bisect import bisect_left, bisect_right
+from concurrent.futures import wait
 from enum import StrEnum
 from functools import cache
 from itertools import count, cycle, islice
 from logging import getLogger
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self, override
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, override
 
 import pluggy
 from jetpytools import cachedproperty, classproperty, flatten, to_arr
+from pathvalidate import sanitize_filename
 from pydantic import BaseModel, ConfigDict, Field
 from PySide6.QtCore import QPoint, QSignalBlocker, Qt, Slot
 from PySide6.QtGui import QAction, QKeySequence
@@ -19,17 +23,20 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHeaderView,
     QMenu,
+    QMessageBox,
     QSplitter,
     QTableView,
     QToolBar,
     QVBoxLayout,
     QWidget,
 )
+from vsengine import UnifiedFuture
 
 from vsview.api import (
     ActionDefinition,
     Checkbox,
     Dropdown,
+    FilePicker,
     Frame,
     IconName,
     IconReloadMixin,
@@ -43,11 +50,12 @@ from vsview.api import (
 
 from . import specs
 from .constants import PLUGIN_DISPLAY_NAME, PLUGIN_IDENTIFIER
-from .models import RangeFrame, RangeTime, SceneRow, UnifiedRange
+from .models import AbstractRange, RangeFrame, RangeTime, SceneRow, UnifiedRange
 from .parsers import internal_parsers
 from .serializer import internal_serializers
 from .ui import Col, RangeCol, RangeTableDelegate, RangeTableModel, SceneTableDelegate, SceneTableModel
 from .utils import ColorGenerator, monkey_patch_parser
+from .worker import FFV1_ARGS, H264_ARGS, ExportWorker
 
 if TYPE_CHECKING:
     from .api import Parser, Serializer
@@ -118,6 +126,17 @@ class GlobalSettings(BaseModel):
         ),
     ] = False
 
+    ffmpeg_path: Annotated[
+        str,
+        FilePicker(
+            label="FFmpeg Executable",
+            file_filter="Executable (*.exe);;All Files (*.*)" if sys.platform == "win32" else "All Files (*)",
+            dialog_title="Select FFmpeg Executable",
+            tooltip="Path to the FFmpeg executable.",
+            from_ui=lambda p: p.strip(),
+        ),
+    ] = Field(default_factory=lambda: shutil.which("ffmpeg") or "")
+
     last_selected_parser: str = ""
 
     @classproperty
@@ -143,6 +162,8 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.output_map = dict[int, str]()
         self._pending_start: Frame | Time | None = None
         self._pending_end: Frame | Time | None = None
+        self._export_worker: ExportWorker | None = None
+        self._export_worker_task: UnifiedFuture[None] | None = None
 
         self.setup_ui()
         self.setup_shortcuts()
@@ -151,6 +172,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.register_icon_callback(self.on_reload_icon)
 
         self.api.globalSettingsChanged.connect(self._update_toolbar_style)
+        self.api.register_on_destroy(self.cancel_export_workers)
 
         self._update_toolbar_style()
         self._update_action_labels()
@@ -435,6 +457,10 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.output_map.update((out.vs_index, out.vs_name) for out in self.api.voutputs)
 
     @override
+    def on_workspace_destroy(self) -> None:
+        self.cancel_export_workers()
+
+    @override
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
         cachedproperty.clear_cache(self.ranges_model)
 
@@ -446,6 +472,14 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         cachedproperty.clear_cache(self.scenes_delegate)
         self.scenes_view.viewport().update()
         self._update_action_labels()
+
+    def cancel_export_workers(self) -> None:
+        if self._export_worker:
+            self._export_worker.cancelled = True
+        if self._export_worker_task:
+            wait([self._export_worker_task])
+            self._export_worker_task = None
+        self._export_worker = None
 
     @Slot()
     def on_new_scene(self) -> None:
@@ -808,8 +842,11 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
     @Slot(QPoint)
     def _on_ranges_context_menu(self, pos: QPoint) -> None:
-        if not self.ranges_view.selectionModel().selectedRows():
+        if not (selected_rows := self.ranges_view.selectionModel().selectedRows()):
             return
+
+        v = self.api.current_voutput
+        scene: SceneRow | None = selected_rows[0].data(self.ranges_model.SceneRowRole)
 
         menu = QMenu(self.ranges_view)
         menu.addAction(self.copy_frames_action)
@@ -827,9 +864,81 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
         self.remove_range_action.setText("Remove selected range" + ("s" if len(selected_rows) > 1 else ""))
         menu.addAction(self.remove_range_action)
+        menu.addSeparator()
+
+        export_menu = menu.addMenu("Export")
+        if not (allowed := scene is not None and (not scene.checked_outputs or v.vs_index in scene.checked_outputs)):
+            export_menu.setToolTip(f"Current output [{v.vs_index}] is not enabled for this scene.")
+            export_menu.setEnabled(allowed)
+        elif scene:
+            export_menu.addAction("H.264 (8-bit YUV)", lambda: self._export_selected_ranges("h264", scene, v))
+            export_menu.addAction("Lossless FFV1", lambda: self._export_selected_ranges("ffv1", scene, v))
 
         menu.exec(self.ranges_view.viewport().mapToGlobal(pos))
         menu.deleteLater()
+
+    def _export_selected_ranges(self, fmt: Literal["h264", "ffv1"], scene: SceneRow, voutput: VideoOutputProxy) -> None:
+        if not (selected_rows := self.ranges_view.selectionModel().selectedRows()):
+            raise NotImplementedError
+
+        selected_ranges: list[AbstractRange[Any]] = [idx.data(self.ranges_model.RangeRole) for idx in selected_rows]
+
+        if not (Path(self.settings.global_.ffmpeg_path).is_file()):
+            QMessageBox.critical(
+                self,
+                "FFmpeg Not Found",
+                "Could not find the FFmpeg executable.\n\n"
+                "Please install FFmpeg or set its path in Scening plugin settings.",
+            )
+            return
+
+        if fmt == "h264":
+            ext = ".mp4"
+            filter_str = "MP4 Video (*.mp4);;All Files (*.*)"
+            ffmpeg_args = H264_ARGS
+        else:
+            ext = ".mkv"
+            filter_str = "MKV Video (*.mkv);;All Files (*.*)"
+            ffmpeg_args = FFV1_ARGS
+
+        default_dir = self.api.file_path.parent if self.api.file_path else Path.cwd()
+        default_file = default_dir / sanitize_filename(f"{scene.name}_{voutput.vs_name}{ext}", replacement_text="_")
+        default_file = default_file.with_stem(default_file.stem.replace(" ", "_"))
+
+        if len(selected_ranges) == 1:
+            r = selected_ranges[0]
+            s, e = r.as_frames(voutput)
+            default_file = default_file.with_stem(f"{default_file.stem}_{s}-{e}_{r.label}")
+            chosen, _ = QFileDialog.getSaveFileName(self, "Export Clip", str(default_file), filter=filter_str)
+            if not chosen:
+                return
+            dest_files = [Path(chosen if chosen.endswith(ext) else f"{chosen}{ext}")]
+        else:
+            chosen, _ = QFileDialog.getSaveFileName(
+                self,
+                f"Export {len(selected_ranges)} Clips (Base Name)",
+                str(default_file),
+                filter=filter_str,
+            )
+            if not chosen:
+                return
+            base = Path(chosen if chosen.endswith(ext) else f"{chosen}{ext}")
+
+            dest_files = list[Path]()
+            for i, r in enumerate(selected_ranges, 1):
+                s, e = r.as_frames(voutput)
+                f = base.with_name(sanitize_filename(f"{base.stem}_{s}-{e}_{r.label or i}{base.suffix}", "_"))
+                dest_files.append(f)
+
+        if w := self._export_worker:
+            if not self._export_worker.cancelled and self._export_worker_task:
+                self._export_worker_task.add_done_callback(
+                    lambda _: w.run(selected_ranges, voutput, dest_files, ffmpeg_args, fmt)
+                )
+        else:
+            worker = ExportWorker(self.api, self.settings)
+            self._export_worker = worker
+            self._export_worker_task = worker.run(selected_ranges, voutput, dest_files, ffmpeg_args, fmt)
 
     def _get_visible_range_boundaries(self, starts_only: bool = False) -> list[int]:
         v = self.api.current_voutput

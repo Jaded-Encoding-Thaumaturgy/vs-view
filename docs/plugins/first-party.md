@@ -37,7 +37,7 @@ First-party plugins are official components integrated directly into the **VSVie
 
     ---
 
-    Create, manage, and export scene ranges. Supports custom parsers and serializers.
+    Create, manage, and export scene ranges or video clips. Supports custom parsers and serializers.
 
     [:lucide-move-right: Explore Scening](#scening)
     
@@ -105,6 +105,7 @@ The Frame Properties panel displays metadata attached to each frame by VapourSyn
 ## Scening
 
 The Scening dock tool is designed for creating, managing, and exporting scene ranges.
+
 <figure markdown="span">
     ![Scening dock showing scene ranges](../assets/scening_dock.png){ loading=lazy }
 </figure>
@@ -186,6 +187,15 @@ The toolbar provides **Import scene...** and **Export scene...** buttons for wor
 | Python List (Frames)     | `.txt`    |
 | Python List (Timestamps) | `.txt`    |
 
+#### Video Clip Export
+
+You can export selected ranges directly to video files:
+
+1. Select one or more ranges in the lower panel.
+2. **Right-click** and choose **Export** -> **H.264 (8-bit YUV)** (`.mp4`) or **Lossless FFV1** (`.mkv`).
+3. Choose a destination file (single range) or base name (batch export).
+
+Exports run asynchronously in the background via FFmpeg (path configurable in **Settings** -> **Plugin - Scening**).
 
 !!! Abstract "Extended Functionality"
     Developers can register custom parsers and serializers via the plugin hook system.
