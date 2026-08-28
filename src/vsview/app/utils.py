@@ -90,8 +90,7 @@ def check_leaks(stage: Literal["before", "after"]) -> None:
 
         if stage == "after" and type_name in ["Core", "VideoNode"]:
             try:
-                filename = f"leak_{type_name.lower()}_{stage.replace(' ', '_').lower()}.png"
-                # Generate backref graph using graphviz
+                filename = f"leak_{type_name.lower()}_{stage.replace(' ', '_').lower()}.dot"
                 objgraph.show_backrefs(
                     objs[:1],
                     max_depth=10,
@@ -129,7 +128,7 @@ def check_leaks(stage: Literal["before", "after"]) -> None:
             # If running the check after deletion, generate backref graph for lingering instances
             if stage == "after" and is_valid:
                 try:
-                    filename = f"leak_qobject_{obj.__class__.__name__.lower()}_{stage.replace(' ', '_').lower()}.png"
+                    filename = f"leak_qobject_{obj.__class__.__name__.lower()}_{stage.replace(' ', '_').lower()}.dot"
                     objgraph.show_backrefs(
                         [obj],
                         max_depth=10,
