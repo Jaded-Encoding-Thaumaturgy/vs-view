@@ -52,6 +52,14 @@ Second-party plugins are officially maintained but distributed as separate packa
 
     [:lucide-move-right: Details](#histogram) · [:fontawesome-brands-github: Source](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/histogram)
 
+- :lucide-monitor-up: **Remote**
+
+    ---
+
+    Remote VapourSynth execution and frame streaming workspace powered by [vsremote](https://github.com/Ichunjo/vs-remote).
+
+    [:lucide-move-right: Details](../usage/workspaces/remote.md) · [:fontawesome-brands-github: Source](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/workspaces/remote)
+
 - :lucide-layers-2: **Split Planes**
 
     ---

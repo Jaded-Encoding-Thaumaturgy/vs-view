@@ -76,6 +76,7 @@ Most of these symbols are re-exported through the top-level `vsview.api` module 
            - ListEdit
            - WidgetTimeEdit
            - Login
+           - SecretLineEdit
            - ColorPicker
            - FilePicker
            - PathListEdit

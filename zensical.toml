@@ -62,6 +62,7 @@ nav = [
         { "File" = "usage/workspaces/file.md" },
         { "Quick Script" = "usage/workspaces/quick-script.md" },
         { "Editor" = "usage/workspaces/editor.md" },
+        { "Remote" = "usage/workspaces/remote.md" },
         { "Color Management" = "usage/color-management.md" },
         { "Configuration & CLI" = "usage/configuration.md" },
         { "Visual Studio Code Integration" = "usage/vscode.md" },

@@ -20,6 +20,7 @@ on:
           - fftspectrum
           - frameprops-extended
           - histogram
+          - remote
           - split-planes
 
 env:

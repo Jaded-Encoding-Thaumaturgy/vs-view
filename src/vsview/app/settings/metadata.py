@@ -168,6 +168,48 @@ class Login(WidgetMetadata[LoginCredentialsInput]):
 
 
 @dataclass(frozen=True, slots=True)
+class SecretLineEdit(WidgetMetadata[QLineEdit]):
+    """Secret LineEdit widget metadata stored in SecretsManager."""
+
+    namespace: str
+    """Namespace for the secret."""
+    context: str
+    """Context for the secret."""
+    key: str
+    """Key for the secret."""
+
+    _: KW_ONLY
+    echo_mode: QLineEdit.EchoMode = QLineEdit.EchoMode.PasswordEchoOnEdit
+    """Echo mode for the LineEdit widget."""
+    placeholder_text: str | None = None
+    """Placeholder text for the LineEdit widget."""
+    strip: bool = True
+    """Whether to strip leading and trailing whitespace from the secret."""
+    to_ui: None = None
+    from_ui: None = None
+
+    @override
+    def create_widget(self, parent: QWidget | None = None) -> QLineEdit:
+        return QLineEdit(parent, echoMode=self.echo_mode, placeholderText=self.placeholder_text)
+
+    @override
+    def load_value(self, widget: QLineEdit, value: Any) -> None:
+        secret = SecretsManager.get(self.namespace, self.context, self.key) or ""
+        widget.setText(secret)
+
+    @override
+    def get_value(self, widget: QLineEdit) -> Any:
+        secret = widget.text().strip() if self.strip else widget.text()
+
+        if secret:
+            SecretsManager.set(self.namespace, self.context, self.key, secret)
+        else:
+            SecretsManager.delete(self.namespace, self.context, self.key)
+
+        return None
+
+
+@dataclass(frozen=True, slots=True)
 class ColorPicker(WidgetMetadata[ColorPickerInput]):
     """ColorPicker widget metadata."""
 
