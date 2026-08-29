@@ -5,6 +5,7 @@ from collections import Counter
 from collections.abc import Callable, Coroutine, Generator
 from concurrent.futures import CancelledError, Future
 from contextlib import contextmanager
+from contextvars import copy_context
 from functools import wraps
 from inspect import iscoroutinefunction
 from logging import getLogger
@@ -105,6 +106,7 @@ class QtEventLoop(QObject, EventLoop):
     ) -> UnifiedFuture[R]:
         """Run func in Qt's global thread pool with a custom thread name."""
         fut = UnifiedFuture[R]()
+        ctx = copy_context()
 
         def wrapper() -> None:
             with self._tasks_lock:
@@ -115,7 +117,7 @@ class QtEventLoop(QObject, EventLoop):
                 if not fut.set_running_or_notify_cancel():
                     return
                 try:
-                    result = func(*args, **kwargs)
+                    result = ctx.run(func, *args, **kwargs)
                 except BaseException as e:
                     if isinstance(e, (Cancelled, CancelledError, asyncio.CancelledError)):
                         _logger.debug("Task %r cancelled: %s", name, e)

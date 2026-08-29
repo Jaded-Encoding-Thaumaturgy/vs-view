@@ -4,6 +4,7 @@ import asyncio
 import logging
 import threading
 from concurrent.futures import CancelledError as ConcurrentCancelledError
+from contextvars import ContextVar
 
 import pytest
 from PySide6.QtCore import QThread, QThreadPool
@@ -386,3 +387,14 @@ def test_run_coro_existing_event_loop_nested(qt_loop: QtEventLoop) -> None:
         return await level2()
 
     assert level1().result(timeout=2.0) == "deep"
+
+
+def test_to_thread_contextvars_propagation(qt_loop: QtEventLoop) -> None:
+    test_var = ContextVar("test_var", default="default")
+    test_var.set("custom_value")
+
+    def worker() -> str:
+        return test_var.get()
+
+    fut = qt_loop.to_thread(worker)
+    assert fut.result(timeout=2.0) == "custom_value"
