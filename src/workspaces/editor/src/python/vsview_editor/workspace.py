@@ -628,7 +628,8 @@ class EditorWorkspace(
             self.content.filename,
         )
 
-        return super().loader()
+        with GlobalConsoleHub.bind_execution(self.code_dock.editor.bridge):
+            return super().loader()
 
     @override
     def reload_content(self, code: str | None = None) -> UnifiedFuture[int]:
@@ -710,9 +711,7 @@ class EditorWorkspace(
         self._save_current_dock_sizes()
         self.code_dock.run_btn.setDisabled(True)
 
-        with GlobalConsoleHub.bind_execution(self.code_dock.editor.bridge):
-            f = self.reload_content(code=self.code_dock.editor.bridge.main_content)
-
+        f = self.reload_content(code=self.code_dock.editor.bridge.main_content)
         f.add_loop_callback(lambda _: self.code_dock.run_btn.setEnabled(True))
 
     @Slot()
