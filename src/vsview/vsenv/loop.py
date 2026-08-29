@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from contextvars import copy_context
 from functools import wraps
 from inspect import iscoroutinefunction
-from logging import getLogger
+from logging import DEBUG, getLogger
 from threading import Lock, current_thread
 from typing import Any, Literal, Protocol, overload, override
 
@@ -221,9 +221,10 @@ class QtEventLoop(QObject, EventLoop):
             # Final flush to process any signals from threads that just finished
             QApplication.processEvents()
 
-        with self._tasks_lock:
-            _logger.debug("Final active threads count: %s", pool.activeThreadCount())
-            _logger.debug("Remaining thread(s): %s", [k for k, v in self._active_tasks.items() if v > 0])
+        if _logger.isEnabledFor(DEBUG):
+            with self._tasks_lock:
+                _logger.debug("Final active threads count: %s", pool.activeThreadCount())
+                _logger.debug("Remaining thread(s): %s", [k for k, v in self._active_tasks.items() if v > 0])
 
 
 class _DecoratorFuture(Protocol):
