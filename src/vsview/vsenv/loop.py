@@ -47,6 +47,11 @@ class QtEventLoop(QObject, EventLoop):
 
     @override
     def detach(self) -> None:
+        from ..app.main import Application
+
+        if isinstance(QApplication.instance(), Application):
+            _logger.warning("Attempt to detach QtEventLoop within VSView context")
+
         self.cancel()
         self.wait_for_threads(5000)
         self._invoke.disconnect(self._on_invoke)
