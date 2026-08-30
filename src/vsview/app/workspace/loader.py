@@ -891,26 +891,17 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
                     self.env,
                     module=module,
                     chdir=chdir,
-                    inline=False,
                     **self._script_kwargs,
                 )
             case "code":
-                self.script = load_code(
-                    self._script_content,
-                    self.env,
-                    module=module,
-                    inline=False,
-                    **self._script_kwargs,
-                )
+                self.script = load_code(self._script_content, self.env, module=module, **self._script_kwargs)
             case _:
                 assert_never(self.content_type)
 
         logger.debug("Running Script...")
 
-        fut = self.script.run()
-
         try:
-            fut.result()
+            self.script.result()
             logger.debug("%s execution completed successfully", self.content_type.title())
         except ExecutionError as e:
             from ...app.error import show_error
