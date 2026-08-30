@@ -45,8 +45,8 @@ class ErrorLocationInfo(NamedTuple):
 def is_user_script_frame(
     filename: str,
     user_script_path: str | None = None,
-    prefix_filenames: tuple[str, ...] = ("src/cython/", "<"),
-    markers: tuple[str, ...] = ("site-packages/", "/lib/", ".venv/", "venv/", "lib/python", "vsengine/", "vsview/"),
+    prefix_filenames: tuple[str, ...] = ("src/cython/", "<", "vapoursynth.pyx"),
+    markers: tuple[str, ...] = ("site-packages/", "/lib/", "vsengine/", "vsview/"),
 ) -> bool:
     normalized_filename = filename.lower().replace("\\", "/")
 
@@ -58,7 +58,7 @@ def is_user_script_frame(
         ):
             return True
 
-    if filename.startswith(prefix_filenames):
+    if filename.startswith(prefix_filenames) or normalized_filename.startswith(prefix_filenames):
         return False
 
     return not any(marker in normalized_filename for marker in markers)
@@ -93,7 +93,7 @@ def extract_source_context(
     # Try reading from real file first, then fall back to linecache (for virtual files)
     lines = list[str]()
     if filename and not filename.startswith("<") and (p := Path(filename)).exists() and p.is_file():
-        lines = p.read_text().splitlines()
+        lines = p.read_text(errors="replace").splitlines()
     elif filename:
         lines = [line.rstrip("\n\r") for line in linecache.getlines(filename)]
 
@@ -126,9 +126,9 @@ def resolve_error_location(
         elif result := find_user_script_frame(tb, user_script_path):
             filename, lineno, code_line = result
         else:
-            filename, lineno, code_line = None, None, None
+            filename, lineno, code_line = user_script_path, None, None
 
-        return ErrorLocationInfo(filename, lineno, e.__class__.__name__, str(e), code_line)
+        return ErrorLocationInfo(filename or user_script_path, lineno, e.__class__.__name__, str(e), code_line)
 
     if isinstance(error, ExceptionLike):
         filename = error.filename
