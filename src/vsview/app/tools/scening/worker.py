@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import queue
 import subprocess
-from dataclasses import dataclass
+import tempfile
+import threading
+from collections.abc import Generator
+from contextlib import contextmanager, suppress
+from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -10,7 +15,7 @@ import vapoursynth as vs
 import vsengine.video
 from vsengine import Cancelled
 
-from vsview.api import PluginAPI, PluginSettings, VideoOutputProxy, run_in_background
+from vsview.api import PluginAPI, PluginSettings, VideoOutputProxy
 
 from .models import AbstractRange
 
@@ -21,15 +26,27 @@ logger = getLogger(__name__)
 
 
 @dataclass
-class ExportWorker:
-    api: PluginAPI
-    settings: PluginSettings[GlobalSettings, LocalSettings]
+class ExportJob:
+    ranges: list[AbstractRange[Any]]
+    voutput: VideoOutputProxy
+    dest_files: list[Path]
+    ffmpeg_args: list[str]
+    fmt: Literal["h264", "ffv1"]
+    cancel_event: threading.Event = field(default_factory=threading.Event)
+    done_event: threading.Event = field(default_factory=threading.Event)
 
-    def __post_init__(self) -> None:
-        self.cancelled = False
 
-    @run_in_background(name="ExportClip")
-    def run(
+class ExportQueueManager:
+    def __init__(self, api: PluginAPI, settings: PluginSettings[GlobalSettings, LocalSettings]) -> None:
+        self.api = api
+        self.settings = settings
+        self._queue = queue.Queue[ExportJob | None]()
+        self._current_job: ExportJob | None = None
+        self._current_proc: subprocess.Popen[bytes] | None = None
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+
+    def enqueue(
         self,
         ranges: list[AbstractRange[Any]],
         voutput: VideoOutputProxy,
@@ -37,52 +54,137 @@ class ExportWorker:
         ffmpeg_args: list[str],
         fmt: Literal["h264", "ffv1"],
     ) -> None:
-        total = len(ranges)
+        self._queue.put(ExportJob(ranges, voutput, dest_files, ffmpeg_args, fmt))
+        self._ensure_worker_started()
+        self.api.statusMessage.emit(f"Queued export of {len(dest_files)} clip(s). Queue size: {self._queue.qsize()}")
 
-        with self.api.blocker(), self.api.vs_context():
-            for i, (r, dest_file) in enumerate(zip(ranges, dest_files), 1):
-                if self.cancelled:
-                    raise Cancelled
+    def cancel_current(self, *, wait: bool = False, timeout: float = 3.0) -> None:
+        job_to_wait: ExportJob | None = None
 
-                self.api.statusMessage.emit(f"Exporting clip {i}/{total}: {dest_file.name[:100]}...")
+        with self._lock:
+            if self._current_job:
+                self._current_job.cancel_event.set()
+                job_to_wait = self._current_job
+            if self._current_proc:
+                with suppress(OSError):
+                    self._current_proc.kill()
 
-                s, e = r.as_frames(voutput)
-                try:
-                    trimmed = voutput.vs_output.clip[s : e + (not self.settings.global_.exclusive)]
-                except vs.Error as e:
-                    logger.error(e)
+        if wait and job_to_wait is not None:
+            job_to_wait.done_event.wait(timeout=timeout)
+
+    def cancel_all(self, *, wait: bool = True, timeout: float = 3.0) -> None:
+        # Drain queued jobs
+        while True:
+            try:
+                if (job := self._queue.get_nowait()) is not None:
+                    job.cancel_event.set()
+                    job.done_event.set()
+                self._queue.task_done()
+            except queue.Empty:
+                break
+
+        self.cancel_current(wait=wait, timeout=timeout)
+
+    def shutdown(self, *, timeout: float = 3.0) -> None:
+        with self._lock:
+            thread = self._thread
+            if thread is None or not thread.is_alive():
+                return
+
+        self.cancel_all(wait=True, timeout=timeout)
+        self._queue.put(None)
+
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=timeout)
+
+    def _ensure_worker_started(self) -> None:
+        with self._lock:
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = threading.Thread(target=self._worker_loop, name="ExportWorkerThread", daemon=True)
+                self._thread.start()
+
+    def _worker_loop(self) -> None:
+        try:
+            while True:
+                if (job := self._queue.get()) is None:
+                    self._queue.task_done()
+                    break
+
+                if job.cancel_event.is_set():
+                    job.done_event.set()
+                    self._queue.task_done()
                     continue
 
-                cfmt = trimmed.format
+                with self._lock:
+                    self._current_job = job
+
                 try:
-                    if fmt == "ffv1" and (cfmt.bits_per_sample > 16 or cfmt.sample_type == vs.FLOAT):
-                        target_fmt = cfmt.replace(bits_per_sample=16, sample_type=vs.INTEGER)
-                        logger.warning("Converting format %s to 16-bit integer (%s)", cfmt.name, target_fmt.name)
+                    with self.api.blocker(), self.api.vs_context():
+                        self._execute_job(job)
+                except Exception:
+                    logger.exception("Unexpected error during export job execution")
+                finally:
+                    job.done_event.set()
+                    with self._lock:
+                        self._current_job = None
+                    self._queue.task_done()
+        finally:
+            with self._lock:
+                self._thread = None
+
+    def _execute_job(self, job: ExportJob) -> None:
+        total = len(job.ranges)
+
+        for i, (r, dest_file) in enumerate(zip(job.ranges, job.dest_files), 1):
+            if job.cancel_event.is_set():
+                dest_file.unlink(missing_ok=True)
+                self.api.statusMessage.emit("Export cancelled.")
+                return
+
+            self.api.statusMessage.emit(f"Exporting clip {i}/{total}: {dest_file.name[:100]}...")
+
+            s, e = r.as_frames(job.voutput)
+            try:
+                trimmed = job.voutput.vs_output.clip[s : e + (not self.settings.global_.exclusive)]
+            except vs.Error as exc:
+                logger.error("Failed to slice clip: %s", exc)
+                continue
+
+            cfmt = trimmed.format
+            try:
+                if job.fmt == "ffv1" and (cfmt.bits_per_sample > 16 or cfmt.sample_type == vs.FLOAT):
+                    target_fmt = cfmt.replace(bits_per_sample=16, sample_type=vs.INTEGER)
+                    logger.warning("Converting format %s to 16-bit integer (%s)", cfmt.name, target_fmt.name)
+                    trimmed = trimmed.resize.Point(format=target_fmt)
+                elif job.fmt == "h264":
+                    if cfmt.color_family == vs.RGB:
+                        target_fmt = cfmt.replace(color_family=vs.YUV, bits_per_sample=8, sample_type=vs.INTEGER)
+                        logger.warning("Converting RGB format %s to %s", cfmt.name, target_fmt.name)
+                        trimmed = trimmed.resize.Point(format=target_fmt, matrix_s="709")
+                    elif cfmt.bits_per_sample > 8:
+                        target_fmt = cfmt.replace(bits_per_sample=8, sample_type=vs.INTEGER)
+                        logger.warning("Converting format %s to 8-bit (%s)", cfmt.name, target_fmt.name)
                         trimmed = trimmed.resize.Point(format=target_fmt)
-                    elif fmt == "h264":
-                        if cfmt.color_family == vs.RGB:
-                            target_fmt = cfmt.replace(color_family=vs.YUV, bits_per_sample=8, sample_type=vs.INTEGER)
-                            logger.warning("Converting RGB format %s to %s", cfmt.name, target_fmt.name)
-                            trimmed = trimmed.resize.Point(format=target_fmt, matrix_s="709")
-                        elif cfmt.bits_per_sample > 8:
-                            target_fmt = cfmt.replace(bits_per_sample=8, sample_type=vs.INTEGER)
-                            logger.warning("Converting format %s to 8-bit (%s)", cfmt.name, target_fmt.name)
-                            trimmed = trimmed.resize.Point(format=target_fmt)
-                except vs.Error:
-                    logger.exception("Failed to convert output n° %s", voutput.vs_index)
-                    continue
+            except vs.Error:
+                logger.exception("Failed to convert format for output %s", job.voutput.vs_index)
+                continue
 
-                try:
-                    self._export_clip(trimmed, dest_file, ffmpeg_args)
-                except Exception as exc:
-                    logger.exception("Export failed for %s", dest_file)
-                    self.api.statusMessage.emit(f"Export failed for {dest_file.name}: {exc}")
-                    return
+            try:
+                self._export_clip(job, trimmed, dest_file, job.ffmpeg_args)
+            except Cancelled:
+                self.api.statusMessage.emit(f"Export cancelled for {dest_file.name}.")
+                dest_file.unlink(missing_ok=True)
+                return
+            except Exception as exc:
+                logger.exception("Export failed for %s", dest_file)
+                dest_file.unlink(missing_ok=True)
+                self.api.statusMessage.emit(f"Export failed for {dest_file.name}: {exc}")
+                return
 
-            logger.info("Successfully exported %s clip(s).", total)
-            self.api.statusMessage.emit(f"Successfully exported {total} clip(s).")
+        logger.info("Successfully exported %s clip(s).", total)
+        self.api.statusMessage.emit(f"Successfully exported {total} clip(s).")
 
-    def _export_clip(self, clip: vs.VideoNode, destination_file: Path, ffmpeg_args: list[str]) -> None:
+    def _export_clip(self, job: ExportJob, clip: vs.VideoNode, destination_file: Path, ffmpeg_args: list[str]) -> None:
         destination_file.parent.mkdir(parents=True, exist_ok=True)
 
         is_y4m = clip.format.color_family in (vs.ColorFamily.YUV, vs.ColorFamily.GRAY)
@@ -117,36 +219,60 @@ class ExportWorker:
             destination_file,
         ]
 
-        with subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) as proc:
-            assert proc.stdin is not None
+        with (
+            tempfile.TemporaryFile(mode="w+b") as stderr_file,
+            subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=stderr_file) as proc,
+            self._bind_proc(proc),
+        ):
             output_err: Exception | None = None
             try:
+                assert proc.stdin is not None
                 if is_y4m:
                     proc.stdin.write(_get_y4m_header(clip))
 
-                for idx, frame in enumerate(vsengine.video.frames(clip)):
-                    if self.cancelled:
+                logger.debug("Exporting %s %s/%s", destination_file.name, 0, total)
+                for idx, frame in enumerate(vsengine.video.frames(clip, prefetch=2)):
+                    if job.cancel_event.is_set():
                         raise Cancelled
-                    if (i := idx + 1) % round(clip.fps) == 0:
-                        logger.debug("Exporting %s/%s", i, total)
+                    if (i := idx + 1) % round(clip.fps) == 0 or i == total:
+                        logger.debug("Exporting %s %s/%s", destination_file.name, i, total)
 
                     if is_y4m:
                         proc.stdin.write(b"FRAME\n")
-                    for plane in range(frame.format.num_planes):
-                        proc.stdin.write(frame[plane])
-
+                    for chunk in frame.readchunks():
+                        proc.stdin.write(chunk)
             except (OSError, vs.Error, ValueError, RuntimeError) as exc:
+                if job.cancel_event.is_set():
+                    raise Cancelled from None
                 output_err = exc
             finally:
-                if not proc.stdin.closed:
-                    proc.stdin.close()
+                if proc.stdin and not proc.stdin.closed:
+                    with suppress(OSError):
+                        proc.stdin.close()
 
-            _, stderr = proc.communicate()
+            proc.wait()
+
+            if job.cancel_event.is_set():
+                raise Cancelled
+
             if proc.returncode != 0:
-                err_text = stderr.decode("utf-8", errors="replace").strip()
+                stderr_file.seek(0)
+                err_text = stderr_file.read().decode("utf-8", errors="replace").strip()
                 raise RuntimeError(f"FFmpeg returned exit code {proc.returncode}: {err_text}") from output_err
+
             if output_err is not None:
                 raise output_err
+
+    @contextmanager
+    def _bind_proc(self, proc: subprocess.Popen[bytes]) -> Generator[None]:
+        with self._lock:
+            self._current_proc = proc
+
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._current_proc = None
 
 
 H264_ARGS = ["-c:v", "libx264", "-crf", "18.67", "-preset", "medium"]

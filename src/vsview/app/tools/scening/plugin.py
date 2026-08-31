@@ -3,7 +3,6 @@ from __future__ import annotations
 import shutil
 import sys
 from bisect import bisect_left, bisect_right
-from concurrent.futures import wait
 from enum import StrEnum
 from functools import cache
 from itertools import count, cycle, islice
@@ -30,7 +29,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from vsengine import UnifiedFuture
 
 from vsview.api import (
     ActionDefinition,
@@ -55,7 +53,7 @@ from .parsers import internal_parsers
 from .serializer import internal_serializers
 from .ui import Col, RangeCol, RangeTableDelegate, RangeTableModel, SceneTableDelegate, SceneTableModel
 from .utils import ColorGenerator, monkey_patch_parser
-from .worker import FFV1_ARGS, H264_ARGS, ExportWorker
+from .worker import FFV1_ARGS, H264_ARGS, ExportQueueManager
 
 if TYPE_CHECKING:
     from .api import Parser, Serializer
@@ -160,10 +158,9 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         IconReloadMixin.__init__(self)
 
         self.output_map = dict[int, str]()
+        self.export_manager = ExportQueueManager(self.api, self.settings)
         self._pending_start: Frame | Time | None = None
         self._pending_end: Frame | Time | None = None
-        self._export_worker: ExportWorker | None = None
-        self._export_worker_task: UnifiedFuture[None] | None = None
 
         self.setup_ui()
         self.setup_shortcuts()
@@ -172,7 +169,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.register_icon_callback(self.on_reload_icon)
 
         self.api.globalSettingsChanged.connect(self._update_toolbar_style)
-        self.api.register_on_destroy(self.cancel_export_workers)
+        self.api.register_on_destroy(self.export_manager.shutdown)
 
         self._update_toolbar_style()
         self._update_action_labels()
@@ -458,7 +455,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
     @override
     def on_workspace_destroy(self) -> None:
-        self.cancel_export_workers()
+        self.export_manager.cancel_all(wait=True)
 
     @override
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
@@ -472,14 +469,6 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         cachedproperty.clear_cache(self.scenes_delegate)
         self.scenes_view.viewport().update()
         self._update_action_labels()
-
-    def cancel_export_workers(self) -> None:
-        if self._export_worker:
-            self._export_worker.cancelled = True
-        if self._export_worker_task:
-            wait([self._export_worker_task])
-            self._export_worker_task = None
-        self._export_worker = None
 
     @Slot()
     def on_new_scene(self) -> None:
@@ -930,15 +919,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
                 f = base.with_name(sanitize_filename(f"{base.stem}_{s}-{e}_{r.label or i}{base.suffix}", "_"))
                 dest_files.append(f)
 
-        if w := self._export_worker:
-            if not self._export_worker.cancelled and self._export_worker_task:
-                self._export_worker_task.add_done_callback(
-                    lambda _: w.run(selected_ranges, voutput, dest_files, ffmpeg_args, fmt)
-                )
-        else:
-            worker = ExportWorker(self.api, self.settings)
-            self._export_worker = worker
-            self._export_worker_task = worker.run(selected_ranges, voutput, dest_files, ffmpeg_args, fmt)
+        self.export_manager.enqueue(selected_ranges, voutput, dest_files, ffmpeg_args, fmt)
 
     def _get_visible_range_boundaries(self, starts_only: bool = False) -> list[int]:
         v = self.api.current_voutput
