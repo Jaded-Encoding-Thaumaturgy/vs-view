@@ -227,5 +227,7 @@ class TabLabel(QWidget):
             metrics.elidedText(name_text, Qt.TextElideMode.ElideRight, self._name_label.maximumWidth())
         )
 
+        self.setToolTip(name_text)
+
     def _update_zoom_text(self) -> None:
         self._zoom_label.setText(f"({round(self._zoom * 100)}%)" if self._zoom else "(---%)")
