@@ -2312,19 +2312,19 @@ wheels = [
 
 [[package]]
 name = "vapoursynth-ffms2"
-version = "5.2.3"
+version = "5.2.4"
 source = { registry = "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple" }
 dependencies = [
     { name = "vapoursynth" },
 ]
-sdist = { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.3/vapoursynth_ffms2-5.2.3.tar.gz", hash = "sha256:aad98fca6b115160cf7261f4e4584c4151cc9e280df82f0edeb555a4027a00c4" }
+sdist = { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.4/vapoursynth_ffms2-5.2.4.tar.gz", hash = "sha256:b00de243479a3aa05094edc59e982aee686bb0aa737e3b7181f478e05cd70482" }
 wheels = [
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.3/vapoursynth_ffms2-5.2.3-py3-none-macosx_13_0_arm64.whl", hash = "sha256:a1b23080dc8e5e7ede1c00c3d700f722778816e417579a95de0ac197bc98740a" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.3/vapoursynth_ffms2-5.2.3-py3-none-macosx_13_0_x86_64.whl", hash = "sha256:7ad56a9d456b0c13b252cbcb989f56bda908e95d54b5975506f6a1df5ee87173" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.3/vapoursynth_ffms2-5.2.3-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:45a4b8113037174a6675cc38cd5b7e172ce61d8169834f2083de0697f2066998" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.3/vapoursynth_ffms2-5.2.3-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:0c11cda52df28fedafae46e79ccdfabc683d700741b630bf6e2be8a713dd8e16" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.3/vapoursynth_ffms2-5.2.3-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:9882208fc2fbb3cc3cabf7453c3d6653bf0a13520c3ea16c0c1a5f2fb8a4bddb" },
-    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.3/vapoursynth_ffms2-5.2.3-py3-none-win_amd64.whl", hash = "sha256:324576ee5ed1e2bd5e75dda15f1663a9b9fce5e0495b6d95132f5c07faae76b6" },
+    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.4/vapoursynth_ffms2-5.2.4-py3-none-macosx_13_0_arm64.whl", hash = "sha256:0af64b2265c1c52adf16bd08134af5a675a2c72ec480db4919c89fe3a2d3f666" },
+    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.4/vapoursynth_ffms2-5.2.4-py3-none-macosx_13_0_x86_64.whl", hash = "sha256:14616330d4153d90716577c538381b04ed45555d680ad2a0700320638a650415" },
+    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.4/vapoursynth_ffms2-5.2.4-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:e450140f7ee984d0a7406cb645bc2e4102ce5f360521d35dc9203801f3b9a703" },
+    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.4/vapoursynth_ffms2-5.2.4-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:8aa6769371c9324d66e066593dce327b43ec1bfb0b2a34fe61cd719cacd84abc" },
+    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.4/vapoursynth_ffms2-5.2.4-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:740a67fa7deec827ce1df4c7f7822037a60f7ac7cb1ba9076cbae3e044df1c34" },
+    { url = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels/releases/download/vapoursynth-ffms2-v5.2.4/vapoursynth_ffms2-5.2.4-py3-none-win_amd64.whl", hash = "sha256:34211e7ae0bd52fe137fbf67436a5da02cbbf888da3f8558b60f6519e7a19395" },
 ]
 
 [[package]]
