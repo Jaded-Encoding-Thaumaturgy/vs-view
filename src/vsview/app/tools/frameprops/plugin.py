@@ -510,6 +510,8 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         super().__init__(parent, api)
         IconReloadMixin.__init__(self)
 
+        self._current_props: Mapping[str, Any] | None = None
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
@@ -584,10 +586,8 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         self.stack.addWidget(self.raw_table)
         self.stack.addWidget(self.categorize_tree)
 
-        self.categorize_toggle.toggled.connect(self.stack.setCurrentIndex)
-        self.categorize_toggle.toggled.connect(self.formatted_toggle.setEnabled)
+        self.categorize_toggle.toggled.connect(self._on_categorize_toggled)
         self.categorize_toggle.setChecked(fallback(self.settings.local_.categorize, self.settings.global_.categorize))
-        self.categorize_toggle.toggled.connect(lambda checked: self.update_local_settings(categorize=not not checked))  # noqa: SIM208
 
         self.formatted_toggle.toggled.connect(self.categorize_tree.set_show_formatted)
         self.formatted_toggle.setChecked(fallback(self.settings.local_.format, self.settings.global_.format))
@@ -631,6 +631,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
         layout.addWidget(self.splitter)
 
+        self.api.register_on_destroy(lambda: setattr(self, "_current_props", None))
         self.api.register_on_destroy(close_btn.click)
 
         # Restore column widths
@@ -674,20 +675,22 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
                 label = f"Frame {frame} (Current)" if frame == current_frame else f"Frame {frame}"
                 self.history_combo.addItem(label, frame)
 
-        current_index = -1
-        for i in range(self.history_combo.count()):
-            if self.history_combo.itemData(i) == current_frame:
-                current_index = i
-                break
+            current_index = -1
+            for i in range(self.history_combo.count()):
+                if self.history_combo.itemData(i) == current_frame:
+                    current_index = i
+                    break
 
-        if current_index >= 0:
-            self.history_combo.setCurrentIndex(current_index)
+            if current_index >= 0:
+                self.history_combo.setCurrentIndex(current_index)
 
         self.update_views(props)
         self.update_nav_buttons()
         self.refresh_preview(current_frame)
 
     def update_views(self, props: Mapping[str, Any]) -> None:
+        self._current_props = props
+
         widths = self.settings.local_.tree_column_widths
         auto_resize = not (widths and 0 in widths)
 
@@ -736,6 +739,14 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         layout.addWidget(toggle)
 
         return toggle, row
+
+    @Slot(bool)
+    def _on_categorize_toggled(self, checked: bool) -> None:
+        self.stack.setCurrentIndex(int(checked))
+        self.formatted_toggle.setEnabled(checked)
+        self.settings.local_.categorize = checked
+        if self._current_props:
+            self.update_views(self._current_props)
 
     @Slot(int)
     def _on_history_selected(self, index: int) -> None:
