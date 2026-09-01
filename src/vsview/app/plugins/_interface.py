@@ -23,6 +23,7 @@ from vsview.app.views.video import GraphicsView
 from vsview.vsenv.loop import run_in_loop
 
 from .contracts import LocalSettingsModel, VideoOutputProxy
+from .exceptions import NoCurrentVideoOutputError
 
 if TYPE_CHECKING:
     from vsview.app.outputs import FrameBuffer
@@ -224,8 +225,7 @@ class _PluginAPI(_PluginLimitedApi):
         if voutput := self.__workspace.outputs_manager.current_voutput:
             return _make_voutput_proxy(voutput)
 
-        # This shouldn't happen
-        raise NotImplementedError
+        raise NoCurrentVideoOutputError("No video output is currently available in the active workspace.")
 
     def blocker(self, caller: WidgetPluginBase[Any, Any] | None = None) -> WorkspaceBlocker:
         """

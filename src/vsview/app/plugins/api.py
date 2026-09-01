@@ -57,6 +57,7 @@ from ._interface import (
     _ViewportProxy,
 )
 from .contracts import AudioOutputProxy, VideoOutputProxy
+from .exceptions import NoCurrentVideoOutputError
 
 logger = getLogger(__name__)
 
@@ -438,7 +439,7 @@ class PluginAPI(_PluginAPI):
         if voutput := self.__workspace.outputs_manager.current_voutput:
             return voutput.frame_to_time(self.current_frame)
 
-        raise NotImplementedError
+        raise NoCurrentVideoOutputError("No video output is currently available in the active workspace.")
 
     @property
     def current_video_index(self) -> int:
