@@ -33,6 +33,7 @@ from vsview.api import (
     AbstractTableModel,
     FrameEdit,
     IconName,
+    NoCurrentVideoOutputError,
     NonClosingMenu,
     PluginAPI,
     Time,
@@ -475,13 +476,16 @@ class RangeTableModel(AbstractTableModel):
 
         range_item, scene = self._data[index.row()]
         col = RangeCol(index.column())
-        v = self.current_voutput
 
         match role:
             case Qt.ItemDataRole.DisplayRole:
+                if col == RangeCol.LABEL:
+                    return range_item.label
+
+                if (v := self.current_voutput) is None:
+                    return None
+
                 match col:
-                    case RangeCol.LABEL:
-                        return range_item.label
                     case RangeCol.START_FRAME:
                         return str(range_item.as_frames(v)[0])
                     case RangeCol.END_FRAME:
@@ -492,9 +496,13 @@ class RangeTableModel(AbstractTableModel):
                         return range_item.as_times(v)[1].to_ts("{H:02d}:{M:02d}:{S:02d}.{ms:03d}")
 
             case Qt.ItemDataRole.EditRole:
+                if col == RangeCol.LABEL:
+                    return range_item.label
+
+                if (v := self.current_voutput) is None:
+                    return None
+
                 match col:
-                    case RangeCol.LABEL:
-                        return range_item.label
                     case RangeCol.START_FRAME:
                         return range_item.as_frames(v)[0]
                     case RangeCol.END_FRAME:
@@ -536,7 +544,9 @@ class RangeTableModel(AbstractTableModel):
 
         range_item, scene_row = self._data[index.row()]
         col = RangeCol(index.column())
-        v = self.current_voutput
+
+        if (v := self.current_voutput) is None:
+            return False
 
         if role == Qt.ItemDataRole.EditRole:
             match col:
@@ -590,8 +600,11 @@ class RangeTableModel(AbstractTableModel):
         return self._data
 
     @property
-    def current_voutput(self) -> VideoOutputProxy:
-        return self.api.current_voutput
+    def current_voutput(self) -> VideoOutputProxy | None:
+        try:
+            return self.api.current_voutput
+        except NoCurrentVideoOutputError:
+            return None
 
     @override
     def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder) -> None:
@@ -631,7 +644,9 @@ class RangeTableModel(AbstractTableModel):
 
     def _sort_key(self, item: tuple[RangeFrame | RangeTime, SceneRow]) -> Any:
         range_item, _ = item
-        v = self.current_voutput
+
+        if (v := self.current_voutput) is None:
+            return None
 
         match RangeCol(self._sort_column):
             case RangeCol.START_FRAME | RangeCol.START_TIME:
@@ -665,8 +680,8 @@ class RangeTableDelegate(QStyledItemDelegate):
                 editor = FrameEdit(parent)
                 editor.setButtonSymbols(FrameEdit.ButtonSymbols.NoButtons)
 
-                if isinstance(model := index.model(), RangeTableModel):
-                    editor.setMaximum(model.current_voutput.vs_output.clip.num_frames - 1)
+                if isinstance(model := index.model(), RangeTableModel) and (v := model.current_voutput):
+                    editor.setMaximum(v.vs_output.clip.num_frames - 1)
 
             case RangeCol.START_TIME | RangeCol.END_TIME:
                 editor = TimeEdit(parent)
