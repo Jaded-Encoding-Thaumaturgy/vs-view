@@ -210,6 +210,11 @@ class PlaybackManager(QObject):
         self._pending_frame: Frame | None = None
 
     @property
+    def has_pending_frame(self) -> bool:
+        """Check if a frame seek request is pending or currently coalescing."""
+        return self._pending_frame is not None
+
+    @property
     def _env(self) -> ManagedEnvironment:
         return self._get_env()
 
@@ -339,12 +344,22 @@ class PlaybackManager(QObject):
             logger.warning("No current video output, ignoring seek")
             return
 
-        self.request_frame(clamp(self.state.current_frame + delta, 0, voutput.vs_output.clip.num_frames - 1))
+        base = self._pending_frame if self._pending_frame is not None else self.state.current_frame
+        target = Frame(clamp(base + delta, 0, voutput.vs_output.clip.num_frames - 1))
+        self.seek_to_frame_coalesced(target)
 
     @Slot(int)
     def seek_n_frames(self, direction: int) -> None:
         """Seek by N frames (configured step size)."""
         self.seek_frame(direction * self._tbar.playback_container.settings.seek_step)
+
+    def seek_to_frame_coalesced(self, frame: Frame) -> None:
+        """Seek to a frame using single-in-flight coalescing to avoid flooding render threads."""
+        self.stop()
+        self._pending_frame = frame
+
+        if not self._timeline_rendering:
+            self._render_pending_frame()
 
     @Slot()
     def toggle_playback(self) -> None:
@@ -753,7 +768,7 @@ class PlaybackManager(QObject):
     @Slot(Frame, Frame)
     def _on_frame_changed(self, frame: Frame, old_frame: Frame) -> None:
         logger.debug("Frame changed: frame=%d", frame)
-        self.request_frame(frame)
+        self.seek_to_frame_coalesced(frame)
 
     @Slot(float)
     def _on_volume_changed(self, volume: float) -> None:
@@ -776,18 +791,12 @@ class PlaybackManager(QObject):
 
         frame = voutput.time_to_frame(Time.from_qtime(time))
         logger.debug("Time changed: frame=%d", frame)
-
-        self.request_frame(frame)
+        self.seek_to_frame_coalesced(frame)
 
     @Slot(Frame, Time)
     def _on_timeline_clicked(self, frame: Frame, time: Time) -> None:
-        self.stop()
-
-        self._pending_frame = frame
-
-        if not self._timeline_rendering:
-            logger.debug("Timeline clicked: frame=%d, time=%s", frame, time)
-            self._render_pending_frame()
+        logger.debug("Timeline clicked: frame=%d, time=%s", frame, time)
+        self.seek_to_frame_coalesced(frame)
 
     def _render_pending_frame(self) -> None:
         if self._pending_frame is None:

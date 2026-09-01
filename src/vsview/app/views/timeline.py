@@ -1710,6 +1710,9 @@ class TimelineControlBar(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
+        self._total_frames: int = 0
+        self._cum_durations: list[Time] | None = None
+
         # Prevent vertical expansion when window is maximized
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
 

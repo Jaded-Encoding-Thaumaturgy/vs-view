@@ -535,7 +535,7 @@ class LoaderWorkspace[T](BaseWorkspace):
     @Slot(int)
     @run_in_loop
     def update_timeline_cursor(self, n: int) -> None:
-        if not self.outputs_manager.current_voutput:
+        if not self.outputs_manager.current_voutput or self.playback.has_pending_frame:
             return
 
         self.tbar.timeline.cursor_x = (n := Frame(n))
