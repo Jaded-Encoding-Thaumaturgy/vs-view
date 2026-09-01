@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import sys
 import weakref
 from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from functools import partial
-from logging import getLogger
+from logging import DEBUG, getLogger
 from pathlib import Path
 from typing import Any, cast, override
 
@@ -30,6 +31,8 @@ from PySide6.QtGui import (
     QDragLeaveEvent,
     QDragMoveEvent,
     QDropEvent,
+    QFont,
+    QFontMetrics,
     QIcon,
     QKeyEvent,
     QKeySequence,
@@ -57,7 +60,7 @@ from shiboken6 import Shiboken
 from vsengine.loops import set_loop
 
 from ..assets import app_icon
-from ..vsenv import QtEventLoop, gc_collect, get_policy, unregister_policy
+from ..vsenv import QtEventLoop, gc_collect, get_policy, run_in_background, unregister_policy
 from .icon import IconReloadMixin
 from .plugins.manager import PluginManager
 from .settings import ActionID, SecretsManager, SettingsManager, ShortcutManager
@@ -106,6 +109,9 @@ class Application(QApplication):
 
         SettingsManager.signals.globalChanged.connect(self._on_global_settings_changed)
 
+        if sys.platform == "win32":
+            self._warmup_cjk_fallback(self.font())
+
     @Slot()
     def _on_global_settings_changed(self) -> None:
         refresh_widgets = False
@@ -141,6 +147,20 @@ class Application(QApplication):
                 style.polish(widget)
                 widget.ensurePolished()
                 widget.update()
+
+    @staticmethod
+    @run_in_background(name="WarmupCJK")
+    def _warmup_cjk_fallback(font: QFont) -> None:
+        logger.log(DEBUG - 1, "Trigger DirectWrite to resolve Hiragana, Katakana, Kanji, and CJK punctuation")
+        QFontMetrics(font).boundingRect(
+            0,
+            0,
+            1000,
+            1000,
+            Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignLeft,
+            "日本語（テスト）「漢字」",  # noqa: RUF001
+        )
+        logger.log(DEBUG - 1, "DirectWrite trigger done")
 
 
 class MainWindow(QMainWindow):
