@@ -4,7 +4,7 @@ from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable, Generator
 from concurrent.futures import Future, wait
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from functools import partial
 from logging import getLogger
 from pathlib import Path
@@ -29,11 +29,13 @@ from vsengine.policy import ManagedEnvironment
 from vsengine.vpy import ExecutionError, Script, load_code, load_script
 
 from ...api.info import Context
+from ...env import getenv_bool
 from ...types import Frame
 from ...vsenv import clear_environment, gc_collect, run_in_background, run_in_loop, unset_environment
 from ..outputs import AudioOutput, OutputsManager, VideoOutput
 from ..plugins.api import PluginAPI, WidgetPluginBase
 from ..settings import ActionID, ShortcutManager
+from ..utils import ProcessMemorySnapshot, measure_memory
 from ..views import PluginDock, PluginSplitter
 from ..views.components import BlockableWidget, CustomLoadingPage, DockButton
 from ..views.tab import TabViewWidget
@@ -363,11 +365,15 @@ class LoaderWorkspace[T](BaseWorkspace):
             return 2
 
         logger.debug("Reloading content: %r", self.content)
+        is_debug = getenv_bool("VSVIEW_DEBUG")
 
         self.playback.stop()
         self.playback.can_reload = False
         self.statusLoadingStarted.emit("Reloading Content...")
         self.loop.from_thread(self.content_area.setDisabled, True).result()
+
+        mmm = measure_memory() if is_debug else nullcontext()
+        mmm.__enter__()
 
         with self.tbar.disabled(), self.freeze_viewport():
             self.tab_manager.disable_switch = True
@@ -385,6 +391,9 @@ class LoaderWorkspace[T](BaseWorkspace):
             # 2. Reset Environment
             self.clear_environment()
             gc_collect()
+
+            if is_debug:
+                logger.debug("Memory after environment cleanup: %s", ProcessMemorySnapshot())
 
             self.reload_count += 1
 
@@ -424,6 +433,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self._is_failed = False
 
                 logger.info("Content reloaded successfully: %r", self.content)
+                mmm.__exit__(None, None, None)
 
             self._on_tab_changed(current_tab_i, seamless=True, cb_render=on_complete, refresh_plugins=True)
 

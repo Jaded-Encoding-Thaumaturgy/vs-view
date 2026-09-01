@@ -2139,6 +2139,15 @@ wheels = [
 ]
 
 [[package]]
+name = "types-psutil"
+version = "7.2.2.20260827"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/ea/23a949b56d3a226a142b43c5c32404fae7044400296d18e8eda63d5d03a4/types_psutil-7.2.2.20260827.tar.gz", hash = "sha256:3c6067dba47c700495ca493f07b11e866ba13de223aabb26da555f9c86ae0b1f", size = 27294, upload-time = "2026-08-27T12:06:22.279Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/1b/7e0f5cfad4faa4a2e0845f69e9206eeefc6659dfa11d07da04e2fa47d08b/types_psutil-7.2.2.20260827-py3-none-any.whl", hash = "sha256:62364359cf85482aa698a62488e5420cae5c576e8acec450ce7fb3b91cdb3d96", size = 33365, upload-time = "2026-08-27T12:06:21.444Z" },
+]
+
+[[package]]
 name = "types-pygments"
 version = "2.21.0.20260819"
 source = { registry = "https://pypi.org/simple" }
@@ -2607,6 +2616,7 @@ dev = [
     { name = "hatchling" },
     { name = "mypy" },
     { name = "objgraph" },
+    { name = "psutil" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-env" },
@@ -2614,6 +2624,7 @@ dev = [
     { name = "pytest-qt" },
     { name = "pytest-xvfb" },
     { name = "ruff" },
+    { name = "types-psutil" },
     { name = "types-pygments" },
     { name = "vspackrgb", extra = ["numba", "numpy"] },
     { name = "vsstubs" },
@@ -2691,6 +2702,7 @@ dev = [
     { name = "hatchling", specifier = ">=1.29.0" },
     { name = "mypy", specifier = ">=2.3.0,<2.4.0" },
     { name = "objgraph", specifier = ">=3.6.2" },
+    { name = "psutil", specifier = ">=7.2.2" },
     { name = "pytest", specifier = ">=9.0.0,<10.0.0" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-env", specifier = ">=1.7.0" },
@@ -2698,6 +2710,7 @@ dev = [
     { name = "pytest-qt", specifier = ">=4.5.0" },
     { name = "pytest-xvfb", specifier = ">=3.1.1" },
     { name = "ruff", specifier = ">=0.16.0,<0.17.0" },
+    { name = "types-psutil", specifier = ">=7.2.2" },
     { name = "types-pygments", specifier = ">=2.20.0" },
     { name = "vspackrgb", extras = ["numba", "numpy"], editable = "src/vspackrgb" },
     { name = "vsstubs", specifier = ">=1.5.0" },

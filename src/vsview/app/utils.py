@@ -10,15 +10,147 @@ import weakref
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Container, Generator, Iterator, MutableSet, Sized
 from contextlib import contextmanager
-from logging import getLogger
+from dataclasses import dataclass
+from logging import DEBUG, getLogger
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, override
+from typing import TYPE_CHECKING, Any, Literal, Self, override
 
 import vapoursynth as vs
-from PySide6.QtCore import QObject, QTimer
+from jetpytools import inject_self
+from PySide6.QtCore import QObject, QThread, QTimer
+from PySide6.QtWidgets import QApplication
 from shiboken6 import Shiboken
 
 logger = getLogger(__name__)
+
+
+@dataclass(slots=True)
+class ProcessMemorySnapshot:
+    rss: int
+    """Resident Set Size / Working Set (physical memory currently paged in)."""
+    vms: int
+    """Virtual Memory Size."""
+    private: int
+    """Private Bytes / Commit Size (dedicated virtual memory, unavailable to other processes)."""
+    uss: int | None
+    """Unique Set Size (physical memory unique to this process, excluding shared pages)."""
+    python_traced: int | None
+    """Python heap memory tracked by tracemalloc if enabled, in bytes."""
+
+    def __init__(self) -> None:
+        self.rss = 0
+        self.vms = 0
+        self.private = 0
+        self.uss = None
+        self.python_traced = None
+
+        try:
+            import tracemalloc
+
+            import psutil
+        except ImportError:
+            logger.exception("")
+            return
+
+        proc = psutil.Process()
+        mem_info = proc.memory_info()
+
+        self.rss = mem_info.rss
+        self.vms = mem_info.vms
+        # On Windows, mem_info.private holds Commit Size / Private Bytes.
+        # Fall back to RSS on platforms without private bytes.
+        self.private = getattr(mem_info, "private", mem_info.rss)
+
+        try:
+            full_info = proc.memory_full_info()
+            self.uss = getattr(full_info, "uss", None)
+        except (psutil.AccessDenied, psutil.NoSuchProcess, AttributeError):
+            self.uss = None
+
+        self.python_traced = tracemalloc.get_traced_memory()[0] if tracemalloc.is_tracing() else None
+
+    @override
+    def __str__(self) -> str:
+        return self.format()
+
+    @property
+    def rss_mb(self) -> float:
+        """Working set / RSS in MiB."""
+        return self.rss / (1024 * 1024)
+
+    @property
+    def vms_mb(self) -> float:
+        """Virtual size in MiB."""
+        return self.vms / (1024 * 1024)
+
+    @property
+    def private_mb(self) -> float:
+        """Commit size / Private bytes in MiB."""
+        return self.private / (1024 * 1024)
+
+    @property
+    def uss_mb(self) -> float | None:
+        """Unique set size in MiB."""
+        return self.uss / (1024 * 1024) if self.uss is not None else None
+
+    @property
+    def python_traced_mb(self) -> float | None:
+        """Python traced heap in MiB."""
+        return self.python_traced / (1024 * 1024) if self.python_traced is not None else None
+
+    @inject_self
+    def format(self, before: Self | None = None) -> str:
+        """
+        Format memory usage, optionally comparing against a previous snapshot.
+
+        Args:
+            before: Previous snapshot to compute and display deltas against.
+        """
+
+        def fmt(label: str, curr: float | None, prev: float | None) -> str | None:
+            if curr is None:
+                return None
+
+            return (
+                f"{label}: {curr:.2f} MiB ({curr - prev:+0.2f} MiB)" if prev is not None else f"{label}: {curr:.2f} MiB"
+            )
+
+        parts = [
+            fmt("Commit/Private", self.private_mb, before.private_mb if before else None),
+            fmt("WorkingSet/RSS", self.rss_mb, before.rss_mb if before else None),
+            fmt("USS", self.uss_mb, before.uss_mb if before else None),
+            fmt("PyHeap", self.python_traced_mb, before.python_traced_mb if before else None),
+        ]
+
+        return ", ".join(p for p in parts if p is not None)
+
+
+@contextmanager
+def measure_memory(
+    label: str = "Memory", force_gc: bool = True, log_level: int = DEBUG
+) -> Generator[ProcessMemorySnapshot | None, None, None]:
+    """
+    Context manager to measure and log process memory before and after an operation.
+
+    Args:
+        label: Label to prepend to log messages.
+        force_gc: Whether to run gc.collect() before taking each snapshot.
+        log_level: Logging level (defaults to logging.DEBUG / 10).
+    """
+    if force_gc:
+        gc.collect()
+
+    before = ProcessMemorySnapshot()
+    logger.log(log_level, "[%s] Memory (before) -> %s", label, before.format())
+
+    try:
+        yield before
+    finally:
+        if force_gc:
+            gc.collect()
+
+        after = ProcessMemorySnapshot()
+        logger.log(log_level, "[%s] Memory (after) -> %s", label, after.format(before))
 
 
 def path_to_hash(path: str | os.PathLike[str]) -> str:
@@ -36,35 +168,55 @@ def path_to_hash(path: str | os.PathLike[str]) -> str:
     return hashlib.md5(str(Path(path).resolve()).encode()).hexdigest()[:16]
 
 
-class _CheckLeaks[**P, R]:
-    def __init__(self, func: Callable[P, R]) -> None:
+class _CheckLeaks:
+    def __init__(self, func: Callable[..., Any]) -> None:
         self.func = func
+        self._snapshot_before: ProcessMemorySnapshot | None = None
 
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        return self.func(*args, **kwargs)
+    def __call__(self, stage: Literal["before", "after"]) -> None:
+        before = self._snapshot_before if stage == "after" else None
+        if stage == "before":
+            self._snapshot_before = ProcessMemorySnapshot()
+        elif stage == "after":
+            self._snapshot_before = None
+        return self.func(stage, before=before)
 
     @contextmanager
     def ctx(self) -> Generator[None]:
         from ..env import getenv_bool
 
+        if not getenv_bool("VSVIEW_DEBUG"):
+            yield
+            return
+
+        is_gui_thread = (app := QApplication.instance()) and QThread.currentThread() == app.thread()
+
+        if is_gui_thread:
+            QTimer.singleShot(0, lambda: self("before"))
+        else:
+            self("before")
+
         try:
-            if getenv_bool("VSVIEW_DEBUG"):
-                QTimer.singleShot(0, lambda: check_leaks("before"))
             yield
         finally:
-            if getenv_bool("VSVIEW_DEBUG"):
-                QTimer.singleShot(0, lambda: check_leaks("after"))
+            if is_gui_thread:
+                QTimer.singleShot(0, lambda: self("after"))
+            else:
+                self("after")
 
 
 @_CheckLeaks
-def check_leaks(stage: Literal["before", "after"]) -> None:
+def check_leaks(stage: Literal["before", "after"], *, before: ProcessMemorySnapshot | None = None) -> None:
+    gc.collect()
+
+    mem = ProcessMemorySnapshot()
+    logger.debug("--- Memory Snapshot (%s) --- %s", stage, mem.format(before if stage == "after" else None))
+
     try:
         import objgraph  # type: ignore[import-untyped]
     except ImportError:
         logger.exception("")
         return
-
-    gc.collect()
 
     # Capture show_growth output
     with io.StringIO() as buf:
