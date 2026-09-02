@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 from collections import deque
 from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, wait
@@ -12,7 +13,7 @@ import vapoursynth as vs
 from vsengine import UnifiedFuture
 from vsengine.policy import ManagedEnvironment
 
-from ...vsenv import gc_collect, run_in_background
+from ...vsenv import run_in_background
 from ..settings import SettingsManager
 
 if TYPE_CHECKING:
@@ -183,7 +184,7 @@ class FrameBuffer:
         wait(pending)
 
         del bundles
-        gc_collect()
+        gc.collect()
 
         logger.debug("Buffer cleared")
 
@@ -312,7 +313,7 @@ class AudioBuffer:
         wait(pending)
 
         del bundles
-        gc_collect()
+        gc.collect()
 
         logger.debug("Audio buffer cleared")
 

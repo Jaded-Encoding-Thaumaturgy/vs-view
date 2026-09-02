@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable, Generator
@@ -31,7 +32,7 @@ from vsengine.vpy import ExecutionError, Script, load_code, load_script
 from ...api.info import Context
 from ...env import getenv_bool
 from ...types import Frame
-from ...vsenv import clear_environment, gc_collect, run_in_background, run_in_loop, unset_environment
+from ...vsenv import clear_environment, run_in_background, run_in_loop, unset_environment
 from ..outputs import AudioOutput, OutputsManager, VideoOutput
 from ..plugins.api import PluginAPI, WidgetPluginBase
 from ..settings import ActionID, ShortcutManager
@@ -390,7 +391,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             # 2. Reset Environment
             self.clear_environment()
-            gc_collect()
+            gc.collect()
 
             if is_debug:
                 logger.debug("Memory after environment cleanup: %s", ProcessMemorySnapshot())
@@ -514,7 +515,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         self.statusLoadingErrored.emit("Error while loading content")
         self.set_error_page()
-        gc_collect()
+        gc.collect()
 
         self._is_failed = True
 

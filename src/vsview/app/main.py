@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import sys
 import weakref
 from collections.abc import Callable, Generator, Sequence
@@ -60,7 +61,7 @@ from shiboken6 import Shiboken
 from vsengine.loops import set_loop
 
 from ..assets import app_icon
-from ..vsenv import QtEventLoop, gc_collect, get_policy, run_in_background, unregister_policy
+from ..vsenv import QtEventLoop, get_policy, run_in_background, unregister_policy
 from .icon import IconReloadMixin
 from .plugins.manager import PluginManager
 from .settings import ActionID, SecretsManager, SettingsManager, ShortcutManager
@@ -436,7 +437,7 @@ class MainWindow(QMainWindow):
             unregister_policy()
 
         with check_leaks.ctx():
-            QTimer.singleShot(0, gc_collect)
+            QTimer.singleShot(0, gc.collect)
 
     def connect_workspace(self, workspace: BaseWorkspace) -> None:
         if isinstance(workspace, LoaderWorkspace):
