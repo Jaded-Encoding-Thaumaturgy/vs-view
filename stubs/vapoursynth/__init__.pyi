@@ -1993,13 +1993,13 @@ class _avs:
 # </implementation/avs>
 
 # <implementation/bs>
-_ReturnDict_bs_TrackInfo = TypedDict("_ReturnDict_bs_TrackInfo", {"mediatype": int, "mediatypestr": _AnyStr, "codec": int, "codecstr": _AnyStr, "disposition": int, "dispositionstr": _AnyStr})
+_ReturnDict_bs_TrackInfo = TypedDict("_ReturnDict_bs_TrackInfo", {"tracktype": _IntLike | list[_IntLike], "tracktypestr": _AnyStr | list[_AnyStr], "codec": _IntLike | list[_IntLike], "codecstr": _AnyStr | list[_AnyStr], "disposition": _IntLike | list[_IntLike], "dispositionstr": _AnyStr | list[_AnyStr]})
 
 class _bs:
     class _Core_bound:
         class Plugin(_VSPlugin):
             @_Wrapper.Function
-            def AudioSource(self, /, source: _AnyStr, track: _IntLike | None = None, adjustdelay: _IntLike | None = None, threads: _IntLike | None = None, enable_drefs: _IntLike | None = None, use_absolute_path: _IntLike | None = None, drc_scale: _FloatLike | None = None, cachemode: _IntLike | None = None, cachepath: _AnyStr | None = None, cachesize: _IntLike | None = None, showprogress: _IntLike | None = None, maxdecoders: _IntLike | None = None) -> AudioNode: ...
+            def AudioSource(self, /, source: _AnyStr, track: _IntLike | None = None, adjustdelay: _IntLike | None = None, threads: _IntLike | None = None, enable_drefs: _IntLike | None = None, use_absolute_path: _IntLike | None = None, drc_scale: _FloatLike | None = None, cachemode: _IntLike | None = None, cachepath: _AnyStr | None = None, cachesize: _IntLike | None = None, showprogress: _IntLike | None = None, maxdecoders: _IntLike | None = None, variableformat: _IntLike | None = None) -> AudioNode: ...
             @_Wrapper.Function
             def Metadata(self, /, source: _AnyStr, track: _IntLike | None = None, enable_drefs: _IntLike | None = None, use_absolute_path: _IntLike | None = None) -> Any: ...
             @_Wrapper.Function
@@ -2167,7 +2167,11 @@ class _lsmas:
     class _Core_bound:
         class Plugin(_VSPlugin):
             @_Wrapper.Function
+            def LWLibavAudioSource(self, /, source: _AnyStr, stream_index: _IntLike | None = None, cache: _IntLike | None = None, cachefile: _AnyStr | None = None, av_sync: _IntLike | None = None, layout: _AnyStr | None = None, rate: _IntLike | None = None, decoder: _AnyStr | None = None, ff_loglevel: _IntLike | None = None, cachedir: _AnyStr | None = None, indexingpr: _IntLike | None = None, drc_scale: _FloatLike | None = None, ff_options: _AnyStr | None = None, fill_agaps: _IntLike | None = None) -> AudioNode: ...
+            @_Wrapper.Function
             def LWLibavSource(self, /, source: _AnyStr, stream_index: _IntLike | None = None, cache: _IntLike | None = None, cachefile: _AnyStr | None = None, threads: _IntLike | None = None, seek_mode: _IntLike | None = None, seek_threshold: _IntLike | None = None, dr: _IntLike | None = None, fpsnum: _IntLike | None = None, fpsden: _IntLike | None = None, variable: _IntLike | None = None, format: _AnyStr | None = None, decoder: _AnyStr | None = None, prefer_hw: _IntLike | None = None, repeat: _IntLike | None = None, dominance: _IntLike | None = None, ff_loglevel: _IntLike | None = None, cachedir: _AnyStr | None = None, ff_options: _AnyStr | None = None, rap_verification: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def LibavSMASHAudioSource(self, /, source: _AnyStr, track: _IntLike | None = None, skip_priming: _IntLike | None = None, layout: _AnyStr | None = None, rate: _IntLike | None = None, decoder: _AnyStr | None = None, ff_loglevel: _IntLike | None = None, drc_scale: _FloatLike | None = None, ff_options: _AnyStr | None = None) -> AudioNode: ...
             @_Wrapper.Function
             def LibavSMASHSource(self, /, source: _AnyStr, track: _IntLike | None = None, threads: _IntLike | None = None, seek_mode: _IntLike | None = None, seek_threshold: _IntLike | None = None, dr: _IntLike | None = None, fpsnum: _IntLike | None = None, fpsden: _IntLike | None = None, variable: _IntLike | None = None, format: _AnyStr | None = None, decoder: _AnyStr | None = None, prefer_hw: _IntLike | None = None, ff_loglevel: _IntLike | None = None, ff_options: _AnyStr | None = None) -> VideoNode: ...
 
