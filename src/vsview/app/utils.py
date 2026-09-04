@@ -8,7 +8,7 @@ import sys
 import threading
 import weakref
 from collections import OrderedDict, UserDict
-from collections.abc import Callable, Container, Generator, Iterator, MutableSet, Sized
+from collections.abc import Callable, Container, Generator, ItemsView, Iterator, KeysView, MutableSet, Sized, ValuesView
 from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import DEBUG, getLogger
@@ -292,26 +292,63 @@ def check_leaks(stage: Literal["before", "after"], *, before: ProcessMemorySnaps
                     logger.debug("Could not generate QObject leak graph for %s: %s", obj.__class__.__name__, e)
 
 
-class LRUCache[K, V](OrderedDict[K, V]):
+class LRUCache[K, V](UserDict[K, V]):
+    data: OrderedDict[K, V]
+
     def __init__(self, cache_size: int = 10) -> None:
         super().__init__()
+        self.data = OrderedDict[K, V]()  # pyright: ignore[reportIncompatibleVariableOverride]
         self.cache_size = cache_size
+        self.lock = threading.RLock()
 
     @override
     def __getitem__(self, key: K) -> V:
-        val = super().__getitem__(key)
-        super().move_to_end(key)
-
-        return val
+        with self.lock:
+            val = self.data[key]
+            self.data.move_to_end(key)
+            return val
 
     @override
     def __setitem__(self, key: K, value: V) -> None:
-        super().__setitem__(key, value)
-        super().move_to_end(key)
+        with self.lock:
+            self.data[key] = value
+            self.data.move_to_end(key)
+            while len(self.data) > self.cache_size:
+                self.data.popitem(last=False)
 
-        while len(self) > self.cache_size:
-            oldkey = next(iter(self))
-            super().__delitem__(oldkey)
+    @override
+    def __delitem__(self, key: K) -> None:
+        with self.lock:
+            del self.data[key]
+
+    @override
+    def __iter__(self) -> Iterator[K]:
+        with self.lock:
+            return iter(self.data.copy())
+
+    def __reversed__(self) -> Iterator[K]:
+        with self.lock:
+            return reversed(self.data.copy())
+
+    @override
+    def keys(self) -> KeysView[K]:
+        with self.lock:
+            return self.data.copy().keys()
+
+    @override
+    def values(self) -> ValuesView[V]:
+        with self.lock:
+            return self.data.copy().values()
+
+    @override
+    def items(self) -> ItemsView[K, V]:
+        with self.lock:
+            return self.data.copy().items()
+
+    @override
+    def clear(self) -> None:
+        with self.lock:
+            self.data.clear()
 
 
 class VideoFramesCache(UserDict[int, vs.VideoFrame]):
