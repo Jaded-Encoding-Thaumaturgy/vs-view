@@ -4,10 +4,10 @@ Graphics view widget for displaying video frames.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Flag, auto
 from logging import getLogger
-from math import isclose
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, override
 
 from jetpytools import cachedproperty, clamp, copy_signature, cround
@@ -524,13 +524,13 @@ class BaseGraphicsView(QGraphicsView):
             return super().viewportEvent(event)
 
         delta = event.value()
-        if isclose(delta, 0, rel_tol=1e-6) or self.autofit:
+        if math.isclose(delta, 0, rel_tol=1e-6) or self.autofit:
             return False
 
         new_zoom = self.current_zoom * (1.0 + delta)
         new_zoom = clamp(new_zoom, self.zoom_factors[0], self.zoom_factors[-1])
 
-        if isclose(new_zoom, self.current_zoom, rel_tol=1e-6):
+        if math.isclose(new_zoom, self.current_zoom, rel_tol=1e-6):
             return True
 
         self.set_zoom(new_zoom)
@@ -617,7 +617,7 @@ class BaseGraphicsView(QGraphicsView):
 
         current_scale = self.transform().m11()
 
-        if current_scale == target_zoom:
+        if math.isclose(current_scale, target_zoom, abs_tol=1e-6):
             return
 
         self._apply_zoom_value(target_zoom)
@@ -729,7 +729,7 @@ class BaseGraphicsView(QGraphicsView):
             return
 
         self._sar = sar
-        has_sar = not isclose(sar, 1.0)
+        has_sar = not math.isclose(sar, 1.0)
 
         if self.apply_sar_action.isEnabled() != has_sar:
             self.apply_sar_action.setEnabled(has_sar)
