@@ -162,6 +162,7 @@ def _make_voutput_proxy(voutput: VideoOutput) -> VideoOutputProxy:
         voutput.props,
         tuple(voutput.framedurs) if voutput.framedurs is not None else None,
         tuple(voutput.cum_durations) if voutput.cum_durations is not None else None,
+        tuple(voutput.midpoints) if voutput.midpoints is not None else None,
         voutput.kwargs,
         voutput.info,
         voutput.packer,

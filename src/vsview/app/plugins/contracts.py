@@ -37,6 +37,9 @@ class VideoOutputProxy:
     cum_durations: Sequence[float] | None = field(hash=False, compare=False)
     """Cumulative durations of the clip."""
 
+    midpoints: Sequence[float] | None = field(hash=False, compare=False)
+    """Midpoints between frame start times of the clip."""
+
     kwargs: Mapping[str, Any] = field(hash=False, compare=False)
     """Additional metadata provided by the user via `set_output()`."""
 
