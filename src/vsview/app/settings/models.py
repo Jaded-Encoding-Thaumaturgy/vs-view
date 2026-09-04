@@ -509,15 +509,6 @@ class ViewSettings(BaseModel):
         ),
     ] = [0.25, 0.5, 0.75, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
 
-    zoom_animation: Annotated[
-        bool,
-        Checkbox(
-            label="Zoom animation",
-            text="Enable zoom animation",
-            tooltip="Enable zoom animation",
-        ),
-    ] = True
-
     checkerboard_size: Annotated[
         int,
         Spin(

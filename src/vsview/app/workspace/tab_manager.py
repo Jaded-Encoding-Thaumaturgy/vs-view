@@ -405,7 +405,7 @@ class TabManager(QWidget, IconReloadMixin):
         for i, view in enumerate(self.tabs.views()):
             if view is not self.current_view and not view.autofit:
                 with QSignalBlocker(view), QSignalBlocker(view.slider):
-                    view.set_zoom(zoom, animated=False)
+                    view.set_zoom(zoom)
                     view.slider.setValue(view.zoom_to_slider(zoom))
 
                 self.tabs.get_tab_label(i).zoom = zoom
@@ -422,8 +422,7 @@ class TabManager(QWidget, IconReloadMixin):
                 if under_reload and not enabled and view.autofit:
                     self.tabs.get_tab_label(i).zoom = 0
                     continue
-
-                view.set_autofit(enabled, animated=not under_reload and view is self.current_view)
+                view.set_autofit(enabled)
 
             self.tabs.get_tab_label(i).zoom = 0 if enabled else view.current_zoom
 

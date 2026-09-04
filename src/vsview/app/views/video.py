@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, override
 
 from jetpytools import cachedproperty, clamp, copy_signature, cround
 from PySide6.QtCore import (
-    QEasingCurve,
     QEvent,
     QObject,
     QPoint,
@@ -21,7 +20,6 @@ from PySide6.QtCore import (
     QRectF,
     QSignalBlocker,
     Qt,
-    QVariantAnimation,
     Signal,
     Slot,
 )
@@ -93,12 +91,12 @@ class ViewState(NamedTuple):
     @run_in_loop(return_future=False)
     def apply_frozen_state(self, view: GraphicsView) -> None:
         if self.autofit:
-            view.set_autofit(True, animated=False)
+            view.set_autofit(True)
         else:
             with QSignalBlocker(view.slider):
                 view.slider.setValue(self.slider_value)
 
-            view.set_zoom(self.zoom, animated=False)
+            view.set_zoom(self.zoom)
             self.restore_view_state(view)
 
     def restore_view_state(self, view: GraphicsView) -> None:
@@ -380,11 +378,6 @@ class BaseGraphicsView(QGraphicsView):
         self._rect_selection_drag: RectSelectionDragState | None = None
         self._init_rect_selection_overlay()
 
-        self._zoom_animation = QVariantAnimation(self)
-        self._zoom_animation.setDuration(125)
-        self._zoom_animation.setEasingCurve(QEasingCurve.Type.InOutQuad)
-        self._zoom_animation.valueChanged.connect(self._apply_zoom_value)
-
         self.wheelScrolled.connect(self._on_wheel_scrolled)
 
         self.context_menu = QMenu(self)
@@ -550,8 +543,8 @@ class BaseGraphicsView(QGraphicsView):
     @override
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
-        if event.type() == QResizeEvent.Type.Resize:
-            self.set_zoom(self.current_zoom if not self.autofit else 0)
+        if event.type() == QResizeEvent.Type.Resize and self.autofit:
+            self.set_zoom(0)
 
     @override
     def scrollContentsBy(self, dx: int, dy: int) -> None:
@@ -608,7 +601,7 @@ class BaseGraphicsView(QGraphicsView):
 
         return cround(index / (num_factors - 1) * 100)
 
-    def set_zoom(self, value: float, *, animated: bool = True) -> None:
+    def set_zoom(self, value: float) -> None:
         target_zoom = value
 
         if value:
@@ -627,19 +620,9 @@ class BaseGraphicsView(QGraphicsView):
         if current_scale == target_zoom:
             return
 
-        if (
-            animated
-            and min(current_scale, target_zoom) >= self.zoom_factors[0]
-            and SettingsManager.global_settings.view.zoom_animation
-        ):
-            self._zoom_animation.stop()
-            self._zoom_animation.setStartValue(current_scale)
-            self._zoom_animation.setEndValue(target_zoom)
-            self._zoom_animation.start()
-        else:
-            self._apply_zoom_value(target_zoom)
+        self._apply_zoom_value(target_zoom)
 
-    def set_autofit(self, enabled: bool, *, animated: bool = True) -> None:
+    def set_autofit(self, enabled: bool) -> None:
         self.autofit = enabled
         self.autofit_action.setChecked(self.autofit)
 
@@ -647,12 +630,12 @@ class BaseGraphicsView(QGraphicsView):
             self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self.slider_container.setDisabled(True)
-            self.set_zoom(0, animated=animated)
+            self.set_zoom(0)
         else:
             self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self.slider_container.setDisabled(False)
-            self.set_zoom(self.slider_to_zoom(self.slider.value()), animated=animated)
+            self.set_zoom(self.slider_to_zoom(self.slider.value()))
 
     def clear_scene(self) -> None:
         self.graphics_scene.clear()
@@ -691,7 +674,7 @@ class BaseGraphicsView(QGraphicsView):
             self.update_scene_rect()
 
             if self.autofit:
-                self.set_zoom(0, animated=False)
+                self.set_zoom(0)
 
         if self._hdr_enabled and self._hdr_viewport:
             self._sync_hdr_transform()
@@ -824,7 +807,7 @@ class BaseGraphicsView(QGraphicsView):
             self.pixmap_item.setTransform(transform)
             self.displayTransformChanged.emit(transform)
             self.update_scene_rect()
-            self.set_zoom(0 if self.autofit else self.current_zoom, animated=False)
+            self.set_zoom(0 if self.autofit else self.current_zoom)
             self._sync_hdr_transform()
 
     def _init_rect_selection_overlay(self) -> None:
@@ -1238,8 +1221,8 @@ class GraphicsView(BaseGraphicsView):
             self.keyReleased.emit(event)
 
     @override
-    def set_zoom(self, value: float, *, animated: bool = True) -> None:
-        super().set_zoom(value, animated=animated)
+    def set_zoom(self, value: float) -> None:
+        super().set_zoom(value)
 
         if value:
             self.zoomChanged.emit(self.current_zoom)
