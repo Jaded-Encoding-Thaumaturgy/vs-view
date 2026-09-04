@@ -604,22 +604,23 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         max_frame = max_total_frames - 1
         max_time = shortest.frame_to_time(shortest.info.total_frames - 1)
 
-        self.frame_edit_start.setRange(0, max_frame)
-        self.frame_edit_end.setRange(0, max_frame)
-
-        self.frame_edit_start.setValue(0)
-        self.frame_edit_end.setValue(max_frame)
+        with QSignalBlocker(self.frame_edit_start), QSignalBlocker(self.frame_edit_end):
+            self.frame_edit_start.setRange(0, max_frame)
+            self.frame_edit_end.setRange(0, max_frame)
+            self.frame_edit_start.setValue(0)
+            self.frame_edit_end.setValue(max_frame)
 
         qtime_s = QTime()
         qtime_e = max_time.to_qtime()
 
-        self.time_edit_start.setTime(qtime_s)
-        self.time_edit_start.setMinimumTime(qtime_s)
-        self.time_edit_start.setMaximumTime(qtime_e)
+        with QSignalBlocker(self.time_edit_start), QSignalBlocker(self.time_edit_end):
+            self.time_edit_start.setTime(qtime_s)
+            self.time_edit_start.setMinimumTime(qtime_s)
+            self.time_edit_start.setMaximumTime(qtime_e)
 
-        self.time_edit_end.setTime(qtime_e)
-        self.time_edit_end.setMinimumTime(qtime_s)
-        self.time_edit_end.setMaximumTime(qtime_e)
+            self.time_edit_end.setTime(qtime_e)
+            self.time_edit_end.setMinimumTime(qtime_s)
+            self.time_edit_end.setMaximumTime(qtime_e)
 
         self._update_buttons_state()
 
@@ -641,23 +642,27 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
     @Slot(object, object)
     def on_frame_edit_start_changed(self, new: Frame, old: Frame) -> None:
-        self.frame_edit_end.setMinimum(new)
-        self.time_edit_start.setTime(self.api.current_voutput.frame_to_time(new).to_qtime())
+        with QSignalBlocker(self.frame_edit_end), QSignalBlocker(self.time_edit_start):
+            self.frame_edit_end.setMinimum(new)
+            self.time_edit_start.setTime(self.api.current_voutput.frame_to_time(new).to_qtime())
 
     @Slot(object, object)
     def on_frame_edit_end_changed(self, new: Frame, old: Frame) -> None:
-        self.frame_edit_start.setMaximum(new)
-        self.time_edit_end.setTime(self.api.current_voutput.frame_to_time(new).to_qtime())
+        with QSignalBlocker(self.frame_edit_start), QSignalBlocker(self.time_edit_end):
+            self.frame_edit_start.setMaximum(new)
+            self.time_edit_end.setTime(self.api.current_voutput.frame_to_time(new).to_qtime())
 
     @Slot(QTime, QTime)
     def on_time_edit_start_changed(self, new: QTime, old: QTime) -> None:
-        self.time_edit_end.setMinimumTime(new)
-        self.frame_edit_start.setValue(self.api.current_voutput.time_to_frame(Time.from_qtime(new)))
+        with QSignalBlocker(self.time_edit_end), QSignalBlocker(self.frame_edit_start):
+            self.time_edit_end.setMinimumTime(new)
+            self.frame_edit_start.setValue(self.api.current_voutput.time_to_frame(Time.from_qtime(new)))
 
     @Slot(QTime, QTime)
     def on_time_edit_end_changed(self, new: QTime, old: QTime) -> None:
-        self.time_edit_start.setMaximumTime(new)
-        self.frame_edit_end.setValue(self.api.current_voutput.time_to_frame(Time.from_qtime(new)))
+        with QSignalBlocker(self.time_edit_start), QSignalBlocker(self.frame_edit_end):
+            self.time_edit_start.setMaximumTime(new)
+            self.frame_edit_end.setValue(self.api.current_voutput.time_to_frame(Time.from_qtime(new)))
 
     @Slot(int)
     def on_list_size_changed(self, delta: int) -> None:
