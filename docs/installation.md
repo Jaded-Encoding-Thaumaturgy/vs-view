@@ -45,7 +45,7 @@ We recommend the **[recommended](plugins/second-party.md#installation)** or **[f
 
 ## Standalone Executable
 
-Pre-built binaries for Windows x86-64, macOS ARM64, and Linux x86-64 are published on [GitHub Releases](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/releases).
+Pre-built binaries for Windows x86-64, and Linux x86-64 are published on [GitHub Releases](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/releases).
 
 Release executables are provided in two variants:
 
@@ -57,11 +57,6 @@ Release executables are provided in two variants:
 
     - Download `VSView.exe` (or `VSView-offline.exe`) from [GitHub Releases](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/releases)
     and launch the executable directly.
-
-=== "macOS"
-
-    1. Download `VSView.dmg` (or `VSView-offline.dmg`) from [GitHub Releases](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/releases).
-    2. Open the `.dmg` file and drag **VSView.app** into your `Applications` folder.
 
 === "Linux"
 
@@ -88,12 +83,6 @@ Standalone executables ship with an isolated Python environment that can be modi
 
         ```powershell
         .\VSView.exe env pip install vsjetpack[full]
-        ```
-
-    === "macOS"
-
-        ```bash
-        /Applications/VSView.app/Contents/MacOS/VSView env pip install "vsjetpack[full]"
         ```
 
     === "Linux"

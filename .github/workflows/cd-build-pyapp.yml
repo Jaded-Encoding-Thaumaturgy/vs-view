@@ -113,64 +113,64 @@ jobs:
           name: vsview-pyapp-${{ steps.version.outputs.value }}-linux-x86_64${{ matrix.offline == 'offline' && '-offline' || '' }}
           path: dist/*.tar.gz
 
-  build-macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        offline: ["offline", "online"]
+  # build-macos:
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       offline: ["offline", "online"]
 
-    name: macOS arm64 (${{ matrix.offline }})
-    runs-on: macos-26
+  #   name: macOS arm64 (${{ matrix.offline }})
+  #   runs-on: macos-26
 
-    env:
-      MACOSX_DEPLOYMENT_TARGET: "15.0"
+  #   env:
+  #     MACOSX_DEPLOYMENT_TARGET: "15.0"
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-          fetch-tags: true
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+  #       with:
+  #         fetch-depth: 0
+  #         fetch-tags: true
 
-      - name: Build PyApp binary
-        id: build
-        uses: ./.github/actions/build-pyapp
-        with:
-          rust-target: aarch64-apple-darwin
-          offline: ${{ matrix.offline == 'offline' }}
+  #     - name: Build PyApp binary
+  #       id: build
+  #       uses: ./.github/actions/build-pyapp
+  #       with:
+  #         rust-target: aarch64-apple-darwin
+  #         offline: ${{ matrix.offline == 'offline' }}
 
-      - name: Get VSView version
-        id: version
-        shell: bash
-        run: echo "value=$(uvx hatch version)" >> "$GITHUB_OUTPUT"
+  #     - name: Get VSView version
+  #       id: version
+  #       shell: bash
+  #       run: echo "value=$(uvx hatch version)" >> "$GITHUB_OUTPUT"
 
-      - name: Create macOS app bundle and DMG
-        run: |
-          VERSION="${{ steps.version.outputs.value }}"
-          OFFLINE_SUFFIX="${{ matrix.offline == 'offline' && '-offline' || '' }}"
-          EXEC="VSView${OFFLINE_SUFFIX}"
-          TARGET_NAME="VSView-${VERSION}-macos-arm64${OFFLINE_SUFFIX}.dmg"
+  #     - name: Create macOS app bundle and DMG
+  #       run: |
+  #         VERSION="${{ steps.version.outputs.value }}"
+  #         OFFLINE_SUFFIX="${{ matrix.offline == 'offline' && '-offline' || '' }}"
+  #         EXEC="VSView${OFFLINE_SUFFIX}"
+  #         TARGET_NAME="VSView-${VERSION}-macos-arm64${OFFLINE_SUFFIX}.dmg"
 
-          uv run vsapp bundle "dist/${EXEC}" "${VERSION}" \
-            --env src/pyapp/.env.example \
-            --iconset-dir src/pyapp/icons/macos/vsview.iconset \
-            --output dist/AppBundle
+  #         uv run vsapp bundle "dist/${EXEC}" "${VERSION}" \
+  #           --env src/pyapp/.env.example \
+  #           --iconset-dir src/pyapp/icons/macos/vsview.iconset \
+  #           --output dist/AppBundle
 
-          mkdir dmg_staging
-          ditto dist/AppBundle "dmg_staging/${EXEC}.app"
-          ln -s /Applications dmg_staging/Applications
-          hdiutil create -volname "${EXEC}" -srcfolder dmg_staging -ov -format UDZO "dist/${TARGET_NAME}"
+  #         mkdir dmg_staging
+  #         ditto dist/AppBundle "dmg_staging/${EXEC}.app"
+  #         ln -s /Applications dmg_staging/Applications
+  #         hdiutil create -volname "${EXEC}" -srcfolder dmg_staging -ov -format UDZO "dist/${TARGET_NAME}"
 
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: vsview-pyapp-${{ steps.version.outputs.value }}-macos-arm64${{ matrix.offline == 'offline' && '-offline' || '' }}
-          path: |
-            dist/*.dmg
+  #     - name: Upload binary artifact
+  #       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+  #       with:
+  #         name: vsview-pyapp-${{ steps.version.outputs.value }}-macos-arm64${{ matrix.offline == 'offline' && '-offline' || '' }}
+  #         path: |
+  #           dist/*.dmg
 
   publish-release:
     name: Publish GitHub Release
-    needs: [build-windows, build-linux, build-macos]
+    needs: [build-windows, build-linux]
     if: startsWith(github.ref, 'refs/tags/vsview/v')
     runs-on: ubuntu-latest
     permissions:
