@@ -65,6 +65,7 @@ def get_state() -> MutableMapping[Any, Any] | None:
 
     Note:
         Objects stored in this dictionary survive script reloads within the same workspace.
+
         - DO NOT store VapourSynth clips, frames, or script closures capturing 'globals()'.
         - DO store heavy external resources (e.g. PyTorch models, ONNX sessions, lookup tables).
     """
