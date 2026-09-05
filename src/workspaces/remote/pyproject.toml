@@ -22,7 +22,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Typing :: Typed",
 ]
-dependencies = ["vsview[secrets]>=0.11.0", "vsremote>=0.2.0"]
+dependencies = ["vsview[secrets]>=0.11.0", "vsremote>=0.3.0"]
 dynamic = ["version"]
 
 [project.entry-points.vsview]
