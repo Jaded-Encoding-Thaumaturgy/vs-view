@@ -28,6 +28,12 @@ dynamic = ["version"]
 [project.entry-points.vsview]
 vsview_remote = "vsview_remote"
 
+[project.urls]
+"Documentation" = "https://jaded-encoding-thaumaturgy.github.io/vs-view/usage/workspaces/remote/"
+"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/workspaces/remote/"
+"Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
+"Contact" = "https://discord.gg/XTpc6Fa9eB"
+
 [tool.hatch.version]
 source = "versioningit"
 
