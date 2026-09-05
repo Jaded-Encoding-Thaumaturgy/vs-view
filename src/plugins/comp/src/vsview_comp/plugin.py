@@ -1000,8 +1000,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                     self._on_upload_error()
                     return
 
-                timestamp = time.to_ts("{M:02d}:{S:02d}.{ms:03d}")
-                images.append(ComparisonImage(image_path, metadata[output.vs_index].pict_type, frame, timestamp))
+                images.append(ComparisonImage(image_path, metadata[output.vs_index].pict_type, frame, time.to_ts()))
 
             sources.append(ComparisonSource(output.vs_name, images))
 
