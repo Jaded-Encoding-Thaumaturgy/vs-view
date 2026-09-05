@@ -37,6 +37,12 @@ dynamic = ["version"]
 [project.entry-points.vsview]
 vsview_editor = "vsview_editor"
 
+[project.urls]
+"Documentation" = "https://jaded-encoding-thaumaturgy.github.io/vs-view/usage/workspaces/editor/"
+"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/workspaces/editor/"
+"Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
+"Contact" = "https://discord.gg/XTpc6Fa9eB"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/python/vsview_editor"]
 artifacts = ["src/python/vsview_editor/web_dist/"]
