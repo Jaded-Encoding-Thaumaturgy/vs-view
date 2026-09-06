@@ -10,6 +10,7 @@ import {
 
 import { DisposableStore } from "../utils/disposables";
 import { Result } from "../utils/result";
+import { canonicalUriKey } from "../utils/uri";
 import { WebSocketMessageReader, WebSocketMessageWriter } from "./connection";
 import { type LspProgressNotification, LspProgressTracker } from "./progress";
 
@@ -109,9 +110,6 @@ export class LspService implements vscode.Disposable {
       }
 
       const syncedUris = new Set<string>();
-      const canonicalKey = (uri: vscode.Uri): string => {
-        return uri.toString().toLowerCase().replace(/%3a/g, ":");
-      };
 
       const progressTracker = new LspProgressTracker();
 
@@ -120,7 +118,7 @@ export class LspService implements vscode.Disposable {
         synchronize: synchronizeOptions,
         middleware: {
           didOpen: async (document, next) => {
-            const key = canonicalKey(document.uri);
+            const key = canonicalUriKey(document.uri);
             if (syncedUris.has(key)) {
               return;
             }
@@ -128,7 +126,7 @@ export class LspService implements vscode.Disposable {
             await next(document);
           },
           didClose: async (document, next) => {
-            const key = canonicalKey(document.uri);
+            const key = canonicalUriKey(document.uri);
             syncedUris.delete(key);
             await next(document);
           },
