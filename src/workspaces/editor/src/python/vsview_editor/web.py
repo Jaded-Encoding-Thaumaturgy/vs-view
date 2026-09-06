@@ -232,7 +232,8 @@ class MonacoBridge(QObject):
     @SafeSlot(str, result=dict)
     def statFile(self, filepath: str) -> dict[str, Any] | None:
         """Get stat metadata for a file on disk (used by Monaco FileSystemProvider)."""
-        if not (p := Path(filepath)).exists():
+        p = Path(QUrl(filepath).toLocalFile()) if filepath.startswith("file:") else Path(filepath)
+        if not p.exists():
             return None
 
         st = p.stat()
@@ -246,7 +247,8 @@ class MonacoBridge(QObject):
     @SafeSlot(str, result=str)
     def readFile(self, filepath: str) -> str | None:
         """Read content of a file on disk (used by Monaco FileSystemProvider)."""
-        return p.read_text(encoding="utf-8", errors="replace") if (p := Path(filepath)).is_file() else None
+        p = Path(QUrl(filepath).toLocalFile()) if filepath.startswith("file:") else Path(filepath)
+        return p.read_text(encoding="utf-8", errors="replace") if p.is_file() else None
 
 
 class MonacoWebPage(QWebEnginePage):

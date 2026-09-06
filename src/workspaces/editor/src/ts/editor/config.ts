@@ -1,3 +1,4 @@
+import type { IConfigurationNode } from "@codingame/monaco-vscode-configuration-service-override";
 import * as monaco from "monaco-editor";
 
 export const defaultEditorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
@@ -19,17 +20,11 @@ export const defaultEditorOptions: monaco.editor.IStandaloneEditorConstructionOp
   wordWrap: "off",
   links: true,
   contextmenu: true,
-  gotoLocation: {
-    // Change the Ctrl+Click to Peek instead of Go to
-    alternativeDefinitionCommand: "editor.action.peekDefinition",
-    multipleDefinitions: "peek",
-  },
   padding: { top: 8 },
   folding: true,
   renderWhitespace: "selection",
   fontFamily: "'Cascadia Mono', 'Consolas', 'Courier New', monospace",
   fontSize: 14,
-  definitionLinkOpensInPeek: true, // Change the Ctrl+Click to Peek instead of Go to
   guides: {
     bracketPairs: true,
     indentation: true,
@@ -40,7 +35,7 @@ export const defaultEditorOptions: monaco.editor.IStandaloneEditorConstructionOp
   language: "python",
 };
 
-export const BASED_PYRIGHT_SETTINGS_DEFS: Record<string, Record<string, never>> = {
+export const BASED_PYRIGHT_SETTINGS_DEFS: NonNullable<IConfigurationNode["properties"]> = {
   "basedpyright.analysis.typeCheckingMode": {},
   "basedpyright.disableLanguageServices": {},
   "basedpyright.analysis.autoImportCompletions": {},

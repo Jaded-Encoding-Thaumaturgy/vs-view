@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import itertools
+import re
 import shutil
 import sys
 import urllib.parse
 import weakref
 from collections.abc import Sequence
 from dataclasses import dataclass
-from logging import getLogger
+from logging import DEBUG, getLogger
 from pathlib import Path
 
 from jetpytools import CustomValueError
@@ -55,6 +57,7 @@ class LSPProcessServer(QObject):
         self._stdout_buffer = bytearray()
         self.real_uri: str | None = None
         self.uri_variations = list[str]()
+        self._virtual_tab_pattern: re.Pattern[str] | None = None
 
     def start(self, port: int = 0, workspace_dir: Path | None = None) -> int:
         if not workspace_dir:
@@ -63,14 +66,12 @@ class LSPProcessServer(QObject):
         self.real_uri = workspace_dir.as_uri()
 
         # Build URI variations to replace in JSON-RPC messages from server -> client
-        self.uri_variations = [
-            self.real_uri,
-            self.real_uri.replace("file:///", "file://"),
-            self.real_uri.replace("file:///", "file:/"),
-            urllib.parse.quote(self.real_uri, safe=":/"),
-            urllib.parse.quote(self.real_uri.replace("file:///", "file://"), safe=":/"),
-            urllib.parse.quote(self.real_uri.replace("file:///", "file:/"), safe=":/"),
-        ]
+        self.uri_variations = self._build_uri_variations(workspace_dir)
+        escaped_vars = "|".join(re.escape(v.rstrip("/")) for v in self.uri_variations)
+        self._virtual_tab_pattern = re.compile(
+            rf"(?:{escaped_vars})/(script\.py|untitled_[a-zA-Z0-9_-]+\.py|workspace\.code-workspace)"
+        )
+        logger.log(DEBUG - 1, "URI Variations: %s", self.uri_variations)
 
         executable_name = Path(self.config.command[0])
         if executable_name.is_file():
@@ -207,9 +208,8 @@ class LSPProcessServer(QObject):
             del self._stdout_buffer[:total_needed]
 
             msg_str = body_bytes.decode("utf-8", errors="replace")
-            for var in self.uri_variations:
-                if var in msg_str:
-                    msg_str = msg_str.replace(var, "file:///workspace")
+            if self._virtual_tab_pattern is not None:
+                msg_str = self._virtual_tab_pattern.sub(r"file:///workspace/\1", msg_str)
 
             for client in self.clients:
                 if client.isValid():
@@ -228,6 +228,49 @@ class LSPProcessServer(QObject):
     def _on_process_error(self, error: QProcess.ProcessError) -> None:
         if self.process:
             logger.error("LSP QProcess error for %r (%s): %s", self.config.id, error, self.process.errorString())
+
+    @staticmethod
+    def _build_uri_variations(workspace_dir: Path) -> list[str]:
+        raw_uri = workspace_dir.as_uri()
+        variations = set[str]()
+
+        # Get path part after scheme
+        if raw_uri.startswith("file:///"):
+            path_part = raw_uri[8:]
+        elif raw_uri.startswith("file://"):
+            path_part = raw_uri[7:]
+        elif raw_uri.startswith("file:/"):
+            path_part = raw_uri[6:]
+        else:
+            path_part = raw_uri
+
+        # Identify drive letter if present
+        if len(path_part) >= 2 and path_part[1] == ":":
+            drive = path_part[0]
+            rest = path_part[2:]
+            drives = [drive.lower(), drive.upper()]
+            colons = [":", "%3A", "%3a"]
+        elif len(path_part) >= 4 and path_part[1:4].upper() == "%3A":
+            drive = path_part[0]
+            rest = path_part[4:]
+            drives = [drive.lower(), drive.upper()]
+            colons = [":", "%3A", "%3a"]
+        else:
+            drives = [""]
+            colons = [""]
+            rest = path_part
+
+        rest_unquoted = urllib.parse.unquote(rest)
+        rest_quoted = urllib.parse.quote(rest_unquoted, safe="/")
+        rest_options = {rest, rest_unquoted, rest_quoted}
+
+        for prefix, d, c, r in itertools.product(["file:///", "file://", "file:/"], drives, colons, rest_options):
+            base = f"{prefix}{d}{c}{r}"
+            variations.add(base)
+            variations.add(urllib.parse.quote(base, safe=":/%"))
+            variations.add(urllib.parse.unquote(base))
+
+        return sorted(variations, key=len, reverse=True)
 
 
 class LSPProcessManager(QObject):

@@ -8,7 +8,7 @@ import {
   IMarkdownRendererService,
   initialize as initializeServices,
 } from "@codingame/monaco-vscode-api/services";
-import { Emitter } from "@codingame/monaco-vscode-api/vscode/vs/base/common/event";
+import { Event } from "@codingame/monaco-vscode-api/vscode/vs/base/common/event";
 import { type IDisposable } from "@codingame/monaco-vscode-api/vscode/vs/base/common/lifecycle";
 import {
   FilePermission,
@@ -16,7 +16,6 @@ import {
   FileSystemProviderError,
   FileSystemProviderErrorCode,
   FileType,
-  type IFileChange,
   type IFileDeleteOptions,
   type IFileOverwriteOptions,
   type IFileSystemProviderWithFileReadWriteCapability,
@@ -48,9 +47,9 @@ import * as vscode from "vscode";
 import githubThemeVersion from "../assets/themes/github/VERSION?raw";
 import { BridgeService } from "../bridge/python";
 import * as config from "../editor/config";
-import type { FileStatResponse } from "../types";
 import { Result } from "../utils/result";
 import { GITHUB_THEMES } from "../utils/theme";
+import { isSameResource } from "../utils/uri";
 
 // Monaco Environment Setup
 self.MonacoEnvironment = {
@@ -66,12 +65,104 @@ self.MonacoEnvironment = {
   },
 };
 
-export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWriteCapability {
-  public readonly capabilities =
-    FileSystemProviderCapabilities.FileReadWrite | FileSystemProviderCapabilities.PathCaseSensitive;
+/** Headless models loaded for definition inspection that are not yet claimed by any tab. */
+const headlessModels = new Set<monaco.editor.ITextModel>();
 
-  public readonly onDidChangeCapabilities = new Emitter<any>().event;
-  public readonly onDidChangeFile = new Emitter<readonly IFileChange[]>().event;
+/**
+ * Claims ownership of a headless model when a tab opens it.
+ */
+export function claimHeadlessModel(model: monaco.editor.ITextModel): void {
+  headlessModels.delete(model);
+}
+
+/**
+ * Disposes all unattached headless models.
+ */
+export function disposeHeadlessModels(): void {
+  for (const model of headlessModels) {
+    if (!model.isDisposed()) {
+      model.dispose();
+    }
+  }
+  headlessModels.clear();
+}
+
+export function findExistingModel(
+  resource: monaco.Uri | vscode.Uri,
+): monaco.editor.ITextModel | undefined {
+  const monacoUri = resource as monaco.Uri;
+  const direct = monaco.editor.getModel(monacoUri);
+  if (direct && !direct.isDisposed()) {
+    return direct;
+  }
+
+  for (const m of monaco.editor.getModels()) {
+    if (m.isDisposed()) continue;
+    if (isSameResource(m.uri, resource)) {
+      return m;
+    }
+  }
+
+  return undefined;
+}
+
+export async function ensureModelLoaded(
+  resource: monaco.Uri | vscode.Uri,
+): Promise<Result<monaco.editor.ITextModel>> {
+  const existing = findExistingModel(resource);
+  if (existing) {
+    return Result.ok(existing);
+  }
+  if (resource.scheme !== "file") {
+    return Result.err(new Error(`Unsupported scheme: ${resource.scheme}`));
+  }
+
+  const readResult = await BridgeService.readFile(resource.fsPath);
+  if (!readResult.ok) {
+    return Result.err(readResult.error);
+  }
+
+  const existingAfterRead = findExistingModel(resource);
+  if (existingAfterRead) {
+    return Result.ok(existingAfterRead);
+  }
+
+  return Result.fromThrowable(() => {
+    const isPython = resource.path.endsWith(".py") || resource.path.endsWith(".pyi");
+    const monacoUri = resource as monaco.Uri;
+    const model = monaco.editor.createModel(
+      readResult.value,
+      isPython ? "python" : undefined,
+      monacoUri,
+    );
+    headlessModels.add(model);
+    return model;
+  });
+}
+
+export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWriteCapability {
+  public readonly capabilities = FileSystemProviderCapabilities.FileReadWrite;
+
+  public readonly onDidChangeCapabilities = Event.None;
+  public readonly onDidChangeFile = Event.None;
+
+  public async copy(
+    _from: monaco.Uri,
+    _to: monaco.Uri,
+    _opts: IFileOverwriteOptions,
+  ): Promise<void> {
+    throw FileSystemProviderError.create(
+      "Readonly file system",
+      FileSystemProviderErrorCode.NoPermissions,
+    );
+  }
+
+  public async createDirectory(_resource: monaco.Uri): Promise<void> {
+    throw FileSystemProviderError.create(
+      "Readonly file system",
+      FileSystemProviderErrorCode.NoPermissions,
+    );
+  }
 
   public async delete(_resource: monaco.Uri, _opts: IFileDeleteOptions): Promise<void> {
     throw FileSystemProviderError.create(
@@ -99,32 +190,18 @@ export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWr
       );
     }
 
-    const bridgeResult = BridgeService.getActiveBridge();
-    const filePath = resource.fsPath;
+    const existingModel = findExistingModel(resource);
+    if (existingModel) {
+      return new TextEncoder().encode(existingModel.getValue());
+    }
 
-    if (bridgeResult.ok) {
-      const readResult = await Result.fromPromise(
-        new Promise<string>((resolve, reject) => {
-          bridgeResult.value.readFile(filePath, (data) => {
-            if (data != null) {
-              resolve(data);
-            } else {
-              reject(new Error(`Null data for: ${filePath}`));
-            }
-          });
-        }),
-      );
-      if (readResult.ok) {
-        if (!monaco.editor.getModel(resource)) {
-          const isPython = resource.path.endsWith(".py") || resource.path.endsWith(".pyi");
-          monaco.editor.createModel(readResult.value, isPython ? "python" : undefined, resource);
-        }
-        return new TextEncoder().encode(readResult.value);
-      }
+    const readResult = await BridgeService.readFile(resource.fsPath);
+    if (readResult.ok) {
+      return new TextEncoder().encode(readResult.value);
     }
 
     throw FileSystemProviderError.create(
-      `File not found: ${filePath}`,
+      `File not found: ${resource.fsPath}`,
       FileSystemProviderErrorCode.FileNotFound,
     );
   }
@@ -147,34 +224,31 @@ export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWr
         FileSystemProviderErrorCode.FileNotFound,
       );
     }
-    const bridgeResult = BridgeService.getActiveBridge();
-    const filePath = resource.fsPath;
 
-    if (bridgeResult.ok) {
-      const resResult = await Result.fromPromise(
-        new Promise<FileStatResponse>((resolve, reject) => {
-          bridgeResult.value.statFile(filePath, (data) => {
-            if (data != null) {
-              resolve(data);
-            } else {
-              reject(new Error(`Null data for: ${filePath}`));
-            }
-          });
-        }),
-      );
-      if (resResult.ok) {
-        return {
-          type: resResult.value.type === 2 ? FileType.Directory : FileType.File,
-          ctime: resResult.value.ctime,
-          mtime: resResult.value.mtime,
-          size: resResult.value.size,
-          permissions: FilePermission.Readonly,
-        };
-      }
+    const existingModel = findExistingModel(resource);
+    if (existingModel) {
+      return {
+        type: FileType.File,
+        ctime: 0,
+        mtime: Date.now(),
+        size: existingModel.getValueLength(),
+        permissions: FilePermission.Readonly,
+      };
+    }
+
+    const statResult = await BridgeService.statFile(resource.fsPath);
+    if (statResult.ok) {
+      return {
+        type: statResult.value.type === 2 ? FileType.Directory : FileType.File,
+        ctime: statResult.value.ctime,
+        mtime: statResult.value.mtime,
+        size: statResult.value.size,
+        permissions: FilePermission.Readonly,
+      };
     }
 
     throw FileSystemProviderError.create(
-      `File not found: ${filePath}`,
+      `File not found: ${resource.fsPath}`,
       FileSystemProviderErrorCode.FileNotFound,
     );
   }
@@ -192,23 +266,6 @@ export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWr
       "Readonly file system",
       FileSystemProviderErrorCode.NoPermissions,
     );
-  }
-}
-
-export class VSCodeWorkspaceRegistry {
-  private static fileSystemProvider: RegisteredFileSystemProvider | null = null;
-
-  public static initialize(provider: RegisteredFileSystemProvider): void {
-    this.fileSystemProvider = provider;
-  }
-
-  public static registerMemoryFile(uri: monaco.Uri, content: string): Result<monaco.IDisposable> {
-    if (!this.fileSystemProvider) {
-      return Result.err(new Error("VSCodeWorkspaceRegistry is not initialized"));
-    }
-    return Result.fromThrowable(() => {
-      return this.fileSystemProvider!.registerFile(new RegisteredMemoryFile(uri, content));
-    });
   }
 }
 
@@ -234,7 +291,6 @@ export async function initVscodeServices(): Promise<Result<void>> {
   const workspaceFileUri = monaco.Uri.parse("file:///workspace/workspace.code-workspace");
 
   const fsProvider = new RegisteredFileSystemProvider(false);
-  VSCodeWorkspaceRegistry.initialize(fsProvider);
   const mkdirRes = Result.fromThrowable(() => fsProvider.mkdirSync(workspaceDirUri));
   // Ignore error if exists
   if (!mkdirRes.ok) {

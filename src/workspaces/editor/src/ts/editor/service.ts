@@ -3,13 +3,14 @@ import * as monaco from "monaco-editor";
 import * as vscode from "vscode";
 
 import { BridgeService } from "../bridge/python";
-import { VSCodeWorkspaceRegistry } from "../services/vscode";
+import { claimHeadlessModel, disposeHeadlessModels, findExistingModel } from "../services/vscode";
 import type { EditorOptionsPayload, TabInfo } from "../types";
 import { DOM_IDS } from "../ui/constants";
 import { TabBarView } from "../ui/tabbar";
 import { DisposableStore } from "../utils/disposables";
 import { Result } from "../utils/result";
 import { getThemeDefinition } from "../utils/theme";
+import { isSameResource } from "../utils/uri";
 import * as config from "./config";
 
 interface TabRecord {
@@ -88,6 +89,48 @@ export class EditorService implements vscode.Disposable {
       label: "VapourSynth: Generate Stubs",
       run: () => BridgeService.getActiveBridge().unwrapOr(undefined)?.requestGenerateStubs(),
     });
+
+    this.disposables.add(
+      monaco.editor.registerEditorOpener({
+        openCodeEditor: async (_source, resource, selectionOrPosition) => {
+          const resourceStr = this.normalizeUri(resource.toString()).toString();
+          let targetTab = this.tabs.get(resourceStr);
+          if (!targetTab) {
+            for (const tab of this.tabs.values()) {
+              if (isSameResource(tab.uri, resource)) {
+                targetTab = tab;
+                break;
+              }
+            }
+          }
+
+          if (targetTab) {
+            const selectRes = this.selectTab(targetTab.uriString);
+            if (!selectRes.ok) return false;
+            this.revealSelectionOrPosition(selectionOrPosition);
+            return true;
+          }
+
+          if (resource.scheme === "file") {
+            const readResult = await BridgeService.readFile(resource.fsPath);
+            if (readResult.ok) {
+              const isPython = resource.path.endsWith(".py") || resource.path.endsWith(".pyi");
+              const openRes = this.openTab(
+                resourceStr,
+                readResult.value,
+                isPython ? "python" : undefined,
+                false,
+              );
+              if (openRes.ok) {
+                this.revealSelectionOrPosition(selectionOrPosition);
+                return true;
+              }
+            }
+          }
+          return false;
+        },
+      }),
+    );
 
     // Initialize default main tab
     const defaultMainUri = "file:///workspace/script.py";
@@ -249,19 +292,15 @@ export class EditorService implements vscode.Disposable {
       if (!tab) {
         const tabDisposables = new DisposableStore();
 
-        let model = monaco.editor.getModel(uri);
+        let model = findExistingModel(uri);
         let ownsModel = false;
         if (!model || model.isDisposed()) {
-          if (uri.scheme === "file" && uri.path.startsWith("/workspace")) {
-            const regResult = VSCodeWorkspaceRegistry.registerMemoryFile(uri, content);
-            if (regResult.ok) {
-              tabDisposables.add(regResult.value);
-            } else {
-              console.warn(`Memory file ${uriString} already registered:`, regResult.error);
-            }
-          }
           model = monaco.editor.createModel(content, language, uri);
           ownsModel = true;
+        } else {
+          const isClaimedByOtherTab = Array.from(this.tabs.values()).some((t) => t.model === model);
+          ownsModel = !isClaimedByOtherTab;
+          claimHeadlessModel(model);
         }
         if (content && model.getValue() !== content) {
           model.setValue(content);
@@ -485,6 +524,7 @@ export class EditorService implements vscode.Disposable {
       }
     }
     this.tabs.clear();
+    disposeHeadlessModels();
     this.disposables.dispose();
   }
 
@@ -511,22 +551,20 @@ export class EditorService implements vscode.Disposable {
     tab.disposables.dispose();
     tab.disposables = new DisposableStore();
 
-    if (newUri.scheme === "file" && newUri.path.startsWith("/workspace")) {
-      const regResult = VSCodeWorkspaceRegistry.registerMemoryFile(newUri, tab.model.getValue());
-      if (regResult.ok) {
-        tab.disposables.add(regResult.value);
-      } else {
-        console.warn(`Memory file ${newUriString} already registered:`, regResult.error);
-      }
-    }
-
-    let newModel = monaco.editor.getModel(newUri);
+    let newModel = findExistingModel(newUri);
     let ownsModel = false;
     if (!newModel || newModel.isDisposed()) {
       newModel = monaco.editor.createModel(tab.model.getValue(), tab.model.getLanguageId(), newUri);
       ownsModel = true;
-    } else if (newModel.getValue() !== tab.model.getValue()) {
-      newModel.setValue(tab.model.getValue());
+    } else {
+      const isClaimedByOtherTab = Array.from(this.tabs.values()).some(
+        (t) => t !== tab && t.model === newModel,
+      );
+      ownsModel = !isClaimedByOtherTab;
+      claimHeadlessModel(newModel);
+      if (newModel.getValue() !== tab.model.getValue()) {
+        newModel.setValue(tab.model.getValue());
+      }
     }
 
     if (tab.ownsModel && tab.model !== newModel && !tab.model.isDisposed()) {
@@ -645,7 +683,22 @@ export class EditorService implements vscode.Disposable {
   private deriveTitle(uriInput: string): string {
     const uri = this.normalizeUri(uriInput);
     const path = uri.path;
-    const parts = path.split("/");
-    return parts[parts.length - 1] || "script.py";
+    const parts = path.split("/").filter(Boolean);
+    const filename = parts[parts.length - 1] || "script.py";
+    if ((filename === "__init__.pyi" || filename === "__init__.py") && parts.length >= 2) {
+      return `${parts[parts.length - 2]}/${filename}`;
+    }
+    return filename;
+  }
+
+  private revealSelectionOrPosition(selectionOrPosition?: monaco.IRange | monaco.IPosition): void {
+    if (!selectionOrPosition) return;
+    if ("startLineNumber" in selectionOrPosition) {
+      this.editor.setSelection(selectionOrPosition);
+      this.editor.revealRangeInCenter(selectionOrPosition);
+    } else {
+      this.editor.setPosition(selectionOrPosition);
+      this.editor.revealPositionInCenter(selectionOrPosition);
+    }
   }
 }
