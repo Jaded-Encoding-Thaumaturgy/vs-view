@@ -656,6 +656,7 @@ export class EditorService implements vscode.Disposable {
       isMain: t.isMain,
       isDirty: t.isDirty,
       language: t.model.getLanguageId(),
+      content: t.isDirty ? t.model.getValue() : undefined,
     }));
 
     // Ensure Main tab is rendered first

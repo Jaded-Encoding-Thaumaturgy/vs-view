@@ -80,6 +80,7 @@ export interface TabInfo {
   isMain: boolean;
   isDirty: boolean;
   language: string;
+  content?: string | undefined;
 }
 
 export interface EditorOptionsPayload {

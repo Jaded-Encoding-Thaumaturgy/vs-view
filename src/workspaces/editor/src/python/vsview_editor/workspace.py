@@ -248,7 +248,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     @override
     def deleteLater(self) -> None:
         GlobalConsoleHub.unregister(self.editor.bridge)
-        self._env_stubs.dispose()
+        if hasattr(self, "_env_stubs_internal"):
+            self._env_stubs_internal.dispose()
         return super().deleteLater()
 
     @property
@@ -339,6 +340,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
                 text=True,
                 capture_output=True,
                 check=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if res.stdout and res.stdout != code:
                 self.editor.bridge.content = res.stdout
@@ -598,8 +600,9 @@ class EditorWorkspace(
                 return False
 
             if reply == QMessageBox.StandardButton.Save:
+                content = tab.get("content") or self.code_dock.editor.bridge.content
                 if local_path := WorkspaceUri(uri).local_path:
-                    self.code_dock.save_script(local_path, self.code_dock.editor.bridge.content).result()
+                    self.code_dock.save_script(local_path, content).result()
                 else:
                     filepath, _ = QFileDialog.getSaveFileName(
                         self,
@@ -610,7 +613,7 @@ class EditorWorkspace(
                     if not filepath:
                         return False
 
-                    self.code_dock.save_script(Path(filepath), self.code_dock.editor.bridge.content).result()
+                    self.code_dock.save_script(Path(filepath), content).result()
 
         return True
 

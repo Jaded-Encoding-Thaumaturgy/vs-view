@@ -289,8 +289,10 @@ class MonacoWebPage(QWebEnginePage):
         line_number: int,
         source_id: str,
     ) -> None:
-        if source_id.startswith("file:///"):
-            source_id = Path(source_id[8:]).name
+        if source_id.startswith("file:"):
+            source_id = QUrl(source_id).fileName() or Path(source_id).name
+        elif "/" in source_id or "\\" in source_id:
+            source_id = Path(source_id).name
 
         lvl = self.LOG_LEVELS.get(level, DEBUG)
         js_logger.log(lvl, message, extra={"js_source": source_id, "js_lineno": line_number})
@@ -333,9 +335,10 @@ class MonacoEditorWidget(QWebEngineView):
         return super().load(thing)
 
 
-class TabInfo(TypedDict):
+class TabInfo(TypedDict, total=False):
     uri: str
     title: str
     isMain: bool
     isDirty: bool
     language: str
+    content: str
