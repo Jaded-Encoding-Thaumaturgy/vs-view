@@ -8,7 +8,6 @@ import {
   State,
 } from "vscode-languageclient/browser";
 
-import { ensureModelLoaded } from "../services/vscode";
 import { DisposableStore } from "../utils/disposables";
 import { Result } from "../utils/result";
 import { WebSocketMessageReader, WebSocketMessageWriter } from "./connection";
@@ -165,20 +164,22 @@ export class LspService implements vscode.Disposable {
                 locs.map(async (loc) => {
                   const targetUri = "uri" in loc ? loc.uri : loc.targetUri;
                   if (targetUri.scheme === "file") {
-                    const loadRes = await ensureModelLoaded(targetUri);
-                    if (window.ENV?.VSVIEW_DEBUG) {
-                      loadRes.match({
-                        ok: () =>
+                    const loadRes = await Result.fromPromise(
+                      vscode.workspace.openTextDocument(targetUri),
+                    );
+                    loadRes.match({
+                      ok: () => {
+                        if (window.ENV?.VSVIEW_DEBUG)
                           console.debug(
                             `[LSP ${config.id}] Pre-loaded model for ${targetUri.toString()}`,
-                          ),
-                        err: (err) =>
-                          console.warn(
-                            `[LSP ${config.id}] Failed to load model for ${targetUri.toString()}:`,
-                            err,
-                          ),
-                      });
-                    }
+                          );
+                      },
+                      err: (err) =>
+                        console.warn(
+                          `[LSP ${config.id}] Failed to load model for ${targetUri.toString()}:`,
+                          err,
+                        ),
+                    });
                   }
                 }),
               );

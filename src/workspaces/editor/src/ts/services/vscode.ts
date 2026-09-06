@@ -65,28 +65,6 @@ self.MonacoEnvironment = {
   },
 };
 
-/** Headless models loaded for definition inspection that are not yet claimed by any tab. */
-const headlessModels = new Set<monaco.editor.ITextModel>();
-
-/**
- * Claims ownership of a headless model when a tab opens it.
- */
-export function claimHeadlessModel(model: monaco.editor.ITextModel): void {
-  headlessModels.delete(model);
-}
-
-/**
- * Disposes all unattached headless models.
- */
-export function disposeHeadlessModels(): void {
-  for (const model of headlessModels) {
-    if (!model.isDisposed()) {
-      model.dispose();
-    }
-  }
-  headlessModels.clear();
-}
-
 export function findExistingModel(
   resource: monaco.Uri | vscode.Uri,
 ): monaco.editor.ITextModel | undefined {
@@ -104,40 +82,6 @@ export function findExistingModel(
   }
 
   return undefined;
-}
-
-export async function ensureModelLoaded(
-  resource: monaco.Uri | vscode.Uri,
-): Promise<Result<monaco.editor.ITextModel>> {
-  const existing = findExistingModel(resource);
-  if (existing) {
-    return Result.ok(existing);
-  }
-  if (resource.scheme !== "file") {
-    return Result.err(new Error(`Unsupported scheme: ${resource.scheme}`));
-  }
-
-  const readResult = await BridgeService.readFile(resource.fsPath);
-  if (!readResult.ok) {
-    return Result.err(readResult.error);
-  }
-
-  const existingAfterRead = findExistingModel(resource);
-  if (existingAfterRead) {
-    return Result.ok(existingAfterRead);
-  }
-
-  return Result.fromThrowable(() => {
-    const isPython = resource.path.endsWith(".py") || resource.path.endsWith(".pyi");
-    const monacoUri = resource as monaco.Uri;
-    const model = monaco.editor.createModel(
-      readResult.value,
-      isPython ? "python" : undefined,
-      monacoUri,
-    );
-    headlessModels.add(model);
-    return model;
-  });
 }
 
 export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWriteCapability {

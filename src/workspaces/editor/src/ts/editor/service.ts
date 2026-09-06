@@ -3,7 +3,7 @@ import * as monaco from "monaco-editor";
 import * as vscode from "vscode";
 
 import { BridgeService } from "../bridge/python";
-import { claimHeadlessModel, disposeHeadlessModels, findExistingModel } from "../services/vscode";
+import { findExistingModel } from "../services/vscode";
 import type { EditorOptionsPayload, TabInfo } from "../types";
 import { DOM_IDS } from "../ui/constants";
 import { TabBarView } from "../ui/tabbar";
@@ -300,7 +300,6 @@ export class EditorService implements vscode.Disposable {
         } else {
           const isClaimedByOtherTab = Array.from(this.tabs.values()).some((t) => t.model === model);
           ownsModel = !isClaimedByOtherTab;
-          claimHeadlessModel(model);
         }
         if (content && model.getValue() !== content) {
           model.setValue(content);
@@ -524,7 +523,6 @@ export class EditorService implements vscode.Disposable {
       }
     }
     this.tabs.clear();
-    disposeHeadlessModels();
     this.disposables.dispose();
   }
 
@@ -561,7 +559,6 @@ export class EditorService implements vscode.Disposable {
         (t) => t !== tab && t.model === newModel,
       );
       ownsModel = !isClaimedByOtherTab;
-      claimHeadlessModel(newModel);
       if (newModel.getValue() !== tab.model.getValue()) {
         newModel.setValue(tab.model.getValue());
       }
