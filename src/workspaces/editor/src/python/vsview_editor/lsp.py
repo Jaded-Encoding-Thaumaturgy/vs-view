@@ -6,7 +6,7 @@ import shutil
 import sys
 import urllib.parse
 import weakref
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from logging import DEBUG, getLogger
 from pathlib import Path
@@ -29,6 +29,7 @@ class LSPConfig:
     language: str
     file_events_pattern: str | None
     configuration_section: str | Sequence[str] | None = None
+    progress_notifications: Sequence[Mapping[str, str]] | None = None
 
     def __post_init__(self) -> None:
         if not self.command:
@@ -42,6 +43,7 @@ LSP_BASEDPYRIGHT_CONFIG = LSPConfig(
     language="python",
     file_events_pattern="**/*.py",
     configuration_section=["basedpyright", "python"],
+    progress_notifications=[{"begin": "pyright/beginAnalysis", "end": "pyright/endAnalysis"}],
 )
 
 

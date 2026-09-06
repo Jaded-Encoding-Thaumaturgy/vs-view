@@ -8,9 +8,11 @@ import {
   State,
 } from "vscode-languageclient/browser";
 
+import { ensureModelLoaded } from "../services/vscode";
 import { DisposableStore } from "../utils/disposables";
 import { Result } from "../utils/result";
 import { WebSocketMessageReader, WebSocketMessageWriter } from "./connection";
+import { type LspProgressNotification, LspProgressTracker } from "./progress";
 
 export class WebSocketLanguageClient extends BaseLanguageClient {
   constructor(
@@ -36,6 +38,14 @@ export class WebSocketLanguageClient extends BaseLanguageClient {
 }
 
 /**
+ * A pair of custom notification methods indicating the start and end of background analysis.
+ */
+export interface LspProgressNotificationPair {
+  begin: string;
+  end: string;
+}
+
+/**
  * Configuration for an LSP server.
  */
 export interface LspServerConfig {
@@ -45,6 +55,7 @@ export interface LspServerConfig {
   language: string;
   fileEventsPattern?: string | undefined;
   configurationSection?: string | string[] | undefined;
+  progressNotifications?: LspProgressNotificationPair[] | undefined;
 }
 
 /**
@@ -98,27 +109,83 @@ export class LspService implements vscode.Disposable {
         );
       }
 
+      const syncedUris = new Set<string>();
+      const canonicalKey = (uri: vscode.Uri): string => {
+        return uri.toString().toLowerCase().replace(/%3a/g, ":");
+      };
+
+      const progressTracker = new LspProgressTracker();
+
       const clientOptions: LanguageClientOptions = {
         documentSelector: [{ language: config.language }],
         synchronize: synchronizeOptions,
         middleware: {
+          didOpen: async (document, next) => {
+            const key = canonicalKey(document.uri);
+            if (syncedUris.has(key)) {
+              return;
+            }
+            syncedUris.add(key);
+            await next(document);
+          },
+          didClose: async (document, next) => {
+            const key = canonicalKey(document.uri);
+            syncedUris.delete(key);
+            await next(document);
+          },
           provideDefinition: async (document, position, token, next) => {
-            const result = await next(document, position, token);
-            if (!result) return result;
+            if (window.ENV?.VSVIEW_DEBUG) {
+              console.debug(
+                `[LSP ${config.id}] Requesting definition at ${document.uri.toString()}:${position.line + 1}:${position.character + 1}...`,
+              );
+            }
+            let result = await next(document, position, token);
+            const isEmpty = !result || (Array.isArray(result) && result.length === 0);
 
-            for (const loc of Array.isArray(result) ? result : [result]) {
-              const targetUriStr = "uri" in loc ? loc.uri.toString() : loc.targetUri.toString();
-              if (targetUriStr.startsWith("file:")) {
-                const openRes = await Result.fromPromise(
-                  vscode.workspace.openTextDocument(vscode.Uri.parse(targetUriStr)),
+            if (isEmpty && progressTracker.hasActiveProgress && !token.isCancellationRequested) {
+              if (window.ENV?.VSVIEW_DEBUG) {
+                console.debug(
+                  `[LSP ${config.id}] Definition query returned empty while indexing, waiting for completion...`,
                 );
-                if (!openRes.ok)
-                  console.warn(
-                    `Failed to pre-open VSCode document for ${targetUriStr}:`,
-                    openRes.error,
-                  );
+              }
+              await progressTracker.waitForProgressOrTimeout(token, 2500);
+              if (!token.isCancellationRequested) {
+                result = await next(document, position, token);
               }
             }
+
+            if (result) {
+              const locs = Array.isArray(result) ? result : [result];
+              if (window.ENV?.VSVIEW_DEBUG) {
+                console.debug(
+                  `[LSP ${config.id}] Definition returned ${locs.length} location(s). Pre-loading model(s)...`,
+                );
+              }
+              await Promise.all(
+                locs.map(async (loc) => {
+                  const targetUri = "uri" in loc ? loc.uri : loc.targetUri;
+                  if (targetUri.scheme === "file") {
+                    const loadRes = await ensureModelLoaded(targetUri);
+                    if (window.ENV?.VSVIEW_DEBUG) {
+                      loadRes.match({
+                        ok: () =>
+                          console.debug(
+                            `[LSP ${config.id}] Pre-loaded model for ${targetUri.toString()}`,
+                          ),
+                        err: (err) =>
+                          console.warn(
+                            `[LSP ${config.id}] Failed to load model for ${targetUri.toString()}:`,
+                            err,
+                          ),
+                      });
+                    }
+                  }
+                }),
+              );
+            } else if (window.ENV?.VSVIEW_DEBUG) {
+              console.debug(`[LSP ${config.id}] No definition found.`);
+            }
+
             return result;
           },
         },
@@ -134,6 +201,8 @@ export class LspService implements vscode.Disposable {
       });
 
       const sessionDisposables = new DisposableStore();
+      sessionDisposables.add(progressTracker);
+      sessionDisposables.add({ dispose: () => syncedUris.clear() });
 
       if (config.configurationSection !== undefined) {
         const sections = Array.isArray(config.configurationSection)
@@ -151,15 +220,51 @@ export class LspService implements vscode.Disposable {
       }
 
       sessionDisposables.add(
-        client.onNotification("$/progress", (params: any) => {
-          if (!window.ENV?.VSVIEW_DEBUG) return;
-          if (params?.value?.kind === "begin") {
-            console.debug(`[LSP ${config.id}] ${params.value.title || "Analysis started"}`);
-          } else if (params?.value?.kind === "end") {
-            console.debug(`[LSP ${config.id}] Analysis complete.`);
+        client.onNotification("$/progress", (params: LspProgressNotification) => {
+          const kind = params?.value?.kind;
+          const token = params?.token;
+
+          if (token !== undefined) {
+            if (kind === "begin") {
+              progressTracker.begin(token);
+            } else if (kind === "end") {
+              progressTracker.end(token);
+            }
+          }
+
+          if (window.ENV?.VSVIEW_DEBUG) {
+            if (kind === "begin") {
+              console.debug(`[LSP ${config.id}] ${params.value?.title || "Analysis started"}`);
+            } else if (kind === "end") {
+              console.debug(`[LSP ${config.id}] Analysis complete.`);
+            }
           }
         }),
       );
+
+      if (config.progressNotifications) {
+        for (const pair of config.progressNotifications) {
+          const token = `__custom_progress_${pair.begin}__`;
+
+          sessionDisposables.add(
+            client.onNotification(pair.begin, () => {
+              progressTracker.begin(token);
+              if (window.ENV?.VSVIEW_DEBUG) {
+                console.debug(`[LSP ${config.id}] Analysis started (${pair.begin})`);
+              }
+            }),
+          );
+
+          sessionDisposables.add(
+            client.onNotification(pair.end, () => {
+              progressTracker.end(token);
+              if (window.ENV?.VSVIEW_DEBUG) {
+                console.debug(`[LSP ${config.id}] Analysis finished (${pair.end})`);
+              }
+            }),
+          );
+        }
+      }
 
       this.sessions.set(config.id, { client, socket: webSocket, disposables: sessionDisposables });
       void client.start();

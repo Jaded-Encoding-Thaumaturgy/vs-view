@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 import type { EditorService } from "../editor/service";
 import type { LspService } from "../lsp/service";
-import type { PythonBridge, QWebSignal } from "../types";
+import type { FileStatResponse, PythonBridge, QWebSignal } from "../types";
 import { ConsolePanelService } from "../ui/console";
 import { DOM_IDS } from "../ui/constants";
 import { DisposableStore, toDisposable } from "../utils/disposables";
@@ -25,6 +25,44 @@ export class BridgeService implements vscode.Disposable {
       return BridgeService.activeInstance.getBridge();
     }
     return Result.err(new Error("BridgeService instance is not available"));
+  }
+
+  /** Read file content from host via Python bridge. */
+  public static async readFile(filePath: string): Promise<Result<string>> {
+    const bridgeResult = BridgeService.getActiveBridge();
+    if (!bridgeResult.ok) {
+      return Result.err(bridgeResult.error);
+    }
+    return Result.fromPromise(
+      new Promise<string>((resolve, reject) => {
+        bridgeResult.value.readFile(filePath, (data) => {
+          if (data !== null) {
+            resolve(data);
+          } else {
+            reject(new Error(`Failed to read file: ${filePath}`));
+          }
+        });
+      }),
+    );
+  }
+
+  /** Query file metadata from host via Python bridge. */
+  public static async statFile(filePath: string): Promise<Result<FileStatResponse>> {
+    const bridgeResult = BridgeService.getActiveBridge();
+    if (!bridgeResult.ok) {
+      return Result.err(bridgeResult.error);
+    }
+    return Result.fromPromise(
+      new Promise<FileStatResponse>((resolve, reject) => {
+        bridgeResult.value.statFile(filePath, (data) => {
+          if (data !== null) {
+            resolve(data);
+          } else {
+            reject(new Error(`File not found: ${filePath}`));
+          }
+        });
+      }),
+    );
   }
 
   constructor(
@@ -216,6 +254,15 @@ export class BridgeService implements vscode.Disposable {
                 ? (p.configurationSection as string[])
                 : undefined;
 
+          const progressNotifications = Array.isArray(p.progressNotifications)
+            ? (p.progressNotifications as Array<{ begin?: unknown; end?: unknown }>)
+                .filter(
+                  (pair): pair is { begin: string; end: string } =>
+                    typeof pair?.begin === "string" && typeof pair?.end === "string",
+                )
+                .map((pair) => ({ begin: pair.begin, end: pair.end }))
+            : undefined;
+
           void this.lspService.connect({
             id: p.id,
             name: p.name,
@@ -224,6 +271,7 @@ export class BridgeService implements vscode.Disposable {
             fileEventsPattern:
               typeof p.fileEventsPattern === "string" ? p.fileEventsPattern : undefined,
             configurationSection,
+            progressNotifications,
           });
         }
       },
@@ -292,25 +340,33 @@ export class BridgeService implements vscode.Disposable {
   }
 
   private async applyLspSettings(section: string, jsonSettings: string): Promise<void> {
-    Result.fromThrowable(() => JSON.parse(jsonSettings) as Record<string, string | boolean>).match({
-      ok: async (raw) => {
-        await Result.fromPromise(async () => {
-          const conf = vscode.workspace.getConfiguration();
-          for (const [key, value] of Object.entries(raw)) {
-            await conf.update(key, value, vscode.ConfigurationTarget.Workspace);
-          }
-        }).match({
-          ok: () =>
-            console.debug(`Updated LSP configuration for '${section}':`, JSON.stringify(raw)),
-          err: (err) =>
-            console.error(
-              `Failed to apply LSP settings for '${section}' to workspace configuration:`,
-              err,
-            ),
-        });
-      },
-      err: async (err) =>
-        console.error(`Failed to parse LSP settings for section '${section}':`, err),
+    const parseResult = Result.fromThrowable(
+      () => JSON.parse(jsonSettings) as Record<string, unknown>,
+    );
+    if (!parseResult.ok) {
+      console.error(`Failed to parse LSP settings for section '${section}':`, parseResult.error);
+      return;
+    }
+
+    const parsed = parseResult.value;
+
+    const conf = vscode.workspace.getConfiguration();
+    const updateResult = await Result.fromPromise(
+      Promise.all(
+        Object.entries(parsed).map(([key, value]) =>
+          conf.update(key, value, vscode.ConfigurationTarget.Workspace),
+        ),
+      ),
+    );
+
+    updateResult.match({
+      ok: () =>
+        console.debug(`Updated LSP configuration for '${section}':`, JSON.stringify(parsed)),
+      err: (err) =>
+        console.error(
+          `Failed to apply LSP settings for '${section}' to workspace configuration:`,
+          err,
+        ),
     });
   }
 }

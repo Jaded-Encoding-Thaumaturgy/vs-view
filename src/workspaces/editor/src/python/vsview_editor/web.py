@@ -107,6 +107,8 @@ class MonacoBridge(QObject):
         }
         if config.configuration_section is not None:
             payload["configurationSection"] = config.configuration_section
+        if config.progress_notifications is not None:
+            payload["progressNotifications"] = [dict(pair) for pair in config.progress_notifications]
 
         self.dispatch("lsp.connect", payload)
 
