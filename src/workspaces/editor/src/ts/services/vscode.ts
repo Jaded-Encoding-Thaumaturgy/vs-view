@@ -10,6 +10,7 @@ import {
 } from "@codingame/monaco-vscode-api/services";
 import { Event } from "@codingame/monaco-vscode-api/vscode/vs/base/common/event";
 import { type IDisposable } from "@codingame/monaco-vscode-api/vscode/vs/base/common/lifecycle";
+import { isLinux } from "@codingame/monaco-vscode-api/vscode/vs/base/common/platform";
 import {
   FilePermission,
   FileSystemProviderCapabilities,
@@ -85,7 +86,9 @@ export function findExistingModel(
 }
 
 export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWriteCapability {
-  public readonly capabilities = FileSystemProviderCapabilities.FileReadWrite;
+  public readonly capabilities =
+    FileSystemProviderCapabilities.FileReadWrite |
+    (isLinux ? FileSystemProviderCapabilities.PathCaseSensitive : 0);
 
   public readonly onDidChangeCapabilities = Event.None;
   public readonly onDidChangeFile = Event.None;
