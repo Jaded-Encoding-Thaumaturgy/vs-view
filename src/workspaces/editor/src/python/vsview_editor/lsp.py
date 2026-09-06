@@ -12,7 +12,7 @@ from logging import DEBUG, getLogger
 from pathlib import Path
 
 from jetpytools import CustomValueError
-from PySide6.QtCore import QObject, QProcess, Slot
+from PySide6.QtCore import QObject, QProcess, QUrl, Slot
 from PySide6.QtNetwork import QHostAddress
 from PySide6.QtWebSockets import QWebSocket, QWebSocketServer
 
@@ -232,8 +232,14 @@ class LSPProcessServer(QObject):
             logger.error("LSP QProcess error for %r (%s): %s", self.config.id, error, self.process.errorString())
 
     @staticmethod
-    def _build_uri_variations(workspace_dir: Path) -> list[str]:
-        raw_uri = workspace_dir.as_uri()
+    def _build_uri_variations(workspace_dir: Path | str) -> list[str]:
+        if isinstance(workspace_dir, str) and workspace_dir.startswith("file:"):
+            raw_uri = workspace_dir
+        elif isinstance(workspace_dir, Path) and workspace_dir.is_absolute():
+            raw_uri = workspace_dir.as_uri()
+        else:
+            raw_uri = QUrl.fromLocalFile(str(workspace_dir)).toString()
+
         variations = set[str]()
 
         # Get path part after scheme
@@ -252,25 +258,35 @@ class LSPProcessServer(QObject):
             rest = path_part[2:]
             drives = [drive.lower(), drive.upper()]
             colons = [":", "%3A", "%3a"]
+            has_drive = True
         elif len(path_part) >= 4 and path_part[1:4].upper() == "%3A":
             drive = path_part[0]
             rest = path_part[4:]
             drives = [drive.lower(), drive.upper()]
             colons = [":", "%3A", "%3a"]
+            has_drive = True
         else:
             drives = [""]
             colons = [""]
-            rest = path_part
+            rest = "/" + path_part.lstrip("/")
+            has_drive = False
 
         rest_unquoted = urllib.parse.unquote(rest)
         rest_quoted = urllib.parse.quote(rest_unquoted, safe="/")
         rest_options = {rest, rest_unquoted, rest_quoted}
 
-        for prefix, d, c, r in itertools.product(["file:///", "file://", "file:/"], drives, colons, rest_options):
-            base = f"{prefix}{d}{c}{r}"
-            variations.add(base)
-            variations.add(urllib.parse.quote(base, safe=":/%"))
-            variations.add(urllib.parse.unquote(base))
+        if has_drive:
+            for prefix, d, c, r in itertools.product(["file:///", "file://", "file:/"], drives, colons, rest_options):
+                base = f"{prefix}{d}{c}{r}"
+                variations.add(base)
+                variations.add(urllib.parse.quote(base, safe=":/%"))
+                variations.add(urllib.parse.unquote(base))
+        else:
+            for prefix, r in itertools.product(["file://", "file:"], rest_options):
+                base = f"{prefix}{r}"
+                variations.add(base)
+                variations.add(urllib.parse.quote(base, safe=":/%"))
+                variations.add(urllib.parse.unquote(base))
 
         return sorted(variations, key=len, reverse=True)
 

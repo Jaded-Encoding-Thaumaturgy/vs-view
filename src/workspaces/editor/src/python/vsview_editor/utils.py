@@ -62,15 +62,30 @@ class SafeSlot(Generic[FallbackT]):
         return Slot(*self._types, **self._kwargs)(wrapper)
 
 
+_VIRTUAL_NAMES = frozenset({"script.py", "workspace.code-workspace"})
+
+
 class WorkspaceUri(QUrl):
     @property
     def local_path(self) -> Path | None:
-        local_path = self.toLocalFile()
-        return (
-            Path(local_path)
-            if self.scheme() == "file" and not local_path.startswith(("/workspace", "\\workspace"))
-            else None
-        )
+        if self.scheme() != "file":
+            return None
+
+        if not (local_file := self.toLocalFile()):
+            return None
+
+        if (p := Path(local_file)).exists():
+            return p
+
+        if local_file.replace("\\", "/").startswith("/workspace/") and (
+            p.name in _VIRTUAL_NAMES or p.name.startswith("untitled_")
+        ):
+            return None
+
+        if sys.platform == "win32" and not (len(local_file) >= 2 and local_file[1] == ":"):
+            return None
+
+        return p
 
 
 class ContentPath:
