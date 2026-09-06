@@ -145,7 +145,10 @@ class EditorOptionsSettings(BaseModel):
             tooltip="Control editor font family",
         ),
     ] = Field(
-        default="'Cascadia Mono', 'Consolas', 'Courier New', monospace",
+        default=(
+            "'Cascadia Mono', 'SF Mono', Monaco, Menlo, Consolas, "
+            "'Ubuntu Mono', 'Liberation Mono', 'DejaVu Sans Mono', monospace"
+        ),
         alias="editor.fontFamily",
     )
     tab_size: Annotated[

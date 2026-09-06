@@ -1,5 +1,5 @@
 import type { IConfigurationNode } from "@codingame/monaco-vscode-configuration-service-override";
-import * as monaco from "monaco-editor";
+import type * as monaco from "monaco-editor";
 
 export const defaultEditorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
   // IGlobalEditorOptions
@@ -23,7 +23,8 @@ export const defaultEditorOptions: monaco.editor.IStandaloneEditorConstructionOp
   padding: { top: 8 },
   folding: true,
   renderWhitespace: "selection",
-  fontFamily: "'Cascadia Mono', 'Consolas', 'Courier New', monospace",
+  fontFamily:
+    "'Cascadia Mono', 'SF Mono', Monaco, Menlo, Consolas, 'Ubuntu Mono', 'Liberation Mono', 'DejaVu Sans Mono', monospace",
   fontSize: 14,
   guides: {
     bracketPairs: true,
