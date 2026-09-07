@@ -304,8 +304,7 @@ export class EditorService implements vscode.Disposable {
           model = monaco.editor.createModel(content, language, uri);
           ownsModel = true;
         } else {
-          const isClaimedByOtherTab = Array.from(this.tabs.values()).some((t) => t.model === model);
-          ownsModel = !isClaimedByOtherTab;
+          ownsModel = false;
         }
         if (content && model.getValue() !== content) {
           model.setValue(content);
@@ -417,7 +416,7 @@ export class EditorService implements vscode.Disposable {
 
       // Safely dispose tab listeners and model after editor unbinding
       tab.disposables.dispose();
-      if (tab.ownsModel && !tab.model.isDisposed()) {
+      if (tab.ownsModel && !tab.model.isDisposed() && tab.uri.scheme !== "file") {
         tab.model.dispose();
       }
 
@@ -561,16 +560,18 @@ export class EditorService implements vscode.Disposable {
       newModel = monaco.editor.createModel(tab.model.getValue(), tab.model.getLanguageId(), newUri);
       ownsModel = true;
     } else {
-      const isClaimedByOtherTab = Array.from(this.tabs.values()).some(
-        (t) => t !== tab && t.model === newModel,
-      );
-      ownsModel = !isClaimedByOtherTab;
+      ownsModel = false;
       if (newModel.getValue() !== tab.model.getValue()) {
         newModel.setValue(tab.model.getValue());
       }
     }
 
-    if (tab.ownsModel && tab.model !== newModel && !tab.model.isDisposed()) {
+    if (
+      tab.ownsModel &&
+      tab.model !== newModel &&
+      !tab.model.isDisposed() &&
+      tab.uri.scheme !== "file"
+    ) {
       tab.model.dispose();
     }
 

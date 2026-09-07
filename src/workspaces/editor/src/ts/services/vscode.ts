@@ -138,7 +138,7 @@ export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWr
     }
 
     const existingModel = findExistingModel(resource);
-    if (existingModel) {
+    if (existingModel && !existingModel.isDisposed()) {
       return new TextEncoder().encode(existingModel.getValue());
     }
 
@@ -173,7 +173,7 @@ export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWr
     }
 
     const existingModel = findExistingModel(resource);
-    if (existingModel) {
+    if (existingModel && !existingModel.isDisposed()) {
       return {
         type: FileType.File,
         ctime: 0,
