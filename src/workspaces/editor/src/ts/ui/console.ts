@@ -107,33 +107,30 @@ export class ConsolePanelService implements vscode.Disposable {
 
   public fit(): void {
     if (this.isVisible) {
-      const resFit = Result.fromThrowable(() => this.fitAddon.fit());
-      if (!resFit.ok) {
-        console.warn("Failed to fit xterm viewport:", resFit.error);
-      } else {
-        BridgeService.active.unwrapOr(undefined)?.onConsoleResized(this.terminal.cols);
-      }
+      void Result.fromThrowable(() => this.fitAddon.fit()).match({
+        ok: () => BridgeService.active.unwrapOr(undefined)?.onConsoleResized(this.terminal.cols),
+        err: (e) => console.warn("Failed to fit xterm viewport:", e),
+      });
     }
   }
 
   public setTheme(theme: string): void {
-    const resDef = getThemeDefinition(theme);
-    if (!resDef.ok) {
-      console.warn(`Theme is undefined ${resDef.error}`);
-      return;
-    }
-    const def = resDef.value;
-    document.documentElement.dataset.theme = def.id;
-    document.documentElement.setAttribute("data-theme-kind", def.kind.toString());
+    void getThemeDefinition(theme).match({
+      ok: (def) => {
+        document.documentElement.dataset.theme = def.id;
+        document.documentElement.setAttribute("data-theme-kind", def.kind.toString());
 
-    if (this.themeTimer !== null) {
-      clearTimeout(this.themeTimer);
-    }
-    this.updateTerminalTheme();
-    this.themeTimer = setTimeout(() => {
-      this.themeTimer = null;
-      this.updateTerminalTheme();
-    }, 100);
+        if (this.themeTimer !== null) {
+          clearTimeout(this.themeTimer);
+        }
+        this.updateTerminalTheme();
+        this.themeTimer = setTimeout(() => {
+          this.themeTimer = null;
+          this.updateTerminalTheme();
+        }, 100);
+      },
+      err: (e) => console.warn(`Theme is undefined ${e}`),
+    });
   }
 
   public updateTerminalTheme(): void {

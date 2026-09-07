@@ -27,18 +27,10 @@ export class WebSocketMessageReader
     const data = event.data;
 
     if (typeof data === "string") {
-      const msgRes = Result.fromThrowable(() => JSON.parse(data) as Message);
-      if (msgRes.ok) {
-        const msg = msgRes.value;
-        if (this.callback) {
-          this.callback(msg);
-        } else {
-          this.messageBuffer.push(msg);
-        }
-      } else {
-        const e = msgRes.error;
-        this.fireError(e instanceof Error ? e : new Error(String(e)));
-      }
+      Result.fromThrowable(() => JSON.parse(data) as Message).match({
+        ok: (msg) => (this.callback ? this.callback(msg) : this.messageBuffer.push(msg)),
+        err: (e) => this.fireError(e instanceof Error ? e : new Error(String(e))),
+      });
     }
   };
 
@@ -68,14 +60,12 @@ export class WebSocketMessageReader
     this.callback = callback;
 
     // Flush any buffered messages that arrived before listen() was invoked
-    while (this.messageBuffer.length > 0 && this.callback) {
+    while (this.messageBuffer.length > 0) {
       const msg = this.messageBuffer.shift();
       if (msg) {
-        const res = Result.fromThrowable(() => this.callback!(msg));
-        if (!res.ok) {
-          const e = res.error;
-          this.fireError(e instanceof Error ? e : new Error(String(e)));
-        }
+        Result.fromThrowable(() => callback(msg)).mapErr((e) =>
+          this.fireError(e instanceof Error ? e : new Error(String(e))),
+        );
       }
     }
 
@@ -140,11 +130,9 @@ export class WebSocketMessageWriter
     }
 
     if (this.socket.readyState === WebSocket.OPEN) {
-      const resSend = Result.fromThrowable(() => this.socket.send(JSON.stringify(msg)));
-      if (!resSend.ok) {
-        const err = resSend.error;
-        this.fireError(err instanceof Error ? err : new Error(String(err)));
-      }
+      void Result.fromThrowable(() => this.socket.send(JSON.stringify(msg))).mapErr((e) =>
+        this.fireError(e instanceof Error ? e : new Error(String(e))),
+      );
       return Promise.resolve();
     }
 
@@ -152,11 +140,9 @@ export class WebSocketMessageWriter
     return new Promise((resolve, reject) => {
       const onOpen = () => {
         cleanup();
-        const resSend = Result.fromThrowable(() => this.socket.send(JSON.stringify(msg)));
-        if (!resSend.ok) {
-          const err = resSend.error;
-          this.fireError(err instanceof Error ? err : new Error(String(err)));
-        }
+        Result.fromThrowable(() => this.socket.send(JSON.stringify(msg))).mapErr((err) =>
+          this.fireError(err instanceof Error ? err : new Error(String(err))),
+        );
         resolve();
       };
       const onError = (e: Event) => {

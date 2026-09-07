@@ -59,13 +59,7 @@ export class EditorService implements vscode.Disposable {
 
     // Resolve initial theme from URL to prevent theme flicker
     const initialTheme = new URLSearchParams(window.location.search).get("initialTheme")!;
-    const resTheme = getThemeDefinition(initialTheme);
-    if (!resTheme.ok) {
-      throw new Error(
-        `Theme initialization failed for '${initialTheme}': ${resTheme.error.message}`,
-      );
-    }
-    const def = resTheme.value;
+    const def = getThemeDefinition(initialTheme).unwrap();
 
     this.editor = this.disposables.add(
       monaco.editor.create(container, {
@@ -111,27 +105,34 @@ export class EditorService implements vscode.Disposable {
           }
 
           if (targetTab) {
-            const selectRes = this.selectTab(targetTab.uriString);
-            if (!selectRes.ok) return false;
-            this.revealSelectionOrPosition(selectionOrPosition);
-            return true;
+            return this.selectTab(targetTab.uriString).match({
+              ok: () => {
+                this.revealSelectionOrPosition(selectionOrPosition);
+                return true;
+              },
+              err: () => false,
+            });
           }
 
           if (resource.scheme === "file") {
-            const readResult = await BridgeService.readFile(resource.fsPath);
-            if (readResult.ok) {
-              const isPython = resource.path.endsWith(".py") || resource.path.endsWith(".pyi");
-              const openRes = this.openTab(
-                resourceStr,
-                readResult.value,
-                isPython ? "python" : undefined,
-                false,
-              );
-              if (openRes.ok) {
-                this.revealSelectionOrPosition(selectionOrPosition);
-                return true;
-              }
-            }
+            return (await BridgeService.readFile(resource.fsPath))
+              .andThen((content) =>
+                this.openTab(
+                  resourceStr,
+                  content,
+                  resource.path.endsWith(".py") || resource.path.endsWith(".pyi")
+                    ? "python"
+                    : undefined,
+                  false,
+                ),
+              )
+              .match({
+                ok: () => {
+                  this.revealSelectionOrPosition(selectionOrPosition);
+                  return true;
+                },
+                err: () => false,
+              });
           }
           return false;
         },
@@ -164,17 +165,17 @@ export class EditorService implements vscode.Disposable {
   }
 
   public setTheme(theme: string): void {
-    const resDef = getThemeDefinition(theme);
-    if (!resDef.ok) {
-      console.error(`Failed to set theme: ${resDef.error.message}`);
-      return;
-    }
-    const def = resDef.value;
-    document.documentElement.dataset.theme = def.id;
-    document.documentElement.setAttribute("data-theme-kind", def.kind.toString());
-
-    monaco.editor.setTheme(def.id);
-    this.persistThemeConfig(def.id).catch((err) => console.error(`Failed to set theme: ${err}`));
+    getThemeDefinition(theme).match({
+      ok: (def) => {
+        document.documentElement.dataset.theme = def.id;
+        document.documentElement.setAttribute("data-theme-kind", def.kind.toString());
+        monaco.editor.setTheme(def.id);
+        this.persistThemeConfig(def.id).catch((err) =>
+          console.error(`Failed to set theme: ${err}`),
+        );
+      },
+      err: (err) => console.error(`Failed to set theme: ${err.message}`),
+    });
   }
 
   public setFontSize(size: number): void {

@@ -40,11 +40,9 @@ export class DisposableStore implements vscode.Disposable {
     this.isDisposed = true;
 
     while (this.disposables.length > 0) {
-      const item = this.disposables.pop();
-      const resDispose = Result.fromThrowable(() => item?.dispose());
-      if (!resDispose.ok) {
-        console.error("Error during resource disposal:", resDispose.error);
-      }
+      void Result.fromThrowable(() => this.disposables.pop()?.dispose()).mapErr((e) =>
+        console.error("Error during resource disposal:", e),
+      );
     }
   }
 

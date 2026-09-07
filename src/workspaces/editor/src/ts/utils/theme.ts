@@ -130,8 +130,5 @@ export const SUPPORTED_THEMES: Record<string, ThemeDefinition> = {
  */
 export function getThemeDefinition(themeName: string): Result<ThemeDefinition, Error> {
   const matched = SUPPORTED_THEMES[themeName];
-  if (matched) {
-    return Result.ok(matched);
-  }
-  return Result.err(new Error(`Unsupported theme: '${themeName}'`));
+  return matched ? Result.ok(matched) : Result.err(new Error(`Unsupported theme: '${themeName}'`));
 }

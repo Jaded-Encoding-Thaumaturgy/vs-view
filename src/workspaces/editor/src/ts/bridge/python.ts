@@ -6,7 +6,7 @@ import type { FileStatResponse, PythonBridge, QWebSignal } from "../types";
 import { ConsolePanelService } from "../ui/console";
 import { DOM_IDS } from "../ui/constants";
 import { DisposableStore, toDisposable } from "../utils/disposables";
-import { Result } from "../utils/result";
+import { Result, ResultAsync } from "../utils/result";
 
 export class BridgeService implements vscode.Disposable {
   private static activeInstance: BridgeService | null = null;
@@ -21,47 +21,43 @@ export class BridgeService implements vscode.Disposable {
   private loadingOverlayTimer: ReturnType<typeof setTimeout> | null = null;
 
   public static get active(): Result<PythonBridge> {
-    return Result.fromThrowable(
-      () => BridgeService!.activeInstance!.bridge!,
-      () => Error("BridgeService instance is not available"),
-    );
+    const bridge = BridgeService.activeInstance?.bridge;
+    return bridge
+      ? Result.ok(bridge)
+      : Result.err(new Error("BridgeService instance is not available"));
   }
 
   /** Read file content from host via Python bridge. */
-  public static async readFile(filePath: string): Promise<Result<string>> {
-    const bridgeResult = BridgeService.active;
-    if (!bridgeResult.ok) {
-      return Result.err(bridgeResult.error);
-    }
-    return Result.fromPromise(
-      new Promise<string>((resolve, reject) => {
-        bridgeResult.value.readFile(filePath, (data) => {
-          if (data !== null) {
-            resolve(data);
-          } else {
-            reject(new Error(`Failed to read file: ${filePath}`));
-          }
-        });
-      }),
+  public static readFile(filePath: string): ResultAsync<string> {
+    return ResultAsync.fromResult(BridgeService.active).andThen((bridge) =>
+      Result.fromPromise(
+        new Promise<string>((resolve, reject) => {
+          bridge.readFile(filePath, (data) => {
+            if (data !== null) {
+              resolve(data);
+            } else {
+              reject(new Error(`Failed to read file: ${filePath}`));
+            }
+          });
+        }),
+      ),
     );
   }
 
   /** Query file metadata from host via Python bridge. */
-  public static async statFile(filePath: string): Promise<Result<FileStatResponse>> {
-    const bridgeResult = BridgeService.active;
-    if (!bridgeResult.ok) {
-      return Result.err(bridgeResult.error);
-    }
-    return Result.fromPromise(
-      new Promise<FileStatResponse>((resolve, reject) => {
-        bridgeResult.value.statFile(filePath, (data) => {
-          if (data !== null) {
-            resolve(data);
-          } else {
-            reject(new Error(`File not found: ${filePath}`));
-          }
-        });
-      }),
+  public static statFile(filePath: string): ResultAsync<FileStatResponse> {
+    return ResultAsync.fromResult(BridgeService.active).andThen((bridge) =>
+      Result.fromPromise(
+        new Promise<FileStatResponse>((resolve, reject) => {
+          bridge.statFile(filePath, (data) => {
+            if (data !== null) {
+              resolve(data);
+            } else {
+              reject(new Error(`File not found: ${filePath}`));
+            }
+          });
+        }),
+      ),
     );
   }
 
@@ -279,10 +275,11 @@ export class BridgeService implements vscode.Disposable {
       },
       "editor.updateOptions": (p) => {
         if (typeof p.optionsJson === "string") {
-          const parsed = Result.fromThrowable(() => JSON.parse(p.optionsJson as string));
-          if (parsed.ok && typeof parsed.value === "object" && parsed.value !== null) {
-            this.editorService.updateOptionsFromMap(parsed.value as Record<string, unknown>);
-          }
+          void Result.fromThrowable(() => JSON.parse(p.optionsJson as string)).tap((parsed) => {
+            if (parsed && typeof parsed === "object") {
+              this.editorService.updateOptionsFromMap(parsed as Record<string, unknown>);
+            }
+          });
         }
       },
       "editor.openTab": (p) => {

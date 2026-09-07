@@ -35,7 +35,10 @@ export class WebSocketLanguageClient extends BaseLanguageClient {
   }
 
   public override async stop(timeout: number = 500): Promise<void> {
-    if (this.state === State.Stopped) return;
+    if (this.state === State.Stopped) {
+      console.debug(`Socket ${this.name} is already closed`);
+      return;
+    }
     if (this.socket.readyState !== WebSocket.OPEN) {
       await this.handleConnectionClosed();
       return;
