@@ -120,7 +120,6 @@ export class LspService implements vscode.Disposable {
       }
 
       const syncedUris = new Set<string>();
-
       const progressTracker = new LspProgressTracker();
 
       const clientOptions: LanguageClientOptions = {

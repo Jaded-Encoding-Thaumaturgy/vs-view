@@ -20,16 +20,16 @@ export class BridgeService implements vscode.Disposable {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private loadingOverlayTimer: ReturnType<typeof setTimeout> | null = null;
 
-  public static getActiveBridge(): Result<PythonBridge> {
-    if (BridgeService.activeInstance) {
-      return BridgeService.activeInstance.getBridge();
-    }
-    return Result.err(new Error("BridgeService instance is not available"));
+  public static get active(): Result<PythonBridge> {
+    return Result.fromThrowable(
+      () => BridgeService!.activeInstance!.bridge!,
+      () => Error("BridgeService instance is not available"),
+    );
   }
 
   /** Read file content from host via Python bridge. */
   public static async readFile(filePath: string): Promise<Result<string>> {
-    const bridgeResult = BridgeService.getActiveBridge();
+    const bridgeResult = BridgeService.active;
     if (!bridgeResult.ok) {
       return Result.err(bridgeResult.error);
     }
@@ -48,7 +48,7 @@ export class BridgeService implements vscode.Disposable {
 
   /** Query file metadata from host via Python bridge. */
   public static async statFile(filePath: string): Promise<Result<FileStatResponse>> {
-    const bridgeResult = BridgeService.getActiveBridge();
+    const bridgeResult = BridgeService.active;
     if (!bridgeResult.ok) {
       return Result.err(bridgeResult.error);
     }
@@ -97,13 +97,6 @@ export class BridgeService implements vscode.Disposable {
       // Delay hiding the loading screen to allow Monaco to render its first frames
       this.removeLoadingOverlayWithDelay();
     });
-  }
-
-  public getBridge(): Result<PythonBridge> {
-    if (this.bridge) {
-      return Result.ok(this.bridge);
-    }
-    return Result.err(new Error("Python bridge is not initialized"));
   }
 
   public dispose(): void {

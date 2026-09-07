@@ -87,13 +87,13 @@ export class EditorService implements vscode.Disposable {
     this.editor.addAction({
       id: "vsview.generateStubs",
       label: "VapourSynth: Generate Stubs",
-      run: () => BridgeService.getActiveBridge().unwrapOr(undefined)?.requestGenerateStubs(),
+      run: () => BridgeService.active.unwrapOr(undefined)?.requestGenerateStubs(),
     });
 
     this.editor.addAction({
       id: "basedpyright.restartserver",
       label: "Basedpyright: Restart Language Server",
-      run: () => BridgeService.getActiveBridge().unwrapOr(undefined)?.requestRestartLsp(),
+      run: () => BridgeService.active.unwrapOr(undefined)?.requestRestartLsp(),
     });
 
     this.disposables.add(
@@ -670,7 +670,7 @@ export class EditorService implements vscode.Disposable {
 
     this.tabBarView.render(tabInfos, this.activeUri);
 
-    BridgeService.getActiveBridge().unwrapOr(undefined)?.onTabStateChanged(tabInfos);
+    BridgeService.active.unwrapOr(undefined)?.onTabStateChanged(tabInfos);
   }
 
   private normalizeUri(uriInput: string): monaco.Uri {
