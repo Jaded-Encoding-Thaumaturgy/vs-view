@@ -100,6 +100,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self.editor.bridge.saveAsRequested.connect(self._on_save_as_clicked)
         self.editor.bridge.formatRequested.connect(self._on_format_clicked)
         self.editor.bridge.generateStubsRequested.connect(lambda: self._generate_stubs(force=True))
+        self.editor.bridge.restartLspRequested.connect(self.restart_lsp)
         self.editor.bridge.consoleResized.connect(self._on_console_resized)
 
         query = QUrlQuery()
@@ -244,6 +245,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self.api.register_shortcut(
             EditorShortcut.GENERATE_STUBS.definition, lambda: self._generate_stubs(force=True), self
         )
+        self.api.register_shortcut(EditorShortcut.RESTART_LSP.definition, self.restart_lsp, self)
 
     @override
     def deleteLater(self) -> None:
@@ -267,6 +269,15 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         return [t for t in self._open_tabs if t.get("isDirty", False)]
 
     @Slot()
+    def restart_lsp(self) -> None:
+        logger.info("Restarting Basedpyright language server...")
+        self._send_pyright_settings()
+        script_dir = self._active_filepath.parent if self._active_filepath else Path.cwd()
+        port = self.lsp_manager.restart_server(config=LSP_BASEDPYRIGHT_CONFIG, workspace_dir=script_dir)
+        if port > 0:
+            self.editor.bridge.connect_lsp(port, LSP_BASEDPYRIGHT_CONFIG)
+
+    @Slot()
     def _on_editor_ready(self) -> None:
         """Initialize script and start LSP bridge when Monaco is ready."""
         if not self._initial_content_set:
@@ -281,12 +292,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
         self._on_settings_changed()
         self._generate_stubs(force=False)
-
-        # Launch LSP process & server
-        script_dir = self._active_filepath.parent if self._active_filepath else Path.cwd()
-        port = self.lsp_manager.start_server(config=LSP_BASEDPYRIGHT_CONFIG, workspace_dir=script_dir)
-        if port > 0:
-            self.editor.bridge.connect_lsp(port, LSP_BASEDPYRIGHT_CONFIG)
+        self.restart_lsp()
 
     @Slot(int, int)
     def _on_cursor_changed(self, line: int, col: int) -> None:
@@ -437,6 +443,7 @@ class EditorShortcut(StrEnum):
     TOGGLE_CONSOLE = "toggle_console", "Toggle Console", "Ctrl+`"
     RUN_SCRIPT = "run_script", "Run Script", "F5"
     GENERATE_STUBS = "generate_stubs", "Generate Stubs", ""
+    RESTART_LSP = "restart_lsp", "Restart Language Server", ""
     FOCUS_CODE_EDITOR = "focus_code_editor", "Focus Code Editor", "Ctrl+F1"
     FOCUS_PREVIEW = "focus_preview", "Focus Preview", "Ctrl+F2"
 
@@ -488,6 +495,7 @@ class EditorWorkspace(
         EditorShortcut.TOGGLE_WORD_WRAP.definition,
         EditorShortcut.TOGGLE_CONSOLE.definition,
         EditorShortcut.RUN_SCRIPT.definition,
+        EditorShortcut.RESTART_LSP.definition,
         EditorShortcut.FOCUS_CODE_EDITOR.definition,
         EditorShortcut.FOCUS_PREVIEW.definition,
     )

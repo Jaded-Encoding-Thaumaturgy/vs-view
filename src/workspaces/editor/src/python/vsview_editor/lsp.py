@@ -296,12 +296,7 @@ class LSPProcessManager(QObject):
         super().__init__(parent)
         self.servers = dict[str, LSPProcessServer]()
 
-    def start_server(
-        self,
-        config: LSPConfig,
-        port: int = 0,
-        workspace_dir: Path | None = None,
-    ) -> int:
+    def start_server(self, config: LSPConfig, port: int = 0, workspace_dir: Path | None = None) -> int:
         if config.id in self.servers:
             logger.debug("LSP server %r is already running. Stopping existing server first.", config.id)
             self.stop_server(config.id)
@@ -316,6 +311,10 @@ class LSPProcessManager(QObject):
     def stop_server(self, server_id: str) -> None:
         if server := self.servers.pop(server_id, None):
             server.stop()
+
+    def restart_server(self, config: LSPConfig, port: int = 0, workspace_dir: Path | None = None) -> int:
+        self.stop_server(config.id)
+        return self.start_server(config, port=port, workspace_dir=workspace_dir)
 
     def stop(self, server_id: str | None = None) -> None:
         if server_id is not None:

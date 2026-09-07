@@ -42,6 +42,9 @@ export interface PythonBridge {
   /** Request Python to regenerate VapourSynth stubs. */
   requestGenerateStubs(): void;
 
+  /** Request Python to restart the language server. */
+  requestRestartLsp(): void;
+
   /** Notify Python that console viewport width has changed (cols). */
   onConsoleResized(cols: number): void;
 

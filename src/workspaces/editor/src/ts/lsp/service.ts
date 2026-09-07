@@ -20,6 +20,7 @@ export class WebSocketLanguageClient extends BaseLanguageClient {
     name: string,
     clientOptions: LanguageClientOptions,
     private transports: MessageTransports,
+    private socket: WebSocket,
   ) {
     super(id, name, clientOptions);
   }
@@ -30,9 +31,18 @@ export class WebSocketLanguageClient extends BaseLanguageClient {
 
   protected override async handleConnectionClosed(): Promise<void> {
     if (this.state === State.Stopped) return;
-    const resStop = await Result.fromPromise(this.stop());
-    if (!resStop.ok) {
-      console.debug(resStop.error);
+    await super.handleConnectionClosed();
+  }
+
+  public override async stop(timeout: number = 500): Promise<void> {
+    if (this.state === State.Stopped) return;
+    if (this.socket.readyState !== WebSocket.OPEN) {
+      await this.handleConnectionClosed();
+      return;
+    }
+    const stopRes = await Result.fromPromise(super.stop(timeout));
+    if (!stopRes.ok) {
+      await this.handleConnectionClosed();
     }
   }
 }
@@ -194,10 +204,13 @@ export class LspService implements vscode.Disposable {
         },
       };
 
-      const client = new WebSocketLanguageClient(config.id, config.name, clientOptions, {
-        reader,
-        writer,
-      });
+      const client = new WebSocketLanguageClient(
+        config.id,
+        config.name,
+        clientOptions,
+        { reader, writer },
+        webSocket,
+      );
 
       const sessionDisposables = new DisposableStore();
       sessionDisposables.add(progressTracker);

@@ -90,6 +90,12 @@ export class EditorService implements vscode.Disposable {
       run: () => BridgeService.getActiveBridge().unwrapOr(undefined)?.requestGenerateStubs(),
     });
 
+    this.editor.addAction({
+      id: "basedpyright.restartserver",
+      label: "Basedpyright: Restart Language Server",
+      run: () => BridgeService.getActiveBridge().unwrapOr(undefined)?.requestRestartLsp(),
+    });
+
     this.disposables.add(
       monaco.editor.registerEditorOpener({
         openCodeEditor: async (_source, resource, selectionOrPosition) => {

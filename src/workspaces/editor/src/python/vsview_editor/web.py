@@ -53,6 +53,8 @@ class MonacoBridge(QObject):
     """Called when Monaco requests formatting the current script."""
     generateStubsRequested = Signal()
     """Called when Monaco requests generating VapourSynth stubs."""
+    restartLspRequested = Signal()
+    """Called when Monaco requests restarting the language server."""
     consoleResized = Signal(int)
     """Called when console viewport width changes (cols)."""
 
@@ -221,6 +223,10 @@ class MonacoBridge(QObject):
     @Slot()
     def requestGenerateStubs(self) -> None:
         self.generateStubsRequested.emit()
+
+    @Slot()
+    def requestRestartLsp(self) -> None:
+        self.restartLspRequested.emit()
 
     @Slot(int)
     def onConsoleResized(self, cols: int) -> None:
