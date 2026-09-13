@@ -1249,6 +1249,7 @@ class BrowserID(WidgetMetadata[BrowserIDWidget]):
 
 class PointEditorPopup(QFrame):
     pointChanged = Signal(int, int, float)
+    dismissed = Signal(QFrame)
 
     def __init__(
         self,
@@ -1355,6 +1356,7 @@ class PointEditorPopup(QFrame):
             self.weight_spin.interpretText()
             self._emit_change()
         super().hideEvent(event)
+        self.dismissed.emit(self)
 
     @Slot()
     def _emit_change(self) -> None:
@@ -1393,7 +1395,8 @@ class ProbabilityCurveWidget(QWidget):
     @points.setter
     def points(self, value: Sequence[QPointF]) -> None:
         if self._point_editor_popup is not None:
-            self._point_editor_popup.close()
+            if Shiboken.isValid(self._point_editor_popup):
+                self._point_editor_popup.close()
             self._point_editor_popup = None
         self._points = [QPointF(p.x(), clamp(p.y(), 0.0, self.MAX_Y)) for p in sorted(value, key=lambda p: p.x())]
         if not self._points or self._points[0].x() != 0.0:
@@ -1649,7 +1652,8 @@ class ProbabilityCurveWidget(QWidget):
             return
 
         if self._point_editor_popup is not None:
-            self._point_editor_popup.close()
+            if Shiboken.isValid(self._point_editor_popup):
+                self._point_editor_popup.close()
             self._point_editor_popup = None
 
         pt = self._points[idx]
@@ -1670,7 +1674,7 @@ class ProbabilityCurveWidget(QWidget):
             min_frame = min(prev_f + 1, current_frame)
             max_frame = max(next_f - 1, current_frame)
 
-        self._point_editor_popup = PointEditorPopup(
+        popup = PointEditorPopup(
             self,
             point_idx=idx,
             frame=current_frame,
@@ -1680,12 +1684,13 @@ class ProbabilityCurveWidget(QWidget):
             max_frame=max_frame,
             max_weight=self.MAX_Y,
         )
-        self._point_editor_popup.pointChanged.connect(self._on_point_value_changed)
-        self._point_editor_popup.destroyed.connect(lambda: setattr(self, "_point_editor_popup", None))
+        popup.pointChanged.connect(self._on_point_value_changed)
+        popup.dismissed.connect(self._on_popup_dismissed)
+        self._point_editor_popup = popup
 
         global_pos = self.mapToGlobal(self.to_pixels(pt).toPoint())
 
-        hint = self._point_editor_popup.sizeHint()
+        hint = popup.sizeHint()
         popup_w = max(hint.width(), 160)
         popup_h = max(hint.height(), 80)
 
@@ -1699,8 +1704,8 @@ class ProbabilityCurveWidget(QWidget):
             x = int(clamp(x, screen_geo.left() + 5, screen_geo.right() - popup_w - 5))
             y = int(clamp(y, screen_geo.top() + 5, screen_geo.bottom() - popup_h - 5))
 
-        self._point_editor_popup.move(x, y)
-        self._point_editor_popup.show()
+        popup.move(x, y)
+        popup.show()
 
     @Slot(int, int, float)
     def _on_point_value_changed(self, idx: int, new_frame: int, new_weight: float) -> None:
@@ -1719,6 +1724,11 @@ class ProbabilityCurveWidget(QWidget):
         self._points[idx] = QPointF(nx, ny)
         self.curveChanged.emit()
         self.update()
+
+    @Slot(PointEditorPopup)
+    def _on_popup_dismissed(self, popup: PointEditorPopup) -> None:
+        if self._point_editor_popup is popup:
+            self._point_editor_popup = None
 
 
 class ProbabilityCurveDialog(QDialog):
