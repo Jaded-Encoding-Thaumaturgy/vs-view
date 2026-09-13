@@ -149,6 +149,7 @@ Click **Curve...** (next to the random frame count) to open the curve editor and
 | :--------------------------------------- | :--------------------------------------------- |
 | Double-click on the graph                | Add a control point                            |
 | Drag a point                             | Adjust its position and weight (Y-axis, 0 – 5) |
+| Double-click on a point                  | Open popover to set exact frame and weight     |
 | Right-click / ++delete++ / ++backspace++ | Remove the point                               |
 | **Reset**                                | Restore flat uniform distribution              |
 

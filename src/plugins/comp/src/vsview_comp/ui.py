@@ -32,6 +32,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QBrush,
     QCursor,
+    QHideEvent,
     QIcon,
     QImage,
     QKeyEvent,
@@ -53,6 +54,8 @@ from PySide6.QtWidgets import (
     QCompleter,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -66,6 +69,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QStyle,
     QStyleOptionFrame,
     QToolButton,
@@ -1243,6 +1247,126 @@ class BrowserID(WidgetMetadata[BrowserIDWidget]):
             return value
 
 
+class PointEditorPopup(QFrame):
+    pointChanged = Signal(int, int, float)
+
+    def __init__(
+        self,
+        parent: QWidget,
+        point_idx: int,
+        frame: int,
+        weight: float,
+        is_endpoint: bool,
+        min_frame: int,
+        max_frame: int,
+        max_weight: float,
+    ) -> None:
+        super().__init__(parent, Qt.WindowType.Popup)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setAutoFillBackground(True)
+
+        self.point_idx = point_idx
+        self._initial_frame = frame
+        self._initial_weight = weight
+        self._reverted = False
+
+        self.setStyleSheet("""
+            PointEditorPopup {
+                background: palette(window);
+                border: 1px solid palette(mid);
+                border-radius: 6px;
+            }
+            QLabel {
+                font-weight: 500;
+                font-size: 11px;
+            }
+            QSpinBox, QDoubleSpinBox {
+                padding: 2px 4px;
+                min-width: 65px;
+            }
+        """)
+
+        layout = QFormLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
+
+        self.frame_spin = QSpinBox(self, minimum=min_frame, maximum=max_frame, value=frame)
+        self.frame_spin.setEnabled(not is_endpoint and min_frame < max_frame)
+
+        self.weight_spin = QDoubleSpinBox(
+            self,
+            value=weight,
+            minimum=0,
+            maximum=max_weight,
+            decimals=2,
+            singleStep=0.1,
+            stepType=QDoubleSpinBox.StepType.AdaptiveDecimalStepType,
+        )
+
+        layout.addRow("Frame:", self.frame_spin)
+        layout.addRow("Weight:", self.weight_spin)
+
+        self.frame_spin.valueChanged.connect(self._emit_change)
+        self.weight_spin.valueChanged.connect(self._emit_change)
+
+        self.frame_spin.installEventFilter(self)
+        self.weight_spin.installEventFilter(self)
+        self.frame_spin.lineEdit().installEventFilter(self)
+        self.weight_spin.lineEdit().installEventFilter(self)
+
+        (self.weight_spin if is_endpoint or not self.frame_spin.isEnabled() else self.frame_spin).setFocus()
+
+    @override
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.KeyPress and isinstance(event, QKeyEvent):
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self.frame_spin.interpretText()
+                self.weight_spin.interpretText()
+                self._emit_change()
+                self.close()
+                return True
+            if event.key() == Qt.Key.Key_Escape:
+                self._revert()
+                self.close()
+                return True
+        return super().eventFilter(watched, event)
+
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.frame_spin.interpretText()
+            self.weight_spin.interpretText()
+            self._emit_change()
+            self.close()
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_Escape:
+            self._revert()
+            self.close()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    @override
+    def hideEvent(self, event: QHideEvent) -> None:
+        if not self._reverted:
+            self.frame_spin.interpretText()
+            self.weight_spin.interpretText()
+            self._emit_change()
+        super().hideEvent(event)
+
+    @Slot()
+    def _emit_change(self) -> None:
+        if not self._reverted:
+            self.pointChanged.emit(self.point_idx, self.frame_spin.value(), self.weight_spin.value())
+
+    @Slot()
+    def _revert(self) -> None:
+        self._reverted = True
+        self.pointChanged.emit(self.point_idx, self._initial_frame, self._initial_weight)
+
+
 class ProbabilityCurveWidget(QWidget):
     curveChanged = Signal()
 
@@ -1259,6 +1383,7 @@ class ProbabilityCurveWidget(QWidget):
         self._end_frame = end_frame
         self._dragged_index: int | None = None
         self._hovered_index: int | None = None
+        self._point_editor_popup: PointEditorPopup | None = None
         self._points = [QPointF(0.0, 1.0), QPointF(1.0, 1.0)]
 
     @property
@@ -1267,7 +1392,10 @@ class ProbabilityCurveWidget(QWidget):
 
     @points.setter
     def points(self, value: Sequence[QPointF]) -> None:
-        self._points = [QPointF(p.x(), clamp(self.MAX_Y, 0.0, p.y())) for p in sorted(value, key=lambda p: p.x())]
+        if self._point_editor_popup is not None:
+            self._point_editor_popup.close()
+            self._point_editor_popup = None
+        self._points = [QPointF(p.x(), clamp(p.y(), 0.0, self.MAX_Y)) for p in sorted(value, key=lambda p: p.x())]
         if not self._points or self._points[0].x() != 0.0:
             self._points.insert(0, QPointF(0.0, 1.0))
         if self._points[-1].x() != 1.0:
@@ -1306,6 +1434,11 @@ class ProbabilityCurveWidget(QWidget):
     @override
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
+            idx = self._hovered_index if self._hovered_index is not None else self.find_point_near(event)
+            if idx is not None:
+                self._dragged_index = None
+                self.open_point_editor(idx)
+                return
             self.add_point_at(event)
 
     @override
@@ -1511,6 +1644,82 @@ class ProbabilityCurveWidget(QWidget):
 
         return None
 
+    def open_point_editor(self, idx: int) -> None:
+        if not (0 <= idx < len(self._points)):
+            return
+
+        if self._point_editor_popup is not None:
+            self._point_editor_popup.close()
+            self._point_editor_popup = None
+
+        pt = self._points[idx]
+        is_endpoint = idx == 0 or idx == len(self._points) - 1
+        total_frames = max(1, self._end_frame - self._start_frame)
+
+        current_frame = round(self._start_frame + pt.x() * total_frames)
+
+        if idx == 0:
+            min_frame = self._start_frame
+            max_frame = self._start_frame
+        elif idx == len(self._points) - 1:
+            min_frame = self._end_frame
+            max_frame = self._end_frame
+        else:
+            prev_f = round(self._start_frame + self._points[idx - 1].x() * total_frames)
+            next_f = round(self._start_frame + self._points[idx + 1].x() * total_frames)
+            min_frame = min(prev_f + 1, current_frame)
+            max_frame = max(next_f - 1, current_frame)
+
+        self._point_editor_popup = PointEditorPopup(
+            self,
+            point_idx=idx,
+            frame=current_frame,
+            weight=pt.y(),
+            is_endpoint=is_endpoint,
+            min_frame=min_frame,
+            max_frame=max_frame,
+            max_weight=self.MAX_Y,
+        )
+        self._point_editor_popup.pointChanged.connect(self._on_point_value_changed)
+        self._point_editor_popup.destroyed.connect(lambda: setattr(self, "_point_editor_popup", None))
+
+        global_pos = self.mapToGlobal(self.to_pixels(pt).toPoint())
+
+        hint = self._point_editor_popup.sizeHint()
+        popup_w = max(hint.width(), 160)
+        popup_h = max(hint.height(), 80)
+
+        x = global_pos.x() + 12
+        y = global_pos.y() - popup_h // 2
+
+        if screen := (self.screen() or QApplication.primaryScreen()):
+            screen_geo = screen.availableGeometry()
+            if x + popup_w > screen_geo.right():
+                x = global_pos.x() - popup_w - 12
+            x = int(clamp(x, screen_geo.left() + 5, screen_geo.right() - popup_w - 5))
+            y = int(clamp(y, screen_geo.top() + 5, screen_geo.bottom() - popup_h - 5))
+
+        self._point_editor_popup.move(x, y)
+        self._point_editor_popup.show()
+
+    @Slot(int, int, float)
+    def _on_point_value_changed(self, idx: int, new_frame: int, new_weight: float) -> None:
+        if not (0 <= idx < len(self._points)):
+            return
+
+        total_frames = max(1, self._end_frame - self._start_frame)
+        if idx == 0:
+            nx = 0.0
+        elif idx == len(self._points) - 1:
+            nx = 1.0
+        else:
+            nx = clamp((new_frame - self._start_frame) / total_frames, 0.0, 1.0)
+
+        ny = clamp(new_weight, 0.0, self.MAX_Y)
+        self._points[idx] = QPointF(nx, ny)
+        self.curveChanged.emit()
+        self.update()
+
 
 class ProbabilityCurveDialog(QDialog):
     def __init__(
@@ -1525,15 +1734,20 @@ class ProbabilityCurveDialog(QDialog):
         self.resize(800, 500)
 
         layout = QVBoxLayout(self)
+        info_layout = QVBoxLayout()
+        info_layout.setContentsMargins(20, 0, 0, 0)
 
         info_label = QLabel(
             "<b>Probability Curve Editor</b><br/>"
-            "Double-click on the graph to add a point. Drag points to change position and probability.<br/>"
-            "Right-click or press Delete/Backspace on a point to remove it. Outer boundaries are fixed horizontally.",
+            "– Double-click on the graph to add a point.<br/>"  # noqa: RUF001
+            "– Drag points to change position and probability.<br/>"  # noqa: RUF001
+            "– Double-click on a point to adjust the frame and the weight.<br/>"  # noqa: RUF001
+            "– Right-click or press Delete/Backspace on a point to remove it. Outer boundaries are fixed horizontally.",  # noqa: RUF001
             self,
         )
         info_label.setStyleSheet("color: palette(placeholder-text); font-size: 12px;")
-        layout.addWidget(info_label)
+        info_layout.addWidget(info_label)
+        layout.addLayout(info_layout)
 
         self.curve_widget = ProbabilityCurveWidget(self, start_frame, end_frame)
         self.curve_widget.points = current_points
