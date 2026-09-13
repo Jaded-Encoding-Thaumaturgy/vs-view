@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import math
 import random
 import re
 import threading
+import time
 from bisect import bisect_left
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import CancelledError, Future, wait
@@ -37,6 +39,7 @@ from .utils import (
     build_cdf,
     get_probability_cdf,
     get_slowpics_headers,
+    parse_retry_after,
 )
 
 if TYPE_CHECKING:
@@ -549,6 +552,7 @@ class Tag(NamedTuple):
 class SlowPicsWorker:
     BASE_URL = "https://slow.pics"
     MAX_CONCURRENT_REQUESTS = 6
+    _cooldown_until = 0.0
 
     def __init__(
         self,
@@ -565,6 +569,14 @@ class SlowPicsWorker:
         self._cancel_event = threading.Event()
         self._upload_task: asyncio.Task[Any] | None = None
         self._upload_loop: asyncio.AbstractEventLoop | None = None
+
+    @classmethod
+    def get_remaining_cooldown(cls) -> float:
+        return max(0.0, cls._cooldown_until - time.monotonic())
+
+    @classmethod
+    def set_cooldown(cls, seconds: float) -> None:
+        cls._cooldown_until = time.monotonic() + seconds
 
     @property
     def is_cancelled(self) -> bool:
@@ -593,6 +605,10 @@ class SlowPicsWorker:
         if not self.secrets.get_credential(LOGIN_CONTEXT):
             return {}
 
+        if (remaining := self.get_remaining_cooldown()) > 0:
+            logger.warning("Upload on cooldown. Please wait %ds before retrying.", math.ceil(remaining))
+            raise asyncio.CancelledError(f"Upload on cooldown ({math.ceil(remaining)}s remaining).")
+
         async with (
             LogNiquestsErrors("Slowpics Login"),
             niquests.AsyncSession(
@@ -607,12 +623,27 @@ class SlowPicsWorker:
             # Grab initial XSRF token
             resp = await client.get("/comparison")
             await client.gather(resp)
+
+            if resp.status_code == 429:
+                retry_after = parse_retry_after(resp.headers)
+                self.set_cooldown(retry_after)
+                self.cancel()
+                logger.warning(
+                    "Slowpics login rate limit reached. Please retry after %ds.",
+                    math.ceil(retry_after),
+                )
+                raise asyncio.CancelledError(f"Slowpics rate limited. Retry after {math.ceil(retry_after)}s.")
+
             resp.raise_for_status()
 
             return self._cookies_jar(client.cookies) if await self._login_async(client) else {}
 
     @run_in_background(name="SlowPicsUpload")
     async def upload(self, *, src: SlowPicsSources, cookies: dict[str, str]) -> str:
+        if (remaining := self.get_remaining_cooldown()) > 0:
+            logger.warning("Upload on cooldown. Please wait %ds before retrying.", math.ceil(remaining))
+            raise asyncio.CancelledError(f"Upload on cooldown ({math.ceil(remaining)}s remaining).")
+
         self._cancel_event.clear()
         self._upload_task = asyncio.current_task()
         self._upload_loop = asyncio.get_running_loop()
@@ -682,6 +713,14 @@ class SlowPicsWorker:
     async def _setup_client(self, client: niquests.AsyncSession, cookies: dict[str, str]) -> None:
         homepage = await client.get("/comparison")
         await client.gather(homepage)
+
+        if homepage.status_code == 429:
+            retry_after = parse_retry_after(homepage.headers)
+            self.set_cooldown(retry_after)
+            self.cancel()
+            logger.warning("Slowpics comparison rate limit reached. Please retry after %ds.", math.ceil(retry_after))
+            raise asyncio.CancelledError(f"Slowpics rate limited. Retry after {math.ceil(retry_after)}s.")
+
         homepage.raise_for_status()
 
         if not (browser_id := self._get_cookie(client.cookies, "BROWSER-ID")):
@@ -776,7 +815,7 @@ class SlowPicsWorker:
                         logger.warning("Image %s has an unhandled error %s", image_path.name, error_message)
                         raise UploadError("Upload has an unhandled error, stopping upload")
                     if response.status_code == 429:
-                        wait_time = int(response.headers.get("Retry-After", (retry + 1) * 2))
+                        wait_time = math.ceil(parse_retry_after(response.headers, (retry + 1) * 2))
                         logger.warning("Rate limited for %s. Waiting %ds...", image_path.name, wait_time)
                         await asyncio.sleep(wait_time)
                         continue

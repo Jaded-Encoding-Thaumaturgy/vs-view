@@ -1041,22 +1041,20 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                 self.set_url_on_top()
                 if self.settings.global_.auto_copy_slowpics_url:
                     self.url_copy_btn.click()
+                self._update_buttons_state()
+                self.upload_btn.setDisabled(True)
 
             def on_upload_error(exc: BaseException) -> None:
                 if isinstance(exc, asyncio.CancelledError):
                     logger.info("Upload cancelled.")
                 else:
                     logger.error("Error during upload: %s", exc)
-
-            def finally_done(_: Any) -> None:
                 self._update_buttons_state()
-                self.upload_btn.setDisabled(True)
 
             self._pending_upload = (
                 self.slowpics_worker.upload(src=src, cookies=cookies)
                 .add_loop_callback(on_done)
                 .then(on_upload_success, on_upload_error, on_loop=True)
-                .add_loop_callback(finally_done)
             )
 
         # Get the cookies and then upload

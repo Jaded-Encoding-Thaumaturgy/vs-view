@@ -6,13 +6,14 @@ import math
 import threading
 from bisect import bisect_right
 from collections.abc import Sequence
-from contextlib import AbstractAsyncContextManager, AbstractContextManager
+from contextlib import AbstractAsyncContextManager, AbstractContextManager, suppress
 from functools import cache
 from logging import DEBUG, LogRecord, getLogger
 from types import TracebackType
 from typing import override
 
 import niquests
+import niquests.structures
 from jetpytools import clamp
 from PySide6.QtCore import QPointF
 
@@ -91,6 +92,15 @@ class LogNiquestsErrors(AbstractContextManager[None], AbstractAsyncContextManage
 
 
 class UploadError(Exception): ...
+
+
+def parse_retry_after(headers: niquests.structures.CaseInsensitiveDict[str, str], default: float = 60.0) -> float:
+    if raw := headers.get("Retry-After"):
+        with suppress(ValueError, TypeError):
+            return max(0.0, float(raw))
+
+    logger.debug("Fallback to default in parse_retry_after")
+    return default
 
 
 def get_probability_cdf(start_frame: int, end_frame: int, curve_points: Sequence[QPointF]) -> tuple[list[float], float]:
