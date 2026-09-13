@@ -476,12 +476,10 @@ class TMDBWorker:
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 params=self.BASE_PARAMS,
                 disable_http3=True,
-                multiplexed=True,
                 revocation_configuration=REV_CONF,
             ) as client,
         ):
             tv_resp = await client.get("/search/tv", params={"query": query})
-            await client.gather(tv_resp)
 
             num_tv_task = None
             num_movie_task = None
@@ -495,7 +493,6 @@ class TMDBWorker:
                     num_movie_task = tg.create_task(client.get(f"/movie/{query}"))
 
             movie_resp = movie_task.result()
-            await client.gather(movie_resp)
 
             title_tasks = list[TMDBTitle]()
 
@@ -511,7 +508,6 @@ class TMDBWorker:
 
             if num_tv_task and num_movie_task:
                 for res, genre_type in zip([num_tv_task.result(), num_movie_task.result()], ["tv", "movie"]):
-                    await client.gather(res)
                     item = TMDBTitleData.validate_logged(res.json(), f"TMDB /{genre_type}/{query}")
                     if item:
                         titles.append(self._create_title(item, genre_type))  # type: ignore[arg-type]
@@ -525,13 +521,11 @@ class TMDBWorker:
             tv_res, movie_res = await asyncio.gather(tv_req, movie_req, return_exceptions=True)
 
             if isinstance(tv_res, niquests.Response) and not self._tv_genres:
-                await client.gather(tv_res)
                 data = TMDBPayload.validate_logged(tv_res.raise_for_status().json(), "TMDB /genre/tv/list")
                 if data:
                     self._tv_genres = {g.id: g.name for g in data.genres}
 
             if isinstance(movie_res, niquests.Response) and not self._movie_genres:
-                await client.gather(movie_res)
                 data = TMDBPayload.validate_logged(movie_res.raise_for_status().json(), "TMDB /genre/movie/list")
                 if data:
                     self._movie_genres = {g.id: g.name for g in data.genres}
@@ -616,13 +610,11 @@ class SlowPicsWorker:
                 headers=self.headers,
                 timeout=20,
                 disable_http3=True,
-                multiplexed=True,
                 revocation_configuration=REV_CONF,
             ) as client,
         ):
             # Grab initial XSRF token
             resp = await client.get("/comparison")
-            await client.gather(resp)
 
             if resp.status_code == 429:
                 retry_after = parse_retry_after(resp.headers)
@@ -660,7 +652,6 @@ class SlowPicsWorker:
                     cookies=cookies,
                     timeout=20,
                     disable_http3=True,
-                    multiplexed=True,
                     revocation_configuration=REV_CONF,
                 ) as client,
             ):
@@ -675,7 +666,6 @@ class SlowPicsWorker:
                     url=f"/upload/{src.upload_type}",
                     data=src.payload | {"browserId": self.settings.global_.browser_id} | image_hashes,
                 )
-                await client.gather(start_resp)
                 comp_data = SlowPicsUploadResponse.model_validate(start_resp.raise_for_status().json())
 
                 collection_url = f"https://slow.pics/c/{comp_data.key}"
@@ -712,7 +702,6 @@ class SlowPicsWorker:
 
     async def _setup_client(self, client: niquests.AsyncSession, cookies: dict[str, str]) -> None:
         homepage = await client.get("/comparison")
-        await client.gather(homepage)
 
         if homepage.status_code == 429:
             retry_after = parse_retry_after(homepage.headers)
@@ -755,7 +744,6 @@ class SlowPicsWorker:
             client.headers.update({"X-XSRF-TOKEN": self._get_cookie(client.cookies, "XSRF-TOKEN")})
 
             login_page = await client.get("/login")
-            await client.gather(login_page)
             login_page.raise_for_status()
 
             csrf_match = re.search(
@@ -773,7 +761,6 @@ class SlowPicsWorker:
                 "remember-me": "on",
             }
             login_resp = await client.post("/login", data=data, allow_redirects=True)
-            await client.gather(login_resp)
             login_resp.raise_for_status()
 
             self.secrets.set_json(COOKIE_KEY, COOKIE_KEY, self._cookies_jar(client.cookies))
@@ -804,7 +791,6 @@ class SlowPicsWorker:
                         data=data,
                         files={"file": (image_path.name, await asyncio.to_thread(image_path.read_bytes), "image/png")},
                     )
-                    await client.gather(response)
                     if response.status_code == 400:
                         error_message = response.headers.get("X-Error-Message", "")
                         # Image exists on the server already
