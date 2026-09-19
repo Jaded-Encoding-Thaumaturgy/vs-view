@@ -74,6 +74,8 @@ class ViewState(NamedTuple):
     scene_x: float
     scene_y: float
     slider_value: int
+    sar: float = 1.0
+    sar_applied: bool = False
 
     @run_in_loop(return_future=False)
     def apply_pixmap(self, view: GraphicsView, target_size: tuple[int, int] | None = None) -> None:
@@ -98,6 +100,12 @@ class ViewState(NamedTuple):
 
             view.set_zoom(self.zoom)
             self.restore_view_state(view)
+
+        if self.sar_applied:
+            view.set_sar(self.sar)
+            view.sar_applied = True
+        else:
+            view.sar_applied = False
 
     def restore_view_state(self, view: GraphicsView) -> None:
         if not self.autofit:
@@ -444,7 +452,21 @@ class BaseGraphicsView(QGraphicsView):
             center.x(),
             center.y(),
             self.slider.value(),
+            self._sar,
+            self._sar_applied,
         )
+
+    @property
+    def sar(self) -> float:
+        return self._sar
+
+    @property
+    def sar_applied(self) -> bool:
+        return self._sar_applied
+
+    @sar_applied.setter
+    def sar_applied(self, applied: bool) -> None:
+        self._set_sar_applied(applied)
 
     @property
     def display_sar(self) -> float:
