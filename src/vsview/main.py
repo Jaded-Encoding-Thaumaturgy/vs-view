@@ -14,16 +14,13 @@ from .app.settings.models import GlobalSettings
 from .app.workspace import BaseWorkspace, PythonScriptWorkspace, QuickScriptWorkspace, VideoFileWorkspace
 from .assets import load_fonts
 from .config import CLIConfig
-from .env import getenv_bool, load_dotenv
+from .env import getenv_bool
 from .logging import IS_GUI_MODE, LOG_PATH, console, setup_logging
 
 logger = getLogger(__name__)
 
 
 def main(raw: dict[str, Any]) -> None:
-    if not getenv_bool("VSVIEW_NO_DOTENV", False):
-        load_dotenv()
-
     cfg = CLIConfig.model_validate(raw)
 
     if cfg.settings:
