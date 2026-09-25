@@ -3,7 +3,7 @@ from __future__ import annotations
 import gc
 from abc import abstractmethod
 from collections import deque
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import Future, wait
 from contextlib import contextmanager, nullcontext
 from functools import partial
@@ -41,7 +41,7 @@ from ..views import PluginDock, PluginSplitter
 from ..views.components import BlockableWidget, CustomLoadingPage, DockButton
 from ..views.tab import TabViewWidget
 from ..views.timeline import TimelineControlBar
-from ..views.video import ViewState
+from ..views.video import GraphicsView, ViewState
 from .base import BaseWorkspace
 from .playback import PlaybackManager
 from .tab_manager import PlayHeadToolButton, TabManager
@@ -294,6 +294,24 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         PluginManager.wait_for_loaded()
 
+    def on_views_created(self, views: Sequence[GraphicsView]) -> None:
+        """Lifecycle hook called when views have been created for video outputs."""
+
+    def on_before_reload(self) -> None:
+        """Lifecycle hook called before content reload begins."""
+
+    def on_content_loaded(self) -> None:
+        """Lifecycle hook called when initial content loading and rendering completes."""
+        self.tab_manager._on_global_autofit_changed(self.tab_manager.autofit_btn.isChecked())
+        self.on_content_ready(is_reload=False)
+
+    def on_content_reloaded(self) -> None:
+        """Lifecycle hook called when content reload and rendering completes."""
+        self.on_content_ready(is_reload=True)
+
+    def on_content_ready(self, *, is_reload: bool = False) -> None:
+        """Lifecycle hook called when content is ready (either initial load or reload)."""
+
     @run_in_background(name="LoadContent")
     def load_content(
         self,
@@ -323,6 +341,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         self.outputs_manager.current_video_index = clamp(self.outputs_manager.current_video_index, 0, len(voutputs) - 1)
         tabs = self.tab_manager.create_tabs(voutputs)
+        self.on_views_created(list(tabs.views()))
 
         with QSignalBlocker(self.tab_manager):
             self.tab_manager.swap_tabs(tabs, self.outputs_manager.current_video_index)
@@ -342,11 +361,11 @@ class LoaderWorkspace[T](BaseWorkspace):
                 return
 
             self.content_area.setEnabled(True)
-            self.tab_manager._on_global_autofit_changed(self.tab_manager.autofit_btn.isChecked())
             self.tab_manager.disable_switch = False
             self.playback.can_reload = True
             self._is_failed = False
 
+            self.on_content_loaded()
             logger.info("Content loaded successfully: %r", self.content)
             self.statusLoadingFinished.emit("Completed")
 
@@ -367,6 +386,8 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         logger.debug("Reloading content: %r", self.content)
         is_debug = getenv_bool("VSVIEW_DEBUG")
+
+        self.on_before_reload()
 
         self.playback.stop()
         self.playback.can_reload = False
@@ -415,6 +436,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             # 4. Reconstruct UI
             tabs = self.tab_manager.create_tabs(voutputs, enabled=False)
+            self.on_views_created(list(tabs.views()))
             current_tab_i = self._restore_reload_tabs(tabs, voutputs, saved_state, current_tab_i, autofit_enabled)
 
             self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
@@ -435,6 +457,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
                 logger.info("Content reloaded successfully: %r", self.content)
                 mmm.__exit__(None, None, None)
+                self.on_content_reloaded()
 
             self._on_tab_changed(current_tab_i, seamless=True, cb_render=on_complete, refresh_plugins=True)
 
