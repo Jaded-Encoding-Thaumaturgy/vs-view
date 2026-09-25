@@ -9,7 +9,7 @@ from contextlib import contextmanager, nullcontext
 from functools import partial
 from logging import getLogger
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 from types import ModuleType
 from typing import Any, ClassVar, Literal, assert_never, override
 
@@ -47,7 +47,7 @@ from .playback import PlaybackManager
 from .tab_manager import PlayHeadToolButton, TabManager
 from .utils import State, evict_packages, find_local_packages
 
-loader_lock = Lock()
+loader_lock = RLock()
 logger = getLogger(__name__)
 
 
@@ -894,35 +894,41 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
         module.__dict__.update(self.vsargs)
         module.__dict__.update(__vsview_context__=ctx)
 
-        match self.content_type:
-            case "script":
-                chdir = Path(self._user_script_path).parent if self.global_settings.chdir else None
-                self.script = load_script(
-                    self._script_content,
-                    self.env,
-                    module=module,
-                    chdir=chdir,
-                    **self._script_kwargs,
-                )
-            case "code":
-                self.script = load_code(self._script_content, self.env, module=module, **self._script_kwargs)
-            case _:
-                assert_never(self.content_type)
+        with loader_lock:
+            match self.content_type:
+                case "script":
+                    chdir = Path(self._user_script_path).parent if self.global_settings.chdir else None
+                    self.script = load_script(
+                        self._script_content,
+                        self.env,
+                        module=module,
+                        chdir=chdir,
+                        **self._script_kwargs,
+                    )
+                case "code":
+                    self.script = load_code(self._script_content, self.env, module=module, **self._script_kwargs)
+                case _:
+                    assert_never(self.content_type)
 
-        logger.debug("Running Script...")
+            logger.debug("Running Script...")
 
-        try:
-            self.script.result()
-            logger.debug("%s execution completed successfully", self.content_type.title())
-        except ExecutionError as e:
+            try:
+                self.script.result()
+                logger.debug("%s execution completed successfully", self.content_type.title())
+            except ExecutionError as e:
+                execution_err = e
+            else:
+                execution_err = None
+
+        if execution_err is not None:
             from ...app.error import show_error
 
             self.statusLoadingErrored.emit("Execution error")
 
-            show_error(e, self, self._user_script_path)
+            show_error(execution_err, self, self._user_script_path)
             # Clear traceback to release VS core references held in the exception chain
-            e.parent_error.__traceback__ = None
-            e.__traceback__ = None
+            execution_err.parent_error.__traceback__ = None
+            execution_err.__traceback__ = None
 
             raise RuntimeError("Script execution failed") from None
 
