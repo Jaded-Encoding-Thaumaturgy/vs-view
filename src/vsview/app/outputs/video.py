@@ -45,7 +45,7 @@ class VideoOutput:
         self.vs_index = vs_index
         self.packer = packer
         self.vs_name = metadata.name if metadata else f"Clip {vs_index}"  # Matches vsview.set_output
-        self.framedurs = metadata.framedurs if metadata else None
+        self.framedurs = tuple(metadata.framedurs) if metadata and metadata.framedurs is not None else None
         self.kwargs = metadata.kwargs if metadata and metadata.kwargs else {}
         self._alpha_prop: Literal[True] | None = metadata.alpha_prop if metadata else None
 
@@ -58,19 +58,19 @@ class VideoOutput:
                 self.vs_output = self.vs_output._replace(alpha=alpha_plane)
 
         if self.framedurs:
-            self.cum_durations: list[float] | None = list(accumulate(self.framedurs))
+            self.cum_durations: Sequence[float] | None = tuple(accumulate(self.framedurs))
         elif self.vs_output.clip.fps > 0:
-            self.cum_durations = [
+            self.cum_durations = tuple(
                 float(1 / self.vs_output.clip.fps) * i for i in range(1, self.vs_output.clip.num_frames + 1)
-            ]
+            )
         else:
             self.cum_durations = None
 
         if self.cum_durations:
-            self.midpoints: list[float] | None = [
+            self.midpoints: Sequence[float] | None = tuple(
                 ((self.cum_durations[k - 1] if k > 0 else 0.0) + self.cum_durations[k]) / 2
                 for k in range(len(self.cum_durations) - 1)
-            ]
+            )
         else:
             self.midpoints = None
 
