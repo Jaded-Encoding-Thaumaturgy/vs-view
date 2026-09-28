@@ -7,15 +7,13 @@ from typing import Literal, Protocol, assert_never, overload
 
 import vapoursynth as vs
 
-from . import cython, python
-
 core = vs.core
 
 
 def packrgb[V: (vs.VideoNode, vs.VideoFrame)](
     clip: V,
     alpha: V | Literal[True] | None = None,
-    backend: Literal["cython", "numba", "numpy", "python"] = "cython",
+    backend: Literal["rust", "numba", "numpy", "python"] = "rust",
 ) -> V:
     """
     Pack a planar RGB clip or frame into a display-ready format.
@@ -31,7 +29,7 @@ def packrgb[V: (vs.VideoNode, vs.VideoFrame)](
     Args:
         clip: Input clip or frame in RGB24, RGB30, RGB48, RGBH or RGBS format.
         alpha: Optional alpha channel clip/frame or if True, fetch the `_Alpha` prop.
-        backend: Packing backend ("cython", "numba", "numpy", "python").
+        backend: Packing backend ("rust", "numba", "numpy", "python").
 
     Returns:
         GRAY32, GRAY16, GRAYH, GRAYS clip or frame with packed pixel data.
@@ -43,12 +41,12 @@ def packrgb[V: (vs.VideoNode, vs.VideoFrame)](
     module: ModuleType
 
     match backend:
-        case "cython":
-            module = cython
+        case "rust" | "cython":
+            from . import rust as module
         case "numpy":
             from . import numpy as module
         case "python":
-            module = python
+            from . import python as module
         case "numba":
             from . import numba as module
         case _:

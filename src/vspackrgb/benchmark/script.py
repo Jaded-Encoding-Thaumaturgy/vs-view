@@ -15,7 +15,7 @@ FRAME_COUNTS = {
     "vszip.PackRGB": 20000,
     "libp2p.Pack": 20000,
     "akarin.Expr": 20000,
-    "vspackrgb (cython)": 7000,
+    "vspackrgb (rust)": 7000,
     "vspackrgb (numba)": 7000,
     "vspackrgb (numpy)": 2000,
     "vspackrgb (python)": 25,
@@ -69,10 +69,10 @@ def benchmark_rgb24() -> Table:
     table.add_row(name, str(num_frames), f"{elapsed:.3f}s", f"{fps:.2f}")
 
     # vspackrgb - cython
-    name = "vspackrgb (cython)"
+    name = "vspackrgb (rust)"
     num_frames = FRAME_COUNTS[name]
     clip = get_clip(num_frames, vs.RGB24)
-    packed = packrgb(clip, backend="cython")
+    packed = packrgb(clip, backend="rust")
     elapsed, fps = benchmark(name, packed, num_frames)
     table.add_row(name, str(num_frames), f"{elapsed:.3f}s", f"{fps:.2f}")
 
@@ -140,10 +140,10 @@ def benchmark_rgb30() -> Table:
     table.add_row(name, str(num_frames), f"{elapsed:.3f}s", f"{fps:.2f}")
 
     # vspackrgb - cython
-    name = "vspackrgb (cython)"
+    name = "vspackrgb (rust)"
     num_frames = FRAME_COUNTS[name]
     clip = get_clip(num_frames, vs.RGB30)
-    packed = packrgb(clip, backend="cython")
+    packed = packrgb(clip, backend="rust")
     elapsed, fps = benchmark(name, packed, num_frames)
     table.add_row(name, str(num_frames), f"{elapsed:.3f}s", f"{fps:.2f}")
 
@@ -195,10 +195,10 @@ def benchmark_rgb48() -> Table:
     table.add_row(name, str(num_frames), f"{elapsed:.3f}s", f"{fps:.2f}")
 
     # vspackrgb - cython
-    name = "vspackrgb (cython)"
+    name = "vspackrgb (rust)"
     num_frames = FRAME_COUNTS[name]
     clip = get_clip(num_frames, vs.RGB48)
-    packed = packrgb(clip, backend="cython")
+    packed = packrgb(clip, backend="rust")
     elapsed, fps = benchmark(name, packed, num_frames)
     table.add_row(name, str(num_frames), f"{elapsed:.3f}s", f"{fps:.2f}")
 
@@ -242,10 +242,10 @@ def benchmark_rgbh() -> Table:
     table.add_column("FPS", justify="right", style="green")
 
     # vspackrgb - cython
-    name = "vspackrgb (cython)"
+    name = "vspackrgb (rust)"
     num_frames = FRAME_COUNTS[name]
     clip = get_clip(num_frames, vs.RGBH)
-    packed = packrgb(clip, backend="cython")
+    packed = packrgb(clip, backend="rust")
     elapsed, fps = benchmark(name, packed, num_frames)
     table.add_row(name, str(num_frames), f"{elapsed:.3f}s", f"{fps:.2f}")
 
@@ -289,10 +289,10 @@ def benchmark_rgbs() -> Table:
     table.add_column("FPS", justify="right", style="green")
 
     # vspackrgb - cython
-    name = "vspackrgb (cython)"
+    name = "vspackrgb (rust)"
     num_frames = FRAME_COUNTS[name]
     clip = get_clip(num_frames, vs.RGBS)
-    packed = packrgb(clip, backend="cython")
+    packed = packrgb(clip, backend="rust")
     elapsed, fps = benchmark(name, packed, num_frames)
     table.add_row(name, str(num_frames), f"{elapsed:.3f}s", f"{fps:.2f}")
 

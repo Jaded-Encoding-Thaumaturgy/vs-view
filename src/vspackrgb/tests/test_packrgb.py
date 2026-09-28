@@ -5,7 +5,7 @@ from typing import Any, Protocol, cast
 import pytest
 import vapoursynth as vs
 
-from vspackrgb import cython, helpers, numba, numpy, python
+from vspackrgb import helpers, numba, numpy, python, rust
 
 
 class BackendModule(Protocol):
@@ -75,7 +75,7 @@ class BackendModule(Protocol):
     ) -> None: ...
 
 
-BACKENDS = ["python", "numpy", "cython", "numba"]
+BACKENDS = ["python", "numpy", "rust", "numba"]
 
 
 def get_backend_module(backend_name: str) -> BackendModule:
@@ -84,8 +84,8 @@ def get_backend_module(backend_name: str) -> BackendModule:
             return cast(BackendModule, python)
         case "numpy":
             return cast(BackendModule, numpy)
-        case "cython":
-            return cast(BackendModule, cython)
+        case "rust":
+            return cast(BackendModule, rust)
         case "numba":
             return cast(BackendModule, numba)
         case _:
@@ -416,3 +416,13 @@ def test_helpers_packrgb_frame_alpha_prop(backend_name: str) -> None:
     assert out_prop[2] == 10
     assert out_prop[3] == 150
     assert "_Alpha" not in packed_frame_prop.props
+
+
+@pytest.mark.vpy("initial-core")
+def test_helpers_packrgb_cython_fallback() -> None:
+    width, height = 16, 16
+    src = vs.core.std.BlankClip(width=width, height=height, format=vs.RGB24, color=[10, 20, 30])
+    packed = helpers.packrgb(src, backend=cast(Any, "cython"))
+    assert packed.format.id == vs.GRAY32
+    assert packed.width == width
+    assert packed.height == height
