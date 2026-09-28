@@ -15,7 +15,6 @@ from PySide6.QtCore import QMetaObject, QObject, QRect, Signal, Slot
 from PySide6.QtGui import QContextMenuEvent, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
 
-from vsview.app.outputs import VideoOutput
 from vsview.app.settings import SecretsManager, SettingsManager
 from vsview.app.utils import ObjectType, QObjectCounter
 from vsview.app.views.timeline import Timeline
@@ -154,21 +153,6 @@ class _PluginSettingsStore:
             SettingsManager.get_local_settings(self.file_path).plugins[plugin_id] = settings
 
 
-def _make_voutput_proxy(voutput: VideoOutput) -> VideoOutputProxy:
-    return VideoOutputProxy(
-        voutput.vs_index,
-        voutput.vs_name,
-        voutput.vs_output,
-        voutput.props,
-        voutput.framedurs,
-        voutput.cum_durations,
-        voutput.midpoints,
-        voutput.kwargs,
-        voutput.info,
-        voutput.packer,
-    )
-
-
 class _PluginLimitedApi(QObject):
     globalSettingsChanged = Signal()
     localSettingsChanged = Signal(str)
@@ -218,13 +202,38 @@ class _PluginAPI(_PluginLimitedApi):
     @property
     def voutputs(self) -> list[VideoOutputProxy]:
         """Return a dictionary of VideoOutputProxy objects for all tabs."""
-        return [_make_voutput_proxy(voutput) for voutput in self.__workspace.outputs_manager.voutputs]
+        return [
+            VideoOutputProxy(
+                v.vs_index,
+                v.vs_name,
+                v.vs_output,
+                v.props,
+                v.framedurs,
+                v.cum_durations,
+                v.midpoints,
+                v.kwargs,
+                v.info,
+                v.packer,
+            )
+            for v in self.__workspace.outputs_manager.voutputs
+        ]
 
     @property
     def current_voutput(self) -> VideoOutputProxy:
         """Return the VideoOutput for the currently selected tab."""
-        if voutput := self.__workspace.outputs_manager.current_voutput:
-            return _make_voutput_proxy(voutput)
+        if v := self.__workspace.outputs_manager.current_voutput:
+            return VideoOutputProxy(
+                v.vs_index,
+                v.vs_name,
+                v.vs_output,
+                v.props,
+                v.framedurs,
+                v.cum_durations,
+                v.midpoints,
+                v.kwargs,
+                v.info,
+                v.packer,
+            )
 
         raise NoCurrentVideoOutputError("No video output is currently available in the active workspace.")
 
