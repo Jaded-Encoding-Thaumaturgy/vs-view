@@ -1,0 +1,43 @@
+[package]
+name = "vspackrgb-rs"
+edition = "2024"
+description = "Internal Rust module for vspackrgb"
+publish = false
+
+[lib]
+name = "rust"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies.pyo3]
+version = "0.29.2"
+features = ["extension-module", "abi3"]
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+opt-level = 3
+
+[lints.rust]
+improper_ctypes = "warn"
+improper_ctypes_definitions = "warn"
+non_ascii_idents = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+single_use_lifetimes = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = [] }
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+
+must_use_candidate = { level = "allow", priority = 1 }
+missing_errors_doc = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }
+too_many_arguments = { level = "allow", priority = 1 }
+cast_ptr_alignment = { level = "allow", priority = 1 }
+needless_pass_by_value = { level = "allow", priority = 1 }

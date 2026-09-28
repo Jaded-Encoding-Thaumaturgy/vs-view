@@ -1,11 +1,5 @@
 [build-system]
-requires = [
-    "hatchling",
-    "hatch-cython @ git+https://github.com/Varde-s-Forks/hatch-cython.git",
-    "cython>=3.0.0",
-    "setuptools",
-    "versioningit",
-]
+requires = ["hatchling", "hatch-rs>=0.4.1", "versioningit"]
 build-backend = "hatchling.build"
 
 [project]
@@ -15,15 +9,7 @@ description = "RGB packing for VapourSynth frames"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-keywords = [
-    "vapoursynth",
-    "rgb",
-    "packing",
-    "cython",
-    "arm",
-    "arm64",
-    "aarch64",
-]
+keywords = ["vapoursynth", "rgb", "packing", "rust", "arm", "arm64", "aarch64"]
 requires-python = ">=3.12"
 authors = [{ name = "Vardë", email = "ichunjo.le.terrible@gmail.com" }]
 maintainers = [
@@ -37,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
@@ -55,34 +42,24 @@ numba = ["numba>=0.62.1", "numpy>=2.0.0"]
 "Contact" = "https://discord.gg/XTpc6Fa9eB"
 
 [dependency-groups]
-dev = ["cython>=3.0.0", "pytest>=9.0.0, <10.0.0"]
-
-# https://github.com/joshua-auchincloss/hatch-cython#readme
-# https://setuptools.pypa.io/en/latest/deprecated/distutils/apiref.html#distutils.core.Extension
+dev = ["pytest>=9.0.0, <10.0.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/vspackrgb"]
-# Exclude .pyx source files from wheel
-exclude = ["**/*.pyx"]
+exclude = ["rust", "target"]
 
-[tool.hatch.build.targets.wheel.hooks.cython]
-dependencies = ["hatch-cython"]
+[tool.hatch.build.hooks.hatch-rs]
+verbose = true
+abi3 = true
+path = "."
+module = "vspackrgb"
+target-dir = "target"
 
-[tool.hatch.build.targets.wheel.hooks.cython.options]
-compile_py = false
-
-# Cython directives
-directives = { boundscheck = false, wraparound = false, nonecheck = false, language_level = 3, cdivision = true }
-
-# Platform-specific compilation arguments
-compile_args = [ # nofmt
-    { platforms = ["linux", "darwin"], arg = "-O3" },
-    { platforms = ["win32", "windows"], arg = "/O2" },
-]
-
-# Limited API / Stable ABI. Target Python 3.12
-py_limited_api = true
-define_macros = [["Py_LIMITED_API", "0x030C0000"]]
+[[tool.hatch.build.hooks.hatch-rs.artifacts]]
+name = "rust"
+manifest = "rust/Cargo.toml"
+destination = "src/vspackrgb/{python_extension_name}"
+editable-debug = false
 
 [tool.hatch.version]
 source = "versioningit"

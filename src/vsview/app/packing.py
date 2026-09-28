@@ -184,7 +184,7 @@ class Packer(ABC):
 
     def to_rgb_packed(self, clip: vs.VideoNode, alpha: vs.VideoNode | Literal[True] | None = None) -> vs.VideoNode:
         """Converts planar VapourSynth RGB to interleaved/packed Qt format."""
-        return packrgb(clip, alpha, "cython")
+        return packrgb(clip, alpha, "rust")
 
     def pack_clip(
         self,
