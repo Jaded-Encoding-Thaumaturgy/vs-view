@@ -4,10 +4,10 @@ import ctypes
 
 
 def pack_bgra_8bit(
-    b_data: ctypes.Array[ctypes.c_uint8],
-    g_data: ctypes.Array[ctypes.c_uint8],
-    r_data: ctypes.Array[ctypes.c_uint8],
-    a_data: ctypes.Array[ctypes.c_uint8] | None,
+    b_ptr: int,
+    g_ptr: int,
+    r_ptr: int,
+    a_ptr: int | None,
     width: int,
     height: int,
     src_stride: int,
@@ -15,6 +15,11 @@ def pack_bgra_8bit(
     dest_stride: int,
 ) -> None:
     """Pack planar 8-bit RGB to interleaved BGRA with straight alpha."""
+    src_size = src_stride * height
+    b_data = (ctypes.c_uint8 * src_size).from_address(b_ptr)
+    g_data = (ctypes.c_uint8 * src_size).from_address(g_ptr)
+    r_data = (ctypes.c_uint8 * src_size).from_address(r_ptr)
+    a_data = (ctypes.c_uint8 * src_size).from_address(a_ptr) if a_ptr is not None else None
 
     out = (ctypes.c_uint8 * (dest_stride * height)).from_address(dest_ptr)
 
@@ -31,10 +36,10 @@ def pack_bgra_8bit(
 
 
 def pack_rgb30_10bit(
-    r_data: ctypes.Array[ctypes.c_uint16],
-    g_data: ctypes.Array[ctypes.c_uint16],
-    b_data: ctypes.Array[ctypes.c_uint16],
-    a_data: ctypes.Array[ctypes.c_uint16] | None,
+    r_ptr: int,
+    g_ptr: int,
+    b_ptr: int,
+    a_ptr: int | None,
     width: int,
     height: int,
     samples_per_row: int,
@@ -42,6 +47,11 @@ def pack_rgb30_10bit(
     dest_stride: int,
 ) -> None:
     """Pack planar 10-bit RGB to A2R10G10B10 with premultiplied alpha."""
+    src_size = samples_per_row * height
+    r_data = (ctypes.c_uint16 * src_size).from_address(r_ptr)
+    g_data = (ctypes.c_uint16 * src_size).from_address(g_ptr)
+    b_data = (ctypes.c_uint16 * src_size).from_address(b_ptr)
+    a_data = (ctypes.c_uint16 * src_size).from_address(a_ptr) if a_ptr is not None else None
 
     out = (ctypes.c_uint32 * ((dest_stride // 4) * height)).from_address(dest_ptr)
     dest_samples_per_row = dest_stride // 4
@@ -73,10 +83,10 @@ def pack_rgb30_10bit(
 
 
 def pack_rgba64_16bit(
-    r_data: ctypes.Array[ctypes.c_uint16],
-    g_data: ctypes.Array[ctypes.c_uint16],
-    b_data: ctypes.Array[ctypes.c_uint16],
-    a_data: ctypes.Array[ctypes.c_uint16] | None,
+    r_ptr: int,
+    g_ptr: int,
+    b_ptr: int,
+    a_ptr: int | None,
     width: int,
     height: int,
     samples_per_row: int,
@@ -84,6 +94,12 @@ def pack_rgba64_16bit(
     dest_stride: int,
 ) -> None:
     """Pack planar 16-bit RGB to interleaved RGBA64 (reference implementation)."""
+    src_size = samples_per_row * height
+    r_data = (ctypes.c_uint16 * src_size).from_address(r_ptr)
+    g_data = (ctypes.c_uint16 * src_size).from_address(g_ptr)
+    b_data = (ctypes.c_uint16 * src_size).from_address(b_ptr)
+    a_data = (ctypes.c_uint16 * src_size).from_address(a_ptr) if a_ptr is not None else None
+
     out = (ctypes.c_uint16 * ((dest_stride // 2) * height)).from_address(dest_ptr)
     dest_samples_per_row = dest_stride // 2
 
@@ -100,10 +116,10 @@ def pack_rgba64_16bit(
 
 
 def pack_rgba16f_16bit(
-    r_data: ctypes.Array[ctypes.c_uint16],
-    g_data: ctypes.Array[ctypes.c_uint16],
-    b_data: ctypes.Array[ctypes.c_uint16],
-    a_data: ctypes.Array[ctypes.c_uint16] | None,
+    r_ptr: int,
+    g_ptr: int,
+    b_ptr: int,
+    a_ptr: int | None,
     width: int,
     height: int,
     samples_per_row: int,
@@ -111,6 +127,11 @@ def pack_rgba16f_16bit(
     dest_stride: int,
 ) -> None:
     """Pack planar 16-bit RGB to interleaved float16 RGBA."""
+    src_size = samples_per_row * height
+    r_data = (ctypes.c_uint16 * src_size).from_address(r_ptr)
+    g_data = (ctypes.c_uint16 * src_size).from_address(g_ptr)
+    b_data = (ctypes.c_uint16 * src_size).from_address(b_ptr)
+    a_data = (ctypes.c_uint16 * src_size).from_address(a_ptr) if a_ptr is not None else None
 
     out = (ctypes.c_uint16 * ((dest_stride // 2) * height)).from_address(dest_ptr)
     dest_samples_per_row = dest_stride // 2
@@ -133,10 +154,10 @@ def pack_rgba16f_16bit(
 
 
 def pack_rgba32f_32bit(
-    r_data: ctypes.Array[ctypes.c_uint32],
-    g_data: ctypes.Array[ctypes.c_uint32],
-    b_data: ctypes.Array[ctypes.c_uint32],
-    a_data: ctypes.Array[ctypes.c_uint32] | None,
+    r_ptr: int,
+    g_ptr: int,
+    b_ptr: int,
+    a_ptr: int | None,
     width: int,
     height: int,
     samples_per_row: int,
@@ -144,6 +165,11 @@ def pack_rgba32f_32bit(
     dest_stride: int,
 ) -> None:
     """Pack planar 32-bit RGB to interleaved float32 RGBA."""
+    src_size = samples_per_row * height
+    r_data = (ctypes.c_uint32 * src_size).from_address(r_ptr)
+    g_data = (ctypes.c_uint32 * src_size).from_address(g_ptr)
+    b_data = (ctypes.c_uint32 * src_size).from_address(b_ptr)
+    a_data = (ctypes.c_uint32 * src_size).from_address(a_ptr) if a_ptr is not None else None
 
     out = (ctypes.c_uint32 * ((dest_stride // 4) * height)).from_address(dest_ptr)
     dest_samples_per_row = dest_stride // 4
