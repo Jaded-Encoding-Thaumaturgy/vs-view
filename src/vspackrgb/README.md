@@ -29,14 +29,14 @@ uv add vspackrgb
 ## Benchmarks
 
 - CPU 9800X3D Windows 11 Pro 25H2 (26200.8655)
-- Python 3.12.13
-- VapourSynth R77 (With unlimited `max_cache_size`)
-- vszip 15.0.0
+- Python 3.12.14
+- VapourSynth R80 (With unlimited `max_cache_size`)
+- vszip 22.1.0
 - libp2p R2 (+ RGB48 packing fix)
-- akarin 1.4.1
-- cython 3.2.5
-- numpy 2.4.6
-- numba 0.65.1
+- akarin 1.5.0
+- Cargo & rustc 1.98.0
+- numpy 2.5.3
+- numba 0.67.0
 
 ### Blank clip with `keep=True`
 
@@ -45,57 +45,57 @@ uv add vspackrgb
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
 ┃ Backend            ┃ Frames ┃    Time ┃     FPS ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
-│ vszip.PackRGB      │  20000 │  5.895s │ 3392.88 │
-│ libp2p.Pack        │  20000 │  5.971s │ 3349.38 │
-│ akarin.Expr        │  20000 │  5.951s │ 3360.97 │
-│ vspackrgb (cython) │   7000 │  6.370s │ 1098.85 │
-│ vspackrgb (numba)  │   7000 │  2.903s │ 2411.60 │
-│ vspackrgb (numpy)  │   2000 │  5.754s │  347.57 │
-│ vspackrgb (python) │     25 │ 10.029s │    2.49 │
+│ vszip.PackRGB      │  20000 │  4.608s │ 4339.86 │
+│ libp2p.Pack        │  20000 │  4.519s │ 4426.02 │
+│ akarin.Expr        │  20000 │  4.677s │ 4276.20 │
+│ vspackrgb (rust)   │   7000 │  6.433s │ 1088.12 │
+│ vspackrgb (numba)  │   7000 │  2.439s │ 2870.36 │
+│ vspackrgb (numpy)  │   2000 │  5.816s │  343.88 │
+│ vspackrgb (python) │     25 │ 10.053s │    2.49 │
 └────────────────────┴────────┴─────────┴─────────┘
 
             RGB30 Packing (1920x1080)
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┓
 ┃ Backend            ┃ Frames ┃   Time ┃     FPS ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━┩
-│ vszip.PackRGB      │  20000 │ 5.865s │ 3410.05 │
-│ libp2p.Pack        │  20000 │ 5.903s │ 3388.30 │
-│ akarin.Expr        │  20000 │ 5.911s │ 3383.56 │
-│ vspackrgb (cython) │   7000 │ 7.801s │  897.35 │
-│ vspackrgb (numba)  │   7000 │ 2.925s │ 2393.24 │
-│ vspackrgb (numpy)  │   2000 │ 8.973s │  222.88 │
-│ vspackrgb (python) │     25 │ 7.251s │    3.45 │
+│ vszip.PackRGB      │  20000 │ 4.689s │ 4265.13 │
+│ libp2p.Pack        │  20000 │ 4.798s │ 4168.77 │
+│ akarin.Expr        │  20000 │ 4.708s │ 4248.45 │
+│ vspackrgb (rust)   │   7000 │ 2.742s │ 2553.35 │
+│ vspackrgb (numba)  │   7000 │ 2.539s │ 2757.50 │
+│ vspackrgb (numpy)  │   2000 │ 9.144s │  218.73 │
+│ vspackrgb (python) │     25 │ 7.104s │    3.52 │
 └────────────────────┴────────┴────────┴─────────┘
 
              RGB48 Packing (1920x1080)
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
 ┃ Backend            ┃ Frames ┃    Time ┃     FPS ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
-│ libp2p.Pack        │  20000 │ 12.004s │ 1666.09 │
-│ vspackrgb (cython) │   7000 │  7.540s │  928.41 │
-│ vspackrgb (numba)  │   7000 │  5.416s │ 1292.48 │
-│ vspackrgb (numpy)  │   2000 │  8.061s │  248.12 │
-│ vspackrgb (python) │     25 │  9.996s │    2.50 │
+│ libp2p.Pack        │  20000 │ 10.957s │ 1825.31 │
+│ vspackrgb (rust)   │   7000 │  5.161s │ 1356.34 │
+│ vspackrgb (numba)  │   7000 │  5.150s │ 1359.27 │
+│ vspackrgb (numpy)  │   2000 │  8.131s │  245.96 │
+│ vspackrgb (python) │     25 │  9.989s │    2.50 │
 └────────────────────┴────────┴─────────┴─────────┘
 
              RGBH Packing (1920x1080)
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┓
 ┃ Backend            ┃ Frames ┃   Time ┃     FPS ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━┩
-│ vspackrgb (cython) │   7000 │ 7.513s │  931.70 │
-│ vspackrgb (numba)  │   7000 │ 5.392s │ 1298.17 │
-│ vspackrgb (numpy)  │   2000 │ 8.116s │  246.42 │
-│ vspackrgb (python) │     25 │ 9.979s │    2.51 │
+│ vspackrgb (rust)   │   7000 │ 5.204s │ 1345.05 │
+│ vspackrgb (numba)  │   7000 │ 5.112s │ 1369.27 │
+│ vspackrgb (numpy)  │   2000 │ 8.168s │  244.86 │
+│ vspackrgb (python) │     25 │ 9.928s │    2.52 │
 └────────────────────┴────────┴────────┴─────────┘
 
              RGBS Packing (1920x1080)
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
 ┃ Backend            ┃ Frames ┃    Time ┃    FPS ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
-│ vspackrgb (cython) │   7000 │ 13.385s │ 522.98 │
-│ vspackrgb (numba)  │   7000 │ 10.433s │ 670.92 │
-│ vspackrgb (numpy)  │   2000 │ 13.386s │ 149.41 │
-│ vspackrgb (python) │     25 │  9.890s │   2.53 │
+│ vspackrgb (rust)   │   7000 │ 11.708s │ 597.88 │
+│ vspackrgb (numba)  │   7000 │ 10.171s │ 688.23 │
+│ vspackrgb (numpy)  │   2000 │ 13.968s │ 143.18 │
+│ vspackrgb (python) │     25 │  9.945s │   2.51 │
 └────────────────────┴────────┴─────────┴────────┘
 ```
 
@@ -109,57 +109,57 @@ indexed with BestSource R18 and resampled to the target format with `resize.Poin
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
 ┃ Backend            ┃ Frames ┃    Time ┃    FPS ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
-│ vszip.PackRGB      │   7000 │  9.451s │ 740.69 │
-│ libp2p.Pack        │   7000 │  9.402s │ 744.52 │
-│ akarin.Expr        │   7000 │  9.572s │ 731.30 │
-│ vspackrgb (cython) │   7000 │ 10.504s │ 666.43 │
-│ vspackrgb (numba)  │   7000 │  9.586s │ 730.22 │
-│ vspackrgb (numpy)  │   2000 │  6.862s │ 291.46 │
-│ vspackrgb (python) │     25 │ 10.065s │   2.48 │
+│ vszip.PackRGB      │   7000 │  9.078s │ 771.06 │
+│ libp2p.Pack        │   7000 │  8.980s │ 779.49 │
+│ akarin.Expr        │   7000 │  9.400s │ 744.65 │
+│ vspackrgb (rust)   │   7000 │  9.794s │ 714.75 │
+│ vspackrgb (numba)  │   7000 │  9.067s │ 772.02 │
+│ vspackrgb (numpy)  │   2000 │  6.720s │ 297.60 │
+│ vspackrgb (python) │     25 │ 10.004s │   2.50 │
 └────────────────────┴────────┴─────────┴────────┘
 
             RGB30 Packing (1920x1080)
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
 ┃ Backend            ┃ Frames ┃    Time ┃    FPS ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
-│ vszip.PackRGB      │   7000 │ 10.170s │ 688.27 │
-│ libp2p.Pack        │   7000 │ 10.321s │ 678.25 │
-│ akarin.Expr        │   7000 │ 10.471s │ 668.54 │
-│ vspackrgb (cython) │   7000 │ 13.434s │ 521.06 │
-│ vspackrgb (numba)  │   7000 │ 10.394s │ 673.43 │
-│ vspackrgb (numpy)  │   2000 │ 10.672s │ 187.41 │
-│ vspackrgb (python) │     25 │  7.350s │   3.40 │
+│ vszip.PackRGB      │   7000 │  9.581s │ 730.63 │
+│ libp2p.Pack        │   7000 │  9.908s │ 706.53 │
+│ akarin.Expr        │   7000 │ 10.317s │ 678.52 │
+│ vspackrgb (rust)   │   7000 │  9.699s │ 721.70 │
+│ vspackrgb (numba)  │   7000 │  9.658s │ 724.82 │
+│ vspackrgb (numpy)  │   2000 │ 10.550s │ 189.58 │
+│ vspackrgb (python) │     25 │  7.134s │   3.50 │
 └────────────────────┴────────┴─────────┴────────┘
 
             RGB48 Packing (1920x1080)
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
 ┃ Backend            ┃ Frames ┃    Time ┃    FPS ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
-│ libp2p.Pack        │   7000 │ 11.665s │ 600.06 │
-│ vspackrgb (cython) │   7000 │ 13.496s │ 518.69 │
-│ vspackrgb (numba)  │   7000 │ 12.391s │ 564.91 │
-│ vspackrgb (numpy)  │   2000 │  9.071s │ 220.48 │
-│ vspackrgb (python) │     25 │ 10.061s │   2.48 │
+│ libp2p.Pack        │   7000 │ 10.607s │ 659.97 │
+│ vspackrgb (rust)   │   7000 │ 11.426s │ 612.61 │
+│ vspackrgb (numba)  │   7000 │ 11.333s │ 617.67 │
+│ vspackrgb (numpy)  │   2000 │  9.188s │ 217.67 │
+│ vspackrgb (python) │     25 │ 10.006s │   2.50 │
 └────────────────────┴────────┴─────────┴────────┘
 
              RGBH Packing (1920x1080)
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
 ┃ Backend            ┃ Frames ┃    Time ┃    FPS ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
-│ vspackrgb (cython) │   7000 │ 13.244s │ 528.53 │
-│ vspackrgb (numba)  │   7000 │ 12.213s │ 573.18 │
-│ vspackrgb (numpy)  │   2000 │  8.805s │ 227.14 │
-│ vspackrgb (python) │     25 │ 10.002s │   2.50 │
+│ vspackrgb (rust)   │   7000 │ 11.462s │ 610.72 │
+│ vspackrgb (numba)  │   7000 │ 11.335s │ 617.54 │
+│ vspackrgb (numpy)  │   2000 │  9.460s │ 211.42 │
+│ vspackrgb (python) │     25 │  9.980s │   2.50 │
 └────────────────────┴────────┴─────────┴────────┘
 
              RGBS Packing (1920x1080)
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
 ┃ Backend            ┃ Frames ┃    Time ┃    FPS ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
-│ vspackrgb (cython) │   7000 │ 22.907s │ 305.58 │
-│ vspackrgb (numba)  │   7000 │ 20.397s │ 343.19 │
-│ vspackrgb (numpy)  │   2000 │ 17.765s │ 112.58 │
-│ vspackrgb (python) │     25 │  9.974s │   2.51 │
+│ vspackrgb (rust)   │   7000 │ 20.458s │ 342.16 │
+│ vspackrgb (numba)  │   7000 │ 19.119s │ 366.14 │
+│ vspackrgb (numpy)  │   2000 │ 14.731s │ 135.77 │
+│ vspackrgb (python) │     25 │  9.924s │   2.52 │
 └────────────────────┴────────┴─────────┴────────┘
 ```
 

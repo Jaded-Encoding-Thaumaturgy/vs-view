@@ -2491,6 +2491,9 @@ numpy = [
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "rich" },
+    { name = "vapoursynth-akarin" },
+    { name = "vapoursynth-vszip" },
 ]
 
 [package.metadata]
@@ -2503,7 +2506,12 @@ requires-dist = [
 provides-extras = ["numba", "numpy"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.0.0,<10.0.0" }]
+dev = [
+    { name = "pytest", specifier = ">=9.0.0,<10.0.0" },
+    { name = "rich", specifier = ">=15.0.0" },
+    { name = "vapoursynth-akarin", specifier = ">=1.5.0" },
+    { name = "vapoursynth-vszip", specifier = ">=22.1.0" },
+]
 
 [[package]]
 name = "vsremote"

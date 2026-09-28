@@ -22,6 +22,7 @@ FRAME_COUNTS = {
 }
 
 console = Console(stderr=True)
+vs.core.max_cache_size = 128 * 1024
 
 
 def benchmark(name: str, clip: vs.VideoNode, num_frames: int) -> tuple[float, float]:
