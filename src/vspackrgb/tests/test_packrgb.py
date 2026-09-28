@@ -11,10 +11,10 @@ from vspackrgb import helpers, numba, numpy, python, rust
 class BackendModule(Protocol):
     def pack_bgra_8bit(
         self,
-        b_data: ctypes.Array[ctypes.c_uint8],
-        g_data: ctypes.Array[ctypes.c_uint8],
-        r_data: ctypes.Array[ctypes.c_uint8],
-        a_data: ctypes.Array[ctypes.c_uint8] | None,
+        b_ptr: int,
+        g_ptr: int,
+        r_ptr: int,
+        a_ptr: int | None,
         width: int,
         height: int,
         src_stride: int,
@@ -24,10 +24,10 @@ class BackendModule(Protocol):
 
     def pack_rgb30_10bit(
         self,
-        r_data: ctypes.Array[ctypes.c_uint16],
-        g_data: ctypes.Array[ctypes.c_uint16],
-        b_data: ctypes.Array[ctypes.c_uint16],
-        a_data: ctypes.Array[ctypes.c_uint16] | None,
+        r_ptr: int,
+        g_ptr: int,
+        b_ptr: int,
+        a_ptr: int | None,
         width: int,
         height: int,
         samples_per_row: int,
@@ -37,10 +37,10 @@ class BackendModule(Protocol):
 
     def pack_rgba64_16bit(
         self,
-        r_data: ctypes.Array[ctypes.c_uint16],
-        g_data: ctypes.Array[ctypes.c_uint16],
-        b_data: ctypes.Array[ctypes.c_uint16],
-        a_data: ctypes.Array[ctypes.c_uint16] | None,
+        r_ptr: int,
+        g_ptr: int,
+        b_ptr: int,
+        a_ptr: int | None,
         width: int,
         height: int,
         samples_per_row: int,
@@ -50,10 +50,10 @@ class BackendModule(Protocol):
 
     def pack_rgba16f_16bit(
         self,
-        r_data: ctypes.Array[ctypes.c_uint16],
-        g_data: ctypes.Array[ctypes.c_uint16],
-        b_data: ctypes.Array[ctypes.c_uint16],
-        a_data: ctypes.Array[ctypes.c_uint16] | None,
+        r_ptr: int,
+        g_ptr: int,
+        b_ptr: int,
+        a_ptr: int | None,
         width: int,
         height: int,
         samples_per_row: int,
@@ -63,10 +63,10 @@ class BackendModule(Protocol):
 
     def pack_rgba32f_32bit(
         self,
-        r_data: ctypes.Array[ctypes.c_uint32],
-        g_data: ctypes.Array[ctypes.c_uint32],
-        b_data: ctypes.Array[ctypes.c_uint32],
-        a_data: ctypes.Array[ctypes.c_uint32] | None,
+        r_ptr: int,
+        g_ptr: int,
+        b_ptr: int,
+        a_ptr: int | None,
         width: int,
         height: int,
         samples_per_row: int,
@@ -107,7 +107,17 @@ def test_pack_bgra_8bit(backend_name: str) -> None:
     dest = (ctypes.c_uint8 * (dest_stride * height))()
     dest_ptr = ctypes.addressof(dest)
 
-    backend.pack_bgra_8bit(b, g, r, a, width, height, src_stride, dest_ptr, dest_stride)
+    backend.pack_bgra_8bit(
+        ctypes.addressof(b),
+        ctypes.addressof(g),
+        ctypes.addressof(r),
+        ctypes.addressof(a),
+        width,
+        height,
+        src_stride,
+        dest_ptr,
+        dest_stride,
+    )
 
     for y in range(height):
         for x in range(width):
@@ -133,7 +143,17 @@ def test_pack_bgra_8bit_no_alpha(backend_name: str) -> None:
     dest = (ctypes.c_uint8 * (dest_stride * height))()
     dest_ptr = ctypes.addressof(dest)
 
-    backend.pack_bgra_8bit(b, g, r, None, width, height, src_stride, dest_ptr, dest_stride)
+    backend.pack_bgra_8bit(
+        ctypes.addressof(b),
+        ctypes.addressof(g),
+        ctypes.addressof(r),
+        None,
+        width,
+        height,
+        src_stride,
+        dest_ptr,
+        dest_stride,
+    )
 
     for y in range(height):
         for x in range(width):
@@ -160,7 +180,17 @@ def test_pack_rgb30_10bit(backend_name: str) -> None:
     dest = (ctypes.c_uint32 * (width * height))()
     dest_ptr = ctypes.addressof(dest)
 
-    backend.pack_rgb30_10bit(r, g, b, None, width, height, src_stride_samples, dest_ptr, dest_stride)
+    backend.pack_rgb30_10bit(
+        ctypes.addressof(r),
+        ctypes.addressof(g),
+        ctypes.addressof(b),
+        None,
+        width,
+        height,
+        src_stride_samples,
+        dest_ptr,
+        dest_stride,
+    )
 
     for y in range(height):
         for x in range(width):
@@ -172,6 +202,47 @@ def test_pack_rgb30_10bit(backend_name: str) -> None:
             assert ((val >> 20) & 0x3FF) == r[idx]
             assert ((val >> 10) & 0x3FF) == g[idx]
             assert (val & 0x3FF) == b[idx]
+
+
+@pytest.mark.parametrize("backend_name", BACKENDS)
+def test_pack_rgb30_10bit_with_alpha(backend_name: str) -> None:
+    backend = get_backend_module(backend_name)
+    width, height = 4, 4
+    src_stride_samples = width
+    dest_stride = width * 4
+
+    r = (ctypes.c_uint16 * (width * height))(*(x * 50 for x in range(width * height)))
+    g = (ctypes.c_uint16 * (width * height))(*(x * 40 for x in range(width * height)))
+    b = (ctypes.c_uint16 * (width * height))(*(x * 30 for x in range(width * height)))
+    a = (ctypes.c_uint16 * (width * height))(*(((x % 4) << 8) for x in range(width * height)))
+
+    dest = (ctypes.c_uint32 * (width * height))()
+    dest_ptr = ctypes.addressof(dest)
+
+    backend.pack_rgb30_10bit(
+        ctypes.addressof(r),
+        ctypes.addressof(g),
+        ctypes.addressof(b),
+        ctypes.addressof(a),
+        width,
+        height,
+        src_stride_samples,
+        dest_ptr,
+        dest_stride,
+    )
+
+    for y in range(height):
+        for x in range(width):
+            idx = y * width + x
+            val = dest[idx]
+            a_bits = a[idx] >> 8
+            assert (val >> 30) == a_bits
+            expected_r = (r[idx] * a_bits) // 3 if a_bits != 3 else r[idx]
+            expected_g = (g[idx] * a_bits) // 3 if a_bits != 3 else g[idx]
+            expected_b = (b[idx] * a_bits) // 3 if a_bits != 3 else b[idx]
+            assert ((val >> 20) & 0x3FF) == expected_r
+            assert ((val >> 10) & 0x3FF) == expected_g
+            assert (val & 0x3FF) == expected_b
 
 
 @pytest.mark.parametrize("backend_name", BACKENDS)
@@ -189,7 +260,17 @@ def test_pack_rgba64_16bit(backend_name: str) -> None:
     dest = (ctypes.c_uint16 * (width * height * 4))()
     dest_ptr = ctypes.addressof(dest)
 
-    backend.pack_rgba64_16bit(r, g, b, a, width, height, src_stride_samples, dest_ptr, dest_stride)
+    backend.pack_rgba64_16bit(
+        ctypes.addressof(r),
+        ctypes.addressof(g),
+        ctypes.addressof(b),
+        ctypes.addressof(a),
+        width,
+        height,
+        src_stride_samples,
+        dest_ptr,
+        dest_stride,
+    )
 
     for y in range(height):
         for x in range(width):
@@ -218,7 +299,17 @@ def test_pack_rgba16f_16bit(backend_name: str) -> None:
     dest = (ctypes.c_uint16 * (width * height * 4))()
     dest_ptr = ctypes.addressof(dest)
 
-    backend.pack_rgba16f_16bit(r, g, b, None, width, height, src_stride_samples, dest_ptr, dest_stride)
+    backend.pack_rgba16f_16bit(
+        ctypes.addressof(r),
+        ctypes.addressof(g),
+        ctypes.addressof(b),
+        None,
+        width,
+        height,
+        src_stride_samples,
+        dest_ptr,
+        dest_stride,
+    )
 
     for y in range(height):
         for x in range(width):
@@ -248,7 +339,17 @@ def test_pack_rgba32f_32bit(backend_name: str) -> None:
     dest = (ctypes.c_uint32 * (width * height * 4))()
     dest_ptr = ctypes.addressof(dest)
 
-    backend.pack_rgba32f_32bit(r, g, b, None, width, height, src_stride_samples, dest_ptr, dest_stride)
+    backend.pack_rgba32f_32bit(
+        ctypes.addressof(r),
+        ctypes.addressof(g),
+        ctypes.addressof(b),
+        None,
+        width,
+        height,
+        src_stride_samples,
+        dest_ptr,
+        dest_stride,
+    )
 
     for y in range(height):
         for x in range(width):

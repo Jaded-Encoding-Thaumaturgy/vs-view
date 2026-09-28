@@ -85,8 +85,9 @@ distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.dirty"
 build-frontend = { name = "uv", args = ["--verbose"] }
 build = "cp312-*"
 skip = "*-win32 *-manylinux_i686"
-# Test would require vapoursynth
-test-skip = "*"
+test-groups = ["dev"]
+test-extras = ["numpy", "numba"]
+test-command = "pytest {project}/tests"
 before-build = "git checkout uv.lock && git clean -fdx src/vspackrgb"
 
 [tool.cibuildwheel.windows]

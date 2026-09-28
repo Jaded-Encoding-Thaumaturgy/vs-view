@@ -1,10 +1,8 @@
-import ctypes
-
 def pack_bgra_8bit(
-    b_data: ctypes.Array[ctypes.c_uint8],
-    g_data: ctypes.Array[ctypes.c_uint8],
-    r_data: ctypes.Array[ctypes.c_uint8],
-    a_data: ctypes.Array[ctypes.c_uint8] | None,
+    b_ptr: int,
+    g_ptr: int,
+    r_ptr: int,
+    a_ptr: int | None,
     width: int,
     height: int,
     src_stride: int,
@@ -12,10 +10,10 @@ def pack_bgra_8bit(
     dest_stride: int,
 ) -> None: ...
 def pack_rgb30_10bit(
-    r_data: ctypes.Array[ctypes.c_uint16],
-    g_data: ctypes.Array[ctypes.c_uint16],
-    b_data: ctypes.Array[ctypes.c_uint16],
-    a_data: ctypes.Array[ctypes.c_uint16] | None,
+    r_ptr: int,
+    g_ptr: int,
+    b_ptr: int,
+    a_ptr: int | None,
     width: int,
     height: int,
     samples_per_row: int,
@@ -23,10 +21,10 @@ def pack_rgb30_10bit(
     dest_stride: int,
 ) -> None: ...
 def pack_rgba64_16bit(
-    r_data: ctypes.Array[ctypes.c_uint16],
-    g_data: ctypes.Array[ctypes.c_uint16],
-    b_data: ctypes.Array[ctypes.c_uint16],
-    a_data: ctypes.Array[ctypes.c_uint16] | None,
+    r_ptr: int,
+    g_ptr: int,
+    b_ptr: int,
+    a_ptr: int | None,
     width: int,
     height: int,
     samples_per_row: int,
@@ -34,10 +32,10 @@ def pack_rgba64_16bit(
     dest_stride: int,
 ) -> None: ...
 def pack_rgba16f_16bit(
-    r_data: ctypes.Array[ctypes.c_uint16],
-    g_data: ctypes.Array[ctypes.c_uint16],
-    b_data: ctypes.Array[ctypes.c_uint16],
-    a_data: ctypes.Array[ctypes.c_uint16] | None,
+    r_ptr: int,
+    g_ptr: int,
+    b_ptr: int,
+    a_ptr: int | None,
     width: int,
     height: int,
     samples_per_row: int,
@@ -45,10 +43,10 @@ def pack_rgba16f_16bit(
     dest_stride: int,
 ) -> None: ...
 def pack_rgba32f_32bit(
-    r_data: ctypes.Array[ctypes.c_uint32],
-    g_data: ctypes.Array[ctypes.c_uint32],
-    b_data: ctypes.Array[ctypes.c_uint32],
-    a_data: ctypes.Array[ctypes.c_uint32] | None,
+    r_ptr: int,
+    g_ptr: int,
+    b_ptr: int,
+    a_ptr: int | None,
     width: int,
     height: int,
     samples_per_row: int,

@@ -128,12 +128,15 @@ def _make_pack_frame_8bit(pack_bgra_8bit: Callable[..., None]) -> _ModifyFrameFu
         if dst_ptr is None:
             raise ValueError("Destination frame pointer is NULL")
 
-        b_plane = get_plane_buffer(frame_src, 2)
-        g_plane = get_plane_buffer(frame_src, 1)
-        r_plane = get_plane_buffer(frame_src, 0)
-        a_plane = get_plane_buffer(frame_alpha, 0) if frame_alpha is not None else None
+        b_ptr = frame_src.get_read_ptr(2).value
+        g_ptr = frame_src.get_read_ptr(1).value
+        r_ptr = frame_src.get_read_ptr(0).value
+        a_ptr = frame_alpha.get_read_ptr(0).value if frame_alpha is not None else None
 
-        pack_bgra_8bit(b_plane, g_plane, r_plane, a_plane, width, height, src_stride, dst_ptr, dst_stride)
+        if b_ptr is None or g_ptr is None or r_ptr is None:
+            raise ValueError("Source frame pointer is NULL")
+
+        pack_bgra_8bit(b_ptr, g_ptr, r_ptr, a_ptr, width, height, src_stride, dst_ptr, dst_stride)
 
         frame_dst.props.update(frame_src.props)
 
@@ -157,12 +160,15 @@ def _make_pack_frame_10bit(pack_rgb30_10bit: Callable[..., None]) -> _ModifyFram
         if dst_ptr is None:
             raise ValueError("Destination frame pointer is NULL")
 
-        r_plane = get_plane_buffer(frame_src, 0, bytes_per_sample=2)
-        g_plane = get_plane_buffer(frame_src, 1, bytes_per_sample=2)
-        b_plane = get_plane_buffer(frame_src, 2, bytes_per_sample=2)
-        a_plane = get_plane_buffer(frame_alpha, 0, bytes_per_sample=2) if frame_alpha is not None else None
+        r_ptr = frame_src.get_read_ptr(0).value
+        g_ptr = frame_src.get_read_ptr(1).value
+        b_ptr = frame_src.get_read_ptr(2).value
+        a_ptr = frame_alpha.get_read_ptr(0).value if frame_alpha is not None else None
 
-        pack_rgb30_10bit(r_plane, g_plane, b_plane, a_plane, width, height, samples_per_row, dst_ptr, dst_stride)
+        if r_ptr is None or g_ptr is None or b_ptr is None:
+            raise ValueError("Source frame pointer is NULL")
+
+        pack_rgb30_10bit(r_ptr, g_ptr, b_ptr, a_ptr, width, height, samples_per_row, dst_ptr, dst_stride)
 
         frame_dst.props.update(frame_src.props)
 
@@ -186,12 +192,15 @@ def _make_pack_frame_16bit(pack_rgba64_16bit: Callable[..., None]) -> _ModifyFra
         if dst_ptr is None:
             raise ValueError("Destination frame pointer is NULL")
 
-        r_plane = get_plane_buffer(frame_src, 0, bytes_per_sample=2)
-        g_plane = get_plane_buffer(frame_src, 1, bytes_per_sample=2)
-        b_plane = get_plane_buffer(frame_src, 2, bytes_per_sample=2)
-        a_plane = get_plane_buffer(frame_alpha, 0, bytes_per_sample=2) if frame_alpha is not None else None
+        r_ptr = frame_src.get_read_ptr(0).value
+        g_ptr = frame_src.get_read_ptr(1).value
+        b_ptr = frame_src.get_read_ptr(2).value
+        a_ptr = frame_alpha.get_read_ptr(0).value if frame_alpha is not None else None
 
-        pack_rgba64_16bit(r_plane, g_plane, b_plane, a_plane, width, height, samples_per_row, dst_ptr, dst_stride)
+        if r_ptr is None or g_ptr is None or b_ptr is None:
+            raise ValueError("Source frame pointer is NULL")
+
+        pack_rgba64_16bit(r_ptr, g_ptr, b_ptr, a_ptr, width, height, samples_per_row, dst_ptr, dst_stride)
 
         frame_dst.props.update(frame_src.props)
         frame_dst.props["VSViewPacked16"] = 1
@@ -215,12 +224,15 @@ def _make_pack_frame_16f(pack_rgba16f_16bit: Callable[..., None]) -> _ModifyFram
         if dst_ptr is None:
             raise ValueError("Destination frame pointer is NULL")
 
-        r_plane = get_plane_buffer(frame_src, 0, bytes_per_sample=2)
-        g_plane = get_plane_buffer(frame_src, 1, bytes_per_sample=2)
-        b_plane = get_plane_buffer(frame_src, 2, bytes_per_sample=2)
-        a_plane = get_plane_buffer(frame_alpha, 0, bytes_per_sample=2) if frame_alpha is not None else None
+        r_ptr = frame_src.get_read_ptr(0).value
+        g_ptr = frame_src.get_read_ptr(1).value
+        b_ptr = frame_src.get_read_ptr(2).value
+        a_ptr = frame_alpha.get_read_ptr(0).value if frame_alpha is not None else None
 
-        pack_rgba16f_16bit(r_plane, g_plane, b_plane, a_plane, width, height, samples_per_row, dst_ptr, dst_stride)
+        if r_ptr is None or g_ptr is None or b_ptr is None:
+            raise ValueError("Source frame pointer is NULL")
+
+        pack_rgba16f_16bit(r_ptr, g_ptr, b_ptr, a_ptr, width, height, samples_per_row, dst_ptr, dst_stride)
 
         frame_dst.props.update(frame_src.props)
         frame_dst.props["VSViewPacked16F"] = 1
@@ -244,12 +256,15 @@ def _make_pack_frame_32f(pack_rgba32f_32bit: Callable[..., None]) -> _ModifyFram
         if dst_ptr is None:
             raise ValueError("Destination frame pointer is NULL")
 
-        r_plane = get_plane_buffer(frame_src, 0, bytes_per_sample=4)
-        g_plane = get_plane_buffer(frame_src, 1, bytes_per_sample=4)
-        b_plane = get_plane_buffer(frame_src, 2, bytes_per_sample=4)
-        a_plane = get_plane_buffer(frame_alpha, 0, bytes_per_sample=4) if frame_alpha is not None else None
+        r_ptr = frame_src.get_read_ptr(0).value
+        g_ptr = frame_src.get_read_ptr(1).value
+        b_ptr = frame_src.get_read_ptr(2).value
+        a_ptr = frame_alpha.get_read_ptr(0).value if frame_alpha is not None else None
 
-        pack_rgba32f_32bit(r_plane, g_plane, b_plane, a_plane, width, height, samples_per_row, dst_ptr, dst_stride)
+        if r_ptr is None or g_ptr is None or b_ptr is None:
+            raise ValueError("Source frame pointer is NULL")
+
+        pack_rgba32f_32bit(r_ptr, g_ptr, b_ptr, a_ptr, width, height, samples_per_row, dst_ptr, dst_stride)
 
         frame_dst.props.update(frame_src.props)
         frame_dst.props["VSViewPacked32F"] = 1
