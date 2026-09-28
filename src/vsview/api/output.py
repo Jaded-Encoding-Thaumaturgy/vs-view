@@ -242,7 +242,7 @@ def set_output(
 
                 _output_metadata[file][i] = VideoMetadata(
                     effective_name or f"{title} {i}",
-                    [float(f) for f in (framedurs or [])],
+                    tuple(float(f) for f in (framedurs or [])),
                     alpha is True or None,
                     hdr,
                     kwargs,

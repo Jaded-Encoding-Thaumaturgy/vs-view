@@ -58,19 +58,19 @@ class VideoOutput:
                 self.vs_output = self.vs_output._replace(alpha=alpha_plane)
 
         if self.framedurs:
-            self.cum_durations: list[float] | None = list(accumulate(self.framedurs))
+            self.cum_durations: tuple[float, ...] | None = tuple(accumulate(self.framedurs))
         elif self.vs_output.clip.fps > 0:
-            self.cum_durations = [
+            self.cum_durations = tuple(
                 float(1 / self.vs_output.clip.fps) * i for i in range(1, self.vs_output.clip.num_frames + 1)
-            ]
+            )
         else:
             self.cum_durations = None
 
         if self.cum_durations:
-            self.midpoints: list[float] | None = [
+            self.midpoints: tuple[float, ...] | None = tuple(
                 ((self.cum_durations[k - 1] if k > 0 else 0.0) + self.cum_durations[k]) / 2
                 for k in range(len(self.cum_durations) - 1)
-            ]
+            )
         else:
             self.midpoints = None
 

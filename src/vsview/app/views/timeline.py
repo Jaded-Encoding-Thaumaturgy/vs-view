@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from collections.abc import Generator, Hashable
+from collections.abc import Generator, Hashable, Sequence
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
@@ -1741,7 +1741,7 @@ class TimelineControlBar(QWidget):
     def cum_durations(self) -> list[Time] | None:
         return self._cum_durations
 
-    def set_data(self, total_frames: int, cum_durations: list[float] | None = None) -> None:
+    def set_data(self, total_frames: int, cum_durations: Sequence[float] | None = None) -> None:
         self._total_frames = total_frames
         self._cum_durations = [Time(seconds=cum) for cum in cum_durations] if cum_durations else None
 
