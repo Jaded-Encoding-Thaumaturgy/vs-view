@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "hatch-rs>=0.4.1", "versioningit"]
+requires = ["hatchling", "hatch-rs>=0.4.2", "versioningit"]
 build-backend = "hatchling.build"
 
 [project]
@@ -23,6 +23,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Free Threading",
     "Programming Language :: Rust",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
@@ -42,12 +44,8 @@ numba = ["numba>=0.62.1", "numpy>=2.0.0"]
 "Contact" = "https://discord.gg/XTpc6Fa9eB"
 
 [dependency-groups]
-dev = [
-    "pytest>=9.0.0, <10.0.0",
-    "rich>=15.0.0",
-    "vapoursynth-akarin>=1.5.0",
-    "vapoursynth-vszip>=22.1.0",
-]
+dev = ["pytest>=9.0.0, <10.0.0", "rich>=15.0.0", "vsjetengine>=1.8.0"]
+bench = ["vapoursynth-akarin>=1.5.0", "vapoursynth-vszip>=22.1.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/vspackrgb"]
@@ -82,26 +80,35 @@ dirty = "{next_version}+dirty"
 distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.dirty"
 
 [tool.cibuildwheel]
-build-frontend = { name = "uv", args = ["--verbose"] }
-build = "cp312-*"
+build-frontend = "uv"
+build = ["cp312-*", "cp315t-*"]
 skip = "*-win32 *-manylinux_i686"
 test-groups = ["dev"]
 test-extras = ["numpy", "numba"]
-test-command = "pytest {project}/tests"
-before-build = "git checkout uv.lock && git clean -fdx src/vspackrgb"
+test-command = "pytest {package}/tests"
+before-build = ["git checkout uv.lock && git clean -fdx src/vspackrgb"]
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
+test-groups = []
+# https://github.com/pypa/cibuildwheel/pull/2978
+before-test = 'uv pip install "pytest>=9.0.0,<10.0.0" vsjetengine>=1.8.0'
 
 [tool.cibuildwheel.macos]
-archs = ["x86_64", "arm64"]
+archs = ["native"]
 # Matches minimum supported by VapourSynth
 environment = { MACOSX_DEPLOYMENT_TARGET = "13.0" }
 
 [tool.cibuildwheel.linux]
 archs = ["native"]
+before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }
 # Matches minimum supported by VapourSynth
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 musllinux-x86_64-image = "musllinux_1_2"
 musllinux-aarch64-image = "musllinux_1_2"
+
+[[tool.cibuildwheel.overrides]]
+select = ["cp315t-*", "*-musllinux_*", "*-macosx_x86_64"]
+test-extras = ["numpy"]
