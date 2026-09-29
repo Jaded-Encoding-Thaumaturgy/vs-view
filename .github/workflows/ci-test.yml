@@ -149,7 +149,24 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      - name: Check for vsview-editor changes
+        if: ${{ !inputs.package }}
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            vsview-editor:
+              - 'src/workspaces/editor/**'
+              - '.github/workflows/ci-test.yml'
+
       - name: Set up Node.js
+        if: ${{
+          inputs.package == 'vsview' ||
+          inputs.package == 'vsview-editor' ||
+          github.event_name == 'workflow_dispatch' ||
+          steps.filter.outputs.vsview-editor == 'true'
+          }}
+        id: node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
@@ -157,12 +174,15 @@ jobs:
           cache-dependency-path: src/workspaces/editor/package-lock.json
 
       - name: Install dependencies
+        if: ${{ steps.node.conclusion == 'success' }}
         run: npm ci
 
       - name: Run vitest
+        if: ${{ steps.node.conclusion == 'success' }}
         run: npm test
 
       - name: Build frontend bundle
+        if: ${{ steps.node.conclusion == 'success' }}
         run: npm run build
 
       - name: Post webhook for failure
