@@ -1,11 +1,13 @@
 import ctypes
 import struct
+from importlib import import_module
+from importlib.util import find_spec
 from typing import Any, Protocol, cast
 
 import pytest
 import vapoursynth as vs
 
-from vspackrgb import helpers, numba, numpy, python, rust
+from vspackrgb import helpers
 
 
 class BackendModule(Protocol):
@@ -75,19 +77,24 @@ class BackendModule(Protocol):
     ) -> None: ...
 
 
-BACKENDS = ["python", "numpy", "rust", "numba"]
+BACKENDS = [
+    "python",
+    "rust",
+    pytest.param("numpy", marks=pytest.mark.skipif(not find_spec("numpy"), reason="NumPy not installed")),
+    pytest.param("numba", marks=pytest.mark.skipif(not find_spec("numba"), reason="Numba not installed")),
+]
 
 
 def get_backend_module(backend_name: str) -> BackendModule:
     match backend_name:
         case "python":
-            return cast(BackendModule, python)
+            return cast(BackendModule, import_module("vspackrgb.python"))
         case "numpy":
-            return cast(BackendModule, numpy)
+            return cast(BackendModule, import_module("vspackrgb.numpy"))
         case "rust":
-            return cast(BackendModule, rust)
+            return cast(BackendModule, import_module("vspackrgb.rust"))
         case "numba":
-            return cast(BackendModule, numba)
+            return cast(BackendModule, import_module("vspackrgb.numba"))
         case _:
             raise ValueError(f"Unknown backend: {backend_name}")
 
