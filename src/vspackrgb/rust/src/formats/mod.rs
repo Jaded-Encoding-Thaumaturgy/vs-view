@@ -45,11 +45,12 @@ pub(crate) unsafe fn pack_rgba_range<T: Copy>(row: &RowPointers<T, T>, range: Ra
             // SAFETY: Caller guarantees that indices in `range`
             // are within bounds of row source and destination buffers.
             unsafe {
-                let out_pixel = row.out.add(x * 4);
-                *out_pixel.add(0) = *row.c0.add(x);
-                *out_pixel.add(1) = *row.c1.add(x);
-                *out_pixel.add(2) = *row.c2.add(x);
-                *out_pixel.add(3) = *alpha_ptr.add(x);
+                row.out.add(x * 4).cast::<[T; 4]>().write([
+                    *row.c0.add(x),
+                    *row.c1.add(x),
+                    *row.c2.add(x),
+                    *alpha_ptr.add(x),
+                ]);
             }
         }
     } else {
@@ -57,11 +58,12 @@ pub(crate) unsafe fn pack_rgba_range<T: Copy>(row: &RowPointers<T, T>, range: Ra
             // SAFETY: Caller guarantees that indices in `range`
             // are within bounds of row source and destination buffers.
             unsafe {
-                let out_pixel = row.out.add(x * 4);
-                *out_pixel.add(0) = *row.c0.add(x);
-                *out_pixel.add(1) = *row.c1.add(x);
-                *out_pixel.add(2) = *row.c2.add(x);
-                *out_pixel.add(3) = alpha_default;
+                row.out.add(x * 4).cast::<[T; 4]>().write([
+                    *row.c0.add(x),
+                    *row.c1.add(x),
+                    *row.c2.add(x),
+                    alpha_default,
+                ]);
             }
         }
     }
