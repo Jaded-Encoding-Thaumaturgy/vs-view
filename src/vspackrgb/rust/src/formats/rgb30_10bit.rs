@@ -43,6 +43,16 @@ pub(crate) unsafe fn pack_rgb30_10bit(
 }
 
 #[inline]
+const fn premultiply_10bit(val: u32, a_bits: u32) -> u32 {
+    match a_bits {
+        0 => 0,
+        1 => val / 3,
+        2 => (val * 2) / 3,
+        _ => val,
+    }
+}
+
+#[inline]
 unsafe fn pack_rgb30_range(
     r_row: *const u16,
     g_row: *const u16,
@@ -57,27 +67,9 @@ unsafe fn pack_rgb30_range(
             unsafe {
                 let alpha_sample = u32::from(*alpha_ptr.add(x)) >> 8;
                 let a_bits = alpha_sample & 0x3;
-                let mut r_val = u32::from(*r_row.add(x)) & 0x3FF;
-                let mut g_val = u32::from(*g_row.add(x)) & 0x3FF;
-                let mut b_val = u32::from(*b_row.add(x)) & 0x3FF;
-                match a_bits {
-                    0 => {
-                        r_val = 0;
-                        g_val = 0;
-                        b_val = 0;
-                    }
-                    1 => {
-                        r_val /= 3;
-                        g_val /= 3;
-                        b_val /= 3;
-                    }
-                    2 => {
-                        r_val = (r_val * 2) / 3;
-                        g_val = (g_val * 2) / 3;
-                        b_val = (b_val * 2) / 3;
-                    }
-                    _ => {}
-                }
+                let r_val = premultiply_10bit(u32::from(*r_row.add(x)) & 0x3FF, a_bits);
+                let g_val = premultiply_10bit(u32::from(*g_row.add(x)) & 0x3FF, a_bits);
+                let b_val = premultiply_10bit(u32::from(*b_row.add(x)) & 0x3FF, a_bits);
                 *out_row.add(x) = (a_bits << 30) | (r_val << 20) | (g_val << 10) | b_val;
             }
         }
