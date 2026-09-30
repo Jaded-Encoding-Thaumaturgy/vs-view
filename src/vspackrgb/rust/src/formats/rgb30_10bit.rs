@@ -430,8 +430,7 @@ unsafe fn pack_rgb30_10bit_neon(
     dest_ptr: *mut u32,
     dest_stride: usize,
 ) {
-    // SAFETY: Transmuting [u32; 4] to uint32x4_t of identical size and alignment.
-    let alpha_mask: uint32x4_t = unsafe { std::mem::transmute([0xC000_0000u32; 4]) };
+    let alpha_mask = vdupq_n_u32(0xC000_0000);
     let div3_recip = vdup_n_u16(21846);
     let alpha_mask_3 = vdup_n_u16(3);
 
