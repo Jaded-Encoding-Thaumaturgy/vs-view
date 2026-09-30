@@ -453,9 +453,9 @@ unsafe fn pack_rgb30_10bit_neon(
     dest_ptr: *mut u32,
     dest_stride: usize,
 ) {
-    let alpha_mask = vdupq_n_u32(0xC000_0000);
-    let div3_recip = vdup_n_u16(21846);
-    let alpha_mask_3 = vdup_n_u16(3);
+    // SAFETY: Target feature neon is available on aarch64.
+    let (alpha_mask, div3_recip, alpha_mask_3) =
+        unsafe { (vdupq_n_u32(0xC000_0000), vdup_n_u16(21846), vdup_n_u16(3)) };
 
     macro_rules! pack_loop {
         (@step $row:ident, $x:ident, $r_wide_0:expr, $g_wide_0:expr, $b_wide_0:expr, $r_wide_1:expr, $g_wide_1:expr, $b_wide_1:expr, $a_shift_0:expr, $a_shift_1:expr) => {

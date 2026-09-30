@@ -299,7 +299,8 @@ unsafe fn pack_rgba_16bit_neon<const ALPHA_DEFAULT: u16>(
     dest_ptr: *mut u16,
     dest_stride: usize,
 ) {
-    let opaque_alpha = vdupq_n_u16(ALPHA_DEFAULT);
+    // SAFETY: Target feature neon is available on aarch64.
+    let opaque_alpha = unsafe { vdupq_n_u16(ALPHA_DEFAULT) };
 
     macro_rules! pack_loop {
         ($row:ident, $x:ident, $width:ident, $alpha:expr) => {

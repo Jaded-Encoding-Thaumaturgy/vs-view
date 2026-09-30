@@ -299,7 +299,8 @@ unsafe fn pack_bgra_8bit_neon(
     dest_ptr: *mut u8,
     dest_stride: usize,
 ) {
-    let opaque_alpha = vdupq_n_u8(0xFF);
+    // SAFETY: Target feature neon is available on aarch64.
+    let opaque_alpha = unsafe { vdupq_n_u8(0xFF) };
 
     macro_rules! pack_loop {
         ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
