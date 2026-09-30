@@ -315,6 +315,7 @@ unsafe fn pack_rgb30_10bit_avx2(
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f", enable = "avx512bw", enable = "avx512vl")]
 unsafe fn pack_rgb30_10bit_avx512(
     r_ptr: *const u16,
