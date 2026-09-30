@@ -33,7 +33,7 @@ pub(crate) unsafe fn compute_row_ptrs<SrcT, DestT>(
             c1: c1_base.add(offset),
             c2: c2_base.add(offset),
             alpha: a_base.map(|p| p.add(offset)),
-            out: out_base.cast::<u8>().add(y * dest_stride_bytes).cast::<DestT>(),
+            out: out_base.byte_add(y * dest_stride_bytes),
         }
     }
 }
