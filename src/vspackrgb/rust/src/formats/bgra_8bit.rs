@@ -50,9 +50,11 @@ unsafe fn pack_bgra_8bit_scalar(
     dest_ptr: *mut u8,
     dest_stride: usize,
 ) {
-    unsafe {
-        for y in 0..height {
-            let row = compute_row_ptrs(b_ptr, g_ptr, r_ptr, a_ptr, dest_ptr, y, src_stride, dest_stride);
+    for y in 0..height {
+        // SAFETY: y < height, strides and pointers are valid for the frame.
+        let row = unsafe { compute_row_ptrs(b_ptr, g_ptr, r_ptr, a_ptr, dest_ptr, y, src_stride, dest_stride) };
+        // SAFETY: range 0..width is within buffer bounds.
+        unsafe {
             pack_rgba_range(&row, 0..width, 0xFF);
         }
     }
@@ -71,12 +73,14 @@ unsafe fn pack_bgra_8bit_sse2(
     dest_ptr: *mut u8,
     dest_stride: usize,
 ) {
-    unsafe {
-        let opaque_alpha = _mm_set1_epi8(-1);
+    let opaque_alpha = _mm_set1_epi8(-1);
 
-        macro_rules! pack_loop {
-            ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
-                while $x + 16 <= $width {
+    macro_rules! pack_loop {
+        ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
+            while $x + 16 <= $width {
+                // SAFETY: Target feature sse2 is enabled.
+                // $x + 16 <= $width guarantees all reads and writes are within buffer bounds.
+                unsafe {
                     let vb = _mm_loadu_si128($row.c0.add($x).cast::<__m128i>());
                     let vg = _mm_loadu_si128($row.c1.add($x).cast::<__m128i>());
                     let vr = _mm_loadu_si128($row.c2.add($x).cast::<__m128i>());
@@ -97,22 +101,26 @@ unsafe fn pack_bgra_8bit_sse2(
                     _mm_storeu_si128(out_pixel.add(16).cast::<__m128i>(), out1);
                     _mm_storeu_si128(out_pixel.add(32).cast::<__m128i>(), out2);
                     _mm_storeu_si128(out_pixel.add(48).cast::<__m128i>(), out3);
-
-                    $x += 16;
                 }
-            };
+
+                $x += 16;
+            }
+        };
+    }
+
+    for y in 0..height {
+        // SAFETY: y < height, strides and pointers are valid for the frame.
+        let row = unsafe { compute_row_ptrs(b_ptr, g_ptr, r_ptr, a_ptr, dest_ptr, y, src_stride, dest_stride) };
+        let mut x = 0;
+
+        if let Some(alpha_row) = row.alpha {
+            pack_loop!(row, x, width, _mm_loadu_si128(alpha_row.add(x).cast::<__m128i>()));
+        } else {
+            pack_loop!(row, x, width, opaque_alpha);
         }
 
-        for y in 0..height {
-            let row = compute_row_ptrs(b_ptr, g_ptr, r_ptr, a_ptr, dest_ptr, y, src_stride, dest_stride);
-            let mut x = 0;
-
-            if let Some(alpha_row) = row.alpha {
-                pack_loop!(row, x, width, _mm_loadu_si128(alpha_row.add(x).cast::<__m128i>()));
-            } else {
-                pack_loop!(row, x, width, opaque_alpha);
-            }
-
+        // SAFETY: range x..width is within buffer bounds.
+        unsafe {
             pack_rgba_range(&row, x..width, 0xFF);
         }
     }
@@ -131,12 +139,14 @@ unsafe fn pack_bgra_8bit_avx2(
     dest_ptr: *mut u8,
     dest_stride: usize,
 ) {
-    unsafe {
-        let opaque_alpha = _mm256_set1_epi8(-1);
+    let opaque_alpha = _mm256_set1_epi8(-1);
 
-        macro_rules! pack_loop {
-            ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
-                while $x + 32 <= $width {
+    macro_rules! pack_loop {
+        ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
+            while $x + 32 <= $width {
+                // SAFETY: Target feature avx2 is enabled.
+                // $x + 32 <= $width guarantees all reads and writes are within buffer bounds.
+                unsafe {
                     let vb = _mm256_loadu_si256($row.c0.add($x).cast::<__m256i>());
                     let vg = _mm256_loadu_si256($row.c1.add($x).cast::<__m256i>());
                     let vr = _mm256_loadu_si256($row.c2.add($x).cast::<__m256i>());
@@ -162,22 +172,26 @@ unsafe fn pack_bgra_8bit_avx2(
                     _mm256_storeu_si256(out_pixel.add(32).cast::<__m256i>(), out1);
                     _mm256_storeu_si256(out_pixel.add(64).cast::<__m256i>(), out2);
                     _mm256_storeu_si256(out_pixel.add(96).cast::<__m256i>(), out3);
-
-                    $x += 32;
                 }
-            };
+
+                $x += 32;
+            }
+        };
+    }
+
+    for y in 0..height {
+        // SAFETY: y < height, strides and pointers are valid for the frame.
+        let row = unsafe { compute_row_ptrs(b_ptr, g_ptr, r_ptr, a_ptr, dest_ptr, y, src_stride, dest_stride) };
+        let mut x = 0;
+
+        if let Some(alpha_row) = row.alpha {
+            pack_loop!(row, x, width, _mm256_loadu_si256(alpha_row.add(x).cast::<__m256i>()));
+        } else {
+            pack_loop!(row, x, width, opaque_alpha);
         }
 
-        for y in 0..height {
-            let row = compute_row_ptrs(b_ptr, g_ptr, r_ptr, a_ptr, dest_ptr, y, src_stride, dest_stride);
-            let mut x = 0;
-
-            if let Some(alpha_row) = row.alpha {
-                pack_loop!(row, x, width, _mm256_loadu_si256(alpha_row.add(x).cast::<__m256i>()));
-            } else {
-                pack_loop!(row, x, width, opaque_alpha);
-            }
-
+        // SAFETY: range x..width is within buffer bounds.
+        unsafe {
             pack_rgba_range(&row, x..width, 0xFF);
         }
     }
@@ -196,12 +210,14 @@ unsafe fn pack_bgra_8bit_avx512(
     dest_ptr: *mut u8,
     dest_stride: usize,
 ) {
-    unsafe {
-        let opaque_alpha = _mm512_set1_epi8(-1);
+    let opaque_alpha = _mm512_set1_epi8(-1);
 
-        macro_rules! pack_loop {
-            ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
-                while $x + 64 <= $width {
+    macro_rules! pack_loop {
+        ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
+            while $x + 64 <= $width {
+                // SAFETY: Target features avx512f/bw/vl are enabled.
+                // $x + 64 <= $width guarantees all reads and writes are within buffer bounds.
+                unsafe {
                     let vb = _mm512_loadu_si512($row.c0.add($x).cast::<__m512i>());
                     let vg = _mm512_loadu_si512($row.c1.add($x).cast::<__m512i>());
                     let vr = _mm512_loadu_si512($row.c2.add($x).cast::<__m512i>());
@@ -246,22 +262,26 @@ unsafe fn pack_bgra_8bit_avx512(
                     _mm512_storeu_si512(out_pixel.add(64).cast::<__m512i>(), z1);
                     _mm512_storeu_si512(out_pixel.add(128).cast::<__m512i>(), z2);
                     _mm512_storeu_si512(out_pixel.add(192).cast::<__m512i>(), z3);
-
-                    $x += 64;
                 }
-            };
+
+                $x += 64;
+            }
+        };
+    }
+
+    for y in 0..height {
+        // SAFETY: y < height, strides and pointers are valid for the frame.
+        let row = unsafe { compute_row_ptrs(b_ptr, g_ptr, r_ptr, a_ptr, dest_ptr, y, src_stride, dest_stride) };
+        let mut x = 0;
+
+        if let Some(alpha_row) = row.alpha {
+            pack_loop!(row, x, width, _mm512_loadu_si512(alpha_row.add(x).cast::<__m512i>()));
+        } else {
+            pack_loop!(row, x, width, opaque_alpha);
         }
 
-        for y in 0..height {
-            let row = compute_row_ptrs(b_ptr, g_ptr, r_ptr, a_ptr, dest_ptr, y, src_stride, dest_stride);
-            let mut x = 0;
-
-            if let Some(alpha_row) = row.alpha {
-                pack_loop!(row, x, width, _mm512_loadu_si512(alpha_row.add(x).cast::<__m512i>()));
-            } else {
-                pack_loop!(row, x, width, opaque_alpha);
-            }
-
+        // SAFETY: range x..width is within buffer bounds.
+        unsafe {
             pack_rgba_range(&row, x..width, 0xFF);
         }
     }
@@ -279,12 +299,13 @@ unsafe fn pack_bgra_8bit_neon(
     dest_ptr: *mut u8,
     dest_stride: usize,
 ) {
-    unsafe {
-        let opaque_alpha = vdupq_n_u8(0xFF);
+    let opaque_alpha = vdupq_n_u8(0xFF);
 
-        macro_rules! pack_loop {
-            ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
-                while $x + 16 <= $width {
+    macro_rules! pack_loop {
+        ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
+            while $x + 16 <= $width {
+                // SAFETY: $x + 16 <= $width guarantees all reads and writes are within bounds.
+                unsafe {
                     let vb = vld1q_u8($row.c0.add($x));
                     let vg = vld1q_u8($row.c1.add($x));
                     let vr = vld1q_u8($row.c2.add($x));
@@ -292,21 +313,25 @@ unsafe fn pack_bgra_8bit_neon(
 
                     let interleaved = uint8x16x4_t(vb, vg, vr, va);
                     vst4q_u8($row.out.add($x * 4), interleaved);
-                    $x += 16;
                 }
-            };
+                $x += 16;
+            }
+        };
+    }
+
+    for y in 0..height {
+        // SAFETY: y < height, strides and pointers are valid for the frame.
+        let row = unsafe { compute_row_ptrs(b_ptr, g_ptr, r_ptr, a_ptr, dest_ptr, y, src_stride, dest_stride) };
+        let mut x = 0;
+
+        if let Some(alpha_row) = row.alpha {
+            pack_loop!(row, x, width, vld1q_u8(alpha_row.add(x)));
+        } else {
+            pack_loop!(row, x, width, opaque_alpha);
         }
 
-        for y in 0..height {
-            let row = compute_row_ptrs(b_ptr, g_ptr, r_ptr, a_ptr, dest_ptr, y, src_stride, dest_stride);
-            let mut x = 0;
-
-            if let Some(alpha_row) = row.alpha {
-                pack_loop!(row, x, width, vld1q_u8(alpha_row.add(x)));
-            } else {
-                pack_loop!(row, x, width, opaque_alpha);
-            }
-
+        // SAFETY: range x..width is within buffer bounds.
+        unsafe {
             pack_rgba_range(&row, x..width, 0xFF);
         }
     }

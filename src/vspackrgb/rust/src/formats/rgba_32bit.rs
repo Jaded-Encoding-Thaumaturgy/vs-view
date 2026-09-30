@@ -50,9 +50,11 @@ unsafe fn pack_rgba_32bit_scalar<const ALPHA_DEFAULT: u32>(
     dest_ptr: *mut u32,
     dest_stride: usize,
 ) {
-    unsafe {
-        for y in 0..height {
-            let row = compute_row_ptrs(r_ptr, g_ptr, b_ptr, a_ptr, dest_ptr, y, samples_per_row, dest_stride);
+    for y in 0..height {
+        // SAFETY: y < height, strides and pointers are valid for the frame.
+        let row = unsafe { compute_row_ptrs(r_ptr, g_ptr, b_ptr, a_ptr, dest_ptr, y, samples_per_row, dest_stride) };
+        // SAFETY: range 0..width is within buffer bounds.
+        unsafe {
             pack_rgba_range(&row, 0..width, ALPHA_DEFAULT);
         }
     }
@@ -71,12 +73,14 @@ unsafe fn pack_rgba_32bit_sse2<const ALPHA_DEFAULT: u32>(
     dest_ptr: *mut u32,
     dest_stride: usize,
 ) {
-    unsafe {
-        let alpha_constant = _mm_set1_ps(f32::from_bits(ALPHA_DEFAULT));
+    let alpha_constant = _mm_set1_ps(f32::from_bits(ALPHA_DEFAULT));
 
-        macro_rules! pack_loop {
-            ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
-                while $x + 4 <= $width {
+    macro_rules! pack_loop {
+        ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
+            while $x + 4 <= $width {
+                // SAFETY: Target feature sse2 is enabled.
+                // $x + 4 <= $width guarantees all reads and writes are within buffer bounds.
+                unsafe {
                     let vr = _mm_loadu_ps($row.c0.add($x).cast::<f32>());
                     let vg = _mm_loadu_ps($row.c1.add($x).cast::<f32>());
                     let vb = _mm_loadu_ps($row.c2.add($x).cast::<f32>());
@@ -97,22 +101,26 @@ unsafe fn pack_rgba_32bit_sse2<const ALPHA_DEFAULT: u32>(
                     _mm_storeu_ps(out_pixel.add(4).cast::<f32>(), out1);
                     _mm_storeu_ps(out_pixel.add(8).cast::<f32>(), out2);
                     _mm_storeu_ps(out_pixel.add(12).cast::<f32>(), out3);
-
-                    $x += 4;
                 }
-            };
+
+                $x += 4;
+            }
+        };
+    }
+
+    for y in 0..height {
+        // SAFETY: y < height, strides and pointers are valid for the frame.
+        let row = unsafe { compute_row_ptrs(r_ptr, g_ptr, b_ptr, a_ptr, dest_ptr, y, samples_per_row, dest_stride) };
+        let mut x = 0;
+
+        if let Some(alpha_row) = row.alpha {
+            pack_loop!(row, x, width, _mm_loadu_ps(alpha_row.add(x).cast::<f32>()));
+        } else {
+            pack_loop!(row, x, width, alpha_constant);
         }
 
-        for y in 0..height {
-            let row = compute_row_ptrs(r_ptr, g_ptr, b_ptr, a_ptr, dest_ptr, y, samples_per_row, dest_stride);
-            let mut x = 0;
-
-            if let Some(alpha_row) = row.alpha {
-                pack_loop!(row, x, width, _mm_loadu_ps(alpha_row.add(x).cast::<f32>()));
-            } else {
-                pack_loop!(row, x, width, alpha_constant);
-            }
-
+        // SAFETY: range x..width is within buffer bounds.
+        unsafe {
             pack_rgba_range(&row, x..width, ALPHA_DEFAULT);
         }
     }
@@ -131,12 +139,14 @@ unsafe fn pack_rgba_32bit_avx2<const ALPHA_DEFAULT: u32>(
     dest_ptr: *mut u32,
     dest_stride: usize,
 ) {
-    unsafe {
-        let alpha_constant = _mm256_set1_ps(f32::from_bits(ALPHA_DEFAULT));
+    let alpha_constant = _mm256_set1_ps(f32::from_bits(ALPHA_DEFAULT));
 
-        macro_rules! pack_loop {
-            ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
-                while $x + 8 <= $width {
+    macro_rules! pack_loop {
+        ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
+            while $x + 8 <= $width {
+                // SAFETY: Target feature avx2 is enabled.
+                // $x + 8 <= $width guarantees all reads and writes are within buffer bounds.
+                unsafe {
                     let vr = _mm256_loadu_ps($row.c0.add($x).cast::<f32>());
                     let vg = _mm256_loadu_ps($row.c1.add($x).cast::<f32>());
                     let vb = _mm256_loadu_ps($row.c2.add($x).cast::<f32>());
@@ -174,22 +184,26 @@ unsafe fn pack_rgba_32bit_avx2<const ALPHA_DEFAULT: u32>(
                     _mm256_storeu_ps(out_pixel.add(8), out1);
                     _mm256_storeu_ps(out_pixel.add(16), out2);
                     _mm256_storeu_ps(out_pixel.add(24), out3);
-
-                    $x += 8;
                 }
-            };
+
+                $x += 8;
+            }
+        };
+    }
+
+    for y in 0..height {
+        // SAFETY: y < height, strides and pointers are valid for the frame.
+        let row = unsafe { compute_row_ptrs(r_ptr, g_ptr, b_ptr, a_ptr, dest_ptr, y, samples_per_row, dest_stride) };
+        let mut x = 0;
+
+        if let Some(alpha_row) = row.alpha {
+            pack_loop!(row, x, width, _mm256_loadu_ps(alpha_row.add(x).cast::<f32>()));
+        } else {
+            pack_loop!(row, x, width, alpha_constant);
         }
 
-        for y in 0..height {
-            let row = compute_row_ptrs(r_ptr, g_ptr, b_ptr, a_ptr, dest_ptr, y, samples_per_row, dest_stride);
-            let mut x = 0;
-
-            if let Some(alpha_row) = row.alpha {
-                pack_loop!(row, x, width, _mm256_loadu_ps(alpha_row.add(x).cast::<f32>()));
-            } else {
-                pack_loop!(row, x, width, alpha_constant);
-            }
-
+        // SAFETY: range x..width is within buffer bounds.
+        unsafe {
             pack_rgba_range(&row, x..width, ALPHA_DEFAULT);
         }
     }
@@ -199,6 +213,8 @@ unsafe fn pack_rgba_32bit_avx2<const ALPHA_DEFAULT: u32>(
 #[target_feature(enable = "avx512f", enable = "avx512dq", enable = "avx512vl")]
 #[inline]
 unsafe fn store_rgba_32bit_avx512(out_pixel: *mut f32, row0: __m512, row1: __m512, row2: __m512, row3: __m512) {
+    // SAFETY: Target features avx512f/dq/vl are enabled.
+    // out_pixel is valid for writing 64 f32 elements.
     unsafe {
         let l0 = _mm512_castps512_ps256(row0);
         let h0 = _mm512_extractf32x8_ps::<1>(row0);
@@ -244,12 +260,14 @@ unsafe fn pack_rgba_32bit_avx512<const ALPHA_DEFAULT: u32>(
     dest_ptr: *mut u32,
     dest_stride: usize,
 ) {
-    unsafe {
-        let alpha_constant = _mm512_set1_ps(f32::from_bits(ALPHA_DEFAULT));
+    let alpha_constant = _mm512_set1_ps(f32::from_bits(ALPHA_DEFAULT));
 
-        macro_rules! pack_loop {
-            ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
-                while $x + 16 <= $width {
+    macro_rules! pack_loop {
+        ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
+            while $x + 16 <= $width {
+                // SAFETY: Target features avx512f/dq/vl are enabled.
+                // $x + 16 <= $width guarantees all reads and writes are within buffer bounds.
+                unsafe {
                     let vr = _mm512_loadu_ps($row.c0.add($x).cast::<f32>());
                     let vg = _mm512_loadu_ps($row.c1.add($x).cast::<f32>());
                     let vb = _mm512_loadu_ps($row.c2.add($x).cast::<f32>());
@@ -279,22 +297,26 @@ unsafe fn pack_rgba_32bit_avx512<const ALPHA_DEFAULT: u32>(
 
                     let out_pixel = $row.out.add($x * 4).cast::<f32>();
                     store_rgba_32bit_avx512(out_pixel, row0, row1, row2, row3);
-
-                    $x += 16;
                 }
-            };
+
+                $x += 16;
+            }
+        };
+    }
+
+    for y in 0..height {
+        // SAFETY: y < height, strides and pointers are valid for the frame.
+        let row = unsafe { compute_row_ptrs(r_ptr, g_ptr, b_ptr, a_ptr, dest_ptr, y, samples_per_row, dest_stride) };
+        let mut x = 0;
+
+        if let Some(alpha_row) = row.alpha {
+            pack_loop!(row, x, width, _mm512_loadu_ps(alpha_row.add(x).cast::<f32>()));
+        } else {
+            pack_loop!(row, x, width, alpha_constant);
         }
 
-        for y in 0..height {
-            let row = compute_row_ptrs(r_ptr, g_ptr, b_ptr, a_ptr, dest_ptr, y, samples_per_row, dest_stride);
-            let mut x = 0;
-
-            if let Some(alpha_row) = row.alpha {
-                pack_loop!(row, x, width, _mm512_loadu_ps(alpha_row.add(x).cast::<f32>()));
-            } else {
-                pack_loop!(row, x, width, alpha_constant);
-            }
-
+        // SAFETY: range x..width is within buffer bounds.
+        unsafe {
             pack_rgba_range(&row, x..width, ALPHA_DEFAULT);
         }
     }
@@ -312,12 +334,13 @@ unsafe fn pack_rgba_32bit_neon<const ALPHA_DEFAULT: u32>(
     dest_ptr: *mut u32,
     dest_stride: usize,
 ) {
-    unsafe {
-        let opaque_alpha = vdupq_n_u32(ALPHA_DEFAULT);
+    let opaque_alpha = vdupq_n_u32(ALPHA_DEFAULT);
 
-        macro_rules! pack_loop {
-            ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
-                while $x + 4 <= $width {
+    macro_rules! pack_loop {
+        ($row:ident, $x:ident, $width:ident, $alpha:expr) => {
+            while $x + 4 <= $width {
+                // SAFETY: $x + 4 <= $width guarantees all reads and writes are within bounds.
+                unsafe {
                     let vr = vld1q_u32($row.c0.add($x));
                     let vg = vld1q_u32($row.c1.add($x));
                     let vb = vld1q_u32($row.c2.add($x));
@@ -325,21 +348,25 @@ unsafe fn pack_rgba_32bit_neon<const ALPHA_DEFAULT: u32>(
 
                     let interleaved = uint32x4x4_t(vr, vg, vb, va);
                     vst4q_u32($row.out.add($x * 4), interleaved);
-                    $x += 4;
                 }
-            };
+                $x += 4;
+            }
+        };
+    }
+
+    for y in 0..height {
+        // SAFETY: y < height, strides and pointers are valid for the frame.
+        let row = unsafe { compute_row_ptrs(r_ptr, g_ptr, b_ptr, a_ptr, dest_ptr, y, samples_per_row, dest_stride) };
+        let mut x = 0;
+
+        if let Some(alpha_row) = row.alpha {
+            pack_loop!(row, x, width, vld1q_u32(alpha_row.add(x)));
+        } else {
+            pack_loop!(row, x, width, opaque_alpha);
         }
 
-        for y in 0..height {
-            let row = compute_row_ptrs(r_ptr, g_ptr, b_ptr, a_ptr, dest_ptr, y, samples_per_row, dest_stride);
-            let mut x = 0;
-
-            if let Some(alpha_row) = row.alpha {
-                pack_loop!(row, x, width, vld1q_u32(alpha_row.add(x)));
-            } else {
-                pack_loop!(row, x, width, opaque_alpha);
-            }
-
+        // SAFETY: range x..width is within buffer bounds.
+        unsafe {
             pack_rgba_range(&row, x..width, ALPHA_DEFAULT);
         }
     }
