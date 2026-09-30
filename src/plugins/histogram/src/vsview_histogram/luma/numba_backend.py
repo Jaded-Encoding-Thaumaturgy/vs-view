@@ -45,7 +45,7 @@ def process_luma_numba(
     modulo_limit = max_val + 1
 
     if use_sawtooth:
-        for y in numba.prange(h):  # type: ignore[attr-defined,no-untyped-call]
+        for y in numba.prange(h):
             for x in range(w):
                 if is_float:
                     p_val = round((src[y, x] * scale + offset) * max_val)
@@ -57,7 +57,7 @@ def process_luma_numba(
                 val = p_shifted & max_val
                 dst[y, x] = val >> shift_out
     else:
-        for y in numba.prange(h):  # type: ignore[attr-defined,no-untyped-call]
+        for y in numba.prange(h):
             for x in range(w):
                 if is_float:
                     p_val = round((src[y, x] * scale + offset) * max_val)
