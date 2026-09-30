@@ -126,8 +126,31 @@ unsafe fn pack_rgb30_10bit_sse2(
     let alpha_mask_3 = _mm_set1_epi16(3);
 
     macro_rules! pack_loop {
-        ($row:ident, $x:ident, $width:ident, $alpha_opt:expr) => {
-            let alpha_opt: Option<*const u16> = $alpha_opt;
+        (@step $row:ident, $x:ident, $r_val:expr, $g_val:expr, $b_val:expr, $a_mask_lo:expr, $a_mask_hi:expr) => {
+            let red_word_lo = _mm_unpacklo_epi16($r_val, zero_reg);
+            let red_word_hi = _mm_unpackhi_epi16($r_val, zero_reg);
+            let green_word_lo = _mm_unpacklo_epi16($g_val, zero_reg);
+            let green_word_hi = _mm_unpackhi_epi16($g_val, zero_reg);
+            let blue_word_lo = _mm_unpacklo_epi16($b_val, zero_reg);
+            let blue_word_hi = _mm_unpackhi_epi16($b_val, zero_reg);
+
+            let red_shifted_lo = _mm_slli_epi32(red_word_lo, 20);
+            let green_shifted_lo = _mm_slli_epi32(green_word_lo, 10);
+            let rg_combined_lo = _mm_or_si128(red_shifted_lo, green_shifted_lo);
+            let rgb_channels_lo = _mm_or_si128(rg_combined_lo, blue_word_lo);
+            let final_pixel_lo = _mm_or_si128(rgb_channels_lo, $a_mask_lo);
+
+            let red_shifted_hi = _mm_slli_epi32(red_word_hi, 20);
+            let green_shifted_hi = _mm_slli_epi32(green_word_hi, 10);
+            let rg_combined_hi = _mm_or_si128(red_shifted_hi, green_shifted_hi);
+            let rgb_channels_hi = _mm_or_si128(rg_combined_hi, blue_word_hi);
+            let final_pixel_hi = _mm_or_si128(rgb_channels_hi, $a_mask_hi);
+
+            let out_pixel = $row.out.add($x);
+            _mm_storeu_si128(out_pixel.cast::<__m128i>(), final_pixel_lo);
+            _mm_storeu_si128(out_pixel.add(4).cast::<__m128i>(), final_pixel_hi);
+        };
+        ($row:ident, $x:ident, $width:ident, alpha: $alpha_row:ident) => {
             while $x + 8 <= $width {
                 // SAFETY: Target feature sse2 is enabled.
                 // $x + 8 <= $width guarantees all reads and writes are within buffer bounds.
@@ -136,49 +159,34 @@ unsafe fn pack_rgb30_10bit_sse2(
                     let green_raw_16 = _mm_loadu_si128($row.c1.add($x).cast::<__m128i>());
                     let blue_raw_16 = _mm_loadu_si128($row.c2.add($x).cast::<__m128i>());
 
-                    let (r_val, g_val, b_val, a_mask_lo, a_mask_hi) = if let Some(alpha_row) = alpha_opt {
-                        let alpha_raw_16 = _mm_loadu_si128(alpha_row.add($x).cast::<__m128i>());
-                        let a_bits = _mm_and_si128(_mm_srli_epi16(alpha_raw_16, 8), alpha_mask_3);
+                    let alpha_raw_16 = _mm_loadu_si128($alpha_row.add($x).cast::<__m128i>());
+                    let a_bits = _mm_and_si128(_mm_srli_epi16(alpha_raw_16, 8), alpha_mask_3);
 
-                        let r = _mm_mulhi_epu16(_mm_mullo_epi16(red_raw_16, a_bits), div3_mul);
-                        let g = _mm_mulhi_epu16(_mm_mullo_epi16(green_raw_16, a_bits), div3_mul);
-                        let b = _mm_mulhi_epu16(_mm_mullo_epi16(blue_raw_16, a_bits), div3_mul);
+                    let r = _mm_mulhi_epu16(_mm_mullo_epi16(red_raw_16, a_bits), div3_mul);
+                    let g = _mm_mulhi_epu16(_mm_mullo_epi16(green_raw_16, a_bits), div3_mul);
+                    let b = _mm_mulhi_epu16(_mm_mullo_epi16(blue_raw_16, a_bits), div3_mul);
 
-                        let a_word_lo = _mm_unpacklo_epi16(a_bits, zero_reg);
-                        let a_word_hi = _mm_unpackhi_epi16(a_bits, zero_reg);
-                        (
-                            r,
-                            g,
-                            b,
-                            _mm_slli_epi32(a_word_lo, 30),
-                            _mm_slli_epi32(a_word_hi, 30),
-                        )
-                    } else {
-                        (red_raw_16, green_raw_16, blue_raw_16, alpha_mask, alpha_mask)
-                    };
+                    let a_word_lo = _mm_unpacklo_epi16(a_bits, zero_reg);
+                    let a_word_hi = _mm_unpackhi_epi16(a_bits, zero_reg);
+                    let a_mask_lo = _mm_slli_epi32(a_word_lo, 30);
+                    let a_mask_hi = _mm_slli_epi32(a_word_hi, 30);
 
-                    let red_word_lo = _mm_unpacklo_epi16(r_val, zero_reg);
-                    let red_word_hi = _mm_unpackhi_epi16(r_val, zero_reg);
-                    let green_word_lo = _mm_unpacklo_epi16(g_val, zero_reg);
-                    let green_word_hi = _mm_unpackhi_epi16(g_val, zero_reg);
-                    let blue_word_lo = _mm_unpacklo_epi16(b_val, zero_reg);
-                    let blue_word_hi = _mm_unpackhi_epi16(b_val, zero_reg);
+                    pack_loop!(@step $row, $x, r, g, b, a_mask_lo, a_mask_hi);
+                }
 
-                    let red_shifted_lo = _mm_slli_epi32(red_word_lo, 20);
-                    let green_shifted_lo = _mm_slli_epi32(green_word_lo, 10);
-                    let rg_combined_lo = _mm_or_si128(red_shifted_lo, green_shifted_lo);
-                    let rgb_channels_lo = _mm_or_si128(rg_combined_lo, blue_word_lo);
-                    let final_pixel_lo = _mm_or_si128(rgb_channels_lo, a_mask_lo);
+                $x += 8;
+            }
+        };
+        ($row:ident, $x:ident, $width:ident, opaque) => {
+            while $x + 8 <= $width {
+                // SAFETY: Target feature sse2 is enabled.
+                // $x + 8 <= $width guarantees all reads and writes are within buffer bounds.
+                unsafe {
+                    let red_raw_16 = _mm_loadu_si128($row.c0.add($x).cast::<__m128i>());
+                    let green_raw_16 = _mm_loadu_si128($row.c1.add($x).cast::<__m128i>());
+                    let blue_raw_16 = _mm_loadu_si128($row.c2.add($x).cast::<__m128i>());
 
-                    let red_shifted_hi = _mm_slli_epi32(red_word_hi, 20);
-                    let green_shifted_hi = _mm_slli_epi32(green_word_hi, 10);
-                    let rg_combined_hi = _mm_or_si128(red_shifted_hi, green_shifted_hi);
-                    let rgb_channels_hi = _mm_or_si128(rg_combined_hi, blue_word_hi);
-                    let final_pixel_hi = _mm_or_si128(rgb_channels_hi, a_mask_hi);
-
-                    let out_pixel = $row.out.add($x);
-                    _mm_storeu_si128(out_pixel.cast::<__m128i>(), final_pixel_lo);
-                    _mm_storeu_si128(out_pixel.add(4).cast::<__m128i>(), final_pixel_hi);
+                    pack_loop!(@step $row, $x, red_raw_16, green_raw_16, blue_raw_16, alpha_mask, alpha_mask);
                 }
 
                 $x += 8;
@@ -192,9 +200,9 @@ unsafe fn pack_rgb30_10bit_sse2(
         let mut x = 0;
 
         if let Some(alpha_row) = row.alpha {
-            pack_loop!(row, x, width, Some(alpha_row));
+            pack_loop!(row, x, width, alpha: alpha_row);
         } else {
-            pack_loop!(row, x, width, None);
+            pack_loop!(row, x, width, opaque);
         }
 
         // SAFETY: range x..width is within buffer bounds.
@@ -222,8 +230,30 @@ unsafe fn pack_rgb30_10bit_avx2(
     let alpha_mask_3 = _mm256_set1_epi16(3);
 
     macro_rules! pack_loop {
-        ($row:ident, $x:ident, $width:ident, $alpha_opt:expr) => {
-            let alpha_opt: Option<*const u16> = $alpha_opt;
+        (@step $row:ident, $x:ident, $r_val:expr, $g_val:expr, $b_val:expr, $a_shift_0:expr, $a_shift_1:expr) => {
+            let r_wide_0 = _mm256_cvtepu16_epi32(_mm256_castsi256_si128($r_val));
+            let r_wide_1 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256::<1>($r_val));
+            let g_wide_0 = _mm256_cvtepu16_epi32(_mm256_castsi256_si128($g_val));
+            let g_wide_1 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256::<1>($g_val));
+            let b_wide_0 = _mm256_cvtepu16_epi32(_mm256_castsi256_si128($b_val));
+            let b_wide_1 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256::<1>($b_val));
+
+            let r_shift_0 = _mm256_slli_epi32(r_wide_0, 20);
+            let g_shift_0 = _mm256_slli_epi32(g_wide_0, 10);
+            let red_green_0 = _mm256_or_si256(r_shift_0, g_shift_0);
+            let rgb_0 = _mm256_or_si256(red_green_0, b_wide_0);
+            let final_pixel_0 = _mm256_or_si256(rgb_0, $a_shift_0);
+
+            let r_shift_1 = _mm256_slli_epi32(r_wide_1, 20);
+            let g_shift_1 = _mm256_slli_epi32(g_wide_1, 10);
+            let red_green_1 = _mm256_or_si256(r_shift_1, g_shift_1);
+            let rgb_1 = _mm256_or_si256(red_green_1, b_wide_1);
+            let final_pixel_1 = _mm256_or_si256(rgb_1, $a_shift_1);
+
+            _mm256_storeu_si256($row.out.add($x).cast::<__m256i>(), final_pixel_0);
+            _mm256_storeu_si256($row.out.add($x + 8).cast::<__m256i>(), final_pixel_1);
+        };
+        ($row:ident, $x:ident, $width:ident, alpha: $alpha_row:ident) => {
             while $x + 16 <= $width {
                 // SAFETY: Target feature avx2 is enabled.
                 // $x + 16 <= $width guarantees all reads and writes are within buffer bounds.
@@ -232,42 +262,34 @@ unsafe fn pack_rgb30_10bit_avx2(
                     let green_raw = _mm256_loadu_si256($row.c1.add($x).cast::<__m256i>());
                     let blue_raw = _mm256_loadu_si256($row.c2.add($x).cast::<__m256i>());
 
-                    let (r_val, g_val, b_val, a_shift_0, a_shift_1) = if let Some(a_row) = alpha_opt {
-                        let alpha_raw = _mm256_loadu_si256(a_row.add($x).cast::<__m256i>());
-                        let a_bits = _mm256_and_si256(_mm256_srli_epi16(alpha_raw, 8), alpha_mask_3);
+                    let alpha_raw = _mm256_loadu_si256($alpha_row.add($x).cast::<__m256i>());
+                    let a_bits = _mm256_and_si256(_mm256_srli_epi16(alpha_raw, 8), alpha_mask_3);
 
-                        let r = _mm256_mulhi_epu16(_mm256_mullo_epi16(red_raw, a_bits), div3_mul);
-                        let g = _mm256_mulhi_epu16(_mm256_mullo_epi16(green_raw, a_bits), div3_mul);
-                        let b = _mm256_mulhi_epu16(_mm256_mullo_epi16(blue_raw, a_bits), div3_mul);
+                    let r = _mm256_mulhi_epu16(_mm256_mullo_epi16(red_raw, a_bits), div3_mul);
+                    let g = _mm256_mulhi_epu16(_mm256_mullo_epi16(green_raw, a_bits), div3_mul);
+                    let b = _mm256_mulhi_epu16(_mm256_mullo_epi16(blue_raw, a_bits), div3_mul);
 
-                        let a0 = _mm256_cvtepu16_epi32(_mm256_castsi256_si128(a_bits));
-                        let a1 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256::<1>(a_bits));
-                        (r, g, b, _mm256_slli_epi32(a0, 30), _mm256_slli_epi32(a1, 30))
-                    } else {
-                        (red_raw, green_raw, blue_raw, alpha_mask, alpha_mask)
-                    };
+                    let a0 = _mm256_cvtepu16_epi32(_mm256_castsi256_si128(a_bits));
+                    let a1 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256::<1>(a_bits));
+                    let a_shift_0 = _mm256_slli_epi32(a0, 30);
+                    let a_shift_1 = _mm256_slli_epi32(a1, 30);
 
-                    let r_wide_0 = _mm256_cvtepu16_epi32(_mm256_castsi256_si128(r_val));
-                    let r_wide_1 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256::<1>(r_val));
-                    let g_wide_0 = _mm256_cvtepu16_epi32(_mm256_castsi256_si128(g_val));
-                    let g_wide_1 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256::<1>(g_val));
-                    let b_wide_0 = _mm256_cvtepu16_epi32(_mm256_castsi256_si128(b_val));
-                    let b_wide_1 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256::<1>(b_val));
+                    pack_loop!(@step $row, $x, r, g, b, a_shift_0, a_shift_1);
+                }
 
-                    let r_shift_0 = _mm256_slli_epi32(r_wide_0, 20);
-                    let g_shift_0 = _mm256_slli_epi32(g_wide_0, 10);
-                    let red_green_0 = _mm256_or_si256(r_shift_0, g_shift_0);
-                    let rgb_0 = _mm256_or_si256(red_green_0, b_wide_0);
-                    let final_pixel_0 = _mm256_or_si256(rgb_0, a_shift_0);
+                $x += 16;
+            }
+        };
+        ($row:ident, $x:ident, $width:ident, opaque) => {
+            while $x + 16 <= $width {
+                // SAFETY: Target feature avx2 is enabled.
+                // $x + 16 <= $width guarantees all reads and writes are within buffer bounds.
+                unsafe {
+                    let red_raw = _mm256_loadu_si256($row.c0.add($x).cast::<__m256i>());
+                    let green_raw = _mm256_loadu_si256($row.c1.add($x).cast::<__m256i>());
+                    let blue_raw = _mm256_loadu_si256($row.c2.add($x).cast::<__m256i>());
 
-                    let r_shift_1 = _mm256_slli_epi32(r_wide_1, 20);
-                    let g_shift_1 = _mm256_slli_epi32(g_wide_1, 10);
-                    let red_green_1 = _mm256_or_si256(r_shift_1, g_shift_1);
-                    let rgb_1 = _mm256_or_si256(red_green_1, b_wide_1);
-                    let final_pixel_1 = _mm256_or_si256(rgb_1, a_shift_1);
-
-                    _mm256_storeu_si256($row.out.add($x).cast::<__m256i>(), final_pixel_0);
-                    _mm256_storeu_si256($row.out.add($x + 8).cast::<__m256i>(), final_pixel_1);
+                    pack_loop!(@step $row, $x, red_raw, green_raw, blue_raw, alpha_mask, alpha_mask);
                 }
 
                 $x += 16;
@@ -281,9 +303,9 @@ unsafe fn pack_rgb30_10bit_avx2(
         let mut x = 0;
 
         if let Some(alpha_row) = row.alpha {
-            pack_loop!(row, x, width, Some(alpha_row));
+            pack_loop!(row, x, width, alpha: alpha_row);
         } else {
-            pack_loop!(row, x, width, None);
+            pack_loop!(row, x, width, opaque);
         }
 
         // SAFETY: range x..width is within buffer bounds.
@@ -293,7 +315,6 @@ unsafe fn pack_rgb30_10bit_avx2(
     }
 }
 
-#[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f", enable = "avx512bw", enable = "avx512vl")]
 unsafe fn pack_rgb30_10bit_avx512(
     r_ptr: *const u16,
@@ -311,8 +332,29 @@ unsafe fn pack_rgb30_10bit_avx512(
     let alpha_mask_3 = _mm256_set1_epi16(3);
 
     macro_rules! pack_loop {
-        ($row:ident, $x:ident, $width:ident, $alpha_opt:expr) => {
-            let alpha_opt: Option<*const u16> = $alpha_opt;
+        (@step $row:ident, $x:ident, $r0:expr, $g0:expr, $b0:expr, $r1:expr, $g1:expr, $b1:expr, $a_mask_0:expr, $a_mask_1:expr) => {
+            let r_wide_0 = _mm512_cvtepu16_epi32($r0);
+            let g_wide_0 = _mm512_cvtepu16_epi32($g0);
+            let b_wide_0 = _mm512_cvtepu16_epi32($b0);
+
+            let r_wide_1 = _mm512_cvtepu16_epi32($r1);
+            let g_wide_1 = _mm512_cvtepu16_epi32($g1);
+            let b_wide_1 = _mm512_cvtepu16_epi32($b1);
+
+            let r_shift_0 = _mm512_slli_epi32(r_wide_0, 20);
+            let g_shift_0 = _mm512_slli_epi32(g_wide_0, 10);
+            let rg_0 = _mm512_or_si512(r_shift_0, g_shift_0);
+            let pixel_0 = _mm512_ternarylogic_epi32::<0xFE>(rg_0, b_wide_0, $a_mask_0);
+
+            let r_shift_1 = _mm512_slli_epi32(r_wide_1, 20);
+            let g_shift_1 = _mm512_slli_epi32(g_wide_1, 10);
+            let rg_1 = _mm512_or_si512(r_shift_1, g_shift_1);
+            let pixel_1 = _mm512_ternarylogic_epi32::<0xFE>(rg_1, b_wide_1, $a_mask_1);
+
+            _mm512_storeu_si512($row.out.add($x).cast::<__m512i>(), pixel_0);
+            _mm512_storeu_si512($row.out.add($x + 16).cast::<__m512i>(), pixel_1);
+        };
+        ($row:ident, $x:ident, $width:ident, alpha: $alpha_row:ident) => {
             while $x + 32 <= $width {
                 // SAFETY: Target features avx512f/bw/vl are enabled.
                 // $x + 32 <= $width guarantees all reads and writes are within buffer bounds.
@@ -325,66 +367,55 @@ unsafe fn pack_rgb30_10bit_avx512(
                     let green_raw_1 = _mm256_loadu_si256($row.c1.add($x + 16).cast::<__m256i>());
                     let blue_raw_1 = _mm256_loadu_si256($row.c2.add($x + 16).cast::<__m256i>());
 
-                    let (r0, g0, b0, r1, g1, b1, a_mask_0, a_mask_1) = if let Some(alpha_row) = alpha_opt {
-                        let alpha_raw_0 = _mm256_loadu_si256(alpha_row.add($x).cast::<__m256i>());
-                        let alpha_raw_1 = _mm256_loadu_si256(alpha_row.add($x + 16).cast::<__m256i>());
+                    let alpha_raw_0 = _mm256_loadu_si256($alpha_row.add($x).cast::<__m256i>());
+                    let alpha_raw_1 = _mm256_loadu_si256($alpha_row.add($x + 16).cast::<__m256i>());
 
-                        let a_bits_0 = _mm256_and_si256(_mm256_srli_epi16(alpha_raw_0, 8), alpha_mask_3);
-                        let a_bits_1 = _mm256_and_si256(_mm256_srli_epi16(alpha_raw_1, 8), alpha_mask_3);
+                    let a_bits_0 = _mm256_and_si256(_mm256_srli_epi16(alpha_raw_0, 8), alpha_mask_3);
+                    let a_bits_1 = _mm256_and_si256(_mm256_srli_epi16(alpha_raw_1, 8), alpha_mask_3);
 
-                        let r_prem_0 = _mm256_mulhi_epu16(_mm256_mullo_epi16(red_raw_0, a_bits_0), div3_mul);
-                        let g_prem_0 = _mm256_mulhi_epu16(_mm256_mullo_epi16(green_raw_0, a_bits_0), div3_mul);
-                        let b_prem_0 = _mm256_mulhi_epu16(_mm256_mullo_epi16(blue_raw_0, a_bits_0), div3_mul);
+                    let r_prem_0 = _mm256_mulhi_epu16(_mm256_mullo_epi16(red_raw_0, a_bits_0), div3_mul);
+                    let g_prem_0 = _mm256_mulhi_epu16(_mm256_mullo_epi16(green_raw_0, a_bits_0), div3_mul);
+                    let b_prem_0 = _mm256_mulhi_epu16(_mm256_mullo_epi16(blue_raw_0, a_bits_0), div3_mul);
 
-                        let r_prem_1 = _mm256_mulhi_epu16(_mm256_mullo_epi16(red_raw_1, a_bits_1), div3_mul);
-                        let g_prem_1 = _mm256_mulhi_epu16(_mm256_mullo_epi16(green_raw_1, a_bits_1), div3_mul);
-                        let b_prem_1 = _mm256_mulhi_epu16(_mm256_mullo_epi16(blue_raw_1, a_bits_1), div3_mul);
+                    let r_prem_1 = _mm256_mulhi_epu16(_mm256_mullo_epi16(red_raw_1, a_bits_1), div3_mul);
+                    let g_prem_1 = _mm256_mulhi_epu16(_mm256_mullo_epi16(green_raw_1, a_bits_1), div3_mul);
+                    let b_prem_1 = _mm256_mulhi_epu16(_mm256_mullo_epi16(blue_raw_1, a_bits_1), div3_mul);
 
-                        let a0 = _mm512_cvtepu16_epi32(a_bits_0);
-                        let a1 = _mm512_cvtepu16_epi32(a_bits_1);
-                        (
-                            r_prem_0,
-                            g_prem_0,
-                            b_prem_0,
-                            r_prem_1,
-                            g_prem_1,
-                            b_prem_1,
-                            _mm512_slli_epi32(a0, 30),
-                            _mm512_slli_epi32(a1, 30),
-                        )
-                    } else {
-                        (
-                            red_raw_0,
-                            green_raw_0,
-                            blue_raw_0,
-                            red_raw_1,
-                            green_raw_1,
-                            blue_raw_1,
-                            alpha_mask,
-                            alpha_mask,
-                        )
-                    };
+                    let a0 = _mm512_cvtepu16_epi32(a_bits_0);
+                    let a1 = _mm512_cvtepu16_epi32(a_bits_1);
+                    let a_mask_0 = _mm512_slli_epi32(a0, 30);
+                    let a_mask_1 = _mm512_slli_epi32(a1, 30);
 
-                    let r_wide_0 = _mm512_cvtepu16_epi32(r0);
-                    let g_wide_0 = _mm512_cvtepu16_epi32(g0);
-                    let b_wide_0 = _mm512_cvtepu16_epi32(b0);
+                    pack_loop!(
+                        @step $row, $x,
+                        r_prem_0, g_prem_0, b_prem_0,
+                        r_prem_1, g_prem_1, b_prem_1,
+                        a_mask_0, a_mask_1
+                    );
+                }
 
-                    let r_wide_1 = _mm512_cvtepu16_epi32(r1);
-                    let g_wide_1 = _mm512_cvtepu16_epi32(g1);
-                    let b_wide_1 = _mm512_cvtepu16_epi32(b1);
+                $x += 32;
+            }
+        };
+        ($row:ident, $x:ident, $width:ident, opaque) => {
+            while $x + 32 <= $width {
+                // SAFETY: Target features avx512f/bw/vl are enabled.
+                // $x + 32 <= $width guarantees all reads and writes are within buffer bounds.
+                unsafe {
+                    let red_raw_0 = _mm256_loadu_si256($row.c0.add($x).cast::<__m256i>());
+                    let green_raw_0 = _mm256_loadu_si256($row.c1.add($x).cast::<__m256i>());
+                    let blue_raw_0 = _mm256_loadu_si256($row.c2.add($x).cast::<__m256i>());
 
-                    let r_shift_0 = _mm512_slli_epi32(r_wide_0, 20);
-                    let g_shift_0 = _mm512_slli_epi32(g_wide_0, 10);
-                    let rg_0 = _mm512_or_si512(r_shift_0, g_shift_0);
-                    let pixel_0 = _mm512_ternarylogic_epi32::<0xFE>(rg_0, b_wide_0, a_mask_0);
+                    let red_raw_1 = _mm256_loadu_si256($row.c0.add($x + 16).cast::<__m256i>());
+                    let green_raw_1 = _mm256_loadu_si256($row.c1.add($x + 16).cast::<__m256i>());
+                    let blue_raw_1 = _mm256_loadu_si256($row.c2.add($x + 16).cast::<__m256i>());
 
-                    let r_shift_1 = _mm512_slli_epi32(r_wide_1, 20);
-                    let g_shift_1 = _mm512_slli_epi32(g_wide_1, 10);
-                    let rg_1 = _mm512_or_si512(r_shift_1, g_shift_1);
-                    let pixel_1 = _mm512_ternarylogic_epi32::<0xFE>(rg_1, b_wide_1, a_mask_1);
-
-                    _mm512_storeu_si512($row.out.add($x).cast::<__m512i>(), pixel_0);
-                    _mm512_storeu_si512($row.out.add($x + 16).cast::<__m512i>(), pixel_1);
+                    pack_loop!(
+                        @step $row, $x,
+                        red_raw_0, green_raw_0, blue_raw_0,
+                        red_raw_1, green_raw_1, blue_raw_1,
+                        alpha_mask, alpha_mask
+                    );
                 }
 
                 $x += 32;
@@ -398,9 +429,9 @@ unsafe fn pack_rgb30_10bit_avx512(
         let mut x = 0;
 
         if let Some(alpha_row) = row.alpha {
-            pack_loop!(row, x, width, Some(alpha_row));
+            pack_loop!(row, x, width, alpha: alpha_row);
         } else {
-            pack_loop!(row, x, width, None);
+            pack_loop!(row, x, width, opaque);
         }
 
         // SAFETY: range x..width is within buffer bounds.
@@ -427,8 +458,23 @@ unsafe fn pack_rgb30_10bit_neon(
     let alpha_mask_3 = vdup_n_u16(3);
 
     macro_rules! pack_loop {
-        ($row:ident, $x:ident, $width:ident, $alpha_opt:expr) => {
-            let alpha_opt: Option<*const u16> = $alpha_opt;
+        (@step $row:ident, $x:ident, $r_wide_0:expr, $g_wide_0:expr, $b_wide_0:expr, $r_wide_1:expr, $g_wide_1:expr, $b_wide_1:expr, $a_shift_0:expr, $a_shift_1:expr) => {
+            let r_shift_0 = vshlq_n_u32($r_wide_0, 20);
+            let g_shift_0 = vshlq_n_u32($g_wide_0, 10);
+            let red_green_0 = vorrq_u32(r_shift_0, g_shift_0);
+            let rgb_0 = vorrq_u32(red_green_0, $b_wide_0);
+            let final_pixel_0 = vorrq_u32(rgb_0, $a_shift_0);
+
+            let r_shift_1 = vshlq_n_u32($r_wide_1, 20);
+            let g_shift_1 = vshlq_n_u32($g_wide_1, 10);
+            let red_green_1 = vorrq_u32(r_shift_1, g_shift_1);
+            let rgb_1 = vorrq_u32(red_green_1, $b_wide_1);
+            let final_pixel_1 = vorrq_u32(rgb_1, $a_shift_1);
+
+            vst1q_u32($row.out.add($x), final_pixel_0);
+            vst1q_u32($row.out.add($x + 4), final_pixel_1);
+        };
+        ($row:ident, $x:ident, $width:ident, alpha: $alpha_row:ident) => {
             while $x + 8 <= $width {
                 // SAFETY: $x + 8 <= $width guarantees all reads and writes are within bounds.
                 unsafe {
@@ -440,60 +486,57 @@ unsafe fn pack_rgb30_10bit_neon(
                     let green_half_1 = vld1_u16($row.c1.add($x + 4));
                     let blue_half_1 = vld1_u16($row.c2.add($x + 4));
 
-                    let (r_wide_0, g_wide_0, b_wide_0, r_wide_1, g_wide_1, b_wide_1, a_shift_0, a_shift_1) =
-                        if let Some(alpha_row) = alpha_opt {
-                            let alpha_half_0 = vld1_u16(alpha_row.add($x));
-                            let alpha_half_1 = vld1_u16(alpha_row.add($x + 4));
+                    let alpha_half_0 = vld1_u16($alpha_row.add($x));
+                    let alpha_half_1 = vld1_u16($alpha_row.add($x + 4));
 
-                            let a_bits_0 = vand_u16(vshr_n_u16(alpha_half_0, 8), alpha_mask_3);
-                            let a_bits_1 = vand_u16(vshr_n_u16(alpha_half_1, 8), alpha_mask_3);
+                    let a_bits_0 = vand_u16(vshr_n_u16(alpha_half_0, 8), alpha_mask_3);
+                    let a_bits_1 = vand_u16(vshr_n_u16(alpha_half_1, 8), alpha_mask_3);
 
-                            let r_prod_0 = vmul_u16(red_half_0, a_bits_0);
-                            let g_prod_0 = vmul_u16(green_half_0, a_bits_0);
-                            let b_prod_0 = vmul_u16(blue_half_0, a_bits_0);
+                    let r_prod_0 = vmul_u16(red_half_0, a_bits_0);
+                    let g_prod_0 = vmul_u16(green_half_0, a_bits_0);
+                    let b_prod_0 = vmul_u16(blue_half_0, a_bits_0);
 
-                            let r_prod_1 = vmul_u16(red_half_1, a_bits_1);
-                            let g_prod_1 = vmul_u16(green_half_1, a_bits_1);
-                            let b_prod_1 = vmul_u16(blue_half_1, a_bits_1);
+                    let r_prod_1 = vmul_u16(red_half_1, a_bits_1);
+                    let g_prod_1 = vmul_u16(green_half_1, a_bits_1);
+                    let b_prod_1 = vmul_u16(blue_half_1, a_bits_1);
 
-                            let r0 = vshrq_n_u32(vmull_u16(r_prod_0, div3_recip), 16);
-                            let g0 = vshrq_n_u32(vmull_u16(g_prod_0, div3_recip), 16);
-                            let b0 = vshrq_n_u32(vmull_u16(b_prod_0, div3_recip), 16);
-                            let a0 = vshlq_n_u32(vmovl_u16(a_bits_0), 30);
+                    let r0 = vshrq_n_u32(vmull_u16(r_prod_0, div3_recip), 16);
+                    let g0 = vshrq_n_u32(vmull_u16(g_prod_0, div3_recip), 16);
+                    let b0 = vshrq_n_u32(vmull_u16(b_prod_0, div3_recip), 16);
+                    let a0 = vshlq_n_u32(vmovl_u16(a_bits_0), 30);
 
-                            let r1 = vshrq_n_u32(vmull_u16(r_prod_1, div3_recip), 16);
-                            let g1 = vshrq_n_u32(vmull_u16(g_prod_1, div3_recip), 16);
-                            let b1 = vshrq_n_u32(vmull_u16(b_prod_1, div3_recip), 16);
-                            let a1 = vshlq_n_u32(vmovl_u16(a_bits_1), 30);
+                    let r1 = vshrq_n_u32(vmull_u16(r_prod_1, div3_recip), 16);
+                    let g1 = vshrq_n_u32(vmull_u16(g_prod_1, div3_recip), 16);
+                    let b1 = vshrq_n_u32(vmull_u16(b_prod_1, div3_recip), 16);
+                    let a1 = vshlq_n_u32(vmovl_u16(a_bits_1), 30);
 
-                            (r0, g0, b0, r1, g1, b1, a0, a1)
-                        } else {
-                            (
-                                vmovl_u16(red_half_0),
-                                vmovl_u16(green_half_0),
-                                vmovl_u16(blue_half_0),
-                                vmovl_u16(red_half_1),
-                                vmovl_u16(green_half_1),
-                                vmovl_u16(blue_half_1),
-                                alpha_mask,
-                                alpha_mask,
-                            )
-                        };
+                    pack_loop!(@step $row, $x, r0, g0, b0, r1, g1, b1, a0, a1);
+                }
 
-                    let r_shift_0 = vshlq_n_u32(r_wide_0, 20);
-                    let g_shift_0 = vshlq_n_u32(g_wide_0, 10);
-                    let red_green_0 = vorrq_u32(r_shift_0, g_shift_0);
-                    let rgb_0 = vorrq_u32(red_green_0, b_wide_0);
-                    let final_pixel_0 = vorrq_u32(rgb_0, a_shift_0);
+                $x += 8;
+            }
+        };
+        ($row:ident, $x:ident, $width:ident, opaque) => {
+            while $x + 8 <= $width {
+                // SAFETY: $x + 8 <= $width guarantees all reads and writes are within bounds.
+                unsafe {
+                    let red_half_0 = vld1_u16($row.c0.add($x));
+                    let green_half_0 = vld1_u16($row.c1.add($x));
+                    let blue_half_0 = vld1_u16($row.c2.add($x));
 
-                    let r_shift_1 = vshlq_n_u32(r_wide_1, 20);
-                    let g_shift_1 = vshlq_n_u32(g_wide_1, 10);
-                    let red_green_1 = vorrq_u32(r_shift_1, g_shift_1);
-                    let rgb_1 = vorrq_u32(red_green_1, b_wide_1);
-                    let final_pixel_1 = vorrq_u32(rgb_1, a_shift_1);
+                    let red_half_1 = vld1_u16($row.c0.add($x + 4));
+                    let green_half_1 = vld1_u16($row.c1.add($x + 4));
+                    let blue_half_1 = vld1_u16($row.c2.add($x + 4));
 
-                    vst1q_u32($row.out.add($x), final_pixel_0);
-                    vst1q_u32($row.out.add($x + 4), final_pixel_1);
+                    let r0 = vmovl_u16(red_half_0);
+                    let g0 = vmovl_u16(green_half_0);
+                    let b0 = vmovl_u16(blue_half_0);
+
+                    let r1 = vmovl_u16(red_half_1);
+                    let g1 = vmovl_u16(green_half_1);
+                    let b1 = vmovl_u16(blue_half_1);
+
+                    pack_loop!(@step $row, $x, r0, g0, b0, r1, g1, b1, alpha_mask, alpha_mask);
                 }
 
                 $x += 8;
@@ -507,9 +550,9 @@ unsafe fn pack_rgb30_10bit_neon(
         let mut x = 0;
 
         if let Some(alpha_row) = row.alpha {
-            pack_loop!(row, x, width, Some(alpha_row));
+            pack_loop!(row, x, width, alpha: alpha_row);
         } else {
-            pack_loop!(row, x, width, None);
+            pack_loop!(row, x, width, opaque);
         }
 
         // SAFETY: range x..width is within buffer bounds.
