@@ -43,15 +43,14 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "cyclopts>=5.1.0",
     "vapoursynth>=78",
     "vapoursynth-bestsource>=17.0",
     "vsjetengine>=1.7.0",
     "vspackrgb>=1.4.0",
-    "vsview-cli~=1.2.0",
     "pyside6>=6.11.0",
     "jetpytools>=3.1.1",
     "pydantic>=2.0.0",
-    "python-dotenv>=1.2.2",
     "platformdirs>=4.9.2",
     "rich>=15.0.0",
     "pathvalidate>=3.3.1",
@@ -61,7 +60,7 @@ dependencies = [
 ]
 
 [project.scripts]
-vsview = "vsview.cli:main"
+vsview = "vsview.cli:app.meta"
 
 [project.optional-dependencies]
 recommended = [
@@ -82,7 +81,7 @@ full = [
 dev = [
     "hatchling>=1.29.0",
     "vsstubs>=1.5.0",
-    "mypy>=2.3.0, <2.4.0",
+    "mypy>=2.4.0, <2.5.0",
     "ruff>=0.16.0, <0.17.0",
     "objgraph>=3.6.2",
     "graphviz>=0.21",
@@ -165,12 +164,7 @@ url = "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple"
 explicit = true
 
 [tool.uv.workspace]
-members = [
-    "src/vspackrgb",
-    "src/vsview-cli",
-    "src/plugins/*",
-    "src/workspaces/*",
-]
+members = ["src/vspackrgb", "src/plugins/*", "src/workspaces/*"]
 exclude = ["src/plugins/audio-convert"]
 
 [tool.uv.sources]
@@ -178,7 +172,6 @@ vapoursynth-ffms2 = { index = "vs-wheels" }
 # Core
 vspackrgb = { workspace = true }
 vsview-pyapp = { path = "src/pyapp", editable = true }
-vsview-cli = { workspace = true }
 # Toolpanels / Tooldocks
 vsview-comp = { workspace = true }
 vsview-fftspectrum = { workspace = true }

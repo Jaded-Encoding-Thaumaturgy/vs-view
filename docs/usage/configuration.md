@@ -18,11 +18,12 @@ VSView can be configured through **command-line arguments** and **environment va
 ## Usage
 
 ```bash
-vsview [OPTIONS] [FILES]... [COMMAND]
+vsview [OPTIONS] [FILE]...
+vsview COMMAND [OPTIONS] [ARGS...]
 ```
 
-`[FILES]...`
-:   One or more file paths to open. VSView detects the type automatically:
+`[FILE]...`
+:   Path to input file(s); video(s), image(s) or script(s). VSView detects the type automatically:
 
     - `.py` / `.vpy` files open as VapourSynth scripts
     - Everything else opens as a video or image
@@ -81,8 +82,11 @@ vsview [OPTIONS] [FILES]... [COMMAND]
 #### `--verbose` / `-v`
 :   Enable verbose output. Repeat to increase verbosity (`-vv`, `-vvv`).
 
-#### `--version` / `-V`
-:   Show the installed vsview version and exit.
+#### `--help` / `-h`
+:   Print help.
+
+#### `--version`
+:   Show the installed vsview version and exit (or use the `vsview version` command).
 
 ---
 
@@ -157,27 +161,44 @@ These options control application log verbosity.
 
     **Env:** `VSVIEW_FILE_LOG`
 
-#### `--vapoursynth-log-level` `LEVEL`
+#### `--vapoursynth-log-level` / `-vs-ll` `LEVEL`
 :   Set the log level for the VapourSynth core environment.
-    Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
+    Available levels: `critical`, `fatal`, `error`, `warn`, `warning`, `info`, `debug`, `notset`.
 
     Default to `INFO` or verbosity level if `--verbose` is specified.
 
-#### `--vsengine-log-level` `LEVEL`
-:   Set the log level for the VSEngine subsystem. Default to `INFO`. Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
+    **Env:** `VSVIEW_VS_LOG_LEVEL`
 
-#### `--qt-log-level` `LEVEL`
-:   Set the log level for Qt / PySide6 system messages. Available levels: `critical`, `error`, `warning`, `info`, `debug`, `notset`.
+#### `--vsengine-log-level` / `-vse-ll` `LEVEL`
+:   Set the log level for the VSEngine subsystem.
+    Available levels: `critical`, `fatal`, `error`, `warn`, `warning`, `info`, `debug`, `notset`.
+
+    Default to `INFO`.
+
+    **Env:** `VSVIEW_VSENGINE_LOG_LEVEL`
+
+#### `--qt-log-level` / `-qt-ll` `LEVEL`
+:   Set the log level for Qt / PySide6 system messages.
+    Available levels: `critical`, `fatal`, `error`, `warn`, `warning`, `info`, `debug`, `notset`.
 
     Default to `INFO` or verbosity level if `--verbose` is specified.
+
+    **Env:** `VSVIEW_QT_LOG_LEVEL`
 
 ---
 
 ## Commands
 
+### `vsview help`
+
+Print help message or the help of the given subcommand(s).
+
 ### `vsview settings`
 
 Manage application settings via the CLI.
+
+#### `vsview settings help`
+:   Print this message or the help of the given settings subcommand(s).
 
 #### `vsview settings path`
 :   Print to stdout the resolved `global_settings.json` path and exit.
@@ -199,7 +220,7 @@ Manage application settings via the CLI.
 
 ### `vsview version`
 
-An alternative to the `--version` flag.
+Show the installed vsview version and exit (alternative to `--version`).
 
 ---
 

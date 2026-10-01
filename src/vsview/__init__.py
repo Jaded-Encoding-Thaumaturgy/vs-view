@@ -23,9 +23,6 @@ if TYPE_CHECKING:
         set_output,
     )
 else:
-    # The main module is the entry point, so it has to be loaded first before anything else
-    # to avoid any circular import
-    import vsview.main
 
     def __getattr__(name: str) -> Any:
         from importlib import import_module

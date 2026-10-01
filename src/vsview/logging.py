@@ -27,12 +27,12 @@ from typing import TypeGuard, override
 
 from jetpytools import fallback
 from platformdirs import user_log_path
-from PySide6.QtCore import QMessageLogContext, QtMsgType, qInstallMessageHandler
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.text import Text
+from rich.theme import Theme
 
-console = Console(stderr=True)
+console = Console(stderr=True, theme=Theme({"cyclopts.name": "bold cyan", "cyclopts.usage": "bold green"}))
 main_thread_name = main_thread().name
 
 IS_GUI_MODE = False
@@ -85,30 +85,6 @@ def _format_lambda(record: LogRecord) -> LogRecord:
     if record.args and record.name.startswith("vsview"):
         record.args = tuple(arg() if _is_lambda(arg) else arg for arg in record.args)
     return record
-
-
-def _qt_message_handler(mode: QtMsgType, context: QMessageLogContext, message: str) -> None:
-    level_map = {
-        QtMsgType.QtDebugMsg: DEBUG,
-        QtMsgType.QtInfoMsg: INFO,
-        QtMsgType.QtWarningMsg: WARNING,
-        QtMsgType.QtCriticalMsg: ERROR,
-        QtMsgType.QtFatalMsg: CRITICAL,
-        QtMsgType.QtSystemMsg: CRITICAL,
-    }
-
-    category = context.category or "default"
-
-    if not category.startswith("qt."):
-        category = f"qt.{category}"
-
-    level = level_map[mode]
-
-    # Demote spammy FFmpeg version info to DEBUG
-    if category == "qt.multimedia.ffmpeg" and level == INFO and "FFmpeg version" in message:
-        level = DEBUG
-
-    getLogger(category).log(level, message, stacklevel=2)
 
 
 class EffectiveLevelFilter(Filter):
@@ -177,7 +153,31 @@ def setup_logging(
     is_gui_mode: bool = False,
     capture_warnings: bool = True,
 ) -> None:
-    qInstallMessageHandler(_qt_message_handler)
+    from PySide6.QtCore import QMessageLogContext, QtMsgType, qInstallMessageHandler
+
+    @qInstallMessageHandler
+    def qthandler(mode: QtMsgType, context: QMessageLogContext, message: str) -> None:
+        level_map = {
+            QtMsgType.QtDebugMsg: DEBUG,
+            QtMsgType.QtInfoMsg: INFO,
+            QtMsgType.QtWarningMsg: WARNING,
+            QtMsgType.QtCriticalMsg: ERROR,
+            QtMsgType.QtFatalMsg: CRITICAL,
+            QtMsgType.QtSystemMsg: CRITICAL,
+        }
+
+        category = context.category or "default"
+
+        if not category.startswith("qt."):
+            category = f"qt.{category}"
+
+        level = level_map[mode]
+
+        # Demote spammy FFmpeg version info to DEBUG
+        if category == "qt.multimedia.ffmpeg" and level == INFO and "FFmpeg version" in message:
+            level = DEBUG
+
+        getLogger(category).log(level, message, stacklevel=2)
 
     console_level = fallback(level, INFO)
     custom_handler.setLevel(console_level)

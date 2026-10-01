@@ -11,7 +11,7 @@ from pathlib import Path
 
 microseconds = int
 
-# uv run python -X importtime -c "from vsview.cli import vsview_cli; vsview_cli()" 2> imports.txt && uv run python -m importtime imports.txt > imports.html  # noqa: E501
+# uv run python -X importtime -c "from vsview.cli import app" 2> imports.txt && uv run python scripts/importtime.py imports.txt > imports.html  # noqa: E501
 
 
 @dataclass
