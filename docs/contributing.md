@@ -9,11 +9,7 @@ icon: lucide/git-pull-request
 ### Requirements
 
 - **[uv](https://github.com/astral-sh/uv)** is the default tool used for development in this repository.
-- For building [`vspackrgb`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/vspackrgb) you will need a working C compiler/toolchain for your platform:
-    - Windows: Visual Studio Build Tools (Desktop development with C++)
-    - Linux: GCC/Clang and Python headers
-    - macOS: Xcode Command Line Tools
-- For building [`vsview-cli`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/vsview-cli), you will need [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html).
+- For building [`vspackrgb`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/vspackrgb) and [`vsview-cli`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/vsview-cli), you will need [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html).
 
 ---
 
