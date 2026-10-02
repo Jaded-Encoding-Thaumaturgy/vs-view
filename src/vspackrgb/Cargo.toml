@@ -3,10 +3,11 @@ name = "vspackrgb-rs"
 edition = "2024"
 description = "Internal Rust module for vspackrgb"
 publish = false
+build = "src/rust/build.rs"
 
 [lib]
 name = "rust"
-path = "src/lib.rs"
+path = "src/rust/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [build-dependencies]

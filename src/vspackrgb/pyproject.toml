@@ -48,8 +48,8 @@ dev = ["pytest>=9.0.0, <10.0.0", "rich>=15.0.0", "vsjetengine>=1.8.0"]
 bench = ["vapoursynth-akarin>=1.5.0", "vapoursynth-vszip>=22.1.0"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/vspackrgb"]
-exclude = ["rust", "target"]
+packages = ["src/python/vspackrgb"]
+exclude = ["src/rust", "target"]
 
 [tool.hatch.build.hooks.hatch-rs]
 verbose = true
@@ -60,8 +60,8 @@ target-dir = "target"
 
 [[tool.hatch.build.hooks.hatch-rs.artifacts]]
 name = "rust"
-manifest = "rust/Cargo.toml"
-destination = "src/vspackrgb/{python_extension_name}"
+manifest = "Cargo.toml"
+destination = "src/python/vspackrgb/{python_extension_name}"
 editable-debug = false
 
 [tool.hatch.version]
@@ -86,7 +86,7 @@ skip = "*-win32 *-manylinux_i686"
 test-groups = ["dev"]
 test-extras = ["numpy", "numba"]
 test-command = "pytest {package}/tests"
-before-build = ["git checkout uv.lock && git clean -fdx src/vspackrgb"]
+before-build = ["git checkout uv.lock && git clean -fdx src/python"]
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
