@@ -40,6 +40,9 @@ vsview_histogram = "vsview_histogram"
 "Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
 "Contact" = "https://discord.gg/XTpc6Fa9eB"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/python/vsview_histogram"]
+
 [tool.hatch.version]
 source = "versioningit"
 
