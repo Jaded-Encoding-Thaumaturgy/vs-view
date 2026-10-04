@@ -1,6 +1,18 @@
+from enum import IntEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+
+class CieMode(IntEnum):
+    CIE_1931 = 0
+    CIE_1976 = 1
+
+
+class RenderMode(IntEnum):
+    DENSITY = 0
+    CHROMA_WHEEL = 1
+    PIXEL_COLOR = 2
 
 
 class LevelsSettings(BaseModel):
@@ -18,7 +30,7 @@ class WaveformSettings(BaseModel):
 
 
 class VectorscopeSettings(BaseModel):
-    mode: Literal["density", "chroma_wheel", "pixel_color"] = "density"
+    mode: RenderMode = RenderMode.DENSITY
     res: Literal[0, 256, 512, 1024] = 0
     luma: float = 1.5
     matrix: Literal["auto", "bt709", "bt601", "bt2020", "st240m"] = "auto"
@@ -30,8 +42,8 @@ class LumaSettings(BaseModel):
 
 
 class CIEDiagramSettings(BaseModel):
-    mode: Literal["cie1931", "cie1976"] = "cie1931"
-    render_mode: Literal["density", "chroma_wheel", "pixel_color"] = "pixel_color"
+    mode: CieMode = CieMode.CIE_1931
+    render_mode: RenderMode = RenderMode.PIXEL_COLOR
     res: Literal[0, 256, 512, 1024] = 0
     show_rec709: bool = True
     show_rec601: bool = False

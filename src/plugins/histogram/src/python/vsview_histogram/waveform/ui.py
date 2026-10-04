@@ -3,21 +3,20 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import StrEnum
 from logging import getLogger
-from typing import Any, override
+from typing import override
 
-import numpy as np
-import numpy.typing as npt
 import vapoursynth as vs
 from jetpytools import cachedproperty, classproperty
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QContextMenuEvent, QImage, QPainter, QPaintEvent, QPen
+from PySide6.QtGui import QColor, QContextMenuEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QWidget
-from vstools import Range, get_lowest_value, get_peak_value
+from vstools import Range, get_plane_sizes
 
 from vsview.api import PluginAPI, PluginSettings
 
+from ..funcs import compute_waveform
 from ..settings import GlobalSettings
-from ..utils import CustomContextMenu, write_to_qimage
+from ..utils import CustomContextMenu, CustomQImage
 
 logger = getLogger(__name__)
 
@@ -80,7 +79,7 @@ class WaveformWidget(QWidget):
         self.api = api
         self.settings = settings
         self.color_name = color_name
-        self.scope_image = QImage()
+        self.scope_image = CustomQImage()
         self._is_chroma = False
         self._color_family: vs.ColorFamily = vs.UNDEFINED
 
@@ -154,7 +153,7 @@ class WaveformWidget(QWidget):
                 painter.drawText(8, y_white - 4, white_label)
                 painter.drawText(8, y_black - 4, black_label)
 
-    def update_data(self, arr: npt.NDArray[Any], frame: vs.VideoFrame, chroma: bool = False) -> None:
+    def update_data(self, frame: vs.VideoFrame, plane: int, chroma: bool = False) -> None:
         fmt = frame.format
         self._is_chroma = chroma
         self._color_family = fmt.color_family
@@ -165,66 +164,39 @@ class WaveformWidget(QWidget):
             target_h = min(res, 1 << fmt.bits_per_sample)
         else:
             target_h = res
-        bits = target_h.bit_length() - 1
 
-        # Scale input plane array to target range [0, target_h - 1]
-        if fmt.sample_type == vs.FLOAT:
-            color_range = Range.from_video(frame)
-            output_peak = get_peak_value(bits, chroma, color_range, fmt.color_family)
-            output_lowest = get_lowest_value(bits, chroma, color_range, fmt.color_family)
+        plane_w, plane_h = get_plane_sizes(frame, plane)
 
-            arr_scaled = arr * (output_peak - output_lowest)
-            if chroma:
-                arr_scaled += 128 << (bits - 8)
-            elif color_range.is_limited:
-                arr_scaled += 16 << (bits - 8)
-
-            arr_scaled = arr_scaled.round().clip(0, target_h - 1).astype(np.int32)
-        else:
-            arr = arr.astype(np.int32)
-            if (shift := fmt.bits_per_sample - bits) > 0:
-                arr = (arr + (1 << (shift - 1))) >> shift
-            elif shift < 0:
-                arr <<= -shift
-
-            arr_scaled = arr.clip(0, target_h - 1)
-
-        # Downsample horizontally to a target width based on widget width for performance
         target_w = max(1024, self.width())
-        h, w = arr_scaled.shape
-        step = max(1, w // target_w)
-        arr_down = arr_scaled[:, ::step]
-        actual_w = arr_down.shape[1]
+        step = max(1, plane_w // target_w)
+        actual_w = plane_w // step
 
-        # Vectorized column-wise bincount
-        cols = np.tile(np.arange(actual_w, dtype=np.int32), (h, 1))
-        grid = np.bincount((arr_down * actual_w + cols).ravel(), minlength=target_h * actual_w).reshape(
-            (target_h, actual_w)
-        )
+        if (
+            self.scope_image.width() != actual_w
+            or self.scope_image.height() != target_h
+            or self.scope_image.format() != CustomQImage.Format.Format_Indexed8
+        ):
+            self.scope_image = CustomQImage(actual_w, target_h, CustomQImage.Format.Format_Indexed8)
+            self.scope_image.setColorTable(self.color_name.table_list)
 
-        # Flip vertically so value target_h-1 is top (row 0), 0 is bottom (row target_h-1)
-        grid = np.flipud(grid)
-
-        # Logarithmic density scale (0 to 255 index range)
-        if self.settings.global_.waveform.dynamic_gain:
-            scale = 255.0 / np.log1p(max_val) if (max_val := grid.max()) > 0 else 0.0
-        else:
-            # Static gain reference is the height of the frame
-            scale = 255.0 / np.log1p(h)
-
-        if scale > 0.0:
-            grid = np.log1p(grid) * scale * self.settings.global_.waveform.gain
-
-        self.scope_image = write_to_qimage(
-            self.scope_image,
-            grid.clip(0, 255).astype(np.uint8),
-            QImage.Format.Format_Indexed8,
-            self.color_name.table_list,
+        compute_waveform(
+            src=(frame.get_read_ptr(plane).value or 0, frame.get_stride(plane)),
+            dst=(self.scope_image.ptr, self.scope_image.bytesPerLine()),
+            width=plane_w,
+            height=plane_h,
+            bits=fmt.bits_per_sample,
+            sample_type=fmt.sample_type.value,
+            target_w=actual_w,
+            target_h=target_h,
+            is_chroma=chroma,
+            is_limited=Range.from_video(frame).is_limited,
+            gain=self.settings.global_.waveform.gain,
+            dynamic_gain=self.settings.global_.waveform.dynamic_gain,
         )
         self.update()
 
     def clear(self) -> None:
-        self.scope_image = QImage()
+        self.scope_image = CustomQImage()
         self.update()
 
 
@@ -249,13 +221,13 @@ class WaveformContainerWidget(QFrame):
                 self.waveforms[0].clear()
                 logger.warning("RGB input — no luma data")
             case "luma":
-                self.waveforms[0].update_data(np.asarray(frame[0]), frame)
+                self.waveforms[0].update_data(frame, 0)
             case "parade":
                 for i in range(frame.format.num_planes):
                     self.waveforms[i].update_data(
-                        np.asarray(frame[i]),
                         frame,
-                        chroma=frame.format.color_family is vs.YUV and i > 0,
+                        i,
+                        chroma=frame.format.color_family == vs.YUV and i > 0,
                     )
 
     def setup_layout(self, color_family: vs.ColorFamily) -> None:
@@ -282,7 +254,7 @@ class WaveformContainerWidget(QFrame):
             w = self.waveforms[i]
             if w.color_name != needed_colors[i]:
                 w.color_name = needed_colors[i]
-                w.scope_image = QImage()
+                w.scope_image = CustomQImage()
             w.show()
 
         # Hide extra widgets

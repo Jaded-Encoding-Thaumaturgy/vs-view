@@ -4,20 +4,21 @@ from collections.abc import Sequence
 from enum import StrEnum
 from functools import cache
 from logging import getLogger
-from typing import override
+from typing import assert_never, override
 
 import numpy as np
 import vapoursynth as vs
 from jetpytools import cachedproperty
 from PySide6.QtCore import QPointF, QRect, Qt
-from PySide6.QtGui import QColor, QContextMenuEvent, QImage, QPainter, QPaintEvent, QPen
+from PySide6.QtGui import QColor, QContextMenuEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QWidget
-from vstools import Matrix, Range, get_lowest_value, get_peak_value
+from vstools import Matrix, Range
 
 from vsview.api import PluginAPI, PluginSettings
 
-from ..settings import GlobalSettings
-from ..utils import CustomContextMenu, write_to_qimage
+from ..funcs import compute_vectorscope
+from ..settings import GlobalSettings, RenderMode
+from ..utils import CustomContextMenu, CustomQImage
 
 logger = getLogger(__name__)
 
@@ -131,6 +132,10 @@ _TARGETS = {
     VectorScopeMatrix.ST240_M: ST240M_TARGETS,
 }
 
+_YUV_TO_RGB_COEFFS: dict[VectorScopeMatrix, tuple[float, ...]] = {
+    matrix: tuple(arr.flatten().tolist()) for matrix, arr in _YUV_TO_RGB_MATS.items()
+}
+
 
 class VectorscopeWidget(QWidget):
     def __init__(self, parent: QWidget | None, api: PluginAPI, settings: PluginSettings[GlobalSettings, None]) -> None:
@@ -138,7 +143,7 @@ class VectorscopeWidget(QWidget):
         self.api = api
         self.settings = settings
 
-        self.scope_image = QImage(128, 128, QImage.Format.Format_Indexed8)
+        self.scope_image = CustomQImage(128, 128, CustomQImage.Format.Format_Indexed8)
         self.scope_image.setColorTable(self.color_table)
         self.scope_image.fill(0)
 
@@ -172,7 +177,7 @@ class VectorscopeWidget(QWidget):
         side = min(self.width(), self.height())
         target_rect = QRect((self.width() - side) // 2, (self.height() - side) // 2, side, side)
 
-        if self.settings.global_.vectorscope.mode == "chroma_wheel":
+        if self.settings.global_.vectorscope.mode == RenderMode.CHROMA_WHEEL:
             # Draw high-resolution background color wheel first
             painter.drawImage(target_rect, background_image(self._resolved_matrix))
 
@@ -220,132 +225,56 @@ class VectorscopeWidget(QWidget):
     def update_frame(self, frame: vs.VideoFrame) -> None:
         fmt = frame.format
 
+        if fmt.color_family != vs.YUV:
+            self.scope_image.fill(0)
+            self.update()
+            if fmt.color_family != vs.GRAY:
+                logger.warning("%s input — no chroma data", fmt.color_family.name)
+            return
+
+        self.current_matrix = Matrix.from_video(frame, func=self.update_frame)
+
+        match render_mode := self.settings.global_.vectorscope.mode:
+            case RenderMode.CHROMA_WHEEL:
+                target_format = CustomQImage.Format.Format_RGBX8888
+            case RenderMode.PIXEL_COLOR:
+                target_format = CustomQImage.Format.Format_RGBX8888
+            case RenderMode.DENSITY:
+                target_format = CustomQImage.Format.Format_Indexed8
+            case _:
+                assert_never(render_mode)
+
         if (res := self.settings.global_.vectorscope.res) == 0:
             size = min(1024, 1 << fmt.bits_per_sample)
         elif fmt.sample_type == vs.INTEGER:
             size = min(res, 1 << fmt.bits_per_sample)
         else:
             size = res
-        bits = size.bit_length() - 1
-        neutral = size // 2
 
-        match fmt.color_family:
-            case vs.GRAY:
-                # Grayscale has neutral chroma
-                yuv_scaled = np.full((3, 16, 16), neutral, dtype=np.int32)
-            case vs.YUV:
-                y = np.asarray(frame[0])
-                u = np.asarray(frame[1])
-                v = np.asarray(frame[2])
+        if (
+            self.scope_image.width() != size
+            or self.scope_image.height() != size
+            or self.scope_image.format() != target_format
+        ):
+            self.scope_image = CustomQImage(size, size, target_format)
+            if target_format == CustomQImage.Format.Format_Indexed8:
+                self.scope_image.setColorTable(self.color_table)
 
-                # Get subsampling factors (row stride = height, col stride = width)
-                y_aligned = y[:: 2**fmt.subsampling_h, :: 2**fmt.subsampling_w][: u.shape[0], : u.shape[1]]
-                yuv = np.stack([y_aligned, u, v], axis=0)
-
-                if fmt.sample_type == vs.FLOAT:
-                    color_range = Range.from_video(frame)
-                    yuv_scaled = np.empty_like(yuv, dtype=np.int32)
-
-                    # Scale Y (plane 0)
-                    peak_y = get_peak_value(bits, range_in=color_range, family=fmt.color_family)
-                    lowest_y = get_lowest_value(bits, range_in=color_range, family=fmt.color_family)
-                    y_sc = yuv[0] * (peak_y - lowest_y)
-                    if color_range.is_limited:
-                        y_sc += size // 16
-                    yuv_scaled[0] = y_sc
-
-                    # Scale U and V (planes 1 and 2)
-                    peak_c = get_peak_value(bits, chroma=True, range_in=color_range, family=fmt.color_family)
-                    lowest_c = get_lowest_value(bits, chroma=True, range_in=color_range, family=fmt.color_family)
-                    yuv_scaled[1:] = yuv[1:] * (peak_c - lowest_c) + neutral
-                else:
-                    shift = fmt.bits_per_sample - bits
-                    yuv_int = yuv.astype(np.int32)
-                    if shift > 0:
-                        yuv_scaled = yuv_int >> shift
-                    elif shift < 0:
-                        yuv_scaled = yuv_int << (-shift)
-                    else:
-                        yuv_scaled = yuv_int
-            case _ as cfam:
-                self.scope_image.fill(0)
-                self.update()
-                logger.warning("%s input — no chroma data", cfam.name)
-                return
-
-        self.current_matrix = Matrix.from_video(frame, func=self.update_frame)
-        yuv_scaled = yuv_scaled.clip(0, size - 1)
-
-        if yuv_scaled.dtype != np.int32:
-            yuv_scaled = yuv_scaled.round().astype(np.int32)
-
-        if self.settings.global_.vectorscope.mode == "pixel_color":
-            total_elements = yuv_scaled.shape[1] * yuv_scaled.shape[2]
-
-            # Apply safety stride for very large resolutions (e.g. 4K 4:4:4)
-            stride = max(1, int(np.sqrt(total_elements / 2_000_000))) if total_elements > 2_000_000 else 1
-            yuv_sliced = yuv_scaled[:, ::stride, ::stride].reshape(3, -1)
-
-            # Map coordinates (size - V, U)
-            y_coords = np.clip(size - yuv_sliced[2], 0, size - 1)
-            x_coords = yuv_sliced[1]
-
-            # Convert to RGB
-            yuv_flat = yuv_sliced.astype(np.float32)
-            scale_factor = size / 256.0
-            yuv_flat[0] /= scale_factor
-            yuv_flat[1:] = (yuv_flat[1:] - neutral) / scale_factor
-            rgb = (yuv_flat.T @ self._resolved_matrix.yuv_to_rgb_mat).clip(0, 255).astype(np.uint8)
-
-            # Draw into canvas
-            grid = np.zeros((size, size, 4), dtype=np.uint8)
-            grid[y_coords, x_coords, :3] = rgb
-
-            self.scope_image = write_to_qimage(self.scope_image, grid, QImage.Format.Format_RGBX8888)
-            self.update()
-            return
-
-        # Density and Chroma Wheel construct a density histogram grid
-        # Map to 2D grid index (Y is size - V, X is U)
-        y_coords = np.clip(size - yuv_scaled[2].ravel(), 0, size - 1)
-        indices = y_coords * size + yuv_scaled[1].ravel()
-        bins = np.bincount(indices, minlength=(size * size))
-        grid = bins.reshape((size, size))
-
-        # Logarithmic density scale
-        if (max_val := grid.max()) > 0:
-            scale = 255.0 / np.log1p(max_val)
-            grid_img = (np.log1p(grid) * scale).astype(np.uint8)
-        else:
-            grid_img = grid.astype(np.uint8)
-
-        if self.settings.global_.vectorscope.mode == "chroma_wheel":
-            # Color Mode: Density map over a high-resolution YUV color wheel background
-            y_idx, x_idx = np.nonzero(grid_img)
-            density = grid_img[y_idx, x_idx].astype(np.float32) / 255.0
-
-            scale_factor = size / 256.0
-            u_val = (x_idx.astype(np.float32) - neutral) / scale_factor
-            v_val = (np.clip(size - y_idx, 0, size - 1).astype(np.float32) - neutral) / scale_factor
-
-            # Use fixed moderate luma for accurate hue, then scale by density for brightness
-            luma = np.full_like(density, self.settings.global_.vectorscope.luma * 128)
-            base_rgb = (np.column_stack([luma, u_val, v_val]) @ self._resolved_matrix.yuv_to_rgb_mat).clip(0, 255)
-            colored = (base_rgb * density[:, np.newaxis]).clip(0, 255).astype(np.uint8)
-
-            rgb = np.zeros((size, size, 4), dtype=np.uint8)
-            rgb[y_idx, x_idx, :3] = colored
-
-            self.scope_image = write_to_qimage(self.scope_image, rgb, QImage.Format.Format_RGBX8888)
-        else:
-            # Density mode
-            self.scope_image = write_to_qimage(
-                self.scope_image,
-                grid_img,
-                QImage.Format.Format_Indexed8,
-                self.color_table,
-            )
-
+        compute_vectorscope(
+            src_yuv=[(frame.get_read_ptr(i).value or 0, frame.get_stride(i)) for i in range(frame.format.num_planes)],
+            dst=(self.scope_image.ptr, self.scope_image.bytesPerLine()),
+            width=frame.width >> fmt.subsampling_w,
+            height=frame.height >> fmt.subsampling_h,
+            bits=fmt.bits_per_sample,
+            sample_type=fmt.sample_type.value,
+            subsampling_w=fmt.subsampling_w,
+            subsampling_h=fmt.subsampling_h,
+            is_limited=Range.from_video(frame).is_limited,
+            matrix_coeffs=_YUV_TO_RGB_COEFFS[self._resolved_matrix],
+            canvas_size=size,
+            render_mode=render_mode,
+            luma_scale=self.settings.global_.vectorscope.luma,
+        )
         self.update()
 
     @property
@@ -375,7 +304,7 @@ class VectorscopeContainerWidget(QFrame):
 
 
 @cache
-def background_image(matrix: VectorScopeMatrix, size: int = 1024) -> QImage:
+def background_image(matrix: VectorScopeMatrix, size: int = 1024) -> CustomQImage:
     pixel_scale = 256.0 / size
     u_bg = np.tile(np.arange(size, dtype=np.float32) * pixel_scale, (size, 1))
     v_bg = (256.0 - np.tile(np.arange(size, dtype=np.float32).reshape(size, 1) * pixel_scale, (1, size))).clip(0, 255)
@@ -394,6 +323,6 @@ def background_image(matrix: VectorScopeMatrix, size: int = 1024) -> QImage:
     rgba = np.zeros((size, size, 4), dtype=np.uint8)
     rgba[..., :3] = rgb
 
-    qimg = QImage(size, size, QImage.Format.Format_RGBX8888)
+    qimg = CustomQImage(size, size, CustomQImage.Format.Format_RGBX8888)
 
-    return write_to_qimage(qimg, rgba, qimg.format())
+    return qimg.write_to(rgba, qimg.format())

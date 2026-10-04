@@ -192,16 +192,21 @@ jobs:
           webhook-url: ${{ secrets.WEBHOOK_URL }}
 
   test-rust:
-    name: Test Rust
-    if: ${{ !inputs.package || inputs.package == 'vspackrgb' }}
     strategy:
       fail-fast: false
       matrix:
-        runner: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        package: [vspackrgb, vsview-histogram]
+        runner: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - package: vspackrgb
+            path: src/vspackrgb/src/rust
+          - package: vsview-histogram
+            path: src/plugins/histogram/src/rust
+
+    name: Test Rust (${{ matrix.package }} on ${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
-    defaults:
-      run:
-        working-directory: src/vspackrgb/rust
+
+    if: ${{ !inputs.package || inputs.package == 'vspackrgb' || inputs.package == 'vsview-histogram' }}
 
     steps:
       - name: Checkout repository
@@ -210,18 +215,19 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Check for vspackrgb changes
+      - name: Check for package changes
         if: ${{ !inputs.package }}
         id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           filters: |
-            vspackrgb:
-              - 'src/vspackrgb/**'
+            changed:
+              - 'src/${{ matrix.package }}/**'
               - '.github/workflows/ci-test.yml'
 
       - name: Run cargo test
-        if: ${{ inputs.package == 'vspackrgb' || github.event_name == 'workflow_dispatch' || steps.filter.outputs.vspackrgb == 'true' }}
+        if: ${{ inputs.package == matrix.package || steps.filter.outputs.changed == 'true' || github.event_name == 'workflow_dispatch' }}
+        working-directory: ${{ matrix.path }}
         run: cargo test -- --nocapture
 
       - name: Post webhook for failure

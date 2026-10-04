@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "versioningit"]
+requires = ["hatchling", "hatch-rs>=0.4.2", "versioningit"]
 build-backend = "hatchling.build"
 
 [project]
@@ -28,7 +28,6 @@ dependencies = [
     "vsview>=0.8.0",
     "vsjetpack>=2.1.1",
     "numpy>=2.4.0",
-    "numba>=0.62.1",
 ]
 
 [project.entry-points.vsview]
@@ -42,6 +41,20 @@ vsview_histogram = "vsview_histogram"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/python/vsview_histogram"]
+exclude = ["src/rust", "target"]
+
+[tool.hatch.build.hooks.hatch-rs]
+verbose = true
+abi3 = true
+path = "."
+module = "vsview_histogram"
+target-dir = "target"
+
+[[tool.hatch.build.hooks.hatch-rs.artifacts]]
+name = "funcs"
+manifest = "src/rust/Cargo.toml"
+destination = "src/python/vsview_histogram/{python_extension_name}"
+editable-debug = false
 
 [tool.hatch.version]
 source = "versioningit"
