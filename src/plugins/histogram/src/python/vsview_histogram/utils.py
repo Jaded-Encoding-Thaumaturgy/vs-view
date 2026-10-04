@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 from collections.abc import Sequence
 from logging import getLogger
 
@@ -14,22 +15,42 @@ from vsview.api import PluginAPI, run_in_background
 logger = getLogger(__name__)
 
 
-def write_to_qimage(
-    image: QImage,
-    data: npt.NDArray[np.uint8],
-    target_format: QImage.Format,
-    color_table: Sequence[int] | None = None,
-) -> QImage:
-    h, w = data.shape[:2]
-    if image.width() != w or image.height() != h or image.format() != target_format:
-        image = QImage(w, h, target_format)
+class CustomQImage(QImage):
+    @property
+    def ptr(self) -> int:
+        return (
+            0
+            if self.isNull() or (bits := self.bits()) is None or len(bits) == 0
+            else ctypes.addressof(ctypes.c_char.from_buffer(bits))
+        )
+
+    def write_to(
+        self,
+        data: npt.NDArray[np.uint8],
+        target_format: QImage.Format,
+        color_table: Sequence[int] | None = None,
+    ) -> CustomQImage:
+        h, w = data.shape[:2]
+
+        if self.width() != w or self.height() != h or self.format() != target_format:
+            image = CustomQImage(w, h, target_format)
+        else:
+            image = self
+
         if color_table is not None:
             image.setColorTable(color_table)
 
-    img_data = np.frombuffer(image.bits(), dtype=np.uint8)
-    img_data = img_data.reshape((h, w) if target_format == QImage.Format.Format_Indexed8 else (h, w, 4))
-    img_data[:] = data
-    return image
+        stride = image.bytesPerLine()
+        raw = np.frombuffer(image.bits(), dtype=np.uint8)
+
+        if data.ndim == 2:
+            img_data = raw.reshape((h, stride))[:, :w]
+        else:
+            channels = data.shape[2]
+            img_data = raw.reshape((h, stride // channels, channels))[:, :w, :]
+
+        img_data[:] = data
+        return image
 
 
 class CustomContextMenu(QMenu):

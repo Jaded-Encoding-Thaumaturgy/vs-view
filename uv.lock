@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -2863,7 +2863,6 @@ requires-dist = [
 name = "vsview-histogram"
 source = { editable = "src/plugins/histogram" }
 dependencies = [
-    { name = "numba" },
     { name = "numpy" },
     { name = "vapoursynth" },
     { name = "vsjetpack" },
@@ -2872,7 +2871,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numba", specifier = ">=0.62.1" },
     { name = "numpy", specifier = ">=2.4.0" },
     { name = "vapoursynth", specifier = ">=78" },
     { name = "vsjetpack", specifier = ">=2.1.1" },

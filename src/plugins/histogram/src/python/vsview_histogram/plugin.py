@@ -1,10 +1,6 @@
-import itertools
-import weakref
 from logging import getLogger
-from threading import Lock
 from typing import override
 
-import numpy as np
 from jetpytools import fallback
 from PySide6.QtCore import Slot
 from PySide6.QtGui import QResizeEvent
@@ -17,15 +13,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from vsengine import UnifiedFuture
 from vstools import core, vs
 
-from vsview.api import PluginAPI, VideoOutputProxy, WidgetPluginBase, run_in_background, run_in_loop
+from vsview.api import PluginAPI, VideoOutputProxy, WidgetPluginBase, run_in_loop
 
 from .cie import CIEDiagramContainerWidget
 from .levels import HistogramContainerWidget
 from .luma import LumaContainerWidget
-from .settings import GlobalSettings
+from .settings import CieMode, GlobalSettings, RenderMode
 from .ui import DiagramToolBar
 from .vectorscope import VectorscopeContainerWidget
 from .waveform import WaveformContainerWidget
@@ -36,9 +31,6 @@ logger = getLogger(__name__)
 class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
     identifier = "jet_vsview_histogram"
     display_name = "Histogram"
-
-    numba_prewarm_worker: UnifiedFuture[None] | None = None
-    lock = Lock()
 
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent, api)
@@ -58,16 +50,6 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(self.tab_widget)
-
-        # Start Numba JIT background warming thread
-        with self.lock:
-            if HistogramPlugin.numba_prewarm_worker is None:
-                HistogramPlugin.numba_prewarm_worker = prewarm_numba().catch(lambda e: logger.error(e))
-
-        weak_self = weakref.ref(self)
-        HistogramPlugin.numba_prewarm_worker.map(
-            lambda _: p._notify_numba_ready() if (p := weak_self()) else None, on_loop=True
-        )
 
         self.cie_nodes = dict[VideoOutputProxy, tuple[vs.VideoNode, vs.VideoNode]]()
         self.api.register_on_destroy(self.cie_nodes.clear)
@@ -167,18 +149,16 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         controls_toolbar.addWidget(mode_label)
 
         self.vectorscope_mode_combo = QComboBox(container)
-        self.vectorscope_mode_combo.addItem("Density", "density")
-        self.vectorscope_mode_combo.addItem("Chroma Wheel", "chroma_wheel")
-        self.vectorscope_mode_combo.addItem("Pixel Color", "pixel_color")
+        self.vectorscope_mode_combo.addItem("Density", RenderMode.DENSITY)
+        self.vectorscope_mode_combo.addItem("Chroma Wheel", RenderMode.CHROMA_WHEEL)
+        self.vectorscope_mode_combo.addItem("Pixel Color", RenderMode.PIXEL_COLOR)
         self.vectorscope_mode_combo.setToolTip(
             "Display mode for vectorscope plots:\n"
             "- Density: logarithmic heat-map with phosphor color table\n"
             "- Chroma Wheel: density map drawn over a full-color UV background wheel\n"
             "- Pixel Color: each pixel plotted at its actual RGB-converted color"
         )
-        self.vectorscope_mode_combo.setCurrentIndex(
-            self.vectorscope_mode_combo.findData(self.settings.global_.vectorscope.mode)
-        )
+        self.vectorscope_mode_combo.setCurrentIndex(self.settings.global_.vectorscope.mode)
         self.vectorscope_mode_combo.currentIndexChanged.connect(self.on_vectorscope_mode_changed)
         controls_toolbar.addWidget(self.vectorscope_mode_combo)
 
@@ -232,7 +212,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
             "Fixed luma value used for color reconstruction in Chroma Wheel mode.\nOnly active in Chroma Wheel mode."
         )
         self.vectorscope_luma_spin.valueChanged.connect(self.on_vectorscope_luma_changed)
-        self.vectorscope_luma_spin.setEnabled(self.settings.global_.vectorscope.mode == "chroma_wheel")
+        self.vectorscope_luma_spin.setEnabled(self.settings.global_.vectorscope.mode == RenderMode.CHROMA_WHEEL)
         controls_toolbar.addWidget(self.vectorscope_luma_spin)
 
         self.vectorscope_container = VectorscopeContainerWidget(self, self.api, self.settings)
@@ -328,9 +308,9 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         controls_toolbar.addWidget(mode_label)
 
         self.cie_mode_combo = QComboBox(container)
-        self.cie_mode_combo.addItem("CIE 1931 (xy)", "cie1931")
-        self.cie_mode_combo.addItem("CIE 1976 (u'v')", "cie1976")
-        self.cie_mode_combo.setCurrentIndex(self.cie_mode_combo.findData(self.settings.global_.cie.mode))
+        self.cie_mode_combo.addItem("CIE 1931 (xy)", CieMode.CIE_1931)
+        self.cie_mode_combo.addItem("CIE 1976 (u'v')", CieMode.CIE_1976)
+        self.cie_mode_combo.setCurrentIndex(self.settings.global_.cie.mode)
         self.cie_mode_combo.currentIndexChanged.connect(self.on_cie_mode_changed)
         controls_toolbar.addWidget(self.cie_mode_combo)
 
@@ -338,18 +318,16 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         controls_toolbar.addWidget(render_mode_label)
 
         self.cie_render_mode_combo = QComboBox(container)
-        self.cie_render_mode_combo.addItem("Density", "density")
-        self.cie_render_mode_combo.addItem("Chroma Wheel", "chroma_wheel")
-        self.cie_render_mode_combo.addItem("Pixel Color", "pixel_color")
+        self.cie_render_mode_combo.addItem("Density", RenderMode.DENSITY)
+        self.cie_render_mode_combo.addItem("Chroma Wheel", RenderMode.CHROMA_WHEEL)
+        self.cie_render_mode_combo.addItem("Pixel Color", RenderMode.PIXEL_COLOR)
         self.cie_render_mode_combo.setToolTip(
             "Display mode for CIE diagram plots:\n"
             "- Density: logarithmic heat-map with phosphor color table\n"
             "- Chroma Wheel: density map drawn over a full-color background diagram\n"
             "- Pixel Color: each pixel plotted at its actual RGB color"
         )
-        self.cie_render_mode_combo.setCurrentIndex(
-            self.cie_render_mode_combo.findData(self.settings.global_.cie.render_mode)
-        )
+        self.cie_render_mode_combo.setCurrentIndex(self.settings.global_.cie.render_mode)
         self.cie_render_mode_combo.currentIndexChanged.connect(self.on_cie_render_mode_changed)
         controls_toolbar.addWidget(self.cie_render_mode_combo)
 
@@ -521,7 +499,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
     def on_vectorscope_mode_changed(self, index: int) -> None:
         mode = self.vectorscope_mode_combo.currentData()
         self.settings.global_.vectorscope.mode = mode
-        self.vectorscope_luma_spin.setEnabled(mode == "chroma_wheel")
+        self.vectorscope_luma_spin.setEnabled(mode == RenderMode.CHROMA_WHEEL)
         self.update_histogram()
 
     @Slot(int)
@@ -588,32 +566,3 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
     def on_cie_luma_changed(self, value: float) -> None:
         self.settings.global_.cie.luma = value
         self.update_histogram()
-
-    def _notify_numba_ready(self) -> None:
-        self.luma_container.view.numba_ready = True
-        if self.tab_widget.currentIndex() == 1:
-            self.luma_container.view.refresh()
-
-
-@run_in_background(name="NumbaPreWarm")
-def prewarm_numba() -> None:
-    from .luma.numba_backend import process_luma_numba
-
-    logger.debug("Starting pre-warm of process_luma_numba...")
-    dtypes = [(np.uint8, 8), (np.uint16, 16), (np.float32, 16)]
-    sawtooth_options = [False, True]
-    is_limited_options = [False, True]
-
-    for (dtype, bits), sawtooth, is_limited in itertools.product(dtypes, sawtooth_options, is_limited_options):
-        # Covers contiguous and non-contiguous layouts for uint8, uint16, and float32
-        logger.debug("Pre-warm of dtype=%s, bits=%s, sawtooth=%s, is_limited=%s", dtype, bits, sawtooth, is_limited)
-        # Contiguous variant
-        dummy_src = np.zeros((16, 16), dtype=dtype)
-        dummy_dst = np.zeros((16, 16), dtype=np.uint8)
-        process_luma_numba(dummy_src, dummy_dst, bits, 4, sawtooth, is_limited)
-
-        # Non-contiguous (strided) variant
-        dummy_src_nc = np.zeros((32, 32), dtype=dtype)[::2, ::2]
-        process_luma_numba(dummy_src_nc, dummy_dst, bits, 4, sawtooth, is_limited)
-
-        logger.debug("Pre-warm numba process_luma_numba is completed")

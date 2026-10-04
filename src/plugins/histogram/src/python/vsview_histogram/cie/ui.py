@@ -3,19 +3,20 @@ from __future__ import annotations
 import enum
 from functools import cache
 from logging import getLogger
-from typing import Literal, NamedTuple, Self, override
+from typing import Any, NamedTuple, Self, assert_never, override
 
 import numpy as np
 import vapoursynth as vs
 from jetpytools import cachedproperty
 from PySide6.QtCore import QPointF, QRect, Qt
-from PySide6.QtGui import QColor, QContextMenuEvent, QImage, QPainter, QPainterPath, QPaintEvent, QPen, QPolygonF
+from PySide6.QtGui import QColor, QContextMenuEvent, QPainter, QPainterPath, QPaintEvent, QPen, QPolygonF
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QWidget
 
 from vsview.api import PluginAPI, PluginSettings
 
-from ..settings import GlobalSettings
-from ..utils import CustomContextMenu, write_to_qimage
+from ..funcs import compute_cie
+from ..settings import CieMode, GlobalSettings, RenderMode
+from ..utils import CustomContextMenu, CustomQImage
 
 logger = getLogger(__name__)
 
@@ -128,9 +129,9 @@ class GamutData(NamedTuple):
     d65: Point
 
 
-class Gamut(enum.StrEnum):
+class Gamut(enum.Enum):
     CIE_1931 = (
-        "cie1931",
+        CieMode.CIE_1931,
         GamutData(
             rec709=GamutRGB(Point(0.640, 0.330), Point(0.300, 0.600), Point(0.150, 0.060)),
             rec601=GamutRGB(Point(0.630, 0.340), Point(0.310, 0.595), Point(0.155, 0.070)),
@@ -151,7 +152,7 @@ class Gamut(enum.StrEnum):
     """
 
     CIE_1976 = (
-        "cie1976",
+        CieMode.CIE_1976,
         GamutData(
             rec709=GamutRGB(Point(0.4507, 0.5229), Point(0.1250, 0.5625), Point(0.1754, 0.1579)),
             rec601=GamutRGB(Point(0.4330, 0.5258), Point(0.1303, 0.5625), Point(0.1756, 0.1785)),
@@ -182,12 +183,12 @@ class Gamut(enum.StrEnum):
 
     def __new__(
         cls,
-        value: str,
+        value: Any,
         data: GamutData | None = None,
         color: QColor | None = None,
         label: str | None = None,
     ) -> Self:
-        obj = str.__new__(cls, value)
+        obj = object.__new__(cls)
         obj._value_ = value
         if data:
             obj.data = data
@@ -204,7 +205,7 @@ class CIEDiagramWidget(QWidget):
         self.api = api
         self.settings = settings
 
-        self.scope_image = QImage(128, 128, QImage.Format.Format_RGBA8888)
+        self.scope_image = CustomQImage(128, 128, CustomQImage.Format.Format_RGBA8888)
         self.scope_image.fill(0)
 
         self.context_menu = CustomContextMenu(self, self.api)
@@ -250,7 +251,7 @@ class CIEDiagramWidget(QWidget):
         render_mode = self.settings.global_.cie.render_mode
         painter.drawImage(target_rect, get_cached_background(self.settings.global_.cie.mode, render_mode))
 
-        if render_mode == "chroma_wheel":
+        if render_mode == RenderMode.CHROMA_WHEEL:
             painter.save()
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
             painter.drawImage(target_rect, self.scope_image)
@@ -336,101 +337,58 @@ class CIEDiagramWidget(QWidget):
     def update_frame(self, linear_frame: vs.VideoFrame, xyz_frame: vs.VideoFrame) -> None:
         self._error_reason = None
 
+        match render_mode := self.settings.global_.cie.render_mode:
+            case RenderMode.PIXEL_COLOR:
+                target_format = CustomQImage.Format.Format_RGBA8888
+            case RenderMode.CHROMA_WHEEL:
+                target_format = CustomQImage.Format.Format_RGBA8888
+            case RenderMode.DENSITY:
+                target_format = CustomQImage.Format.Format_Indexed8
+            case _:
+                assert_never(render_mode)
+
         size = xyz_frame.height if (res := self.settings.global_.cie.res) == 0 else res
-        xyz = np.asarray(xyz_frame)
 
-        # Apply safety stride for very large resolutions (e.g. 4K 4:4:4)
-        _, h, w = xyz.shape
-        stride = max(1, int(np.sqrt(total_elements / 2_000_000))) if (total_elements := h * w) > 2_000_000 else 1
-        xyz_sliced = xyz[:, ::stride, ::stride].reshape(3, -1)
+        if (
+            self.scope_image.width() != size
+            or self.scope_image.height() != size
+            or self.scope_image.format() != target_format
+        ):
+            self.scope_image = CustomQImage(size, size, target_format)
+            if target_format == CustomQImage.Format.Format_Indexed8:
+                self.scope_image.setColorTable(self.color_table)
 
-        # Calculate target coordinates
-        x, y, z = xyz_sliced
-        if self.settings.global_.cie.mode == "cie1976":
-            denom = (x + 15.0 * y + 3.0 * z).clip(1e-6, None)
-            x_coord = 4.0 * x / denom
-            y_coord = 9.0 * y / denom
-        else:  # cie1931
-            denom = (x + y + z).clip(1e-6, None)
-            x_coord = x / denom
-            y_coord = y / denom
+        x_ptr = xyz_frame.get_read_ptr(0).value or 0
+        y_ptr = xyz_frame.get_read_ptr(1).value or 0
+        z_ptr = xyz_frame.get_read_ptr(2).value or 0
 
-        # Map to size-based pixel grid coordinates
-        x_pixel = ((x_coord / MAX_VAL_X) * size).clip(0.0, size - 1.0).astype(np.int32)
-        y_pixel = ((1.0 - (y_coord / MAX_VAL_Y)) * size).clip(0.0, size - 1.0).astype(np.int32)
-        indices = y_pixel * size + x_pixel
+        if render_mode == RenderMode.PIXEL_COLOR:
+            lr_ptr = linear_frame.get_read_ptr(0).value or 0
+            lg_ptr = linear_frame.get_read_ptr(1).value or 0
+            lb_ptr = linear_frame.get_read_ptr(2).value or 0
+            linear_rgb = [
+                (lr_ptr, linear_frame.get_stride(0)),
+                (lg_ptr, linear_frame.get_stride(1)),
+                (lb_ptr, linear_frame.get_stride(2)),
+            ]
+        else:
+            linear_rgb = None
 
-        # Generate 2D color cloud density counts
-        counts = np.bincount(indices, minlength=(size * size))
-        counts_2d = counts.reshape((size, size))
-
-        render_mode = self.settings.global_.cie.render_mode
-
-        if render_mode == "pixel_color":
-            # Extract and normalize original colors in linear space
-            lrgb = np.asarray(linear_frame)
-            lrgb_sliced = lrgb[:, ::stride, ::stride].reshape(3, -1)
-            lrgb_sliced_clipped = lrgb_sliced.clip(0.0, 1.0)
-
-            # Accumulate linear R, G, B colors of the pixels falling into each bin
-            # Multiply by 255.0 to get standard range values
-            rgb_sum = np.stack(
-                [np.bincount(indices, weights=p * 255.0, minlength=(size * size)) for p in lrgb_sliced_clipped]
-            )
-            rgb_grid = rgb_sum.reshape((3, size, size))
-
-            # Normalize to [0, 1], apply Gamma 2.2 correction on the size^2 canvas,
-            # and scale to 255.0 (counts cancel out during division)
-            max_channel = rgb_grid.max(axis=0)
-            max_channel_safe = np.where(max_channel == 0.0, 1.0, max_channel)
-            rgb_norm_color = ((rgb_grid / max_channel_safe) ** (1 / 2.2)) * 255.0
-
-            # Scale pixel brightness by density log-scale
-            if (max_count := counts_2d.max()) > 0:
-                # density_scale is in range [0.3, 1.0] for populated bins to ensure visibility
-                density_scale = (0.3 + 0.7 * (np.log1p(counts_2d) / np.log1p(max_count))) * (counts_2d > 0)
-
-                rgb_final = (
-                    (rgb_norm_color * density_scale * self.settings.global_.cie.luma).clip(0, 255).astype(np.uint8)
-                )
-                alpha = (counts_2d > 0).astype(np.uint8) * np.uint8(255)
-
-                rgba = np.empty((size, size, 4), dtype=np.uint8)
-                rgba[..., :3] = rgb_final.transpose(1, 2, 0)
-                rgba[..., 3] = alpha
-            else:
-                rgba = np.zeros((size, size, 4), dtype=np.uint8)
-
-            self.scope_image = write_to_qimage(self.scope_image, rgba, QImage.Format.Format_RGBA8888)
-
-        elif render_mode == "density":
-            if (max_count := counts_2d.max()) > 0:
-                scale = 255.0 / np.log1p(max_count)
-                grid_img = (np.log1p(counts_2d) * scale).astype(np.uint8)
-            else:
-                grid_img = counts_2d.astype(np.uint8)
-
-            self.scope_image = write_to_qimage(
-                self.scope_image,
-                grid_img,
-                QImage.Format.Format_Indexed8,
-                self.color_table,
-            )
-
-        elif render_mode == "chroma_wheel":
-            if (max_count := counts_2d.max()) > 0:
-                scale = 255.0 / np.log1p(max_count)
-                density_val = np.log1p(counts_2d) * scale
-                density_val = (density_val * self.settings.global_.cie.luma).clip(0, 255).astype(np.uint8)
-
-                rgba = np.empty((size, size, 4), dtype=np.uint8)
-                rgba[..., :3] = 255  # White glow
-                rgba[..., 3] = density_val
-            else:
-                rgba = np.zeros((size, size, 4), dtype=np.uint8)
-
-            self.scope_image = write_to_qimage(self.scope_image, rgba, QImage.Format.Format_RGBA8888)
-
+        compute_cie(
+            src_xyz=[
+                (x_ptr, xyz_frame.get_stride(0)),
+                (y_ptr, xyz_frame.get_stride(1)),
+                (z_ptr, xyz_frame.get_stride(2)),
+            ],
+            dst=(self.scope_image.ptr, self.scope_image.bytesPerLine()),
+            width=xyz_frame.width,
+            height=xyz_frame.height,
+            canvas_size=size,
+            cie_mode=self.settings.global_.cie.mode,
+            render_mode=render_mode,
+            luma_scale=self.settings.global_.cie.luma,
+            linear_rgb=linear_rgb,
+        )
         self.update()
 
     def paint_error(self, message: str) -> None:
@@ -455,23 +413,23 @@ class CIEDiagramContainerWidget(QFrame):
 
 
 @cache
-def get_cached_background(
-    mode: Literal["cie1931", "cie1976"],
-    render_mode: Literal["density", "chroma_wheel", "pixel_color"],
-    size: int = 1024,
-) -> QImage:
+def get_cached_background(mode: CieMode, render_mode: RenderMode, size: int = 1024) -> CustomQImage:
     points = list[QPointF]()
-    if mode == "cie1976":
-        for x, y in SPECTRAL_LOCUS_XY:
-            denom_l = -2.0 * x + 12.0 * y + 3.0
-            u = 4.0 * x / denom_l
-            v = 9.0 * y / denom_l
-            points.append(QPointF((u / MAX_VAL_X) * size, (1.0 - (v / MAX_VAL_Y)) * size))
-    else:
-        for x, y in SPECTRAL_LOCUS_XY:
-            points.append(QPointF((x / MAX_VAL_X) * size, (1.0 - (y / MAX_VAL_Y)) * size))
 
-    bg_img = QImage(size, size, QImage.Format.Format_ARGB32)
+    match mode:
+        case CieMode.CIE_1976:
+            for x, y in SPECTRAL_LOCUS_XY:
+                denom_l = -2.0 * x + 12.0 * y + 3.0
+                u = 4.0 * x / denom_l
+                v = 9.0 * y / denom_l
+                points.append(QPointF((u / MAX_VAL_X) * size, (1.0 - (v / MAX_VAL_Y)) * size))
+        case CieMode.CIE_1931:
+            for x, y in SPECTRAL_LOCUS_XY:
+                points.append(QPointF((x / MAX_VAL_X) * size, (1.0 - (y / MAX_VAL_Y)) * size))
+        case _:
+            assert_never(mode)
+
+    bg_img = CustomQImage(size, size, CustomQImage.Format.Format_ARGB32)
     bg_img.fill(Qt.GlobalColor.transparent)
 
     with QPainter(bg_img) as painter:
@@ -480,18 +438,21 @@ def get_cached_background(
         poly = QPolygonF(points)
 
         # Draw colored background inside the polygon if chroma_wheel mode is selected
-        if render_mode == "chroma_wheel":
+        if render_mode == RenderMode.CHROMA_WHEEL:
             col = np.arange(size, dtype=np.float32)
             row = np.arange(size, dtype=np.float32)
 
-            if mode == "cie1976":
-                u_coord, v_coord = np.meshgrid((col / size) * MAX_VAL_X, (1.0 - (row / size)) * MAX_VAL_Y)
-                denom_uv = 6.0 * u_coord - 16.0 * v_coord + 12.0
-                denom_uv = np.where(np.abs(denom_uv) < 1e-6, 1e-6, denom_uv)
-                x_coord = 9.0 * u_coord / denom_uv
-                y_coord = 4.0 * v_coord / denom_uv
-            else:
-                x_coord, y_coord = np.meshgrid((col / size) * MAX_VAL_X, (1.0 - (row / size)) * MAX_VAL_Y)
+            match mode:
+                case CieMode.CIE_1976:
+                    u_coord, v_coord = np.meshgrid((col / size) * MAX_VAL_X, (1.0 - (row / size)) * MAX_VAL_Y)
+                    denom_uv = 6.0 * u_coord - 16.0 * v_coord + 12.0
+                    denom_uv = np.where(np.abs(denom_uv) < 1e-6, 1e-6, denom_uv)
+                    x_coord = 9.0 * u_coord / denom_uv
+                    y_coord = 4.0 * v_coord / denom_uv
+                case CieMode.CIE_1931:
+                    x_coord, y_coord = np.meshgrid((col / size) * MAX_VAL_X, (1.0 - (row / size)) * MAX_VAL_Y)
+                case _:
+                    assert_never(mode)
 
             denom = np.maximum(y_coord, 1e-6)
             x = x_coord / denom
@@ -507,8 +468,8 @@ def get_cached_background(
             rgba[..., :3] = (rgb_srgb * 255.0).astype(np.uint8)
             rgba[..., 3] = 255
 
-            fmt = QImage.Format.Format_RGBX8888
-            grad_img = write_to_qimage(QImage(size, size, fmt), rgba, fmt)
+            fmt = CustomQImage.Format.Format_RGBX8888
+            grad_img = CustomQImage(size, size, fmt).write_to(rgba, fmt)
 
             painter.save()
             path = QPainterPath()
