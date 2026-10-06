@@ -100,6 +100,10 @@ The Frame Properties panel displays metadata attached to each frame by VapourSyn
 !!! Abstract "Extended Functionality"
     For additional property categories and formatters, see [FrameProps Extended](second-party.md#frameprops-extended).
 
+!!! warning "Performance & Display Limits"
+    - Excessively large property values (such as long strings, byte buffers, or large lists) are automatically truncated for display.
+    - If a frame contains more than 100 properties, loading is skipped entirely to maintain interface responsiveness.
+
 ---
 
 ## Scening

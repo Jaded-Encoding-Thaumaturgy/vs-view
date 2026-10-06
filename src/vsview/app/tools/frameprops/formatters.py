@@ -7,10 +7,10 @@ from __future__ import annotations
 from collections.abc import Callable, Hashable, Iterable
 from dataclasses import dataclass
 from logging import DEBUG, getLogger
-from typing import Any
+from typing import Any, override
 
 from jetpytools import Singleton, flatten, inject_self
-from vapoursynth import VideoFrame
+from vapoursynth import RawFrame
 
 __all__ = ["FormatterProperty", "FormatterRegistry"]
 
@@ -49,9 +49,10 @@ class FormatterProperty:
 
     @staticmethod
     def default_format(value: Any, repr_frame: bool = False) -> str:
+        max_len = 128
+
         match value:
-            case bytes():
-                max_len = 128
+            case bytes() | bytearray():
                 if len(value) > max_len:
                     truncated = value[:max_len].decode("utf-8", errors="ignore")
                     return f"{truncated}..."
@@ -63,10 +64,17 @@ class FormatterProperty:
                     return f"{res[:max_len]}..." if len(res) > max_len else res
             case float():
                 return f"{value:.6g}"
-            case VideoFrame():
+            case RawFrame():
                 return repr(value) if repr_frame else str(value).replace("\t", "    ").rstrip()
+            case list():
+                return str(
+                    [*value[: max_len // 2], CustomEllipsis(), *value[-max_len // 2 :]]
+                    if len(value) > max_len
+                    else value
+                )
             case _:
-                return str(value)
+                value_str = str(value)
+                return value_str if len(value_str) < max_len * 2 else value_str[: max_len * 2] + "..."
 
 
 type IterFormatter = Iterable[FormatterProperty | IterFormatter]
@@ -112,3 +120,13 @@ class FormatterRegistry(Singleton):
 
 
 FormatterRegistry()
+
+
+class CustomEllipsis:
+    @override
+    def __repr__(self) -> str:
+        return "..."
+
+    @override
+    def __str__(self) -> str:
+        return "..."

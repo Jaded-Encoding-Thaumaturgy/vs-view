@@ -694,6 +694,12 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         widths = self.settings.local_.tree_column_widths
         auto_resize = not (widths and 0 in widths)
 
+        if len(props) > 100:
+            logger.warning("Too many frame properties, skipping loading.")
+            self.categorize_tree.current_model.clear_props()
+            self.raw_table.current_model.clear_rows()
+            return
+
         self.categorize_tree.update_props(props, auto_resize_0=auto_resize)
         self.raw_table.update_props(props)
 
