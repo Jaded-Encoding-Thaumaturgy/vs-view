@@ -12,7 +12,8 @@ import vapoursynth
 import vapoursynth as vs
 from jetpytools import CustomValueError
 from PySide6.QtGui import QColorSpace, QImage
-from vspackrgb.helpers import get_plane_buffer, packrgb
+
+from vspackrgb import packrgb
 
 from .settings import SettingsManager
 
@@ -229,7 +230,7 @@ class Packer(ABC):
 
         # QImage supports Buffer inputs
         img = QImage(
-            get_plane_buffer(frame, 0),  # type: ignore[call-overload]
+            frame[0],
             width,
             frame.height,
             frame.get_stride(0),

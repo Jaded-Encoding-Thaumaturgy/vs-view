@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from vspackrgb.helpers import get_plane_buffer, packrgb
+from vspackrgb.helpers import packrgb
 
 from vsview.api import (
     AnimatedToggle,
@@ -456,7 +456,7 @@ class FramePropPreviewGraphicsView(BaseGraphicsView):
                         return self._packer.frame_to_qimage(packed).copy()
 
         return QImage(
-            get_plane_buffer(frame, 0),  # type: ignore[call-overload]
+            frame[0],
             frame.width,
             frame.height,
             frame.get_stride(0),
