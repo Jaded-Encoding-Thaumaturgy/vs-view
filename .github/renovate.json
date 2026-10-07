@@ -11,9 +11,6 @@
     ":semanticCommitScopeDisabled",
     ":semanticCommitTypeAll(deps)"
   ],
-  "pep723": {
-    "managerFilePatterns": ["src/pyapp/.env.example"]
-  },
   "vulnerabilityAlerts": {
     "enabled": true,
     "groupName": "Security fixes",
@@ -56,8 +53,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/src/pyapp/\\.env\\.template$/"],
-      "matchStrings": ["PYAPP_UV_VERSION\\s*=\\s*(?<currentValue>.*)"],
+      "managerFilePatterns": ["/src/pyapp/\\.env\\.example$/"],
+      "matchStrings": ["PYAPP_UV_VERSION\\s*=\\s*(?<currentValue>[^\\s#]+)"],
       "depNameTemplate": "astral-sh/uv",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "semver"
