@@ -22,33 +22,36 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@codingame/monaco-vscode-api": "37.1.0",
-    "@codingame/monaco-vscode-configuration-service-override": "37.1.0",
-    "@codingame/monaco-vscode-editor-api": "37.1.0",
-    "@codingame/monaco-vscode-extension-api": "37.1.0",
-    "@codingame/monaco-vscode-extensions-service-override": "37.1.0",
-    "@codingame/monaco-vscode-languages-service-override": "37.1.0",
-    "@codingame/monaco-vscode-log-service-override": "37.1.0",
-    "@codingame/monaco-vscode-model-service-override": "37.1.0",
-    "@codingame/monaco-vscode-python-default-extension": "37.1.0",
-    "@codingame/monaco-vscode-textmate-service-override": "37.1.0",
-    "@codingame/monaco-vscode-theme-defaults-default-extension": "37.1.0",
-    "@codingame/monaco-vscode-theme-service-override": "37.1.0",
+    "@codingame/monaco-vscode-api": "37.3.4",
+    "@codingame/monaco-vscode-configuration-service-override": "37.3.4",
+    "@codingame/monaco-vscode-editor-api": "37.3.4",
+    "@codingame/monaco-vscode-extension-api": "37.3.4",
+    "@codingame/monaco-vscode-extensions-service-override": "37.3.4",
+    "@codingame/monaco-vscode-languages-service-override": "37.3.4",
+    "@codingame/monaco-vscode-log-service-override": "37.3.4",
+    "@codingame/monaco-vscode-model-service-override": "37.3.4",
+    "@codingame/monaco-vscode-python-default-extension": "37.3.4",
+    "@codingame/monaco-vscode-textmate-service-override": "37.3.4",
+    "@codingame/monaco-vscode-theme-defaults-default-extension": "37.3.4",
+    "@codingame/monaco-vscode-theme-service-override": "37.3.4",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
-    "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@37.1.0",
-    "vscode": "npm:@codingame/monaco-vscode-extension-api@37.1.0",
-    "vscode-jsonrpc": "9.0.2",
-    "vscode-languageclient": "10.1.1"
+    "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@37.3.4",
+    "vscode": "npm:@codingame/monaco-vscode-extension-api@37.3.4",
+    "vscode-jsonrpc": "9.0.3",
+    "vscode-languageclient": "10.1.2"
   },
   "devDependencies": {
-    "@types/node": "26.6.2",
-    "@types/vscode": "1.138.0",
-    "@vitest/coverage-v8": "5.0.1",
-    "oxfmt": "0.70.0",
-    "oxlint": "1.85.0",
+    "@types/node": "26.6.4",
+    "@types/vscode": "1.140.0",
+    "@vitest/coverage-v8": "5.0.3",
+    "oxfmt": "0.72.0",
+    "oxlint": "1.87.0",
     "typescript": "7.0.2",
-    "vite": "8.3.0",
-    "vitest": "5.0.1"
+    "vite": "8.3.3",
+    "vitest": "5.0.3"
+  },
+  "overrides": {
+    "dompurify": "^3.4.16"
   }
 }
