@@ -112,3 +112,9 @@ musllinux-aarch64-image = "musllinux_1_2"
 [[tool.cibuildwheel.overrides]]
 select = ["cp315t-*", "*-musllinux_*", "*-macosx_x86_64"]
 test-extras = ["numpy"]
+
+# https://github.com/pypa/abi3audit/issues/215
+# https://github.com/pypa/abi3audit/pull/233
+[[tool.cibuildwheel.overrides]]
+select = "cp315t-*"
+audit-command = ""
