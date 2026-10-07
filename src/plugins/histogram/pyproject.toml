@@ -73,3 +73,24 @@ distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.dirty"
 
 [tool.uv.sources]
 vsview = { workspace = true }
+
+[tool.cibuildwheel]
+build-frontend = "uv"
+build = ["cp312-*"]
+skip = "*-win32 *-manylinux_i686 *musllinux*"
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+
+[tool.cibuildwheel.macos]
+archs = ["native"]
+# Matches minimum supported by VapourSynth
+environment = { MACOSX_DEPLOYMENT_TARGET = "13.0" }
+
+[tool.cibuildwheel.linux]
+archs = ["native"]
+before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }
+# Matches minimum supported by VapourSynth
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"

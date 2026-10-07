@@ -1,16 +1,30 @@
-name: Build vspackrgb
+name: Build Wheels
 on:
   workflow_call:
     inputs:
+      package:
+        required: true
+        type: string
+      package-dir:
+        required: true
+        type: string
       python-version:
         required: true
         type: string
   workflow_dispatch:
     inputs:
+      package:
+        required: true
+        type: string
+        default: "vspackrgb"
+      package-dir:
+        required: true
+        type: string
+        default: "src/vspackrgb"
       python-version:
         required: false
         type: string
-        default: "3.12"
+        default: "3.14"
 
 jobs:
   wheels:
@@ -34,7 +48,7 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@adba99c781d3746d38b3a09b1cf797965bcb7fe6 # v4.3
         with:
-          package-dir: src/vspackrgb
+          package-dir: ${{ inputs.package-dir }}
           output-dir: wheelhouse
 
       - name: Upload wheels
@@ -45,7 +59,7 @@ jobs:
 
   sdist:
     name: Build sdist
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
 
     steps:
       - name: Checkout repository
@@ -60,7 +74,7 @@ jobs:
           enable-cache: false
 
       - name: Build sdist
-        run: uv build --package vspackrgb --sdist --out-dir dist --clear
+        run: uv build --package ${{ inputs.package }} --sdist --out-dir dist --clear
 
       - name: Upload sdist
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

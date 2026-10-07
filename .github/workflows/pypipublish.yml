@@ -6,13 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: "Package to build"
+        description: "Package or tag prefix to build"
         required: true
         type: choice
         options:
           - vsview
-          - vsview-cli
-          - vsview-editor
           - vspackrgb
           - audio-convert
           - comp
@@ -32,6 +30,8 @@ jobs:
     outputs:
       matrix: ${{ steps.check.outputs.matrix }}
       build-workflow: ${{ steps.check.outputs.build-workflow }}
+      package: ${{ steps.check.outputs.package }}
+      package-dir: ${{ steps.check.outputs.package-dir }}
       python-version: ${{ env.VSVIEW_PYTHON_VERSION }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -43,71 +43,37 @@ jobs:
   # Build Jobs
   python-build:
     needs: [prepare]
-    if: needs.prepare.outputs.matrix != '[]'
+    if: needs.prepare.outputs.build-workflow == 'python'
     uses: ./.github/workflows/cd-build-python.yml
     with:
       matrix: ${{ needs.prepare.outputs.matrix }}
       python-version: ${{ needs.prepare.outputs.python-version }}
 
-  vsview-cli-build:
+  wheels-build:
     needs: [prepare]
-    if: needs.prepare.outputs.build-workflow == 'vsview-cli'
-    uses: ./.github/workflows/cd-build-vsview-cli.yml
+    if: needs.prepare.outputs.build-workflow == 'wheels'
+    uses: ./.github/workflows/cd-build-wheels.yml
     with:
-      python-version: ${{ needs.prepare.outputs.python-version }}
-
-  vspackrgb-build:
-    needs: [prepare]
-    if: needs.prepare.outputs.build-workflow == 'vspackrgb'
-    uses: ./.github/workflows/cd-build-vspackrgb.yml
-    with:
+      package: ${{ needs.prepare.outputs.package }}
+      package-dir: ${{ needs.prepare.outputs.package-dir }}
       python-version: ${{ needs.prepare.outputs.python-version }}
 
   vsview-editor-build:
     needs: [prepare]
-    if: needs.prepare.outputs.build-workflow == 'vsview-editor'
+    if: needs.prepare.outputs.build-workflow == 'editor'
     uses: ./.github/workflows/cd-build-vsview-editor.yml
     with:
       python-version: ${{ needs.prepare.outputs.python-version }}
 
-  # Publish Jobs
-  python-publish:
-    name: Publish ${{ matrix.package }} to PyPI
-    needs: [prepare, python-build]
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      id-token: write
-
-    strategy:
-      matrix:
-        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
-
-    environment:
-      name: pypi-${{ matrix.package }}
-      url: https://pypi.org/p/${{ matrix.package }}
-
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: dist-${{ matrix.package }}
-          path: dist
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
-
-      - name: Post webhook for failure
-        if: failure()
-        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@0abb7fddabf2daa28da23b654ca8290e96294064 # v1
-        with:
-          webhook-url: ${{ secrets.WEBHOOK_URL }}
-
-  vsview-cli-publish:
-    name: Publish vsview-cli to PyPI
-    needs: [prepare, vsview-cli-build]
-    if: needs.prepare.outputs.build-workflow == 'vsview-cli'
+  # Centralized Publish Job
+  publish:
+    name: Publish ${{ needs.prepare.outputs.package }} to PyPI
+    needs: [prepare, python-build, wheels-build, vsview-editor-build]
+    if: |
+      always() &&
+      needs.prepare.result == 'success' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
 
     permissions:
@@ -115,8 +81,8 @@ jobs:
       id-token: write
 
     environment:
-      name: pypi-vsview-cli
-      url: https://pypi.org/p/vsview-cli
+      name: pypi-${{ needs.prepare.outputs.package }}
+      url: https://pypi.org/p/${{ needs.prepare.outputs.package }}
 
     steps:
       - name: Download all artifacts
@@ -129,71 +95,6 @@ jobs:
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ needs.prepare.outputs.python-version }}
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
-
-      - name: Post webhook for failure
-        if: failure()
-        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@0abb7fddabf2daa28da23b654ca8290e96294064 # v1
-        with:
-          webhook-url: ${{ secrets.WEBHOOK_URL }}
-
-  vspackrgb-publish:
-    name: Publish vspackrgb to PyPI
-    needs: [prepare, vspackrgb-build]
-    if: needs.prepare.outputs.build-workflow == 'vspackrgb'
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      id-token: write
-
-    environment:
-      name: pypi-vspackrgb
-      url: https://pypi.org/p/vspackrgb
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          python-version: ${{ needs.prepare.outputs.python-version }}
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
-
-      - name: Post webhook for failure
-        if: failure()
-        uses: Jaded-Encoding-Thaumaturgy/discord-failure-notifier@0abb7fddabf2daa28da23b654ca8290e96294064 # v1
-        with:
-          webhook-url: ${{ secrets.WEBHOOK_URL }}
-
-  vsview-editor-publish:
-    name: Publish vsview-editor to PyPI
-    needs: [prepare, vsview-editor-build]
-    if: needs.prepare.outputs.build-workflow == 'vsview-editor'
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      id-token: write
-
-    environment:
-      name: pypi-vsview-editor
-      url: https://pypi.org/p/vsview-editor
-
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: dist-vsview-editor
-          path: dist
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
