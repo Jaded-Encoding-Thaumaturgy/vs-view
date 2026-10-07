@@ -90,9 +90,6 @@ before-build = ["git checkout uv.lock && git clean -fdx src/python"]
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
-test-groups = []
-# https://github.com/pypa/cibuildwheel/pull/2978
-before-test = 'uv pip install "pytest>=9.0.0,<10.0.0" vsjetengine>=1.8.0'
 
 [tool.cibuildwheel.macos]
 archs = ["native"]
