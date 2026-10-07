@@ -229,14 +229,7 @@ class Packer(ABC):
             width //= 4
 
         # QImage supports Buffer inputs
-        img = QImage(
-            frame[0],
-            width,
-            frame.height,
-            frame.get_stride(0),
-            params.pop("format"),
-            **params,
-        )
+        img = QImage(frame[0], width, frame.height, frame.get_stride(0), params.pop("format"), **params)
 
         match frame.props.get("_Primaries"), frame.props.get("_Transfer"):
             case vs.PRIMARIES_BT2020, vs.TRANSFER_ST2084:
