@@ -134,6 +134,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self.rgb_copy_btns = dict[str, QToolButton]()
 
         self.setup_ui()
+        self.api.globalSettingsChanged.connect(self._on_global_settings_changed)
         self.api.register_on_destroy(self.outputs.clear)
         self.api.register_on_destroy(lambda: self.eyedropper_btn.setChecked(False))
 
@@ -508,6 +509,12 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         else:
             self.tracking = TrackingState.INACTIVE
             self.api.current_view.viewport.set_cursor(Qt.CursorShape.OpenHandCursor)
+
+    @Slot()
+    def _on_global_settings_changed(self) -> None:
+        self.src_norm_fmt = f"{{:.{self.settings.global_.decimals_nb}f}}"
+        if self.tracking == TrackingState.ACTIVE and self.outputs:
+            self.update_labels()
 
     def copy_row(
         self,
