@@ -104,7 +104,7 @@ def convert_arg(type_: type[Mapping[str, str]], tokens: list[Token]) -> dict[str
     return d
 
 
-def convert_qt_args(type_: Sequence[str], tokens: list[Token]) -> list[str]:
+def convert_qt_args(type_: type[Sequence[str]], tokens: list[Token]) -> list[str]:
     return list(chain.from_iterable(shlex.split(t.value) for t in tokens))
 
 
