@@ -83,6 +83,8 @@ BACKENDS = [
     pytest.param("numpy", marks=pytest.mark.skipif(not find_spec("numpy"), reason="NumPy not installed")),
     pytest.param("numba", marks=pytest.mark.skipif(not find_spec("numba"), reason="Numba not installed")),
 ]
+WIDTHS = [4, 17, 852]
+HEIGHTS = [4, 17, 480]
 
 
 def get_backend_module(backend_name: str) -> BackendModule:
@@ -100,9 +102,10 @@ def get_backend_module(backend_name: str) -> BackendModule:
 
 
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_pack_bgra_8bit(backend_name: str) -> None:
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_pack_bgra_8bit(backend_name: str, width: int, height: int) -> None:
     backend = get_backend_module(backend_name)
-    width, height = 4, 4
     src_stride = width
     dest_stride = width * 4
 
@@ -137,9 +140,10 @@ def test_pack_bgra_8bit(backend_name: str) -> None:
 
 
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_pack_bgra_8bit_no_alpha(backend_name: str) -> None:
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_pack_bgra_8bit_no_alpha(backend_name: str, width: int, height: int) -> None:
     backend = get_backend_module(backend_name)
-    width, height = 4, 4
     src_stride = width
     dest_stride = width * 4
 
@@ -173,16 +177,17 @@ def test_pack_bgra_8bit_no_alpha(backend_name: str) -> None:
 
 
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_pack_rgb30_10bit(backend_name: str) -> None:
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_pack_rgb30_10bit(backend_name: str, width: int, height: int) -> None:
     backend = get_backend_module(backend_name)
-    width, height = 4, 4
     src_stride_samples = width
     dest_stride = width * 4
 
     # 10-bit values (0-1023)
-    r = (ctypes.c_uint16 * (width * height))(*(x * 50 for x in range(width * height)))
-    g = (ctypes.c_uint16 * (width * height))(*(x * 40 for x in range(width * height)))
-    b = (ctypes.c_uint16 * (width * height))(*(x * 30 for x in range(width * height)))
+    r = (ctypes.c_uint16 * (width * height))(*(((x * 50) % 1024) for x in range(width * height)))
+    g = (ctypes.c_uint16 * (width * height))(*(((x * 40) % 1024) for x in range(width * height)))
+    b = (ctypes.c_uint16 * (width * height))(*(((x * 30) % 1024) for x in range(width * height)))
 
     dest = (ctypes.c_uint32 * (width * height))()
     dest_ptr = ctypes.addressof(dest)
@@ -212,15 +217,16 @@ def test_pack_rgb30_10bit(backend_name: str) -> None:
 
 
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_pack_rgb30_10bit_with_alpha(backend_name: str) -> None:
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_pack_rgb30_10bit_with_alpha(backend_name: str, width: int, height: int) -> None:
     backend = get_backend_module(backend_name)
-    width, height = 4, 4
     src_stride_samples = width
     dest_stride = width * 4
 
-    r = (ctypes.c_uint16 * (width * height))(*(x * 50 for x in range(width * height)))
-    g = (ctypes.c_uint16 * (width * height))(*(x * 40 for x in range(width * height)))
-    b = (ctypes.c_uint16 * (width * height))(*(x * 30 for x in range(width * height)))
+    r = (ctypes.c_uint16 * (width * height))(*(((x * 50) % 1024) for x in range(width * height)))
+    g = (ctypes.c_uint16 * (width * height))(*(((x * 40) % 1024) for x in range(width * height)))
+    b = (ctypes.c_uint16 * (width * height))(*(((x * 30) % 1024) for x in range(width * height)))
     a = (ctypes.c_uint16 * (width * height))(*(((x % 4) << 8) for x in range(width * height)))
 
     dest = (ctypes.c_uint32 * (width * height))()
@@ -253,9 +259,10 @@ def test_pack_rgb30_10bit_with_alpha(backend_name: str) -> None:
 
 
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_pack_rgba64_16bit(backend_name: str) -> None:
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_pack_rgba64_16bit(backend_name: str, width: int, height: int) -> None:
     backend = get_backend_module(backend_name)
-    width, height = 4, 4
     src_stride_samples = width
     dest_stride = width * 4 * 2  # 4 channels * 2 bytes
 
@@ -290,9 +297,10 @@ def test_pack_rgba64_16bit(backend_name: str) -> None:
 
 
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_pack_rgba16f_16bit(backend_name: str) -> None:
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_pack_rgba16f_16bit(backend_name: str, width: int, height: int) -> None:
     backend = get_backend_module(backend_name)
-    width, height = 4, 4
     src_stride_samples = width
     dest_stride = width * 4 * 2
 
@@ -330,9 +338,10 @@ def test_pack_rgba16f_16bit(backend_name: str) -> None:
 
 
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_pack_rgba32f_32bit(backend_name: str) -> None:
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_pack_rgba32f_32bit(backend_name: str, width: int, height: int) -> None:
     backend = get_backend_module(backend_name)
-    width, height = 4, 4
     src_stride_samples = width
     dest_stride = width * 4 * 4  # 4 channels * 4 bytes
 
@@ -371,8 +380,9 @@ def test_pack_rgba32f_32bit(backend_name: str) -> None:
 
 @pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_helpers_packrgb_integration(backend_name: str) -> None:
-    width, height = 16, 16
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_helpers_packrgb_integration(backend_name: str, width: int, height: int) -> None:
     src = vs.core.std.BlankClip(width=width, height=height, format=vs.RGB24, color=[10, 20, 30])
     packed = helpers.packrgb(src, backend=cast(Any, backend_name))
 
@@ -395,9 +405,9 @@ def test_helpers_packrgb_integration(backend_name: str) -> None:
 
 @pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_helpers_packrgb_rgba16f(backend_name: str) -> None:
-    width, height = 8, 8
-
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_helpers_packrgb_rgba16f(backend_name: str, width: int, height: int) -> None:
     # Test Integer packing
     src_int = vs.core.std.BlankClip(width=width, height=height, format=vs.RGB48, color=[65535, 32768, 0])
     packed_int = helpers.packrgb(src_int, backend=cast(Any, backend_name))
@@ -427,9 +437,9 @@ def test_helpers_packrgb_rgba16f(backend_name: str) -> None:
 
 @pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_helpers_packrgb_rgbs(backend_name: str) -> None:
-    width, height = 8, 8
-
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_helpers_packrgb_rgbs(backend_name: str, width: int, height: int) -> None:
     # Test Float packing (RGBS input)
     src_float = vs.core.std.BlankClip(width=width, height=height, format=vs.RGBS, color=[1.0, 0.5, 0.0])
     packed_float = helpers.packrgb(src_float, backend=cast(Any, backend_name))
@@ -455,8 +465,9 @@ def test_helpers_packrgb_rgbs(backend_name: str) -> None:
 
 @pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_helpers_packrgb_frame_no_alpha(backend_name: str) -> None:
-    width, height = 16, 16
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_helpers_packrgb_frame_no_alpha(backend_name: str, width: int, height: int) -> None:
     src = vs.core.std.BlankClip(width=width, height=height, format=vs.RGB24, color=[10, 20, 30])
 
     with src.get_frame(0) as src_frame:
@@ -480,8 +491,9 @@ def test_helpers_packrgb_frame_no_alpha(backend_name: str) -> None:
 
 @pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_helpers_packrgb_frame_explicit_alpha(backend_name: str) -> None:
-    width, height = 16, 16
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_helpers_packrgb_frame_explicit_alpha(backend_name: str, width: int, height: int) -> None:
     src = vs.core.std.BlankClip(width=width, height=height, format=vs.RGB24, color=[10, 20, 30])
     alpha = vs.core.std.BlankClip(width=width, height=height, format=vs.GRAY8, color=[150])
 
@@ -503,8 +515,9 @@ def test_helpers_packrgb_frame_explicit_alpha(backend_name: str) -> None:
 
 @pytest.mark.vpy("initial-core")
 @pytest.mark.parametrize("backend_name", BACKENDS)
-def test_helpers_packrgb_frame_alpha_prop(backend_name: str) -> None:
-    width, height = 16, 16
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_helpers_packrgb_frame_alpha_prop(backend_name: str, width: int, height: int) -> None:
     src = vs.core.std.BlankClip(width=width, height=height, format=vs.RGB24, color=[10, 20, 30])
     alpha = vs.core.std.BlankClip(width=width, height=height, format=vs.GRAY8, color=[150])
     src_with_alpha = src.std.ClipToProp(alpha, prop="_Alpha")
@@ -527,8 +540,9 @@ def test_helpers_packrgb_frame_alpha_prop(backend_name: str) -> None:
 
 
 @pytest.mark.vpy("initial-core")
-def test_helpers_packrgb_cython_fallback() -> None:
-    width, height = 16, 16
+@pytest.mark.parametrize("width", WIDTHS)
+@pytest.mark.parametrize("height", HEIGHTS)
+def test_helpers_packrgb_cython_fallback(width: int, height: int) -> None:
     src = vs.core.std.BlankClip(width=width, height=height, format=vs.RGB24, color=[10, 20, 30])
     packed = helpers.packrgb(src, backend=cast(Any, "cython"))
     assert packed.format.id == vs.GRAY32
