@@ -22,6 +22,19 @@ class DefaultUserDict[K, V](UserDict[K, V]):
 
         return new_value
 
+    @override
+    def clear(self) -> None:
+        self.data.clear()
+
+    @override
+    @copy_signature(UserDict[K, V].pop)
+    def pop(self, key: K, default: Any = ...) -> Any:
+        return self.data.pop(key) if default is ... else self.data.pop(key, default)
+
+    @override
+    def popitem(self) -> tuple[K, V]:
+        return self.data.popitem()
+
 
 class OutputMetadata(DefaultUserDict[str, dict[int, Any]]):
     def _hash_key(self, key: str | PathLike[str]) -> str:
@@ -38,8 +51,18 @@ class OutputMetadata(DefaultUserDict[str, dict[int, Any]]):
         super().__setitem__(self._hash_key(key), value)
 
     @override
+    def __delitem__(self, key: str | PathLike[str]) -> None:
+        super().__delitem__(self._hash_key(key))
+
+    @override
     def __contains__(self, key: object) -> bool:
         return super().__contains__(self._hash_key(str(key)))
+
+    @override
+    @copy_signature(DefaultUserDict[str, dict[int, Any]].pop)
+    def pop(self, key: str | PathLike[str], default: Any = ...) -> Any:
+        key_hash = self._hash_key(key)
+        return self.data.pop(key_hash) if default is ... else self.data.pop(key_hash, default)
 
 
 output_metadata = OutputMetadata(dict)
