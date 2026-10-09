@@ -420,7 +420,7 @@ class VideoFileWorkspace(GenericFileWorkspace):
 
         logger.debug("Loaded file: %s", self.content)
 
-    def _source(self) -> VideoNode:
+    def _source(self, **kwargs: Any) -> VideoNode:
         if find_spec("vssource"):
             from vssource import BestSource
 
@@ -428,7 +428,7 @@ class VideoFileWorkspace(GenericFileWorkspace):
 
             pr = BestSource.get_progress(console=console)
             task = pr.add_task("Indexing with BestSource...", total=100.0, visible=False)
-            bs = BestSource(show_pretty_progress=lambda pct: pr.update(task, completed=pct, visible=True))
+            bs = BestSource(show_pretty_progress=lambda pct: pr.update(task, completed=pct, visible=True), **kwargs)
             return bs.source(self.content, 0)
 
         logger.debug("Using fallback bs.VideoSource...")
