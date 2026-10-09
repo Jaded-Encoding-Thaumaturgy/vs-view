@@ -189,7 +189,7 @@ env = ["QT_QPA_PLATFORM=offscreen"]
 [tool.mypy]
 mypy_path = "$MYPY_CONFIG_FILE_DIR/stubs"
 exclude_gitignore = true
-exclude = ["^submodules/"]
+exclude = ["^submodules/", "^tests/"]
 
 # Flags changed by --strict
 warn_return_any = false
