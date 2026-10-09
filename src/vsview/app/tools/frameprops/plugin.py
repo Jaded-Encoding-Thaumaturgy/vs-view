@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from vspackrgb.helpers import packrgb
+from vspackrgb.helpers import get_plane_buffer, packrgb
 
 from vsview.api import (
     AnimatedToggle,
@@ -455,7 +455,13 @@ class FramePropPreviewGraphicsView(BaseGraphicsView):
                     with packed_clip.get_frame(0) as packed:
                         return self._packer.frame_to_qimage(packed).copy()
 
-        return QImage(frame[0], frame.width, frame.height, frame.get_stride(0), fmt).copy()
+        return QImage(
+            get_plane_buffer(frame, 0),  # type: ignore[call-overload]
+            frame.width,
+            frame.height,
+            frame.get_stride(0),
+            fmt,
+        ).copy()
 
     def frame2clip(self, frame: vs.VideoFrame) -> vs.VideoNode:
         key = hash((frame.width, frame.height, frame.format.id))
