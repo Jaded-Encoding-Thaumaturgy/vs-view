@@ -116,6 +116,34 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             context=Qt.ShortcutContext.WindowShortcut,
         )
 
+    @property
+    def left_box(self) -> QSpinBox:
+        return self.left_spin
+
+    @property
+    def right_box(self) -> QSpinBox:
+        return self.right_spin
+
+    @property
+    def top_box(self) -> QSpinBox:
+        return self.top_spin
+
+    @property
+    def bottom_box(self) -> QSpinBox:
+        return self.bottom_spin
+
+    @property
+    def width_box(self) -> QSpinBox:
+        return self.width_spin
+
+    @property
+    def height_box(self) -> QSpinBox:
+        return self.height_spin
+
+    @property
+    def command_label(self) -> CommandLabel:
+        return self.cmd_labels[0]
+
     def _add_spin_field(self, text: str, row: int, column: int) -> QSpinBox:
         name_label = QLabel(text, self.info_group)
         font = name_label.font()
