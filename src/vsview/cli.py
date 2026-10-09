@@ -96,15 +96,15 @@ def convert_log_level(type_: str, tokens: list[Token]) -> int:
     return getLevelNamesMapping()[tokens[0].value.upper()]
 
 
-def convert_arg(type_: type[dict[str, str]], tokens: list[Token]) -> dict[str, str]:
-    d = type_()
+def convert_arg(type_: type[Mapping[str, str]], tokens: list[Token]) -> dict[str, str]:
+    d = dict[str, str]()
     for arg in tokens:
         k, v = arg.value.split("=", 1)
         d[k] = v
     return d
 
 
-def convert_qt_args(type_: Sequence[str], tokens: list[Token]) -> Sequence[str]:
+def convert_qt_args(type_: Sequence[str], tokens: list[Token]) -> list[str]:
     return list(chain.from_iterable(shlex.split(t.value) for t in tokens))
 
 
@@ -131,7 +131,7 @@ def main(
     verbose: Annotated[int, Parameter(alias="-v", count=True)] = 0,
     arg: Annotated[
         Mapping[str, str],
-        Parameter(alias="-a", converter=convert_arg, metavar="<KEY=VALUE>"),
+        Parameter(alias="-a", converter=convert_arg, allow_repeating=True, n_tokens=-1, metavar="<KEY=VALUE>"),
     ] = {},
     qt_arg: Annotated[
         Sequence[str],
