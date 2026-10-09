@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from PySide6.QtCore import QObject, QSignalBlocker, Signal, SignalInstance, Slot
 from PySide6.QtWidgets import QApplication
 from rich.pretty import pretty_repr
+from shiboken6 import Shiboken
 
 from ...env import getenv_bool
 from .models import GlobalSettings, LocalSettings
@@ -53,6 +54,10 @@ class SettingsSignals(QObject):
         @Slot()
         def weak_slot() -> None:
             if (m := weak()) is not None:
+                receiver = getattr(m, "__self__", None)
+                if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
+                    signal.disconnect(weak_slot)
+                    return
                 m()
             else:
                 signal.disconnect(weak_slot)
@@ -65,6 +70,10 @@ class SettingsSignals(QObject):
         @Slot(str)
         def weak_slot(p: str) -> None:
             if (m := weak()) is not None:
+                receiver = getattr(m, "__self__", None)
+                if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
+                    signal.disconnect(weak_slot)
+                    return
                 m(p)
             else:
                 signal.disconnect(weak_slot)
