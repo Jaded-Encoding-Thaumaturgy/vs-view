@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QMenu,
     QSizePolicy,
     QSplitter,
@@ -357,6 +358,27 @@ class FramePropsTreeView(QTreeView, FramePropsViewMixin):
             for col, width in widths.items():
                 header.resizeSection(col, width)
 
+    def filter_props(self, text: str) -> None:
+        query = text.lower().strip()
+        model = self.current_model
+        for cat_row in range(model.rowCount()):
+            cat_index = model.index(cat_row, 0)
+            cat_item = model.itemFromIndex(cat_index)
+            if not cat_item:
+                continue
+            visible_children = 0
+            for child_row in range(cat_item.rowCount()):
+                child_key = str(cat_item.child(child_row, 0).text() or "").lower()
+                child_val = str(cat_item.child(child_row, 1).text() or "").lower()
+                hide = bool(query and query not in child_key and query not in child_val)
+                self.setRowHidden(child_row, cat_index, hide)
+                if not hide:
+                    visible_children += 1
+            if query:
+                self.setRowHidden(cat_row, QModelIndex(), visible_children == 0)
+            else:
+                self.setRowHidden(cat_row, QModelIndex(), False)
+
 
 class FramePropsTableModel(QStandardItemModel):
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -418,6 +440,17 @@ class FramePropsTableView(QTableView, FramePropsViewMixin):
     @run_in_loop(return_future=False)
     def update_props(self, props: Mapping[str, Any]) -> None:
         self.current_model.load_props(props)
+
+    def filter_props(self, text: str) -> None:
+        query = text.lower().strip()
+        model = self.model()
+        for row in range(model.rowCount()):
+            if not query:
+                self.setRowHidden(row, False)
+            else:
+                key = str(model.index(row, 0).data() or "").lower()
+                val = str(model.index(row, 1).data() or "").lower()
+                self.setRowHidden(row, query not in key and query not in val)
 
 
 class FramePropPreviewGraphicsView(BaseGraphicsView):
@@ -520,7 +553,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
         toggle_container = QWidget(self)
         toggle_layout = QVBoxLayout(toggle_container)
-        toggle_layout.setContentsMargins(0, 0, 0, 0)
+        toggle_layout.setContentsMargins(4, 0, 4, 0)
         toggle_layout.setSpacing(0)
         toggle_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
@@ -536,6 +569,13 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         toggle_layout.addWidget(fmt_row)
 
         self.toolbar.addWidget(toggle_container)
+
+        self.search_box = QLineEdit(self)
+        self.search_box.setPlaceholderText("Filter properties...")
+        self.search_box.setClearButtonEnabled(True)
+        self.search_box.setMaximumWidth(180)
+        self.search_box.textChanged.connect(self._on_search_text_changed)
+        self.toolbar.addWidget(self.search_box)
 
         spacer = QWidget(self.toolbar)
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -702,6 +742,8 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
         self.categorize_tree.update_props(props, auto_resize_0=auto_resize)
         self.raw_table.update_props(props)
+        if self.search_box.text():
+            self._on_search_text_changed(self.search_box.text())
 
     def update_nav_buttons(self) -> None:
         if not self.history_combo.isEnabled():
@@ -745,6 +787,11 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         layout.addWidget(toggle)
 
         return toggle, row
+
+    @Slot(str)
+    def _on_search_text_changed(self, text: str) -> None:
+        self.raw_table.filter_props(text)
+        self.categorize_tree.filter_props(text)
 
     @Slot(bool)
     def _on_categorize_toggled(self, checked: bool) -> None:
