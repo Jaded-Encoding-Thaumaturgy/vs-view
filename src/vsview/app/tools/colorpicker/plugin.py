@@ -175,7 +175,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             icon_size=QSize(24, 24),
             icon_states=self.DEFAULT_ICON_STATES,
         )
-        self.eyedropper_btn.toggled.connect(self.on_eyedropper_toggle)
+        self.eyedropper_btn.toggled.connect(self._on_eyedropper_toggle)
         top_bar_layout.addWidget(self.eyedropper_btn)
 
         self.main_layout.addLayout(top_bar_layout)
@@ -325,7 +325,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             # Copy button
             copy_btn = self.make_tool_button(IconName.CLIPBOARD, f"Copy {name} values", self)
             copy_btn.setFixedSize(24, 24)
-            copy_btn.clicked.connect(partial(self.copy_row, name, labels_dict, copy_btns_dict))
+            copy_btn.clicked.connect(partial(self._on_copy_btn_clicked, name, labels_dict, copy_btns_dict))
             grid.addWidget(copy_btn, row_idx, self.COL_VALUES_START + num_cols)
             copy_btns_dict[name] = copy_btn
 
@@ -502,7 +502,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         return results
 
     @Slot(bool)
-    def on_eyedropper_toggle(self, checked: bool) -> None:
+    def _on_eyedropper_toggle(self, checked: bool) -> None:
         if checked:
             self.tracking = TrackingState.ACTIVE
             self.api.current_view.viewport.set_cursor(Qt.CursorShape.CrossCursor)
@@ -516,7 +516,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         if self.tracking == TrackingState.ACTIVE and self.outputs:
             self.update_labels()
 
-    def copy_row(
+    def _on_copy_btn_clicked(
         self,
         row_name: str,
         labels_dict: dict[str, list[QLabel]],
