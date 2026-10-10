@@ -440,6 +440,40 @@ class FrameThumbnailList(QListWidget):
 
         self.listSizeChanged.emit(-nb)
 
+    @Slot()
+    def copy_timestamp(self) -> None:
+        items = self.selectedItems()
+
+        if len(items) == 1 and isinstance(item := items[0], ThumbnailItem):
+            QApplication.clipboard().setText(item.time.to_ts())
+            return
+
+        timestamps = list[str]()
+        for item in items:
+            if not isinstance(item, ThumbnailItem):
+                continue
+
+            timestamps.append(item.time.to_ts())
+
+        QApplication.clipboard().setText(str(timestamps))
+
+    @Slot()
+    def copy_frame_number(self) -> None:
+        items = self.selectedItems()
+
+        if len(items) == 1 and isinstance(item := items[0], ThumbnailItem):
+            QApplication.clipboard().setText(str(item.frame))
+            return
+
+        frame_numbers = list[int]()
+        for item in items:
+            if not isinstance(item, ThumbnailItem):
+                continue
+
+            frame_numbers.append(item.frame)
+
+        QApplication.clipboard().setText(str(frame_numbers))
+
     def get_data(self) -> list[tuple[Time, dict[int, ThumbnailItem.Metadata], FrameSourceProvider]]:
         return [
             (it.time, it.metadata, it.src_provider)
@@ -487,10 +521,17 @@ class FrameThumbnailList(QListWidget):
             return
 
         menu = QMenu(self)
+        count = len(self.selectedItems())
+        plural = count > 1
 
-        remove_action = menu.addAction(
-            f"Remove {count} frame(s)" if (count := len(self.selectedItems())) > 1 else "Remove frame"
-        )
+        copy_timestamp_action = menu.addAction(f"Copy {count} timestamps" if plural else "Copy timestamp")
+        copy_timestamp_action.triggered.connect(self.copy_timestamp)
+        copy_frame_action = menu.addAction(f"Copy {count} frame numbers" if plural else "Copy frame number")
+        copy_frame_action.triggered.connect(self.copy_frame_number)
+
+        menu.addSeparator()
+
+        remove_action = menu.addAction(f"Remove {count} frames" if plural else "Remove frame")
         remove_action.triggered.connect(self.remove_selected)
 
         menu.exec(self.mapToGlobal(pos))

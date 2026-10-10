@@ -141,6 +141,18 @@ It features automated frame selection, filtering by picture type, and integratio
 | **Allowed frame searches** | 150      | Max attempts per frame slot before giving up.                                                   |
 | **Brightness candidates**  | 0 (auto) | Candidate frames to analyze for dark/light selection. `0` auto-scales from clip length and FPS. |
 
+### Frame List Context Menu
+
+Right-clicking any thumbnail in the selected frames list opens a context menu for managing and copying frame data. Multi-selection (++ctrl++-click or ++shift++-click) is supported:
+
+| Action                   | Description                                                                     |
+| :----------------------- | :------------------------------------------------------------------------------ |
+| **Copy timestamp(s)**    | Copies the timestamp (`HH:MM:SS.mmm`) or a list of timestamps to the clipboard. |
+| **Copy frame number(s)** | Copies the frame number or a list of frame numbers to the clipboard.            |
+| **Remove frame(s)**      | Removes the selected frame(s) from the list (also supported via ++delete++).    |
+
+Double-clicking any thumbnail in the list seeks the playback directly to that frame.
+
 ### Probability Curve Editor
 
 Click **Curve...** (next to the random frame count) to open the curve editor and bias where in the timeline random frames are sampled from.
