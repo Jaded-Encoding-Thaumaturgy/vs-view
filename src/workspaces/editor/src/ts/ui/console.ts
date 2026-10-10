@@ -394,17 +394,17 @@ export class ConsolePanelService implements vscode.Disposable {
       shortcutSpan.textContent = item.shortcut;
       itemEl.appendChild(shortcutSpan);
 
-      if (!item.disabled) {
-        const onItemClick = (e: MouseEvent) => {
-          e.stopPropagation();
+      const onItemClick = (e: MouseEvent) => {
+        e.stopPropagation();
+        if (!item.disabled) {
           this.closeContextMenu();
           item.action();
-        };
-        itemEl.addEventListener("click", onItemClick);
-        this.contextMenuDisposables.add(
-          toDisposable(() => itemEl.removeEventListener("click", onItemClick)),
-        );
-      }
+        }
+      };
+      itemEl.addEventListener("click", onItemClick);
+      this.contextMenuDisposables.add(
+        toDisposable(() => itemEl.removeEventListener("click", onItemClick)),
+      );
 
       menu.appendChild(itemEl);
     }
