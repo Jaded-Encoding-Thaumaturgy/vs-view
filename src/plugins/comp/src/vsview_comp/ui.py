@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from enum import StrEnum
 from functools import partial
 from logging import getLogger
 from pathlib import Path
@@ -97,7 +96,7 @@ from vsview.api import (
     run_in_loop,
 )
 
-from .models import TMDBTitle
+from .models import FrameSourceProvider, TMDBTitle
 
 logger = getLogger(__name__)
 
@@ -255,13 +254,6 @@ class OutputDropdown(QPushButton):
             self.setText(f"{', '.join(names)}{self.shortest_dur_text}")
 
         self.inclusionChanged.emit()
-
-
-class FrameSourceProvider(StrEnum):
-    MANUAL = "Manual"
-    RANDOM = "Random"
-    RANDOM_DARK = "Random dark"
-    RANDOM_LIGHT = "Random light"
 
 
 TIME_ROLE = Qt.ItemDataRole.UserRole

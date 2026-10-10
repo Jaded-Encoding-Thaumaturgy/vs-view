@@ -14,9 +14,8 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from http.cookiejar import CookieJar
 from logging import DEBUG, getLogger
-from operator import attrgetter
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Protocol
 
 import niquests
 import niquests.cookies
@@ -25,13 +24,21 @@ from pathvalidate import sanitize_filepath
 from PySide6.QtCore import QThreadPool
 from PySide6.QtGui import QImage
 from vapoursynth import GRAY8, VideoNode
-from vstools import DitherType, clip_data_gather, core, depth, get_prop, remap_frames, vs
+from vstools import clip_data_gather, core, depth, get_prop, remap_frames, vs
 
 from vsview.api import Packer, PluginAPI, PluginSecrets, PluginSettings, Time, run_in_background
 
 from ._metadata import COOKIE_KEY, LOGIN_CONTEXT
-from .models import SlowPicsSources, SlowPicsUploadResponse, TMDBPayload, TMDBTitle, TMDBTitleData
-from .ui import FrameSourceProvider, ProgressBar
+from .models import (
+    ExtractFramesConfig,
+    FrameSourceProvider,
+    SelectFrameConfig,
+    SlowPicsSources,
+    SlowPicsUploadResponse,
+    TMDBPayload,
+    TMDBTitle,
+    TMDBTitleData,
+)
 from .utils import (
     LogNiquestsErrors,
     UploadError,
@@ -43,25 +50,31 @@ from .utils import (
 )
 
 if TYPE_CHECKING:
-    from .plugin import CompPlugin, GlobalSettings
+    from .plugin import GlobalSettings
 
 REV_CONF = niquests.RevocationConfiguration(niquests.RevocationStrategy.PREFER_CRL)
 
 logger = getLogger(__name__)
 
 
+class ProgressCallback(Protocol):
+    def __call__(
+        self,
+        *,
+        value: int | None = None,
+        range: tuple[int, int] | None = None,
+        fmt: str | None = None,
+        increment: int | None = None,
+    ) -> None: ...
+
+
 class ExtractFramesWorker:
-    def __init__(self, api: PluginAPI, parent: CompPlugin) -> None:
+    def __init__(self, api: PluginAPI, cfg: ExtractFramesConfig, progress_cb: ProgressCallback) -> None:
         self.api = api
-        self.progress_bar = parent.progress_bar
-        self.data = parent.frames_list.get_data()
-        self.voutputs = parent.selected_voutputs
+        self.cfg = cfg
+        self.progress_cb = progress_cb
         self.packer = Packer(8)
         self._cancel_event = threading.Event()
-
-        if not (storage := self.api.get_local_storage(parent)):
-            raise NotImplementedError
-        self.storage = storage
 
     @property
     def is_cancelled(self) -> bool:
@@ -76,25 +89,20 @@ class ExtractFramesWorker:
         self._cancel_event.set()
 
     def _extract(self) -> list[tuple[int, Path]]:
-        self.progress_bar.update_progress(
-            range=(0, len(self.data) * len(self.voutputs)),
+        self.progress_cb(
+            range=(0, len(self.cfg.frames_data) * len(self.cfg.voutputs)),
             fmt="Extracting frames %v / %m",
             value=0,
         )
 
-        path = self.storage / datetime.now(tz=UTC).astimezone().strftime("%Y-%m-%d %H-%M-%S")
+        path = self.cfg.storage / datetime.now(tz=UTC).astimezone().strftime("%Y-%m-%d %H-%M-%S")
         workers = list[Future[None]]()
         images_paths = list[tuple[int, Path]]()
-
-        try:
-            dither_type = attrgetter("settings.view")(self.api)
-        except AttributeError:
-            dither_type = DitherType.RANDOM
 
         with self.api.vs_context():
             is_fpng_available = hasattr(core, "fpng")
 
-            for output in self.voutputs:
+            for output in self.cfg.voutputs:
                 if self.is_cancelled:
                     raise CancelledError("Extract frames cancelled")
                 images_path = path / f"({output.vs_index}) ({output.vs_name})"
@@ -103,8 +111,8 @@ class ExtractFramesWorker:
                 images_paths.append((output.vs_index, images_path))
 
                 clip = self.packer.to_rgb_planar(output.vs_output.clip)
-                alpha = depth(a, 8, dither_type=dither_type) if (a := output.vs_output.alpha) else None
-                frames = [output.time_to_frame(t) for t, *_ in self.data]
+                alpha = depth(a, 8, dither_type=self.cfg.dither_type) if (a := output.vs_output.alpha) else None
+                frames = [output.time_to_frame(t) for t, *_ in self.cfg.frames_data]
                 clip_image_path = images_path / f"%0{ndigits(max(frames))}d.png"
 
                 if is_fpng_available:
@@ -131,7 +139,7 @@ class ExtractFramesWorker:
             for _ in remapped.frames(close=True):
                 if self.is_cancelled:
                     raise CancelledError("Extract frames cancelled")
-                self.progress_bar.update_progress(increment=1)
+                self.progress_cb(increment=1)
 
     @run_in_background(name="ExtractQt")
     def _qt_extract(self, clip: VideoNode, alpha: VideoNode | None, path: Path, frames: Sequence[int]) -> None:
@@ -158,7 +166,7 @@ class ExtractFramesWorker:
         if self.is_cancelled:
             return
         qimage.save(str(path), "PNG", 75)  # type: ignore[call-overload]
-        self.progress_bar.update_progress(increment=1)
+        self.progress_cb(increment=1)
 
 
 class _SourceInfo(NamedTuple):
@@ -171,36 +179,12 @@ class SelectFrameWorker:
     DARK_CURVE_PARAMS = (0.065, 0.015, 0.15)
     LIGHT_CURVE_PARAMS = (0.75, 0.45, 0.90)
 
-    def __init__(self, api: PluginAPI, parent: CompPlugin) -> None:
+    def __init__(self, api: PluginAPI, cfg: SelectFrameConfig, progress_cb: ProgressCallback) -> None:
         self.api = api
-        self.progress_bar = parent.progress_bar
-
-        self.start = Time.from_qtime(parent.time_edit_start.time())
-        self.end = Time.from_qtime(parent.time_edit_end.time())
-        self.dark = parent.dark_frame_count.value()
-        self.light = parent.light_frame_count.value()
-        self.normal = parent.random_frame_count.value() - self.dark - self.light
-        self.voutputs = parent.selected_voutputs
-        self.curve_points = parent.curve_points
-        self.allowed_frame_searches = parent.settings.global_.allowed_frame_searches
-        self.brightness_candidates = parent.settings.global_.brightness_candidates
+        self.cfg = cfg
+        self.progress_cb = progress_cb
+        self.checked = list(cfg.checked)
         self._cancel_event = threading.Event()
-
-        # Existing frames to avoid duplicates
-        v = self.api.current_voutput
-        self.checked = [int(v.time_to_frame(t)) for t, *_ in parent.frames_list.get_data()]
-
-        # Picture types
-        self.pict_types = list[str]()
-        if parent.pict_type_i_cb.isChecked():
-            self.pict_types.append("I")
-        if parent.pict_type_p_cb.isChecked():
-            self.pict_types.append("P")
-        if parent.pict_type_b_cb.isChecked():
-            self.pict_types.append("B")
-
-        self.should_check_pict = len(self.pict_types) < 3 and parent.pict_types_supported
-        self.should_check_combed = not parent.combed_cb.isChecked()
 
     @property
     def is_cancelled(self) -> bool:
@@ -219,16 +203,16 @@ class SelectFrameWorker:
             return []
 
         start_frame, end_frame = frame_range
-        cdf, total_weight = get_probability_cdf(start_frame, end_frame, self.curve_points)
+        cdf, total_weight = get_probability_cdf(start_frame, end_frame, self.cfg.curve_points)
         candidates = range(start_frame, end_frame + 1)
 
         found_times = list[tuple[Time, FrameSourceProvider]]()
 
-        if self.normal > 0:
+        if self.cfg.normal > 0:
             found_times.extend(
                 (t, FrameSourceProvider.RANDOM)
                 for t in self._sample_frames(
-                    count=self.normal,
+                    count=self.cfg.normal,
                     candidates=candidates,
                     cdf=cdf,
                     total_weight=total_weight,
@@ -236,10 +220,10 @@ class SelectFrameWorker:
                 )
             )
 
-        if self.dark > 0 or self.light > 0:
+        if self.cfg.dark > 0 or self.cfg.light > 0:
             # Sample candidate frames for brightness analysis using the temporal probability CDF
             dur = end_frame - start_frame + 1
-            if c := self.brightness_candidates:
+            if c := self.cfg.brightness_candidates:
                 num_candidates = min(c, dur)
             else:
                 duration = self.api.current_voutput.frame_to_time(dur).total_seconds()
@@ -253,7 +237,7 @@ class SelectFrameWorker:
                 cdf=cdf,
                 total_weight=total_weight,
                 is_valid_fn=lambda rnum: rnum not in candidate_frames,
-                max_attempts=min(self.allowed_frame_searches, num_candidates),
+                max_attempts=min(self.cfg.allowed_frame_searches, num_candidates),
                 on_sample_added=candidate_frames.add,
             )
 
@@ -263,14 +247,12 @@ class SelectFrameWorker:
                 .resize.Point(format=vs.GRAYS)
                 .std.PlaneStats()
             )
-            self.progress_bar.update_progress(
-                range=(0, len(frames_to_check)), fmt="Checking frames light levels %v / %m", value=0
-            )
+            self.progress_cb(range=(0, len(frames_to_check)), fmt="Checking frames light levels %v / %m", value=0)
 
             def progress_cb(*_: Any) -> None:
                 if self.is_cancelled:
                     raise CancelledError("Select frames cancelled")
-                self.progress_bar.update_progress(increment=1)
+                self.progress_cb(increment=1)
 
             avg_levels = clip_data_gather(
                 clip_to_check,
@@ -279,11 +261,11 @@ class SelectFrameWorker:
                 async_requests=clamp(core.num_threads // 2, 2, clip_to_check.num_frames),
             )
 
-            if self.dark > 0:
+            if self.cfg.dark > 0:
                 found_times.extend(
                     (t, FrameSourceProvider.RANDOM_DARK)
                     for t in self._get_weighted_brightness_frames(
-                        self.dark,
+                        self.cfg.dark,
                         frames_to_check,
                         avg_levels,
                         self.DARK_CURVE_PARAMS,
@@ -291,11 +273,11 @@ class SelectFrameWorker:
                     )
                 )
 
-            if self.light > 0:
+            if self.cfg.light > 0:
                 found_times.extend(
                     (t, FrameSourceProvider.RANDOM_LIGHT)
                     for t in self._get_weighted_brightness_frames(
-                        self.light,
+                        self.cfg.light,
                         frames_to_check,
                         avg_levels,
                         self.LIGHT_CURVE_PARAMS,
@@ -307,9 +289,9 @@ class SelectFrameWorker:
 
     def _get_frame_range(self) -> tuple[int, int] | None:
         v = self.api.current_voutput
-        start_frame, end_frame = v.time_to_frame(self.start), v.time_to_frame(self.end)
+        start_frame, end_frame = v.time_to_frame(self.cfg.start), v.time_to_frame(self.cfg.end)
 
-        min_clip_length = min(output.vs_output.clip.num_frames for output in self.voutputs)
+        min_clip_length = min(output.vs_output.clip.num_frames for output in self.cfg.voutputs)
         end_frame = min(end_frame, min_clip_length - 1)
 
         if start_frame > end_frame:
@@ -330,17 +312,17 @@ class SelectFrameWorker:
         total_weight: float,
         progress_fmt: str,
     ) -> list[Time]:
-        self.progress_bar.update_progress(range=(0, count), fmt=progress_fmt, value=0)
+        self.progress_cb(range=(0, count), fmt=progress_fmt, value=0)
 
         v = self.api.current_voutput
-        base_clip = core.std.BlankClip(width=1, height=1, format=GRAY8, length=len(self.voutputs), keep=True)
-        other_clips = [_SourceInfo(output.vs_output.clip, output.time_to_frame) for output in self.voutputs]
+        base_clip = core.std.BlankClip(width=1, height=1, format=GRAY8, length=len(self.cfg.voutputs), keep=True)
+        other_clips = [_SourceInfo(output.vs_output.clip, output.time_to_frame) for output in self.cfg.voutputs]
 
         def is_valid_fn(rnum: int) -> bool:
             if rnum in self.checked:
                 return False
 
-            if not (self.should_check_pict or self.should_check_combed):
+            if not (self.cfg.should_check_pict or self.cfg.should_check_combed):
                 return True
 
             # Convert frame -> time, then use each clip's own time_to_frame to get a valid frame index
@@ -358,11 +340,11 @@ class SelectFrameWorker:
                     raise CancelledError("Select frames cancelled")
 
                 is_pict_type_not_selected = (
-                    self.should_check_pict
-                    and get_prop(f, "_PictType", str, default="", func="__vsview__") not in self.pict_types
+                    self.cfg.should_check_pict
+                    and get_prop(f, "_PictType", str, default="", func="__vsview__") not in self.cfg.pict_types
                 )
                 is_combed = (
-                    self.should_check_combed  # No format
+                    self.cfg.should_check_combed  # No format
                     and get_prop(f, "_Combed", int, default=0, func="__vsview__")
                 )
 
@@ -383,7 +365,7 @@ class SelectFrameWorker:
             self.checked.append(rnum)
             selected_times.append(v.frame_to_time(rnum))
             logger.log(DEBUG - 1, "Valid frame found: %s", rnum)
-            self.progress_bar.update_progress(value=len(selected_times))
+            self.progress_cb(value=len(selected_times))
 
         self._itss_sample(
             count=count,
@@ -391,7 +373,7 @@ class SelectFrameWorker:
             cdf=cdf,
             total_weight=total_weight,
             is_valid_fn=is_valid_fn,
-            max_attempts=self.allowed_frame_searches,
+            max_attempts=self.cfg.allowed_frame_searches,
             on_sample_added=on_sample_added,
         )
 
@@ -548,17 +530,10 @@ class SlowPicsWorker:
     MAX_CONCURRENT_REQUESTS = 6
     _cooldown_until = 0.0
 
-    def __init__(
-        self,
-        api: PluginAPI,
-        settings: PluginSettings[GlobalSettings, None],
-        secrets: PluginSecrets,
-        progress_bar: ProgressBar,
-    ) -> None:
+    def __init__(self, api: PluginAPI, settings: PluginSettings[GlobalSettings, None], secrets: PluginSecrets) -> None:
         self.api = api
         self.settings = settings
         self.secrets = secrets
-        self.progress_bar = progress_bar
         self.headers = get_slowpics_headers()
         self._cancel_event = threading.Event()
         self._upload_task: asyncio.Task[Any] | None = None
@@ -631,7 +606,7 @@ class SlowPicsWorker:
             return self._cookies_jar(client.cookies) if await self._login_async(client) else {}
 
     @run_in_background(name="SlowPicsUpload")
-    async def upload(self, *, src: SlowPicsSources, cookies: dict[str, str]) -> str:
+    async def upload(self, *, src: SlowPicsSources, cookies: dict[str, str], progress_cb: ProgressCallback) -> str:
         if (remaining := self.get_remaining_cooldown()) > 0:
             logger.warning("Upload on cooldown. Please wait %ds before retrying.", math.ceil(remaining))
             raise asyncio.CancelledError(f"Upload on cooldown ({math.ceil(remaining)}s remaining).")
@@ -672,7 +647,7 @@ class SlowPicsWorker:
                 logger.debug("Starting upload of: %s", collection_url)
 
                 # Upload images concurrently
-                self.progress_bar.update_progress(range=(0, src.total_images), fmt="Uploading images %v / %m", value=0)
+                progress_cb(range=(0, src.total_images), fmt="Uploading images %v / %m", value=0)
 
                 async def upload_with_progress(img_uuid: str, img_path: Path) -> None:
                     if self.is_cancelled:
@@ -680,7 +655,7 @@ class SlowPicsWorker:
                     logger.debug("Uploading image: %s", img_uuid)
                     await self._upload_image(client, comp_data.collection_uuid, img_uuid, img_path)
                     logger.debug("Finished uploading image: %s", img_uuid)
-                    self.progress_bar.update_progress(increment=1)
+                    progress_cb(increment=1)
 
                 async with asyncio.TaskGroup() as tg:
                     for img_uuid, image_path in src.get_images(comp_data):
@@ -689,7 +664,7 @@ class SlowPicsWorker:
                         tg.create_task(upload_with_progress(img_uuid, image_path))
 
                 logger.debug("Finished uploading all images")
-                self.progress_bar.update_progress(fmt="Finished uploading %v images")
+                progress_cb(fmt="Finished uploading %v images")
 
                 # Refresh cookies
                 self.secrets.set_json(COOKIE_KEY, COOKIE_KEY, self._cookies_jar(client.cookies))

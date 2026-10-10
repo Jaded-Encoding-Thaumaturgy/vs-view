@@ -3,6 +3,7 @@ import asyncio
 from collections.abc import Sequence
 from concurrent.futures import CancelledError
 from logging import getLogger
+from operator import attrgetter
 from pathlib import Path
 from typing import Annotated, Any, override
 from uuid import uuid4
@@ -35,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from vsengine.futures import UnifiedFuture
+from vstools import DitherType
 
 from vsview.api import (
     Accordion,
@@ -57,10 +59,17 @@ from vsview.api import (
 )
 
 from ._metadata import LOGIN_CONTEXT, PLUGIN_DISPLAY, PLUGIN_ID
-from .models import ComparisonImage, ComparisonSource, SlowPicsSources, TMDBTitle
+from .models import (
+    ComparisonImage,
+    ComparisonSource,
+    ExtractFramesConfig,
+    FrameSourceProvider,
+    SelectFrameConfig,
+    SlowPicsSources,
+    TMDBTitle,
+)
 from .ui import (
     BrowserID,
-    FrameSourceProvider,
     FrameThumbnailList,
     LineEditCompleter,
     MainCompWidget,
@@ -225,7 +234,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         main_layout.addWidget(self.progress_stack)
 
-        self.slowpics_worker = SlowPicsWorker(self.api, self.settings, self.secrets, self.progress_bar)
+        self.slowpics_worker = SlowPicsWorker(self.api, self.settings, self.secrets)
 
         self.api.register_action(
             f"{PLUGIN_ID}.add_current_frame",
@@ -572,6 +581,54 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         included = self.outputs_dropdown.included_outputs
         return [v for v in self.comp_voutputs if v.vs_index in included]
 
+    @property
+    def _select_frame_config(self) -> SelectFrameConfig:
+        v = self.api.current_voutput
+        pict_types = list[str]()
+        if self.pict_type_i_cb.isChecked():
+            pict_types.append("I")
+        if self.pict_type_p_cb.isChecked():
+            pict_types.append("P")
+        if self.pict_type_b_cb.isChecked():
+            pict_types.append("B")
+
+        dark = self.dark_frame_count.value()
+        light = self.light_frame_count.value()
+        normal = self.random_frame_count.value() - dark - light
+
+        return SelectFrameConfig(
+            start=Time.from_qtime(self.time_edit_start.time()),
+            end=Time.from_qtime(self.time_edit_end.time()),
+            normal=normal,
+            dark=dark,
+            light=light,
+            voutputs=self.selected_voutputs,
+            curve_points=self.curve_points,
+            checked=[int(v.time_to_frame(t)) for t, *_ in self.frames_list.get_data()],
+            pict_types=pict_types,
+            should_check_pict=len(pict_types) < 3 and self.pict_types_supported,
+            should_check_combed=not self.combed_cb.isChecked(),
+            allowed_frame_searches=self.settings.global_.allowed_frame_searches,
+            brightness_candidates=self.settings.global_.brightness_candidates,
+        )
+
+    @property
+    def _extract_frames_config(self) -> ExtractFramesConfig:
+        if not (storage := self.api.get_local_storage(self)):
+            raise NotImplementedError
+
+        try:
+            dither_type = attrgetter("settings.view")(self.api)
+        except AttributeError:
+            dither_type = DitherType.RANDOM
+
+        return ExtractFramesConfig(
+            storage=storage,
+            frames_data=self.frames_list.get_data(),
+            voutputs=self.selected_voutputs,
+            dither_type=dither_type,
+        )
+
     @override
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         # Intercept tooltips for this plugin tree when disabled
@@ -736,9 +793,9 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
     @Slot()
     def on_select_frames_clicked(self) -> None:
-        worker = SelectFrameWorker(self.api, self)
+        cfg = self._select_frame_config
 
-        if (worker.normal + worker.dark + worker.light) > 50:
+        if cfg.total_count > 50:
             result = QMessageBox.warning(
                 self,
                 "Too Many Frames",
@@ -769,6 +826,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             else:
                 logger.error("Error during frame selection: %s", exc)
 
+        worker = SelectFrameWorker(self.api, cfg, self.progress_bar.update_progress)
         self._select_frames_worker = worker
         self._pending_select_frames = (
             worker.run()
@@ -800,7 +858,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                     logger.error("Error during frame extraction: %s", exc)
                 return []
 
-            worker = ExtractFramesWorker(self.api, self)
+            worker = ExtractFramesWorker(self.api, self._extract_frames_config, self.progress_bar.update_progress)
             self._extract_frames_worker = worker
             self._pending_extract_frames = (
                 worker.run()
@@ -1052,7 +1110,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                 self._update_buttons_state()
 
             self._pending_upload = (
-                self.slowpics_worker.upload(src=src, cookies=cookies)
+                self.slowpics_worker.upload(src=src, cookies=cookies, progress_cb=self.progress_bar.update_progress)
                 .add_loop_callback(on_done)
                 .then(on_upload_success, on_upload_error, on_loop=True)
             )

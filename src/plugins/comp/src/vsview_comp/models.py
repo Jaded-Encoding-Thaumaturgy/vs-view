@@ -2,14 +2,56 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
+from enum import StrEnum
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Literal, NamedTuple, Self
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self
 
 from jetpytools import classproperty
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from PySide6.QtCore import QPointF
+from vstools import DitherType
+
+from vsview.api import Time, VideoOutputProxy
+
+if TYPE_CHECKING:
+    from .ui import ThumbnailItem
 
 logger = getLogger(__name__)
+
+
+class FrameSourceProvider(StrEnum):
+    MANUAL = "Manual"
+    RANDOM = "Random"
+    RANDOM_DARK = "Random dark"
+    RANDOM_LIGHT = "Random light"
+
+
+class ExtractFramesConfig(NamedTuple):
+    storage: Path
+    frames_data: Sequence[tuple[Time, dict[int, ThumbnailItem.Metadata], FrameSourceProvider]]
+    voutputs: Sequence[VideoOutputProxy]
+    dither_type: DitherType = DitherType.RANDOM
+
+
+class SelectFrameConfig(NamedTuple):
+    start: Time
+    end: Time
+    normal: int
+    dark: int
+    light: int
+    voutputs: Sequence[VideoOutputProxy]
+    curve_points: Sequence[QPointF]
+    checked: Sequence[int]
+    pict_types: Sequence[str]
+    should_check_pict: bool
+    should_check_combed: bool
+    allowed_frame_searches: int
+    brightness_candidates: int | None = None
+
+    @property
+    def total_count(self) -> int:
+        return self.normal + self.dark + self.light
 
 
 class ComparisonImage(NamedTuple):
