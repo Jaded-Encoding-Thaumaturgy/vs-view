@@ -84,7 +84,7 @@ class AudioOutput:
     # https://github.com/vapoursynth/vapoursynth/blob/8cd1cba539bf70eea21dc242d43349603115632d/include/VapourSynth4.h#L36
     SAMPLES_PER_FRAME = 3072
 
-    def __init__(self, vs_output: vs.AudioNode, vs_index: int, metadata: AudioMetadata | None) -> None:
+    def __init__(self, vs_output: vs.AudioNode, vs_index: int, metadata: AudioMetadata | None = None) -> None:
         self.vs_output = vs_output
         self.vs_index = vs_index
         self.vs_name = metadata.name if metadata else f"Audio {vs_index}"  # Matches vsview.set_output
