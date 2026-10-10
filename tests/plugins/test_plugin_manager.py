@@ -10,7 +10,6 @@ from typing import Annotated, Any
 
 import pytest
 from jetpytools import inject_self
-from jetpytools.types.utils import _self_objects_cache
 from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
@@ -31,10 +30,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.qt]
 @pytest.fixture(autouse=True)
 def isolate_plugin_manager_singleton() -> Generator[None]:
     """Ensure a fresh PluginManager singleton state for every test."""
-    _self_objects_cache.pop(SettingsManager, None)
     type(PluginManager)._instances.pop(PluginManager, None)
     yield
-    _self_objects_cache.pop(SettingsManager, None)
     type(PluginManager)._instances.pop(PluginManager, None)
 
 

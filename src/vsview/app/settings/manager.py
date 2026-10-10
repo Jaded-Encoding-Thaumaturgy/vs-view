@@ -104,18 +104,18 @@ class SettingsManager(Singleton):
         """Get the current global settings."""
         return self._global_settings
 
-    @inject_self.cached.property
+    @inject_self.property
     def default_global_settings(self) -> GlobalSettings:
         """Get the default global settings, lazily initialized."""
 
         return GlobalSettings()
 
-    @inject_self.cached.property
+    @inject_self.property
     def default_local_settings(self) -> LocalSettings:
         """Get the default local settings, lazily initialized."""
         return LocalSettings()
 
-    @inject_self.cached
+    @inject_self
     def get_local_settings(self, script_path: os.PathLike[str]) -> LocalSettings:
         """
         Get local settings for a specific script.
@@ -136,7 +136,7 @@ class SettingsManager(Singleton):
 
         return self._local_settings.get(path_hash) or self.default_local_settings
 
-    @inject_self.cached
+    @inject_self
     def save_global(self, settings: GlobalSettings | None = None, path: os.PathLike[str] | None = None) -> None:
         """Save global settings to disk."""
         try:
@@ -156,7 +156,7 @@ class SettingsManager(Singleton):
         except Exception:
             logger.exception("Failed to save global settings")
 
-    @inject_self.cached
+    @inject_self
     def save_local(
         self,
         script_path: os.PathLike[str],

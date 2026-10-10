@@ -90,22 +90,22 @@ class PluginManager(Singleton):
         self._load_future: Future[None] | None = None
         self._lock = Lock()
 
-    @inject_self.cached.property
+    @inject_self.property
     @ensure_loaded("entrypoints")
     def tooldocks(self) -> list[type[WidgetPluginBase[Any, Any]]]:
         return self.manager.hook.vsview_register_tooldock()
 
-    @inject_self.cached.property
+    @inject_self.property
     @ensure_loaded("entrypoints")
     def toolpanels(self) -> list[type[WidgetPluginBase[Any, Any]]]:
         return self.manager.hook.vsview_register_toolpanel()
 
-    @inject_self.cached.property
+    @inject_self.property
     @ensure_loaded("entrypoints")
     def video_processor(self) -> type[NodeProcessor[VideoNode, Any, Any]] | None:
         return self.manager.hook.vsview_get_video_processor()
 
-    @inject_self.cached.property
+    @inject_self.property
     @ensure_loaded("entrypoints")
     def audio_processor(self) -> type[NodeProcessor[AudioNode, Any, Any]] | None:
         return self.manager.hook.vsview_get_audio_processor()
@@ -124,7 +124,7 @@ class PluginManager(Singleton):
 
         return sorted(all_plugins, key=lambda p: p.identifier)
 
-    @inject_self.cached.property
+    @inject_self.property
     @ensure_loaded("entrypoints")
     def workspaces(self) -> list[type[PluginBaseWorkspace[Any, Any]]]:
         restricted_caller = self.manager.subset_hook_caller(

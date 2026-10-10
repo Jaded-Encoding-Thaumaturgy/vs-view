@@ -10,7 +10,6 @@ from unittest.mock import MagicMock
 import pytest
 import vapoursynth as vs
 from jetpytools import SPath
-from jetpytools.types.utils import _self_objects_cache
 from PySide6.QtWidgets import QApplication
 from pytestqt.qtbot import QtBot
 from vsengine.loops import NO_LOOP, set_loop
@@ -116,43 +115,33 @@ def isolate_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generat
 
 
 def _reset_settings_manager() -> None:
-    _self_objects_cache.pop(SettingsManager, None)
     if SettingsManager in type(SettingsManager)._instances:
         sm = SettingsManager()
         sm._global_settings = sm.default_global_settings
         sm._local_settings.clear()
         sm._signals = SettingsSignals(QApplication.instance())
-        _self_objects_cache[SettingsManager] = sm
 
 
 @pytest.fixture
 def fresh_settings_manager() -> Generator[Callable[[], SettingsManager], None, None]:
     """Factory fixture to safely re-instantiate SettingsManager singleton with guaranteed teardown."""
     original: SettingsManager | None = type(SettingsManager)._instances.get(SettingsManager)
-    original_cache = _self_objects_cache.get(SettingsManager)
 
     def reinit() -> SettingsManager:
         type(SettingsManager)._instances.pop(SettingsManager, None)
-        _self_objects_cache.pop(SettingsManager, None)
-        sm = SettingsManager()
-        _self_objects_cache[SettingsManager] = sm
-        return sm
+        return SettingsManager()
 
     try:
         yield reinit
     finally:
         # Restore the original singleton so existing signal connections stay valid
         type(SettingsManager)._instances.pop(SettingsManager, None)
-        _self_objects_cache.pop(SettingsManager, None)
 
         if original is not None:
             type(SettingsManager)._instances[SettingsManager] = original
             original._global_settings = original.default_global_settings
             original._local_settings.clear()
             original._signals = SettingsSignals(QApplication.instance())
-            _self_objects_cache[SettingsManager] = original
-        elif original_cache is not None:
-            _self_objects_cache[SettingsManager] = original_cache
 
 
 # Qt Event Loop & Lifecycle
