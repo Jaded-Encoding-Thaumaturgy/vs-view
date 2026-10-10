@@ -143,6 +143,14 @@ class GlobalSettings(BaseModel):
             ),
         ),
     ] = 0
+    auto_load_frames: Annotated[
+        bool,
+        Checkbox(
+            label="Preserve frames on reload",
+            text="",
+            tooltip="Automatically restore the selected frame list across script reloads.",
+        ),
+    ] = False
     auto_copy_slowpics_url: Annotated[
         bool,
         Checkbox(
@@ -179,6 +187,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._extract_paths: list[tuple[int, Path]] | None = None
         self._reported_url = ""
         self._collection_name_tmdb: str | None = None
+        self._current_data: list[tuple[Time, FrameSourceProvider]] | None = None
         self.curve_points: Sequence[QPointF] = [QPointF(0.0, 1.0), QPointF(1.0, 1.0)]
 
         # Build UI
@@ -264,7 +273,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self.outputs_dropdown = OutputDropdown(self.clip_section)
         self.outputs_dropdown.setToolTip("Select and rename outputs.")
-        self.outputs_dropdown.inclusionChanged.connect(self._update_buttons_state)
+        self.outputs_dropdown.outputsChanged.connect(self._update_buttons_state)
         form.addRow(self.outputs_dropdown)
 
         # Current frames + add remove buttons
@@ -687,6 +696,11 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         if self.pict_types_supported and not any("_PictType" in props for props in voutput.props.values()):
             self.pict_types_supported = False
 
+        if self._current_data:
+            v = self.api.current_voutput
+            for t, provider in self._current_data:
+                self.frames_list.add_item(frame=v.time_to_frame(t), src_provider=provider)
+
         self.frames_list.update_thumbnails(voutput.vs_index)
 
     @Slot()
@@ -727,6 +741,9 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._extraction_finished = False
         self._update_buttons_state()
         self._update_frames_count()
+
+        if self.settings.global_.auto_load_frames:
+            self._current_data = [(d[0], d[2]) for d in self.frames_list.get_data()]
 
     @Slot(int, int)
     def on_thumbnail_progress(self, pending: int, total: int) -> None:

@@ -206,7 +206,7 @@ class OutputItemWidget(QWidget):
 
 
 class OutputDropdown(QPushButton):
-    inclusionChanged = Signal()
+    outputsChanged = Signal()
 
     class Output(NamedTuple):
         vs_index: int
@@ -219,7 +219,6 @@ class OutputDropdown(QPushButton):
         self.shortest_dur_text = ""  # Set in init_load
 
         self.setMenu(NonClosingMenu(self))
-
         self.setStyleSheet("text-align: left; padding: 4px;")
 
     @property
@@ -257,7 +256,7 @@ class OutputDropdown(QPushButton):
             names = [w.vs_name for w in included]
             self.setText(f"{', '.join(names)}{self.shortest_dur_text}")
 
-        self.inclusionChanged.emit()
+        self.outputsChanged.emit()
 
 
 TIME_ROLE = Qt.ItemDataRole.UserRole
