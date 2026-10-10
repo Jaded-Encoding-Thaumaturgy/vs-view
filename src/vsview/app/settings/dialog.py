@@ -507,7 +507,10 @@ class SettingsDialog(QDialog, IconReloadMixin):
         for entry in self.global_settings_registry:
             widget = self._global_widgets[entry.key]
             value = global_settings.get_nested_value(entry.key)
-            entry.metadata.load_value(widget, value)
+            try:
+                entry.metadata.load_value(widget, value)
+            except Exception:
+                logger.exception("The entry %s couldn't be load with the error:", entry)
 
         # Populate weight dropdown based on selected provider, then reload weight value
         self._on_provider_changed()
@@ -524,7 +527,10 @@ class SettingsDialog(QDialog, IconReloadMixin):
             for entry in self.local_settings_registry:
                 widget = self._local_widgets[entry.key]
                 value = local_settings.get_nested_value(entry.key)
-                entry.metadata.load_value(widget, value)
+                try:
+                    entry.metadata.load_value(widget, value)
+                except Exception:
+                    logger.exception("The entry %s couldn't be load with the error:", entry)
 
     def _get_global_settings_from_ui(self) -> GlobalSettings:
         # Build shortcuts from UI editors
