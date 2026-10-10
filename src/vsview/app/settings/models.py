@@ -10,7 +10,7 @@ from datetime import time, timedelta
 from logging import getLogger
 from operator import attrgetter
 from pathlib import Path
-from typing import Annotated, Any, Literal, NamedTuple, get_args, get_origin, get_type_hints, override
+from typing import Annotated, Any, Literal, NamedTuple, override
 
 import vapoursynth as vs
 from jetpytools import SPath, classproperty
@@ -62,36 +62,30 @@ class SettingEntry(NamedTuple):
     """Widget metadata for this setting."""
 
 
-def _get_widget_metadata(annotation: Any) -> WidgetMetadata[QWidget] | None:
-    if get_origin(annotation) is Annotated:
-        for arg in get_args(annotation)[1:]:
-            if isinstance(arg, WidgetMetadata):
-                return arg
-    return None
-
-
 def extract_settings(
     model: type[BaseModel],
     prefix: str = "",
     section: str | None = None,
     section_prefix: str | None = None,
 ) -> list[SettingEntry]:
-    """Extract SettingEntry list from a Pydantic model's Annotated fields."""
     result = list[SettingEntry]()
-    hints = get_type_hints(model, include_extras=True)
 
     if model_section_attr := getattr(model, "__section__", None):
         model_section = f"{section_prefix} - {model_section_attr}" if section_prefix else model_section_attr
     else:
         model_section = section or section_prefix
 
-    for field_name, annotation in hints.items():
+    for field_name, field_info in model.model_fields.items():
         key = f"{prefix}{field_name}" if prefix else field_name
-        metadata = _get_widget_metadata(annotation)
+
+        metadata = next(
+            (meta for meta in field_info.metadata if isinstance(meta, WidgetMetadata)),
+            None,
+        )
 
         if metadata is None:
             # Check if it's a nested BaseModel
-            inner_type = get_args(annotation)[0] if get_origin(annotation) is Annotated else annotation
+            inner_type = field_info.annotation
             if isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
                 result.extend(
                     extract_settings(
