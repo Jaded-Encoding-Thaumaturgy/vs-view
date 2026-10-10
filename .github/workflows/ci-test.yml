@@ -94,6 +94,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            ffmpeg \
             libegl1 \
             libopengl0 \
             libxkbcommon-x11-0 \
