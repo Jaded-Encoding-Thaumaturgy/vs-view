@@ -7,10 +7,18 @@ export type UriLike =
   | vscode.Uri
   | { readonly scheme: string; readonly fsPath: string; toString(): string };
 
+export function isWindowsPathOrUri(pathOrUri: string): boolean {
+  if (/^[a-zA-Z]:([\\/]|$)/.test(pathOrUri) || /^(\/\/|\\\\)/.test(pathOrUri)) {
+    return true;
+  }
+  const normalized = pathOrUri.replace(/%3a/gi, ":");
+  return /^[a-z0-9+.-]+:\/\/[^/]*\/[a-zA-Z]:([\\/]|$)/i.test(normalized);
+}
+
 /**
  * Generates a canonical lookup key for a URI.
- * - On Windows & macOS: case-insensitive path folding.
- * - On Linux: case-sensitive path preservation, normalizing scheme and drive encoding.
+ * - On Windows & macOS (or for Windows-style paths): case-insensitive path folding.
+ * - On Linux (for POSIX paths): case-sensitive path preservation, normalizing scheme and drive encoding.
  */
 export function canonicalUriKey(
   uriOrString: UriLike | string,
@@ -19,7 +27,9 @@ export function canonicalUriKey(
   const str = typeof uriOrString === "string" ? uriOrString : uriOrString.toString();
   const normalized = str.replace(/%3a/gi, ":");
 
-  if (isCaseSensitive) {
+  const isCasePreserved = isCaseSensitive && !isWindowsPathOrUri(normalized);
+
+  if (isCasePreserved) {
     const match = normalized.match(/^([a-z0-9+.-]+:\/\/[^/]*)(.*)$/i);
     if (match && match[1] && match[2] !== undefined) {
       return match[1].toLowerCase() + match[2];
@@ -32,7 +42,8 @@ export function canonicalUriKey(
 
 /**
  * Determines whether two URIs refer to the same resource.
- * Respects OS case sensitivity: case-sensitive on Linux, case-insensitive on Windows/macOS.
+ * Respects OS case sensitivity: case-sensitive on Linux for POSIX paths,
+ * case-insensitive on Windows/macOS and for Windows-style paths.
  */
 export function isSameResource(
   a: UriLike,
@@ -46,7 +57,9 @@ export function isSameResource(
     return false;
   }
   if (a.scheme === "file") {
-    return isCaseSensitive
+    const isWindowsPath = isWindowsPathOrUri(a.fsPath) || isWindowsPathOrUri(b.fsPath);
+    const caseSensitive = isWindowsPath ? false : isCaseSensitive;
+    return caseSensitive
       ? a.fsPath === b.fsPath
       : a.fsPath.toLowerCase() === b.fsPath.toLowerCase();
   }
