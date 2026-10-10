@@ -3,7 +3,7 @@ import * as monaco from "monaco-editor";
 import * as vscode from "vscode";
 
 import { BridgeService } from "../bridge/python";
-import { findExistingModel } from "../services/vscode";
+import { findExistingModel } from "../services/models";
 import type { EditorOptionsPayload, TabInfo } from "../types";
 import { DOM_IDS } from "../ui/constants";
 import { TabBarView } from "../ui/tabbar";

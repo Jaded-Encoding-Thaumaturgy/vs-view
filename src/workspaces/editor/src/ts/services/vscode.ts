@@ -8,22 +8,6 @@ import {
   IMarkdownRendererService,
   initialize as initializeServices,
 } from "@codingame/monaco-vscode-api/services";
-import { Event } from "@codingame/monaco-vscode-api/vscode/vs/base/common/event";
-import { type IDisposable } from "@codingame/monaco-vscode-api/vscode/vs/base/common/lifecycle";
-import { isLinux } from "@codingame/monaco-vscode-api/vscode/vs/base/common/platform";
-import {
-  FilePermission,
-  FileSystemProviderCapabilities,
-  FileSystemProviderError,
-  FileSystemProviderErrorCode,
-  FileType,
-  type IFileDeleteOptions,
-  type IFileOverwriteOptions,
-  type IFileSystemProviderWithFileReadWriteCapability,
-  type IFileWriteOptions,
-  type IStat,
-  type IWatchOptions,
-} from "@codingame/monaco-vscode-api/vscode/vs/platform/files/common/files";
 import { SyncDescriptor } from "@codingame/monaco-vscode-api/vscode/vs/platform/instantiation/common/descriptors";
 import { MarkdownRendererService } from "@codingame/monaco-vscode-api/vscode/vs/platform/markdown/browser/markdownRenderer";
 import getConfigurationServiceOverride from "@codingame/monaco-vscode-configuration-service-override";
@@ -46,11 +30,13 @@ import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import * as vscode from "vscode";
 
 import githubThemeVersion from "../assets/themes/github/VERSION?raw";
-import { BridgeService } from "../bridge/python";
 import * as config from "../editor/config";
 import { Result } from "../utils/result";
 import { GITHUB_THEMES } from "../utils/theme";
-import { isSameResource } from "../utils/uri";
+import { DiskFileSystemProvider } from "./fs";
+
+export { DiskFileSystemProvider } from "./fs";
+export { findExistingModel } from "./models";
 
 // Monaco Environment Setup
 self.MonacoEnvironment = {
@@ -65,156 +51,6 @@ self.MonacoEnvironment = {
     }
   },
 };
-
-export function findExistingModel(
-  resource: monaco.Uri | vscode.Uri,
-): monaco.editor.ITextModel | undefined {
-  const monacoUri = resource as monaco.Uri;
-  const direct = monaco.editor.getModel(monacoUri);
-  if (direct && !direct.isDisposed()) {
-    return direct;
-  }
-
-  for (const m of monaco.editor.getModels()) {
-    if (m.isDisposed()) continue;
-    if (isSameResource(m.uri, resource)) {
-      return m;
-    }
-  }
-
-  return undefined;
-}
-
-export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWriteCapability {
-  public readonly capabilities =
-    FileSystemProviderCapabilities.FileReadWrite |
-    (isLinux ? FileSystemProviderCapabilities.PathCaseSensitive : 0);
-
-  public readonly onDidChangeCapabilities = Event.None;
-  public readonly onDidChangeFile = Event.None;
-
-  public async copy(
-    _from: monaco.Uri,
-    _to: monaco.Uri,
-    _opts: IFileOverwriteOptions,
-  ): Promise<void> {
-    throw FileSystemProviderError.create(
-      "Readonly file system",
-      FileSystemProviderErrorCode.NoPermissions,
-    );
-  }
-
-  public async createDirectory(_resource: monaco.Uri): Promise<void> {
-    throw FileSystemProviderError.create(
-      "Readonly file system",
-      FileSystemProviderErrorCode.NoPermissions,
-    );
-  }
-
-  public async delete(_resource: monaco.Uri, _opts: IFileDeleteOptions): Promise<void> {
-    throw FileSystemProviderError.create(
-      "Readonly file system",
-      FileSystemProviderErrorCode.NoPermissions,
-    );
-  }
-
-  public async mkdir(_resource: monaco.Uri): Promise<void> {
-    throw FileSystemProviderError.create(
-      "Readonly file system",
-      FileSystemProviderErrorCode.NoPermissions,
-    );
-  }
-
-  public async readdir(_resource: monaco.Uri): Promise<[string, FileType][]> {
-    return [];
-  }
-
-  public async readFile(resource: monaco.Uri): Promise<Uint8Array> {
-    if (resource.scheme !== "file") {
-      throw FileSystemProviderError.create(
-        `Unsupported scheme: ${resource.scheme}`,
-        FileSystemProviderErrorCode.FileNotFound,
-      );
-    }
-
-    const existingModel = findExistingModel(resource);
-    if (existingModel && !existingModel.isDisposed()) {
-      return new TextEncoder().encode(existingModel.getValue());
-    }
-
-    const readResult = await BridgeService.readFile(resource.fsPath);
-    if (readResult.ok) {
-      return new TextEncoder().encode(readResult.value);
-    }
-
-    throw FileSystemProviderError.create(
-      `File not found: ${resource.fsPath}`,
-      FileSystemProviderErrorCode.FileNotFound,
-    );
-  }
-
-  public async rename(
-    _from: monaco.Uri,
-    _to: monaco.Uri,
-    _opts: IFileOverwriteOptions,
-  ): Promise<void> {
-    throw FileSystemProviderError.create(
-      "Readonly file system",
-      FileSystemProviderErrorCode.NoPermissions,
-    );
-  }
-
-  public async stat(resource: monaco.Uri): Promise<IStat> {
-    if (resource.scheme !== "file") {
-      throw FileSystemProviderError.create(
-        `Unsupported scheme: ${resource.scheme}`,
-        FileSystemProviderErrorCode.FileNotFound,
-      );
-    }
-
-    const existingModel = findExistingModel(resource);
-    if (existingModel && !existingModel.isDisposed()) {
-      return {
-        type: FileType.File,
-        ctime: 0,
-        mtime: Date.now(),
-        size: existingModel.getValueLength(),
-        permissions: FilePermission.Readonly,
-      };
-    }
-
-    const statResult = await BridgeService.statFile(resource.fsPath);
-    if (statResult.ok) {
-      return {
-        type: statResult.value.type === 2 ? FileType.Directory : FileType.File,
-        ctime: statResult.value.ctime,
-        mtime: statResult.value.mtime,
-        size: statResult.value.size,
-        permissions: FilePermission.Readonly,
-      };
-    }
-
-    throw FileSystemProviderError.create(
-      `File not found: ${resource.fsPath}`,
-      FileSystemProviderErrorCode.FileNotFound,
-    );
-  }
-
-  public watch(_resource: monaco.Uri, _opts: IWatchOptions): IDisposable {
-    return { dispose: () => {} };
-  }
-
-  public async writeFile(
-    _resource: monaco.Uri,
-    _content: Uint8Array,
-    _opts: IFileWriteOptions,
-  ): Promise<void> {
-    throw FileSystemProviderError.create(
-      "Readonly file system",
-      FileSystemProviderErrorCode.NoPermissions,
-    );
-  }
-}
 
 /** Initialize VS Code extension host & services before Monaco creation */
 export async function initVscodeServices(): Promise<Result<void>> {
