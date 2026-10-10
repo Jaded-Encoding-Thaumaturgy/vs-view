@@ -208,6 +208,10 @@ class OutputItemWidget(QWidget):
 class OutputDropdown(QPushButton):
     inclusionChanged = Signal()
 
+    class Output(NamedTuple):
+        vs_index: int
+        label: str
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.items = list[OutputItemWidget]()
@@ -219,8 +223,8 @@ class OutputDropdown(QPushButton):
         self.setStyleSheet("text-align: left; padding: 4px;")
 
     @property
-    def included_outputs(self) -> list[int]:
-        return [w.vs_index for w in self.items if w.included]
+    def included_outputs(self) -> list[Output]:
+        return [OutputDropdown.Output(w.vs_index, w.vs_name) for w in self.items if w.included]
 
     def populate(self, voutputs: list[VideoOutputProxy]) -> None:
         self.menu().clear()

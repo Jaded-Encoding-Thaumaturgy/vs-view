@@ -178,6 +178,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._extraction_finished = False
         self._extract_paths: list[tuple[int, Path]] | None = None
         self._reported_url = ""
+        self._collection_name_tmdb: str | None = None
         self.curve_points: Sequence[QPointF] = [QPointF(0.0, 1.0), QPointF(1.0, 1.0)]
 
         # Build UI
@@ -578,7 +579,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
     @property
     def selected_voutputs(self) -> list[VideoOutputProxy]:
-        included = self.outputs_dropdown.included_outputs
+        included = [o.vs_index for o in self.outputs_dropdown.included_outputs]
         return [v for v in self.comp_voutputs if v.vs_index in included]
 
     @property
@@ -946,10 +947,15 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.tmdb_title = title
 
         # Automatically set the collection name if it's currently empty
-        if not self.collection_name.text().strip():
-            voutputs = self.selected_voutputs
-            vs_names = " vs ".join(v.vs_name for v in voutputs)
+        # or the collection name hasn't been changed by the user
+        if (
+            not (collection_name := self.collection_name.text().strip())
+            or collection_name == self._collection_name_tmdb
+        ):
+            included_outputs = self.outputs_dropdown.included_outputs
+            vs_names = " vs ".join(v.label for v in included_outputs)
             self.collection_name.setText(title.format_name(self.settings.global_.tmdb_format, vs_names=vs_names))
+            self._collection_name_tmdb = self.collection_name.text().strip()
 
     @Slot()
     def on_tags_editing_started(self) -> None:
