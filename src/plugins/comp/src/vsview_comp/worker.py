@@ -640,6 +640,7 @@ class SlowPicsWorker:
                 start_resp = await client.post(
                     url=f"/upload/{src.upload_type}",
                     data=src.payload | {"browserId": self.settings.global_.browser_id} | image_hashes,
+                    timeout=60,
                 )
                 comp_data = SlowPicsUploadResponse.model_validate(start_resp.raise_for_status().json())
 
