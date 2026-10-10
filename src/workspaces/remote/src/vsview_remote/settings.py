@@ -43,9 +43,12 @@ class GlobalSettings(BaseModel):
         int | None,
         Spin(
             label="Backlog",
-            min=1,
+            min=0,
             max=128,
             tooltip="Maximum number of in-flight and prefetched frame requests buffered",
+            min_text="Auto",
+            to_ui=lambda v: 0 if v is None else v,
+            from_ui=lambda v: None if v == 0 else v,
         ),
     ] = None
     forward_logs: Annotated[
