@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from PySide6.QtGui import QColor
 
-from vsview.app.tools.scening.models import RangeFrame, RangeTime
+from vsview.app.tools.scening.models import RangeFrame, RangeTime, SceneRow
 from vsview.app.tools.scening.parsers import (
     AssParser,
     MatroskaXMLParser,
@@ -22,7 +22,9 @@ from vsview.app.tools.scening.parsers import (
     XvidLogParser,
 )
 
-FIXTURES = Path(__file__).parent / "fixtures" / "scening"
+pytestmark = [pytest.mark.unit]
+
+FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "scening"
 FPS_24 = Fraction(24000, 1001)
 FIXED_COLOR = QColor("#ff0000")
 
@@ -96,7 +98,8 @@ class TestAssParser:
 
 class TestOGMParser:
     def test_parse_logic(self, ogm_p: OGMParser, tmp_path: Path) -> None:
-        (f := tmp_path / "test_ogm.txt").write_text(
+        f = tmp_path / "test_ogm.txt"
+        f.write_text(
             "CHAPTER01=00:00:00.000\nCHAPTER01NAME=Intro\nCHAPTER02=01:23:45.678\nCHAPTER02NAME=Ending\n",
             encoding="utf-8",
         )
@@ -104,7 +107,7 @@ class TestOGMParser:
         assert len(result.ranges) == 2
         assert [(r.start, r.label) for r in result.ranges] == [
             (timedelta(0), "Intro"),
-            (timedelta(hours=1, minutes=23, seconds=45.678), "Ending"),
+            (timedelta(hours=1, minutes=23, seconds=45, microseconds=678000), "Ending"),
         ]
 
     def test_parse_fixture(self, ogm_p: OGMParser) -> None:
@@ -126,8 +129,9 @@ class TestOGMParser:
         ]
 
     def test_empty_file(self, ogm_p: OGMParser, tmp_path: Path) -> None:
-        (f := tmp_path / "empty.txt").write_text("", encoding="utf-8")
-        with pytest.raises(ValueError, match="Empty file"):
+        f = tmp_path / "empty.txt"
+        f.write_text("", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"^Empty file$"):
             parse(ogm_p, f)
 
 
@@ -139,7 +143,7 @@ class TestMatroskaXMLParser:
         assert scene.name == "test_matroska_single"
         assert len(scene.ranges) == 7
         assert (scene.ranges[0].start, scene.ranges[0].label) == (timedelta(0), "Chapter 01")
-        assert scene.ranges[-1].start == timedelta(minutes=23, seconds=34.998)
+        assert scene.ranges[-1].start == timedelta(minutes=23, seconds=34, microseconds=998000)
 
     def test_multi_edition(self, xml_p: MatroskaXMLParser) -> None:
         scenes = parse(xml_p, FIXTURES / "test_matroska_multi.xml")
@@ -148,30 +152,31 @@ class TestMatroskaXMLParser:
         assert [s.name for s in scenes] == ["test_matroska_multi (1001)", "test_matroska_multi (2002)"]
         assert [len(s.ranges) for s in scenes] == [2, 3]
 
-    @pytest.mark.parametrize(
-        ("content", "error"),
-        [
-            ("not xml", "Could not parse XML"),
-            ("<Chapters></Chapters>", None),
-        ],
-    )
-    def test_edge_cases(self, xml_p: MatroskaXMLParser, tmp_path: Path, content: str, error: str | None) -> None:
-        (f := tmp_path / "test.xml").write_text(content, encoding="utf-8")
-        if error:
-            with pytest.raises(ValueError, match=error):
-                parse(xml_p, f)
-        else:
+    def test_edge_case_invalid_xml_raises(self, xml_p: MatroskaXMLParser, tmp_path: Path) -> None:
+        f = tmp_path / "test.xml"
+        f.write_text("not xml", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"Could not parse XML"):
             parse(xml_p, f)
+
+    def test_edge_case_empty_chapters(self, xml_p: MatroskaXMLParser, tmp_path: Path) -> None:
+        f = tmp_path / "test.xml"
+        f.write_text("<Chapters></Chapters>", encoding="utf-8")
+        result = parse(xml_p, f)
+        assert isinstance(result, SceneRow)
+        assert result.name == "test"
+        assert result.ranges == []
 
 
 class TestXvidLogParser:
     def test_parse_logic(self, xvid_p: XvidLogParser) -> None:
         result = parse(xvid_p, FIXTURES / "test_xvidlog.txt")
+        assert len(result.ranges) == 432
         assert result.ranges[0].start == 0
-        assert len(result.ranges) > 5
+        assert result.ranges[-1].start == 33976
 
     def test_parse_empty_xvid(self, xvid_p: XvidLogParser, tmp_path: Path) -> None:
-        (f := tmp_path / "empty.txt").write_text("# XviD 2pass stat file\n# comment\n", encoding="utf-8")
+        f = tmp_path / "empty.txt"
+        f.write_text("# XviD 2pass stat file\n# comment\n", encoding="utf-8")
         result = parse(xvid_p, f)
         assert len(result.ranges) == 0
 
@@ -190,7 +195,8 @@ class TestQPFileParser:
         assert (result.ranges[0].start, result.ranges[0].label) == (first_frame, label)
 
     def test_parse_empty_qp(self, qp_p: QPFileParser, tmp_path: Path) -> None:
-        (f := tmp_path / "empty.qp").write_text("", encoding="utf-8")
+        f = tmp_path / "empty.qp"
+        f.write_text("", encoding="utf-8")
         result = parse(qp_p, f)
         assert len(result.ranges) == 0
 
@@ -216,7 +222,8 @@ class TestWobblyParser:
             "sections": [{"start": 0, "presets": ["a", "b"]}, {"start": 100, "preset": "c"}],
             "trim": [[0, 200]],
         }
-        (f := tmp_path / "labels.wob").write_text(json.dumps(data))
+        f = tmp_path / "labels.wob"
+        f.write_text(json.dumps(data))
         res = parse(wob_p, f)
         assert isinstance(res, list)
         [sections] = [s for s in res if "(Sections)" in s.name]
@@ -224,7 +231,8 @@ class TestWobblyParser:
 
     def test_integer_format(self, wob_p: WobblyParser, tmp_path: Path) -> None:
         data = {"sections": [0, 50, 100], "trim": [[0, 150]]}
-        (f := tmp_path / "int.wob").write_text(json.dumps(data))
+        f = tmp_path / "int.wob"
+        f.write_text(json.dumps(data))
         res = parse(wob_p, f)
         assert isinstance(res, list)
         [sections] = [s for s in res if "(Sections)" in s.name]
@@ -232,19 +240,22 @@ class TestWobblyParser:
         assert [r.start for r in sections.ranges] == [0, 50, 100]
 
     def test_errors(self, wob_p: WobblyParser, tmp_path: Path) -> None:
-        (f := tmp_path / "bad.wob").write_text("invalid")
-        with pytest.raises(ValueError, match="Could not parse Wobbly"):
+        f = tmp_path / "bad.wob"
+        f.write_text("invalid")
+        with pytest.raises(ValueError, match=r"^Could not parse Wobbly"):
             parse(wob_p, f)
 
-        (f2 := tmp_path / "empty.wob").write_text("{}")
-        with pytest.raises(ValueError, match="Could not find any sections"):
+        f2 = tmp_path / "empty.wob"
+        f2.write_text("{}")
+        with pytest.raises(ValueError, match=r"^Could not find any sections"):
             parse(wob_p, f2)
 
 
 class TestPythonListFramesParser:
     def test_parse_logic(self, py_frames_p: PythonListFramesParser, tmp_path: Path) -> None:
         data = [30, (100, 200), (300, 400)]
-        (f := tmp_path / "test.txt").write_text(str(data))
+        f = tmp_path / "test.txt"
+        f.write_text(str(data))
         result = parse(py_frames_p, f)
 
         assert len(result.ranges) == 3
@@ -253,15 +264,17 @@ class TestPythonListFramesParser:
         assert (result.ranges[2].start, result.ranges[2].end) == (300, 400)
 
     def test_empty_file(self, py_frames_p: PythonListFramesParser, tmp_path: Path) -> None:
-        (f := tmp_path / "empty.txt").write_text("")
-        with pytest.raises(ValueError, match="Empty file"):
+        f = tmp_path / "empty.txt"
+        f.write_text("")
+        with pytest.raises(ValueError, match=r"^Empty file$"):
             parse(py_frames_p, f)
 
 
 class TestPythonListTimestampsParser:
     def test_parse_logic(self, py_ts_p: PythonListTimestampsParser, tmp_path: Path) -> None:
         data = ["00:00:30.000000", ("00:01:00.000000", "00:02:00.000000")]
-        (f := tmp_path / "test.txt").write_text(str(data))
+        f = tmp_path / "test.txt"
+        f.write_text(str(data))
         result = parse(py_ts_p, f)
 
         assert len(result.ranges) == 2
@@ -270,7 +283,8 @@ class TestPythonListTimestampsParser:
         assert result.ranges[1].start == timedelta(minutes=1)
         assert result.ranges[1].end == timedelta(minutes=2)
 
-    def test_empty_file(self, py_frames_p: PythonListFramesParser, tmp_path: Path) -> None:
-        (f := tmp_path / "empty.txt").write_text("")
-        with pytest.raises(ValueError, match="Empty file"):
-            parse(py_frames_p, f)
+    def test_empty_file(self, py_ts_p: PythonListTimestampsParser, tmp_path: Path) -> None:
+        f = tmp_path / "empty.txt"
+        f.write_text("")
+        with pytest.raises(ValueError, match=r"^Empty file$"):
+            parse(py_ts_p, f)

@@ -13,6 +13,8 @@ from vsview.app.settings import SettingsManager
 
 core = vs.core
 
+pytestmark = [pytest.mark.integration]
+
 
 def test_frame_props_filter() -> None:
     filter_obj = FramePropsFilter("test_filter")
@@ -23,14 +25,14 @@ def test_frame_props_filter() -> None:
     record3 = logging.LogRecord("test_filter", logging.WARNING, "file.py", 12, "Other warning", (), None)
 
     # First encounter of msg should be logged
-    assert filter_obj.filter(record1) is not False
+    assert filter_obj.filter(record1) is True
     assert "Missing props" in filter_obj.msgs
 
     # Duplicate msg should be filtered out (return False)
     assert filter_obj.filter(record2) is False
 
     # New message should be logged
-    assert filter_obj.filter(record3) is not False
+    assert filter_obj.filter(record3) is True
     assert "Other warning" in filter_obj.msgs
 
     # Test super().filter failure (different logger name filter)
@@ -134,7 +136,7 @@ def test_packer_init_and_hdr_validation() -> None:
     # Standard packer initialization with default bit depth
     packer = Packer()
     assert packer.format == Packer.FormatConfig.INT8
-    assert not packer.hdr
+    assert packer.hdr is False
 
     # Explicit bit depth and sample type
     packer10 = Packer(10, vs.INTEGER)
@@ -142,11 +144,11 @@ def test_packer_init_and_hdr_validation() -> None:
 
     # Valid HDR initialization (FP16 or FP32)
     packer_hdr = Packer(16, vs.FLOAT, hdr=True)
-    assert packer_hdr.hdr
+    assert packer_hdr.hdr is True
     assert packer_hdr.format == Packer.FormatConfig.FP16
 
     packer_hdr32 = Packer(32, vs.FLOAT, hdr=True)
-    assert packer_hdr32.hdr
+    assert packer_hdr32.hdr is True
     assert packer_hdr32.format == Packer.FormatConfig.FP32
 
     # Invalid HDR initializations: integer sample type or bit depth < 16
@@ -247,15 +249,16 @@ def test_packer_to_rgb_packed_and_pack_clip() -> None:
     # pack_clip with VideoNode alpha (tests alpha resizing branch: isinstance(alpha, vs.VideoNode))
     packed_with_alpha = packer.pack_clip(clip, alpha=alpha)
     frame_with_alpha = packed_with_alpha.get_frame(0)
-    assert bool(frame_with_alpha.props.get("VSViewHasAlpha")) is True
+    assert frame_with_alpha.props.get("VSViewHasAlpha") == 1
 
 
 @pytest.mark.vpy("initial-core")
-def test_packer_frame_to_qimage_8bit() -> None:
+@pytest.mark.parametrize(("width", "height"), [(64, 48), (852, 480)])
+def test_packer_frame_to_qimage_8bit(width: int, height: int) -> None:
     clip = core.std.BlankClip(
         format=vs.RGB24,
-        width=64,
-        height=48,
+        width=width,
+        height=height,
         length=1,
     ).std.SetFrameProps(
         _Matrix=vs.MATRIX_RGB,
@@ -267,6 +270,11 @@ def test_packer_frame_to_qimage_8bit() -> None:
     packed_clip = packer.pack_clip(clip)
     frame = packed_clip.get_frame(0)
 
+    # For 852x480, row stride includes SIMD padding so the 2D memoryview is non-C-contiguous
+    if width == 852:
+        assert frame.get_stride(0) > width * 4
+        assert not frame[0].c_contiguous
+
     frame_ptr = frame.get_read_ptr(0).value
 
     # 8-bit frame conversion to QImage without copy_qimage (shares buffer memory)
@@ -274,9 +282,10 @@ def test_packer_frame_to_qimage_8bit() -> None:
     qimg = packer.frame_to_qimage(frame)
 
     assert isinstance(qimg, QImage)
-    assert not qimg.isNull()
-    assert qimg.width() == 64
-    assert qimg.height() == 48
+    assert qimg.isNull() is False
+    assert qimg.width() == width
+    assert qimg.height() == height
+    assert qimg.bytesPerLine() == frame.get_stride(0)
     assert qimg.format() == QImage.Format.Format_RGB32
     assert qimg.colorSpace() == QColorSpace(QColorSpace.NamedColorSpace.SRgb)
     # Memory ownership check: buffer pointer matches VapourSynth frame read pointer directly
@@ -285,9 +294,9 @@ def test_packer_frame_to_qimage_8bit() -> None:
     # With copy_qimage = True (allocates independent memory copy)
     SettingsManager.global_settings.view.copy_qimage = True
     qimg_copy = packer.frame_to_qimage(frame)
-    assert not qimg_copy.isNull()
-    assert qimg_copy.width() == 64
-    assert qimg_copy.height() == 48
+    assert qimg_copy.isNull() is False
+    assert qimg_copy.width() == width
+    assert qimg_copy.height() == height
     assert qimg_copy.format() == QImage.Format.Format_RGB32
     # Memory ownership check: copied buffer pointer is separate from VapourSynth frame read pointer
     assert ctypes.addressof(ctypes.c_char.from_buffer(qimg_copy.bits())) != frame_ptr
@@ -313,14 +322,14 @@ def test_packer_frame_to_qimage_alpha_and_colorspaces() -> None:
     packed_alpha = packer.pack_clip(base_clip, alpha=alpha_node)
     frame_alpha = packed_alpha.get_frame(0)
     qimg_alpha = packer.frame_to_qimage(frame_alpha)
-    assert not qimg_alpha.isNull()
+    assert qimg_alpha.isNull() is False
     assert qimg_alpha.format() == QImage.Format.Format_ARGB32
 
     # Test when _Alpha prop is present on frame
     base_clip_with_alpha = base_clip.std.ClipToProp(alpha_node, "_Alpha")
     packed = packer.pack_clip(base_clip_with_alpha, alpha=True)
     qimg_alpha_prop = packer.frame_to_qimage(packed.get_frame(0))
-    assert not qimg_alpha_prop.isNull()
+    assert qimg_alpha_prop.isNull() is False
     assert qimg_alpha_prop.format() == QImage.Format.Format_ARGB32
 
     # Test color space mappings by updating frame props on packed clip
@@ -368,9 +377,37 @@ def test_packer_frame_to_qimage_16bit_width_division() -> None:
 
     # Bit depth >= 16 causes width division by 4 inside frame_to_qimage and forces a memory copy
     qimg = packer_fp16.frame_to_qimage(frame)
-    assert not qimg.isNull()
+    assert qimg.isNull() is False
     assert qimg.width() == 64
     assert qimg.height() == 48
     assert qimg.format() == QImage.Format.Format_RGBA16FPx4
     # Memory ownership check: bitdepth >= 16 forces a copy, so QImage buffer address is separate
     assert ctypes.addressof(ctypes.c_char.from_buffer(qimg.bits())) != frame.get_read_ptr(0).value
+
+
+@pytest.mark.vpy("initial-core")
+@pytest.mark.parametrize(
+    ("bitdepth", "sample_type"),
+    [(8, vs.INTEGER), (10, vs.INTEGER), (16, vs.INTEGER), (16, vs.FLOAT), (32, vs.FLOAT)],
+)
+def test_packer_frame_to_qimage_strided_padding(bitdepth: int, sample_type: vs.SampleType) -> None:
+    packer = Packer(bitdepth, sample_type)
+    clip = core.std.BlankClip(
+        format=packer.format.vs,
+        width=852,
+        height=480,
+        length=1,
+    ).std.SetFrameProps(
+        _Matrix=vs.MATRIX_RGB,
+        _Primaries=vs.PRIMARIES_BT709,
+        _Transfer=vs.TRANSFER_BT709,
+    )
+    packed = packer.pack_clip(clip)
+    frame = packed.get_frame(0)
+
+    # Conversion must succeed without BufferError ("underlying buffer is not C-contiguous")
+    qimg = packer.frame_to_qimage(frame)
+    assert qimg.isNull() is False
+    assert qimg.width() == 852
+    assert qimg.height() == 480
+    assert qimg.format() == packer.format.qt

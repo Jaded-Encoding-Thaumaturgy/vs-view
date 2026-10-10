@@ -103,13 +103,15 @@ test = [
 ]
 doc = ["mkdocstrings[python]>=1.0.3", "zensical==0.0.68", "ruff"]
 plugins = [
-    "vsview-frameprops-extended",
-    "vsview-split-planes",
-    "vsview-fftspectrum",
     "vsview-comp",
-    "vsview-nativeres",
-    "vsview-editor",
+    "vsview-fftspectrum",
+    "vsview-frameprops-extended",
     "vsview-histogram",
+    "vsview-nativeres",
+    "vsview-split-planes",
+    # Workspaces
+    "vsview-editor",
+    "vsview-remote",
 ]
 # Specify this one to it's properly resolved for nativeres.
 # PyPI has an outdated wheel stub version compared to vs-wheels. 
@@ -185,6 +187,15 @@ vsview-remote = { workspace = true }
 [tool.pytest]
 testpaths = ["tests"]
 env = ["QT_QPA_PLATFORM=offscreen"]
+markers = [
+    "unit: Fast, isolated unit tests",
+    "integration: Multi-subsystem integration tests",
+    "qt: Tests requiring PySide6 QApplication or QtBot",
+    "vpy: Tests interacting with VapourSynth environments (managed by vsengine)",
+]
+
+[tool.coverage.run]
+omit = ["tests/*"]
 
 [tool.mypy]
 mypy_path = "$MYPY_CONFIG_FILE_DIR/stubs"

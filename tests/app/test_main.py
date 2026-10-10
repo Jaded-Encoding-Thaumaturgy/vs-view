@@ -8,19 +8,19 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QCloseEvent, QKeyEvent
 from PySide6.QtWidgets import QApplication
 from pytestqt.qtbot import QtBot
-from vsengine.loops import set_loop
 
 from vsview.app.main import Application, MainWindow, WorkspaceToolButton
 from vsview.app.settings.dialog import ShortcutEditor
+from vsview.app.settings.manager import SettingsManager
 from vsview.app.settings.models import WindowGeometry
 from vsview.app.workspace import PythonScriptWorkspace, VideoFileWorkspace
 from vsview.vsenv import QtEventLoop, unregister_policy
 
+pytestmark = [pytest.mark.integration, pytest.mark.qt, pytest.mark.vpy("no-policy")]
+
 
 @pytest.fixture
-def main_window(qapp: QApplication, qtbot: QtBot) -> MainWindow:
-    set_loop(QtEventLoop(qapp))
-
+def main_window(qapp: QApplication, qtbot: QtBot, qt_event_loop: QtEventLoop) -> MainWindow:
     window = MainWindow()
     window.stack.animations_enabled = False
     qtbot.addWidget(window)
@@ -29,14 +29,13 @@ def main_window(qapp: QApplication, qtbot: QtBot) -> MainWindow:
 
 
 @pytest.fixture(autouse=True)
-def ensure_no_policy() -> Generator[None, None, None]:
+def ensure_no_policy() -> Generator[None]:
     try:
         yield
     finally:
         unregister_policy()
 
 
-@pytest.mark.vpy("no-policy")
 def test_main_window_init(main_window: MainWindow) -> None:
     assert main_window.windowTitle() == "VS View"
     assert main_window.centralWidget()
@@ -46,7 +45,6 @@ def test_main_window_init(main_window: MainWindow) -> None:
     assert menu_actions == ["New", "View", "Settings", "Help"]
 
 
-@pytest.mark.vpy("no-policy")
 def test_event_filter_tab_key_consumption(
     main_window: MainWindow,
     qtbot: QtBot,
@@ -73,7 +71,6 @@ def test_event_filter_tab_key_consumption(
     assert main_window.eventFilter(main_window, key_event_tab) is False
 
 
-@pytest.mark.vpy("no-policy")
 def test_workspace_lifecycle_add_and_delete(main_window: MainWindow) -> None:
     # Add PythonScriptWorkspace
     btn1 = main_window.add_workspace(PythonScriptWorkspace)
@@ -101,7 +98,6 @@ def test_workspace_lifecycle_add_and_delete(main_window: MainWindow) -> None:
     assert main_window.stack.count() == 0
 
 
-@pytest.mark.vpy("no-policy")
 def test_workspace_delete_cancelled_by_confirm_close(main_window: MainWindow) -> None:
     btn = main_window.add_workspace(PythonScriptWorkspace)
 
@@ -116,10 +112,12 @@ def test_workspace_delete_cancelled_by_confirm_close(main_window: MainWindow) ->
     btn.workspace.confirm_close.assert_called_once()
 
 
-@pytest.mark.vpy("no-policy")
-def test_restore_geometry_offscreen_fallback(main_window: MainWindow) -> None:
-    # Set out-of-bounds coordinates
-    main_window.settings_manager.global_settings.window_geometry = WindowGeometry(
+def test_restore_geometry_offscreen_fallback(
+    qtbot: QtBot,
+    qt_event_loop: QtEventLoop,
+) -> None:
+    # Set out-of-bounds coordinates prior to window construction
+    SettingsManager.global_settings.window_geometry = WindowGeometry(
         x=-10000,
         y=-10000,
         width=800,
@@ -127,27 +125,27 @@ def test_restore_geometry_offscreen_fallback(main_window: MainWindow) -> None:
         is_maximized=False,
     )
 
-    main_window._restore_geometry()
+    # Window initialization automatically restores geometry and executes offscreen fallback
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
 
     # Window position should be reset into valid primary screen bounds (x >= 0, y >= 0)
-    pos = main_window.pos()
+    pos = window.pos()
     assert pos.x() >= 0
     assert pos.y() >= 0
 
 
-@pytest.mark.vpy("no-policy")
 def test_view_sidebar_toggle(main_window: MainWindow) -> None:
     initial_state = main_window.sidebar.isVisible()
 
-    # Trigger action toggle
-    main_window.view_sidebar_action.setChecked(not initial_state)
-    main_window._on_view_sidebar_action_triggered(not initial_state)
+    # Trigger action toggle through public QAction trigger()
+    main_window.view_sidebar_action.trigger()
 
     assert main_window.sidebar.isVisible() == (not initial_state)
     assert main_window.settings_manager.global_settings.appearance.sidebar_visible == (not initial_state)
 
 
-@pytest.mark.vpy("no-policy")
 def test_draggable_nav_container_move_button(main_window: MainWindow) -> None:
     btn1 = main_window.add_workspace(PythonScriptWorkspace)
     btn2 = main_window.add_workspace(VideoFileWorkspace)
@@ -159,12 +157,11 @@ def test_draggable_nav_container_move_button(main_window: MainWindow) -> None:
     nav.move_button(btn2, 0)
     assert nav.buttons == [btn2, btn1]
 
-    # Test drop index calculation
-    assert nav._get_drop_index(-10) == 0
-    assert nav._get_drop_index(10000) == 2
+    # Move btn2 back to index 1
+    nav.move_button(btn2, 1)
+    assert nav.buttons == [btn1, btn2]
 
 
-@pytest.mark.vpy("no-policy")
 def test_close_event_clean_teardown(main_window: MainWindow) -> None:
     btn = main_window.add_workspace(PythonScriptWorkspace)
     btn.workspace.confirm_close = MagicMock(return_value=True)  # type: ignore[method-assign]
@@ -175,7 +172,6 @@ def test_close_event_clean_teardown(main_window: MainWindow) -> None:
     btn.workspace.confirm_close.assert_called_once()
 
 
-@pytest.mark.vpy("no-policy")
 def test_application_global_settings_changed(main_window: MainWindow, qapp: QApplication) -> None:
     sm = main_window.settings_manager
     original_theme = sm.global_settings.appearance.theme
@@ -191,7 +187,6 @@ def test_application_global_settings_changed(main_window: MainWindow, qapp: QApp
         Application._on_global_settings_changed(qapp)  # type: ignore[arg-type]
 
 
-@pytest.mark.vpy("no-policy")
 def test_workspace_clear_action(main_window: MainWindow) -> None:
     btn1 = main_window.add_workspace(PythonScriptWorkspace)
     btn2 = main_window.add_workspace(VideoFileWorkspace)
@@ -208,7 +203,6 @@ def test_workspace_clear_action(main_window: MainWindow) -> None:
     assert isinstance(new_btn.workspace, PythonScriptWorkspace)
 
 
-@pytest.mark.vpy("no-policy")
 def test_stack_switch_clears_old_workspace_cache(main_window: MainWindow) -> None:
     btn1 = main_window.add_workspace(PythonScriptWorkspace)
     btn2 = main_window.add_workspace(VideoFileWorkspace)
