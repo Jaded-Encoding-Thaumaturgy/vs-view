@@ -58,6 +58,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from shiboken6 import Shiboken
+from vsengine import UnifiedFuture
 from vsengine.loops import set_loop
 
 from ..assets import app_icon
@@ -379,14 +380,16 @@ class MainWindow(QMainWindow):
 
         super().closeEvent(event)
 
-    def load_new_script(self, path: Path, **vsargs: Any) -> None:
+    def load_new_script(
+        self, path: Path, **vsargs: Any
+    ) -> tuple[WorkspaceToolButton[PythonScriptWorkspace], UnifiedFuture[int]]:
         btn = self.add_workspace(PythonScriptWorkspace)
         btn.workspace.vsargs = vsargs
-        btn.workspace.load_content(path)
+        return btn, btn.workspace.load_content(path)
 
-    def load_new_file(self, path: Path) -> None:
+    def load_new_file(self, path: Path) -> tuple[WorkspaceToolButton[VideoFileWorkspace], UnifiedFuture[int]]:
         btn = self.add_workspace(VideoFileWorkspace)
-        btn.workspace.load_content(path)
+        return btn, btn.workspace.load_content(path)
 
     def add_workspace[WorkspaceT: BaseWorkspace](
         self, workspace_t: type[WorkspaceT]
