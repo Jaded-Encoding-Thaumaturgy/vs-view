@@ -5,7 +5,7 @@ from logging import DEBUG, getLogger
 from typing import Any, ClassVar
 from weakref import WeakKeyDictionary, WeakMethod
 
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QObject, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QIcon, QPalette, QPixmap
 from PySide6.QtWidgets import QToolButton, QWidget
 from shiboken6 import Shiboken
@@ -59,28 +59,8 @@ class IconReloadMixin:
         self._action_reloaders = WeakKeyDictionary[QAction, Callable[[], None]]()
         self._custom_callbacks = list[Callable[[], None]]()
 
-        from ..app.settings import SettingsManager
-
-        weak = WeakMethod(self._reload_all_icons)
-
-        def _on_global_changed() -> None:
-            if (method := weak()) is not None:
-                QTimer.singleShot(0, method)
-
-        self._on_global_changed_slot = _on_global_changed
-
-        SettingsManager.signals.globalChanged.connect(self._on_global_changed_slot)
-
-        # Automatically clean up when Qt destroys the C++ object
-        # Use singleShot to defer connection until after C++ constructors finish
-        QTimer.singleShot(
-            0,
-            lambda: (
-                Shiboken.isValid(self)
-                and hasattr(self, "destroyed")
-                and getattr(self, "destroyed").connect(lambda: self._cleanup_icon_reload())
-            ),
-        )
+        self._connect_reload()
+        self._connect_destroy()
 
     def deleteLater(self) -> None:
         self._cleanup_icon_reload()
@@ -197,11 +177,11 @@ class IconReloadMixin:
                 del qobj
 
         for cb in self._custom_callbacks.copy():
-            with suppress(RuntimeError):
+            try:
                 cb()
-                continue
-            self._custom_callbacks.remove(cb)
-            logger.log(DEBUG - 1, "%r callback failed to reload icon. Removed it.")
+            except RuntimeError:
+                self._custom_callbacks.remove(cb)
+                logger.log(DEBUG - 1, "%r callback failed to reload icon. Removed it.")
 
     @staticmethod
     def make_icon(
@@ -380,12 +360,52 @@ class IconReloadMixin:
 
         return q_icon
 
+    def _connect_reload(self) -> None:
+        from ..app.settings import SettingsManager
+
+        weak = WeakMethod(self._reload_all_icons)
+
+        def _on_global_changed() -> None:
+            if (method := weak()) is not None:
+                receiver = getattr(method, "__self__", None)
+                if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
+                    self._cleanup_icon_reload()
+                    return
+                QTimer.singleShot(0, method)
+            else:
+                self._cleanup_icon_reload()
+
+        self._on_global_changed_slot = _on_global_changed
+        sig = SettingsManager.signals.globalChanged
+        sig.connect(self._on_global_changed_slot)
+        self._connected_signal = sig
+
+    def _connect_destroy(self) -> None:
+        # Automatically clean up when Qt destroys the C++ object
+        if isinstance(self, QObject):
+            with suppress(RuntimeError, ValueError):
+                self.destroyed.connect(lambda: self._cleanup_icon_reload())
+        else:
+            # Use singleShot to defer connection until after C++ constructors finish
+            QTimer.singleShot(
+                0,
+                lambda: (
+                    Shiboken.isValid(self)
+                    and hasattr(self, "destroyed")
+                    and getattr(self, "destroyed").connect(lambda: self._cleanup_icon_reload())
+                ),
+            )
+
     def _cleanup_icon_reload(self) -> None:
         if hasattr(self, "_on_global_changed_slot"):
-            from ..app.settings import SettingsManager
-
-            SettingsManager.signals.globalChanged.disconnect(self._on_global_changed_slot)
+            slot = self._on_global_changed_slot
             del self._on_global_changed_slot
+
+            if hasattr(self, "_connected_signal"):
+                sig = self._connected_signal
+                del self._connected_signal
+                with suppress(RuntimeError, ValueError):
+                    sig.disconnect(slot)
 
         self._button_reloaders.clear()
         self._action_reloaders.clear()
