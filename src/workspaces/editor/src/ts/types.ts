@@ -104,6 +104,7 @@ declare global {
   interface Window {
     /** Injected environment variables via QWebEngineScript. */
     ENV?: {
+      VSVIEW?: boolean;
       VSVIEW_DEBUG?: boolean;
       [key: string]: unknown;
     };

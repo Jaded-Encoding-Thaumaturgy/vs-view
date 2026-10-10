@@ -320,7 +320,7 @@ class MonacoEditorWidget(QWebEngineView):
         self.page().setWebChannel(channel)
 
         # Inject environment configuration into JavaScript before document creation
-        env_data = {"VSVIEW_DEBUG": getenv_bool("VSVIEW_DEBUG")}
+        env_data = {"VSVIEW_DEBUG": getenv_bool("VSVIEW_DEBUG"), "VSVIEW": True}
         script = QWebEngineScript()
         script.setName("vsview_env_injection")
         script.setSourceCode(f"window.ENV = Object.freeze({json.dumps(env_data)});\n")
