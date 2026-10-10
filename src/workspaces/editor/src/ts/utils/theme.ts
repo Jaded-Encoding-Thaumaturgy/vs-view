@@ -132,3 +132,8 @@ export function getThemeDefinition(themeName: string): Result<ThemeDefinition, E
   const matched = SUPPORTED_THEMES[themeName];
   return matched ? Result.ok(matched) : Result.err(new Error(`Unsupported theme: '${themeName}'`));
 }
+
+export function getInitialTheme(): string {
+  const urlTheme = new URLSearchParams(window.location.search).get("initialTheme");
+  return urlTheme || (window.ENV?.VSVIEW !== undefined ? undefined : "Dark Modern")!;
+}

@@ -9,7 +9,7 @@ import { DOM_IDS } from "../ui/constants";
 import { TabBarView } from "../ui/tabbar";
 import { DisposableStore } from "../utils/disposables";
 import { Result } from "../utils/result";
-import { getThemeDefinition } from "../utils/theme";
+import { getInitialTheme, getThemeDefinition } from "../utils/theme";
 import { isSameResource } from "../utils/uri";
 import * as config from "./config";
 
@@ -58,8 +58,7 @@ export class EditorService implements vscode.Disposable {
     );
 
     // Resolve initial theme from URL to prevent theme flicker
-    const initialTheme = new URLSearchParams(window.location.search).get("initialTheme")!;
-    const def = getThemeDefinition(initialTheme).unwrap();
+    const def = getThemeDefinition(getInitialTheme()).unwrap();
 
     this.editor = this.disposables.add(
       monaco.editor.create(container, {

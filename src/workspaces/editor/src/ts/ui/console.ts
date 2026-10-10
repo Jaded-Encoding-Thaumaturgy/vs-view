@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import { BridgeService } from "../bridge/python";
 import { DisposableStore, toDisposable } from "../utils/disposables";
 import { Result } from "../utils/result";
-import { getThemeDefinition } from "../utils/theme";
+import { getInitialTheme, getThemeDefinition } from "../utils/theme";
 import { DOM_IDS } from "./constants";
 
 type MenuItem =
@@ -49,8 +49,7 @@ export class ConsolePanelService implements vscode.Disposable {
     this.terminal.loadAddon(this.fitAddon);
     this.terminal.open(this.xtermContainer);
 
-    const initialTheme = new URLSearchParams(window.location.search).get("initialTheme")!;
-    this.setTheme(initialTheme);
+    this.setTheme(getInitialTheme());
 
     this.setupUIListeners();
     this.disposables.add(this.onDidToggleEmitter);
