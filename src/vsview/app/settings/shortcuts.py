@@ -416,6 +416,11 @@ class KeyboardLayoutMapper(Singleton):
         self._cache = dict[tuple[str, QKeySequence], QKeySequence]()
 
     @inject_self
+    def clear_cache(self) -> None:
+        """Clear cached key sequence translations."""
+        self._cache.clear()
+
+    @inject_self
     def translate_qwerty_to_active(self, key_sequence: QKeySequence) -> QKeySequence:
         if key_sequence.isEmpty():
             return QKeySequence()
