@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import gc
 import sys
 import weakref
@@ -84,7 +85,22 @@ logger = getLogger(__name__)
 
 class Application(QApplication):
     def __init__(self, arguments: Sequence[str], /, no_settings: bool, **kwargs: Any) -> None:
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("jet.vsview")
+            except Exception:
+                logger.exception("Can't register app ID")
+
         super().__init__(arguments, **kwargs)
+
+        self.setApplicationName("vsview")
+        self.setApplicationDisplayName("VS View")
+        self.setOrganizationName("Jaded Encoding Thaumaturgy")
+        self.setOrganizationDomain("jet.guide")
+        self.setWindowIcon(app_icon())
+
+        if sys.platform == "linux":
+            self.setDesktopFileName("vsview.desktop")
 
         SettingsManager(noop=no_settings)
         set_loop(QtEventLoop(self))
@@ -169,7 +185,6 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("VS View")
-        self.setWindowIcon(app_icon())
 
         self.settings_manager = SettingsManager()
         self.plugin_manager = PluginManager()
