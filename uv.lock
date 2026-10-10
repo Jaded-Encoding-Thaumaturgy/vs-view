@@ -2795,6 +2795,7 @@ dev = [
     { name = "vsview-histogram" },
     { name = "vsview-nativeres" },
     { name = "vsview-pyapp" },
+    { name = "vsview-remote" },
     { name = "vsview-split-planes" },
 ]
 doc = [
@@ -2812,6 +2813,7 @@ plugins = [
     { name = "vsview-frameprops-extended" },
     { name = "vsview-histogram" },
     { name = "vsview-nativeres" },
+    { name = "vsview-remote" },
     { name = "vsview-split-planes" },
 ]
 test = [
@@ -2880,6 +2882,7 @@ dev = [
     { name = "vsview-histogram", editable = "src/plugins/histogram" },
     { name = "vsview-nativeres" },
     { name = "vsview-pyapp", editable = "src/pyapp" },
+    { name = "vsview-remote", editable = "src/workspaces/remote" },
     { name = "vsview-split-planes", editable = "src/plugins/split-planes" },
 ]
 doc = [
@@ -2895,6 +2898,7 @@ plugins = [
     { name = "vsview-frameprops-extended", editable = "src/plugins/frameprops-extended" },
     { name = "vsview-histogram", editable = "src/plugins/histogram" },
     { name = "vsview-nativeres" },
+    { name = "vsview-remote", editable = "src/workspaces/remote" },
     { name = "vsview-split-planes", editable = "src/plugins/split-planes" },
 ]
 test = [

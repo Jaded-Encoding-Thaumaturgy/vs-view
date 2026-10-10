@@ -3,7 +3,6 @@ from __future__ import annotations
 import ctypes
 import ctypes.util
 import sys
-from collections.abc import Generator
 from typing import Any, Protocol, runtime_checkable
 from unittest.mock import MagicMock
 
@@ -18,6 +17,8 @@ from vsview.app.settings.shortcuts import MACOS_KEYCODES, QWERTY_SCAN_CODES, Key
 
 # ruff: noqa: N806
 
+pytestmark = [pytest.mark.unit]
+
 
 @runtime_checkable
 class HasValue(Protocol):
@@ -25,10 +26,8 @@ class HasValue(Protocol):
 
 
 @pytest.fixture(autouse=True)
-def clear_mapper_cache() -> Generator[None, None, None]:
-    KeyboardLayoutMapper()._cache.clear()
-    yield
-    KeyboardLayoutMapper()._cache.clear()
+def clear_layout_cache() -> None:
+    KeyboardLayoutMapper.clear_cache()
 
 
 def test_layout_mapper_native_translation() -> None:
@@ -37,14 +36,14 @@ def test_layout_mapper_native_translation() -> None:
     assert KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence("F5")) == QKeySequence("F5")
 
     translated_ctrl_o = KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence("Ctrl+O"))
-    assert not translated_ctrl_o.isEmpty()
+    assert translated_ctrl_o.isEmpty() is False
 
 
 def test_layout_mapper_shifted_symbols() -> None:
     symbols = ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "_", "+", "{", "}", "|", ":", '"', "<", ">", "?", "~"]
     for sym in symbols:
         res = KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence(f"Ctrl+{sym}"))
-        assert not res.isEmpty()
+        assert res.isEmpty() is False
 
 
 def test_layout_mapper_multi_key_sequence() -> None:
@@ -94,8 +93,8 @@ def test_win32_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_windll.user32 = mock_user32
     monkeypatch.setattr(ctypes, "windll", mock_windll, raising=False)
 
-    translated = KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence("Ctrl+A"))
-    assert translated == QKeySequence("Ctrl+Q")
+    translated = KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence("Ctrl+Alt+A"))
+    assert translated == QKeySequence("Ctrl+Alt+Q")
     mock_user32.GetKeyboardLayout.assert_called_once_with(0)
     mock_user32.MapVirtualKeyExW.assert_called_once_with(QWERTY_SCAN_CODES["A"], MAPVK_VSC_TO_VK, AZERTY_HKL)
 
@@ -116,18 +115,16 @@ def test_win32_ctypes_failures(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # MapVirtualKeyExW returns 0 (unmapped key)
     mock_user32.MapVirtualKeyExW.return_value = 0
-    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
-    mapper._cache.clear()
+    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+X")) == QKeySequence("Ctrl+X")
 
     # ToUnicodeEx returns 0 (no character mapped)
     mock_user32.MapVirtualKeyExW.return_value = VK_Q
     mock_user32.ToUnicodeEx.return_value = 0
-    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
-    mapper._cache.clear()
+    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+Y")) == QKeySequence("Ctrl+Y")
 
     # Exception during win32 ctypes execution (caught by @fallback_logged)
     mock_user32.ToUnicodeEx.side_effect = OSError("Win32 ctypes exception")
-    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
+    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+Z")) == QKeySequence("Ctrl+Z")
 
 
 def test_darwin_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -219,8 +216,7 @@ def test_darwin_ctypes_failures(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Carbon library not found
     monkeypatch.setattr(ctypes.util, "find_library", lambda lib: None)
-    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
-    mapper._cache.clear()
+    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+W")) == QKeySequence("Ctrl+W")
 
     # TISCopyCurrentKeyboardInputSource returns None/0
     monkeypatch.setattr(ctypes.util, "find_library", lambda lib: "/path/to/Carbon")
@@ -228,19 +224,17 @@ def test_darwin_ctypes_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_carbon.TISCopyCurrentKeyboardInputSource.return_value = 0
     monkeypatch.setattr(ctypes, "CDLL", lambda path: mock_carbon)
 
-    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
-    mapper._cache.clear()
+    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+X")) == QKeySequence("Ctrl+X")
 
     # TISGetInputSourceProperty returns None/0
     mock_carbon.TISCopyCurrentKeyboardInputSource.return_value = MOCK_TIS_SOURCE
     monkeypatch.setattr(ctypes.c_void_p, "in_dll", lambda lib, name: None)
-    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
-    mapper._cache.clear()
+    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+Y")) == QKeySequence("Ctrl+Y")
 
     # UCKeyTranslate returns non-zero error status
     monkeypatch.setattr(ctypes.c_void_p, "in_dll", lambda lib, name: ctypes.c_void_p(MOCK_LAYOUT_DATA_PTR))
     mock_carbon.UCKeyTranslate.return_value = PARAM_ERR_STATUS
-    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
+    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+Z")) == QKeySequence("Ctrl+Z")
 
 
 def test_linux_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -315,27 +309,25 @@ def test_linux_ctypes_failures_and_cleanup(monkeypatch: pytest.MonkeyPatch) -> N
 
     # xkb_context_new fails (returns 0)
     mock_libxkb.xkb_context_new.return_value = 0
-    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
+    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+B")) == QKeySequence("Ctrl+B")
     mock_libxkb.xkb_keymap_unref.assert_not_called()
     mock_libxkb.xkb_context_unref.assert_not_called()
-    mapper._cache.clear()
     mock_libxkb.reset_mock()
 
     # xkb_keymap_new_from_names fails (returns 0) -> ctx must be unref'd
     mock_libxkb.xkb_context_new.return_value = MOCK_CTX_PTR
     mock_libxkb.xkb_keymap_new_from_names.return_value = 0
-    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
+    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+C")) == QKeySequence("Ctrl+C")
     mock_libxkb.xkb_context_unref.assert_called_once_with(MOCK_CTX_PTR)
     mock_libxkb.xkb_keymap_unref.assert_not_called()
     mock_libxkb.xkb_state_unref.assert_not_called()
-    mapper._cache.clear()
     mock_libxkb.reset_mock()
 
     # xkb_state_new fails (returns 0) -> keymap and ctx must be unref'd
     mock_libxkb.xkb_context_new.return_value = MOCK_CTX_PTR
     mock_libxkb.xkb_keymap_new_from_names.return_value = MOCK_KEYMAP_PTR
     mock_libxkb.xkb_state_new.return_value = 0
-    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A")) == QKeySequence("Ctrl+A")
+    assert mapper.translate_qwerty_to_active(QKeySequence("Ctrl+D")) == QKeySequence("Ctrl+D")
     mock_libxkb.xkb_keymap_unref.assert_called_once_with(MOCK_KEYMAP_PTR)
     mock_libxkb.xkb_context_unref.assert_called_once_with(MOCK_CTX_PTR)
     mock_libxkb.xkb_state_unref.assert_not_called()

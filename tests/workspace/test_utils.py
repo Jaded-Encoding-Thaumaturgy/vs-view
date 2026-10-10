@@ -5,9 +5,12 @@ from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
 
+import pytest
 from pytest_mock import MockerFixture
 
 from vsview.app.workspace.utils import EXCLUDED_PREFIXES, _get_installed_top_levels, evict_packages, find_local_packages
+
+pytestmark = [pytest.mark.unit]
 
 
 def _make_module(name: str, file: str | None) -> ModuleType:

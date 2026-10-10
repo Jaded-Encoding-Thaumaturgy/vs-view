@@ -15,6 +15,8 @@ from vsengine.loops import Cancelled, set_loop
 
 from vsview.vsenv.loop import QtEventLoop, run_in_background, run_in_loop
 
+pytestmark = [pytest.mark.integration, pytest.mark.qt]
+
 
 @pytest.fixture
 def qt_loop(qapp: QApplication) -> QtEventLoop:
@@ -84,6 +86,7 @@ def test_from_thread_exception_handling(qt_loop: QtEventLoop, qtbot: QtBot) -> N
     fut2 = qt_loop.from_thread(cancel_func)
     qtbot.waitUntil(lambda: fut2.done(), timeout=2000)
     assert isinstance(fut2.exception(), Cancelled)
+    assert str(fut2.exception()) == "cancelled task"
 
     # asyncio CancelledError
     def asyncio_cancel_func() -> None:
@@ -92,6 +95,7 @@ def test_from_thread_exception_handling(qt_loop: QtEventLoop, qtbot: QtBot) -> N
     fut3 = qt_loop.from_thread(asyncio_cancel_func)
     qtbot.waitUntil(lambda: fut3.done(), timeout=2000)
     assert isinstance(fut3.exception(), asyncio.CancelledError)
+    assert str(fut3.exception()) == "asyncio cancelled"
 
 
 def test_to_thread_execution_and_naming(qt_loop: QtEventLoop) -> None:
@@ -133,12 +137,14 @@ def test_to_thread_exception_handling(qt_loop: QtEventLoop) -> None:
 
     fut2 = qt_loop.to_thread(cancel_func)
     assert isinstance(fut2.exception(timeout=2.0), Cancelled)
+    assert str(fut2.exception(timeout=2.0)) == "bg task cancelled"
 
     def concurrent_cancel_func() -> None:
         raise ConcurrentCancelledError("bg task concurrent cancelled")
 
     fut3 = qt_loop.to_thread_named("ConcurrentCancelWorker", concurrent_cancel_func)
     assert isinstance(fut3.exception(timeout=2.0), ConcurrentCancelledError)
+    assert str(fut3.exception(timeout=2.0)) == "bg task concurrent cancelled"
 
 
 def test_from_thread_pre_cancelled_future(qt_loop: QtEventLoop, qtbot: QtBot) -> None:
@@ -362,7 +368,7 @@ def test_run_coro_existing_event_loop_exception(qt_loop: QtEventLoop) -> None:
         return await innercoro()
 
     fut = coro2()
-    with pytest.raises(Cancelled):
+    with pytest.raises(Cancelled, match=r"^$"):
         fut.result(timeout=2.0)
 
 
