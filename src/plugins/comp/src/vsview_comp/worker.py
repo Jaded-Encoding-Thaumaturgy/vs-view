@@ -630,6 +630,7 @@ class SlowPicsWorker:
                     revocation_configuration=REV_CONF,
                 ) as client,
             ):
+                progress_cb(range=(0, 0))
                 logger.debug("Setup client")
                 await self._setup_client(client, cookies)
 
