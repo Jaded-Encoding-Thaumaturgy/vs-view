@@ -1,7 +1,7 @@
 """API for vsview"""
 
 from ..app.icon import IconName, IconReloadMixin, load_icon
-from ..app.packing import Packer, get_packer
+from ..app.packing import Packer
 from ..app.plugins import (
     AudioOutputProxy,
     GraphicsViewProxy,
@@ -111,7 +111,6 @@ __all__ = [
     "get_console_level",
     "get_output",
     "get_outputs",
-    "get_packer",
     "get_reload_count",
     "get_state",
     "hookimpl",

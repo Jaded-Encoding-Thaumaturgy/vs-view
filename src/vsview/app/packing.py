@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from abc import ABC
 from enum import Enum, IntEnum
 from logging import Filter, LogRecord, getLogger
@@ -15,11 +14,6 @@ from PySide6.QtGui import QColorSpace, QImage
 from vspackrgb.helpers import get_plane_buffer, packrgb
 
 from .settings import SettingsManager
-
-if sys.version_info >= (3, 13):
-    from warnings import deprecated
-else:
-    from typing_extensions import deprecated
 
 logger = getLogger(__name__)
 
@@ -258,8 +252,3 @@ class Packer(ABC):
             return img.copy()
 
         return img
-
-
-@deprecated("Deprecated method. Use Packer.", category=DeprecationWarning)
-def get_packer(method: str | None = None, bit_depth: int | None = None) -> Packer:
-    return Packer(bit_depth)
