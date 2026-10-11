@@ -99,9 +99,11 @@ class PlayHeadToolButton(QToolButton, IconReloadMixin):
     def reload_icons(self) -> None:
         self._icons.clear()
 
-        for icon_name in (state.icon_name for state in PlayHeadToolButton.State):
+        # Was `for icon_name in (state.icon_name for state in PlayHeadToolButton.State)`
+        # FIXME: https://github.com/python/cpython & https://qt-project.atlassian.net/browse/PYSIDE-3481
+        for state in PlayHeadToolButton.State:
             icon_desc = {
-                mode_state: (icon_name, self.palette().color(*color_group_role))
+                mode_state: (state.icon_name, self.palette().color(*color_group_role))
                 for mode_state, color_group_role in self.DEFAULT_ICON_STATES.items()
             }
 
