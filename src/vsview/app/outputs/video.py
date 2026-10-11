@@ -120,6 +120,9 @@ class VideoOutput:
         else:
             clip = self.vs_output.clip
 
+        if vs.__version__.release_major >= 80 and clip.gpu_resident:
+            clip = clip.std.GPUDownload()
+
         clip = clip.std.ModifyFrame(clip, self._get_props_on_render)
 
         if clip.format.id == vs.GRAY32:
