@@ -228,6 +228,22 @@ def test_create_voutputs_exception_during_prepare(
     assert "Failed to load script: 'bad_script'" in caplog.text
 
 
+def test_create_voutputs_auto_gpu_download(plugin_controller: HarnessPluginController, manager: OutputsManager) -> None:
+    if vs.__version__.release_major < 80:
+        pytest.skip("VapourSynth < 80")
+
+    if not core.vulkan_devices:
+        pytest.skip("No GPU available")
+
+    clip = core.std.BlankClip(gpu=True)
+    assert clip.gpu_resident is True
+    tup0 = vs.VideoOutputTuple(core.std.BlankClip(gpu=True), None, 0)
+    vouts = manager.create_voutputs("test", {0: tup0}, {}, plugin_controller.api)
+    assert len(vouts) == 1
+    vout = vouts[0]
+    assert vout.prepared_clip.gpu_resident is False
+
+
 # create_aoutputs Tests
 def test_create_aoutputs_empty_dict(
     plugin_controller: HarnessPluginController,
