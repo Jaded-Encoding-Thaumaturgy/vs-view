@@ -471,14 +471,14 @@ def test_reload_content_rejected_when_busy(
     ws.playback.can_reload = True
 
     # 2. When plugin API is busy (using workspace blocker)
-    with ws.api.blocker():
-        assert ws.api.busy is True
+    with ws.plugin_controller.api.blocker():
+        assert ws.plugin_controller.busy is True
         fut_reject2 = ws.reload_content()
         qtbot.waitUntil(lambda: fut_reject2.done(), timeout=2000)
         assert fut_reject2.result() == 2
         assert ws.reload_count == 0
 
-    assert ws.api.busy is False
+    assert ws.plugin_controller.busy is False
 
 
 # Error Recovery Lifecycle Tests

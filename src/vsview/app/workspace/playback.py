@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
     from ...vsenv import QtEventLoop
     from ..outputs import OutputsManager
-    from ..plugins.api import PluginAPI
+    from ..plugins._controller import PluginWorkspaceController
     from .tab_manager import TabManager
 
 logger = getLogger(__name__)
@@ -160,7 +160,7 @@ class PlaybackManager(QObject):
         self,
         loop: QtEventLoop,
         get_env: Callable[[], ManagedEnvironment],
-        api: PluginAPI,
+        controller: PluginWorkspaceController,
         outputs_manager: OutputsManager,
         tab_manager: TabManager,
         tbar: TimelineControlBar,
@@ -171,7 +171,7 @@ class PlaybackManager(QObject):
         self._loop = loop
         self._get_env = get_env
 
-        self._api = api
+        self._controller = controller
         self._outputs_manager = outputs_manager
         self._tab_manager = tab_manager
         self._tbar = tbar
@@ -224,20 +224,20 @@ class PlaybackManager(QObject):
         n: int,
         cb_render: Callable[[Future[int]], None] | None = None,
         notify_plugins: bool = True,
-    ) -> None:
+    ) -> bool:
         """Request a specific frame to be rendered and displayed."""
         logger.debug("Frame requested: %d", n)
 
         if not (voutput := self._outputs_manager.current_voutput):
-            return
+            return False
 
-        if self._api.busy:
+        if self._controller.busy:
             logger.warning("At least one plugin is busy, cannot request frame")
             if cb_render:
                 fut = Future[int]()
                 fut.set_result(2)
                 cb_render(fut)
-            return
+            return False
 
         n = clamp(n, 0, voutput.vs_output.clip.num_frames - 1)
 
@@ -265,6 +265,7 @@ class PlaybackManager(QObject):
             self.can_reload = True
 
         fut.then(on_success, on_error, on_loop=True).add_done_callback(on_finally_done)
+        return True
 
     @run_in_background(name="RenderFrame")
     def _render_frame(self, n: int, notify_plugins: bool = True) -> int:
@@ -308,7 +309,7 @@ class PlaybackManager(QObject):
                 failed = True
 
             if notify_plugins:
-                self._api._on_current_frame_changed(n, None)
+                self._controller.on_current_frame_changed(n, None)
 
             if not self.state.is_playing:
                 self.statusLoadingFinished.emit("Completed")
@@ -383,7 +384,7 @@ class PlaybackManager(QObject):
         if not (voutput := self._outputs_manager.current_voutput):
             return
 
-        if self._api.busy:
+        if self._controller.busy:
             logger.warning("At least one plugin is busy, cannot request frame")
             self._stop_playback()
             return
@@ -426,7 +427,7 @@ class PlaybackManager(QObject):
             if not self.state.is_playing:
                 return
 
-            self._api._on_playback_started()
+            self._controller.on_playback_started()
 
             # Start both audio and video at the same time
             self.state.next_frame_time_ns = self.state.next_audio_frame_time_ns = perf_counter_ns()
@@ -455,7 +456,7 @@ class PlaybackManager(QObject):
 
         self.can_reload = True
 
-        self._api._on_playback_stopped()
+        self._controller.on_playback_stopped()
         self.statusLoadingFinished.emit("Paused")
 
     @run_in_loop(return_future=False)
@@ -511,7 +512,7 @@ class PlaybackManager(QObject):
                     self.frameRendered.emit(image, frame, self._get_sar_from_props(frame_n))
                     self.timelineCursorChanged.emit(frame_n)
 
-                    self._api._on_current_frame_changed(frame_n, plugin_frames)
+                    self._controller.on_current_frame_changed(frame_n, plugin_frames)
                 finally:
                     for frame_to_close in plugin_frames.values():
                         frame_to_close.close()
@@ -601,7 +602,7 @@ class PlaybackManager(QObject):
 
         # Create and allocate video buffer
         buffer = FrameBuffer(video_output=voutput, env=self._env)
-        self._api._register_plugin_nodes_to_buffer(buffer)
+        self._controller.register_plugin_nodes_to_buffer(buffer)
 
         buffer.allocate(play_range=play_range, loop=loop)
 
@@ -755,7 +756,7 @@ class PlaybackManager(QObject):
 
         with self._env.use():
             for aoutput in self._outputs_manager.aoutputs:
-                aoutput.prepare_audio(delay_s, self._api)
+                aoutput.prepare_audio(delay_s, self._controller.api)
 
     @Slot(int)
     def _on_audio_output_changed(self, index: int) -> None:

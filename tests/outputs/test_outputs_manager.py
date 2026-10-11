@@ -8,7 +8,7 @@ import vapoursynth as vs
 from pytest_mock import MockerFixture
 from vsengine import ManagedEnvironment
 
-from tests.harness import PluginTestHarness
+from tests.harness import HarnessPluginController
 from vsview.app.outputs.audio import AudioMetadata, AudioOutput
 from vsview.app.outputs.manager import OutputsManager
 from vsview.app.outputs.video import VideoMetadata, VideoOutput
@@ -26,13 +26,13 @@ def use_plugin_manager(init_plugin_manager: PluginManager) -> None: ...
 
 @pytest.fixture
 def manager(
-    plugin_harness: PluginTestHarness,
+    plugin_controller: HarnessPluginController,
     vpy_env_factory: Callable[[], ManagedEnvironment],
 ) -> Generator[OutputsManager]:
-    plugin_harness.env = vpy_env_factory()
+    plugin_controller.env = vpy_env_factory()
 
-    with plugin_harness.env.use():
-        yield OutputsManager(plugin_harness)  # pyright: ignore[reportArgumentType]
+    with plugin_controller.env.use():
+        yield OutputsManager(plugin_controller.api)
 
 
 # Defaults and Index Setters Tests

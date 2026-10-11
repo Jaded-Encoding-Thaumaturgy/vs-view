@@ -13,7 +13,7 @@ from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
-from tests.harness import PluginTestHarness
+from tests.harness import HarnessPluginController
 from vsview.app.outputs import AudioBuffer, FrameBuffer
 from vsview.app.outputs.audio import AudioOutput
 from vsview.app.outputs.video import VideoOutput
@@ -186,7 +186,7 @@ def test_playback_state_wait_for_cleanup(
 class PlaybackManagerSetup(NamedTuple):
     playback_manager: PlaybackManager
     env: ManagedEnvironment
-    plugin_harness: PluginTestHarness
+    plugin_controller: HarnessPluginController
     mock_outputs: MagicMock
     mock_tabs: MagicMock
     tbar: TimelineControlBar
@@ -196,7 +196,7 @@ class PlaybackManagerSetup(NamedTuple):
 def playback_manager_setup(
     qt_event_loop: QtEventLoop,
     vpy_env_factory: Callable[[], ManagedEnvironment],
-    plugin_harness: PluginTestHarness,
+    plugin_controller: HarnessPluginController,
     qtbot: QtBot,
 ) -> Generator[PlaybackManagerSetup, None, None]:
     env = vpy_env_factory()
@@ -212,27 +212,17 @@ def playback_manager_setup(
     tbar = TimelineControlBar()
     qtbot.addWidget(tbar)
 
-    # Attach internal workspace lifecycle hooks expected by PlaybackManager
-    for name in (
-        "_on_playback_started",
-        "_on_playback_stopped",
-        "_on_current_frame_changed",
-        "_register_plugin_nodes_to_buffer",
-    ):
-        if not hasattr(plugin_harness, name):
-            setattr(plugin_harness, name, MagicMock())
-
     manager = PlaybackManager(
         loop=qt_event_loop,
         get_env=lambda: env,
-        api=plugin_harness,  # pyright: ignore[reportArgumentType]
+        controller=plugin_controller,  # pyright: ignore[reportArgumentType]
         outputs_manager=mock_outputs,
         tab_manager=mock_tabs,
         tbar=tbar,
     )
 
     try:
-        yield PlaybackManagerSetup(manager, env, plugin_harness, mock_outputs, mock_tabs, tbar)
+        yield PlaybackManagerSetup(manager, env, plugin_controller, mock_outputs, mock_tabs, tbar)
     finally:
         manager.stop()
 
@@ -492,20 +482,20 @@ def test_playback_manager_api_busy_frame_request(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
 ) -> None:
-    manager, env, plugin_harness, mock_outputs, _, _ = playback_manager_setup
+    manager, env, plugin_controller, mock_outputs, _, _ = playback_manager_setup
     voutput = create_test_video_output(env, 10)
     mock_outputs.current_voutput = voutput
 
     try:
-        plugin_harness.busy = True
-        callback_results = list[int]()
+        with plugin_controller.create_blocker(plugin_controller.api):
+            assert plugin_controller.api.busy is True
+            callback_results = list[int]()
 
-        def on_rendered(fut: Future[int]) -> None:
-            callback_results.append(fut.result())
+            def on_rendered(fut: Future[int]) -> None:
+                callback_results.append(fut.result())
 
-        manager.request_frame(5, cb_render=on_rendered)
-        assert callback_results == [2]
+            manager.request_frame(5, cb_render=on_rendered)
+            assert callback_results == [2]
     finally:
         voutput.clear()
         mock_outputs.current_voutput = None
-        plugin_harness.busy = False

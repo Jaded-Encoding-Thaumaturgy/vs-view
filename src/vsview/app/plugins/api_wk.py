@@ -1,9 +1,12 @@
 from collections.abc import Sequence
 from typing import Any, ClassVar, Generic
 
+from PySide6.QtWidgets import QWidget
+
 from vsview.app.settings.action import ActionDefinition
 from vsview.app.workspace import BaseWorkspace, LoaderWorkspace
 
+from ._controller import get_controller
 from ._interface import _PluginBaseMeta
 from .api import PluginSecrets, PluginSettings, TGlobalSettings, TLocalSettings
 
@@ -32,6 +35,10 @@ class PluginWorkspace(
 ):
     __plugin_base__ = True
 
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.api = self.plugin_controller.api
+
     @property
     def settings(self) -> PluginSettings[TGlobalSettings, TLocalSettings]:
         """Get the settings wrapper for lazy, always-fresh access."""
@@ -44,8 +51,8 @@ class PluginWorkspace(
 
     def update_global_settings(self, **updates: Any) -> None:
         """Update specific global settings fields and trigger persistence."""
-        self.api._update_settings(self, "global", **updates)
+        get_controller(self.api).update_settings(self, "global", **updates)
 
     def update_local_settings(self, **updates: Any) -> None:
         """Update specific local settings fields and trigger persistence."""
-        self.api._update_settings(self, "local", **updates)
+        get_controller(self.api).update_settings(self, "local", **updates)

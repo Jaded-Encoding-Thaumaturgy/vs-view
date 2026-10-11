@@ -17,7 +17,7 @@ from vsview.app.tools.cropping.plugin import RegionSelectorPlugin
 from vsview.app.tools.frameprops.plugin import FramePropsModel, FramePropsPlugin
 
 if TYPE_CHECKING:
-    from tests.harness import PluginTestHarness
+    from tests.harness import HarnessPluginController
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
 
@@ -28,25 +28,25 @@ def _use_qt_event_loop(qt_event_loop: Any) -> Any:
 
 
 @pytest.fixture
-def plugin_harness(
-    plugin_harness: PluginTestHarness,
+def plugin_controller(
+    plugin_controller: HarnessPluginController,
     vpy_env_factory: Callable[[], ManagedEnvironment],
     create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
-) -> PluginTestHarness:
+) -> HarnessPluginController:
     env = vpy_env_factory()
     voutput = create_test_video_output(env, 100)
-    plugin_harness.env = env
-    plugin_harness.set_current_voutput(voutput)
-    return plugin_harness
+    plugin_controller.env = env
+    plugin_controller.set_current_voutput(voutput)
+    return plugin_controller
 
 
 # RegionSelectorPlugin Tests
-def test_region_selector_instantiation(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(RegionSelectorPlugin)
-    assert plugin.api is plugin_harness
+def test_region_selector_instantiation(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(RegionSelectorPlugin)
+    assert plugin.api is plugin_controller.api
     assert plugin.crop_rect.isEmpty()
     assert plugin.enable_btn.isChecked() is False
-    assert plugin_harness.current_view.rect_selection_enabled is False
+    assert plugin_controller.api.current_view.rect_selection_enabled is False
 
     assert plugin.left_box.value() == 0
     assert plugin.right_box.value() == 0
@@ -56,12 +56,12 @@ def test_region_selector_instantiation(plugin_harness: PluginTestHarness) -> Non
     assert plugin.height_box.value() == 0
 
 
-def test_region_selector_selection_update_and_mod_clamping(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(RegionSelectorPlugin)
+def test_region_selector_selection_update_and_mod_clamping(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(RegionSelectorPlugin)
 
     # 1. Even coordinates on 64x64 video (already mod 2 aligned)
     aligned_rect = QRect(10, 10, 30, 30)
-    plugin_harness.set_rect_selection(aligned_rect)
+    plugin_controller.set_rect_selection(aligned_rect)
 
     assert plugin.crop_rect == aligned_rect
     assert plugin.left_box.value() == 10
@@ -81,7 +81,7 @@ def test_region_selector_selection_update_and_mod_clamping(plugin_harness: Plugi
     # x=9 -> x0=8, y=7 -> y0=6, x+w=40 -> x1=40, y+h=32 -> y1=32
     # w=32, h=26
     unaligned_rect = QRect(9, 7, 31, 25)
-    plugin_harness.set_rect_selection(unaligned_rect)
+    plugin_controller.set_rect_selection(unaligned_rect)
 
     expected_clamped = QRect(8, 6, 32, 26)
     assert plugin.crop_rect == expected_clamped
@@ -93,15 +93,15 @@ def test_region_selector_selection_update_and_mod_clamping(plugin_harness: Plugi
     assert plugin.bottom_box.value() == 32  # 64 - 32
 
 
-def test_region_selector_aspect_ratio_and_command_labels(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(RegionSelectorPlugin)
+def test_region_selector_aspect_ratio_and_command_labels(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(RegionSelectorPlugin)
 
     # Before selection, command label shows unformatted template
     assert plugin.command_label.text() == "std.Crop({left}, {right}, {top}, {bottom})"
 
     # Set selection and verify crop script label formatting
     test_rect = QRect(10, 10, 30, 30)
-    plugin_harness.set_rect_selection(test_rect)
+    plugin_controller.set_rect_selection(test_rect)
 
     assert plugin.command_label.text() == "std.Crop(10, 24, 10, 24)"
     assert len(plugin.cmd_labels) == 3
@@ -111,12 +111,12 @@ def test_region_selector_aspect_ratio_and_command_labels(plugin_harness: PluginT
 
     # Simulate 16:9 aspect ratio preset calculation (32x18 on 64x64)
     rect_16_9 = QRect(16, 22, 32, 18)
-    plugin_harness.set_rect_selection(rect_16_9)
+    plugin_controller.set_rect_selection(rect_16_9)
     assert plugin.command_label.text() == "std.Crop(16, 16, 22, 24)"
 
     # Simulate 4:3 aspect ratio preset calculation (32x24 on 64x64)
     rect_4_3 = QRect(16, 20, 32, 24)
-    plugin_harness.set_rect_selection(rect_4_3)
+    plugin_controller.set_rect_selection(rect_4_3)
     assert plugin.command_label.text() == "std.Crop(16, 16, 20, 20)"
 
     # Clear selection resets command labels
@@ -125,63 +125,63 @@ def test_region_selector_aspect_ratio_and_command_labels(plugin_harness: PluginT
     assert plugin.command_label.text() == "std.Crop({left}, {right}, {top}, {bottom})"
 
 
-def test_region_selector_toggle_action_and_shortcut(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(RegionSelectorPlugin)
+def test_region_selector_toggle_action_and_shortcut(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(RegionSelectorPlugin)
 
     # Initial state
     assert plugin.enable_btn.isChecked() is False
-    assert plugin_harness.current_view.rect_selection_enabled is False
+    assert plugin_controller.api.current_view.rect_selection_enabled is False
 
     # Toggle via button click
     plugin.enable_btn.click()
     assert plugin.enable_btn.isChecked() is True
-    assert plugin_harness.current_view.rect_selection_enabled is True
+    assert plugin_controller.api.current_view.rect_selection_enabled is True
 
     plugin.enable_btn.click()
     assert plugin.enable_btn.isChecked() is False
-    assert plugin_harness.current_view.rect_selection_enabled is False
+    assert plugin_controller.api.current_view.rect_selection_enabled is False
 
     # Toggle via button toggle
     plugin.enable_btn.toggle()
     assert plugin.enable_btn.isChecked() is True
-    assert plugin_harness.current_view.rect_selection_enabled is True
+    assert plugin_controller.api.current_view.rect_selection_enabled is True
 
     # on_hide turns off selection
     plugin.on_hide()
     assert plugin.enable_btn.isChecked() is False
-    assert plugin_harness.current_view.rect_selection_enabled is False
+    assert plugin_controller.api.current_view.rect_selection_enabled is False
 
 
-def test_region_selector_spinbox_edits_update_view(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(RegionSelectorPlugin)
+def test_region_selector_spinbox_edits_update_view(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(RegionSelectorPlugin)
 
     # Set initial selection
-    plugin_harness.set_rect_selection(QRect(10, 10, 30, 30))
+    plugin_controller.set_rect_selection(QRect(10, 10, 30, 30))
 
     # Edit left_spin: value changed triggers view rect selection update
     plugin.left_spin.setValue(12)
-    assert plugin_harness.current_view.rect_selection.x() == 12
+    assert plugin_controller.api.current_view.rect_selection.x() == 12
     assert plugin.left_box.value() == 12
 
 
 # ColorPickerPlugin Tests
-def test_color_picker_instantiation(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(ColorPickerPlugin)
+def test_color_picker_instantiation(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(ColorPickerPlugin)
     assert plugin.tracking == TrackingState.INACTIVE
     assert plugin.eyedropper_btn.isChecked() is False
     assert plugin.position_label.text() == "Pos: —, —"
     assert plugin.position_label.cursor_pos == QPoint(0, 0)
 
 
-def test_color_picker_tracking_state_transitions(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(ColorPickerPlugin)
+def test_color_picker_tracking_state_transitions(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(ColorPickerPlugin)
 
     # Inactive -> Active via eyedropper button
     plugin.eyedropper_btn.click()
     assert plugin.tracking == TrackingState.ACTIVE
     assert plugin.eyedropper_btn.isChecked() is True
 
-    assert plugin_harness.current_view.viewport.cursor == Qt.CursorShape.CrossCursor
+    assert plugin_controller.current_view_proxy.viewport._cursor == Qt.CursorShape.CrossCursor
 
     # Active -> Deactivating via Right Mouse Button Press
     press_event = QMouseEvent(
@@ -194,7 +194,7 @@ def test_color_picker_tracking_state_transitions(plugin_harness: PluginTestHarne
     )
     plugin.on_view_mouse_pressed(press_event)
     assert plugin.tracking == TrackingState.DEACTIVATING
-    assert plugin_harness.current_view.viewport.cursor == Qt.CursorShape.OpenHandCursor
+    assert plugin_controller.current_view_proxy.viewport._cursor == Qt.CursorShape.OpenHandCursor
 
     # Deactivating -> Inactive via Context Menu Event
     context_event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10), QPoint(10, 10))
@@ -203,8 +203,8 @@ def test_color_picker_tracking_state_transitions(plugin_harness: PluginTestHarne
     assert plugin.eyedropper_btn.isChecked() is False
 
 
-def test_color_picker_mouse_move_and_position_label(qtbot: QtBot, plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(ColorPickerPlugin)
+def test_color_picker_mouse_move_and_position_label(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(ColorPickerPlugin)
     plugin.eyedropper_btn.setChecked(True)
 
     # Simulate mouse movement to (15, 25)
@@ -234,8 +234,8 @@ def test_color_picker_mouse_move_and_position_label(qtbot: QtBot, plugin_harness
     assert plugin.rgb_labels["HSV"][0].text() == "0°"
 
 
-def test_color_picker_decimals_nb_setting_update(qtbot: QtBot, plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(ColorPickerPlugin)
+def test_color_picker_decimals_nb_setting_update(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(ColorPickerPlugin)
     plugin.eyedropper_btn.setChecked(True)
 
     # Trigger initial update
@@ -272,8 +272,8 @@ def test_color_picker_decimals_nb_setting_update(qtbot: QtBot, plugin_harness: P
     assert plugin.rgb_labels["Norm"][0].text() == "0.0000"
 
 
-def test_color_picker_copy_row(qtbot: QtBot, plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(ColorPickerPlugin)
+def test_color_picker_copy_row(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(ColorPickerPlugin)
     plugin.eyedropper_btn.setChecked(True)
 
     move_event = QMouseEvent(
@@ -288,7 +288,7 @@ def test_color_picker_copy_row(qtbot: QtBot, plugin_harness: PluginTestHarness) 
     qtbot.waitUntil(lambda: plugin.position_label.cursor_pos == QPoint(5, 5))
 
     status_messages = list[str]()
-    plugin_harness.statusMessage.connect(status_messages.append)
+    plugin_controller.statusMessage.connect(status_messages.append)
 
     # Click copy button via user interaction with qtbot
     copy_btn = plugin.src_copy_btns["Dec"]
@@ -300,9 +300,9 @@ def test_color_picker_copy_row(qtbot: QtBot, plugin_harness: PluginTestHarness) 
 
 
 # FramePropsPlugin Tests
-def test_frameprops_instantiation(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(FramePropsPlugin)
-    assert plugin.api is plugin_harness
+def test_frameprops_instantiation(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FramePropsPlugin)
+    assert plugin.api is plugin_controller.api
     assert plugin.categorize_toggle.isChecked() is True
     assert plugin.stack.currentIndex() == 1  # categorize_tree
     assert isinstance(plugin.search_box, QLineEdit)
@@ -310,11 +310,11 @@ def test_frameprops_instantiation(plugin_harness: PluginTestHarness) -> None:
     assert plugin.search_box.isClearButtonEnabled() is True
 
 
-def test_frameprops_load_properties_on_frame_change(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(FramePropsPlugin)
+def test_frameprops_load_properties_on_frame_change(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FramePropsPlugin)
 
     # Load frame 0 props
-    plugin_harness.set_current_frame(0)
+    plugin_controller.set_current_frame(0)
 
     assert plugin.history_combo.count() == 1
     assert "Frame 0 (Current)" in plugin.history_combo.currentText()
@@ -338,14 +338,14 @@ def test_frameprops_load_properties_on_frame_change(plugin_harness: PluginTestHa
     assert video_props.get("_Transfer") == "BT.709"
 
     # Move to frame 1
-    plugin_harness.set_current_frame(1)
+    plugin_controller.set_current_frame(1)
     assert plugin.history_combo.count() == 2
     assert "Frame 1 (Current)" in plugin.history_combo.currentText()
 
 
-def test_frameprops_search_filter_box(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(FramePropsPlugin)
-    plugin_harness.set_current_frame(0)
+def test_frameprops_search_filter_box(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FramePropsPlugin)
+    plugin_controller.set_current_frame(0)
 
     table = plugin.raw_table
     model = table.model()
@@ -389,9 +389,9 @@ def test_frameprops_search_filter_box(plugin_harness: PluginTestHarness) -> None
     assert all(not tree.isRowHidden(r, video_cat_index) for r in range(video_item.rowCount()))
 
 
-def test_frameprops_categorize_and_format_toggles(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(FramePropsPlugin)
-    plugin_harness.set_current_frame(0)
+def test_frameprops_categorize_and_format_toggles(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FramePropsPlugin)
+    plugin_controller.set_current_frame(0)
 
     # Categorize toggle
     assert plugin.categorize_toggle.isChecked() is True
@@ -413,13 +413,13 @@ def test_frameprops_categorize_and_format_toggles(plugin_harness: PluginTestHarn
     assert plugin.categorize_tree.header().isSectionHidden(FramePropsModel.FORMATTED_COLUMN) is True
 
 
-def test_frameprops_history_navigation_buttons(plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(FramePropsPlugin)
+def test_frameprops_history_navigation_buttons(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FramePropsPlugin)
 
     # Populate frames 0, 1, 2 in history
-    plugin_harness.set_current_frame(0)
-    plugin_harness.set_current_frame(1)
-    plugin_harness.set_current_frame(2)
+    plugin_controller.set_current_frame(0)
+    plugin_controller.set_current_frame(1)
+    plugin_controller.set_current_frame(2)
 
     assert plugin.history_combo.count() == 3
     assert plugin.history_combo.currentIndex() == 2
@@ -442,14 +442,14 @@ def test_frameprops_history_navigation_buttons(plugin_harness: PluginTestHarness
     assert plugin.history_combo.currentIndex() == 1
 
 
-def test_frameprops_videoframe_preview_lifecycle(qtbot: QtBot, plugin_harness: PluginTestHarness) -> None:
-    plugin = plugin_harness.create_plugin(FramePropsPlugin)
-    plugin_harness.set_current_frame(0)
+def test_frameprops_videoframe_preview_lifecycle(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FramePropsPlugin)
+    plugin_controller.set_current_frame(0)
 
     # Create dummy VideoFrame property
-    assert plugin_harness.env is not None
-    with plugin_harness.env.use():
-        dummy_clip = plugin_harness.env.core.std.BlankClip(width=32, height=32, format=vs.RGB24, length=1)
+    assert plugin_controller.env is not None
+    with plugin_controller.env.use():
+        dummy_clip = plugin_controller.env.core.std.BlankClip(width=32, height=32, format=vs.RGB24, length=1)
         dummy_frame = dummy_clip.get_frame(0)
 
     # Show preview via public signal contract

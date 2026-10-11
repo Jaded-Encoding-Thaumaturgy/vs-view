@@ -11,7 +11,6 @@ from pytest_mock import MockerFixture
 from vsview.app.plugins._interface import _PluginSettingsStore, _SettingsProxy
 from vsview.app.plugins.contracts import LocalSettingsModel
 from vsview.app.settings import SettingsManager
-from vsview.app.workspace import BaseGenericFileWorkspace
 
 pytestmark = [pytest.mark.unit]
 
@@ -150,11 +149,9 @@ def test_store_get_caching(mock_workspace: MagicMock, mock_plugin: MagicMock) ->
     assert settings2.attr1 == "from_storage"
 
 
-def test_store_local_global_resolution(mocker: MockerFixture, tmp_path: Path, mock_plugin: MagicMock) -> None:
+def test_store_local_global_resolution(tmp_path: Path, mock_plugin: MagicMock) -> None:
     test_file = tmp_path / "test.vpy"
-    mock_workspace = mocker.MagicMock(spec=BaseGenericFileWorkspace)
-    mock_workspace.current_file_path = test_file
-    store = _PluginSettingsStore(mock_workspace)
+    store = _PluginSettingsStore(lambda: test_file)
 
     # Setup global and local storage
     SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "global_val", "attr2": 100}

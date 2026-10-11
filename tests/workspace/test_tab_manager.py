@@ -22,7 +22,7 @@ from vsview.app.workspace.tab_manager import PlayHeadToolButton, TabManager
 if TYPE_CHECKING:
     from vsengine.policy import ManagedEnvironment
 
-    from tests.harness import PluginTestHarness
+    from tests.harness import HarnessPluginController
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.usefixtures("qt_event_loop")]
 
@@ -41,26 +41,25 @@ def playhead_btn(qtbot: QtBot) -> Generator[PlayHeadToolButton, None, None]:
 
 
 @pytest.fixture
-def tab_manager(qtbot: QtBot, plugin_harness: PluginTestHarness) -> Generator[TabManager, None, None]:
-    """Provide a TabManager wired to PluginTestHarness with Qt lifecycle managed by qtbot."""
+def tab_manager(qtbot: QtBot, plugin_controller: HarnessPluginController) -> Generator[TabManager, None, None]:
+    """Provide a TabManager wired to HarnessPluginController with Qt lifecycle managed by qtbot."""
     parent = QWidget()
     qtbot.addWidget(parent)
 
     # Attach internal workspace view routing methods expected by TabManager
     for name in (
-        "_on_view_context_menu",
-        "_on_view_mouse_moved",
-        "_on_view_mouse_pressed",
-        "_on_view_mouse_released",
-        "_on_view_rect_selection_changed",
-        "_on_view_rect_selection_finished",
-        "_on_view_key_press",
-        "_on_view_key_release",
+        "on_view_context_menu",
+        "on_view_mouse_moved",
+        "on_view_mouse_pressed",
+        "on_view_mouse_released",
+        "on_view_rect_selection_changed",
+        "on_view_rect_selection_finished",
+        "on_view_key_press",
+        "on_view_key_release",
     ):
-        if not hasattr(plugin_harness, name):
-            setattr(plugin_harness, name, MagicMock())
+        setattr(plugin_controller, name, MagicMock())
 
-    mgr = TabManager(parent, plugin_harness)  # pyright: ignore[reportArgumentType]
+    mgr = TabManager(parent, plugin_controller)  # pyright: ignore[reportArgumentType]
     qtbot.addWidget(mgr)
     try:
         yield mgr
@@ -249,10 +248,10 @@ def test_playhead_tool_button_reload_icons(playhead_btn: PlayHeadToolButton) -> 
 
 
 # 2. TabManager Initialization & Shortcuts Tests
-def test_tab_manager_initialization(tab_manager: TabManager, plugin_harness: PluginTestHarness) -> None:
+def test_tab_manager_initialization(tab_manager: TabManager, plugin_controller: HarnessPluginController) -> None:
     mgr = tab_manager
 
-    assert mgr.api is plugin_harness
+    assert mgr.controller is plugin_controller
     assert isinstance(mgr.parentWidget(), QWidget)
 
     # Buttons existence and checked states
@@ -368,7 +367,7 @@ def test_create_tabs_multiple_outputs_enables_sync(
 def test_create_tabs_signal_forwarding(
     qtbot: QtBot,
     tab_manager: TabManager,
-    plugin_harness: PluginTestHarness,
+    plugin_controller: HarnessPluginController,
     make_video_output: Callable[..., VideoOutput],
 ) -> None:
     mgr = tab_manager
@@ -380,7 +379,7 @@ def test_create_tabs_signal_forwarding(
     # API mouse/keyboard/context signals
     context_event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10), QPoint(10, 10))
     view.contextMenuRequested.emit(context_event)
-    plugin_harness._on_view_context_menu.assert_called_once_with(context_event)  # pyright: ignore[reportAttributeAccessIssue]
+    plugin_controller.on_view_context_menu.assert_called_once_with(context_event)  # pyright: ignore[reportAttributeAccessIssue]
 
     mouse_move_event = QMouseEvent(
         QEvent.Type.MouseMove,
@@ -391,7 +390,7 @@ def test_create_tabs_signal_forwarding(
         Qt.KeyboardModifier.NoModifier,
     )
     view.mouseMoved.emit(mouse_move_event)
-    plugin_harness._on_view_mouse_moved.assert_called_once_with(mouse_move_event)  # pyright: ignore[reportAttributeAccessIssue]
+    plugin_controller.on_view_mouse_moved.assert_called_once_with(mouse_move_event)  # pyright: ignore[reportAttributeAccessIssue]
 
     mouse_press_event = QMouseEvent(
         QEvent.Type.MouseButtonPress,
@@ -402,7 +401,7 @@ def test_create_tabs_signal_forwarding(
         Qt.KeyboardModifier.NoModifier,
     )
     view.mousePressed.emit(mouse_press_event)
-    plugin_harness._on_view_mouse_pressed.assert_called_once_with(mouse_press_event)  # pyright: ignore[reportAttributeAccessIssue]
+    plugin_controller.on_view_mouse_pressed.assert_called_once_with(mouse_press_event)  # pyright: ignore[reportAttributeAccessIssue]
 
     mouse_release_event = QMouseEvent(
         QEvent.Type.MouseButtonRelease,
@@ -413,22 +412,22 @@ def test_create_tabs_signal_forwarding(
         Qt.KeyboardModifier.NoModifier,
     )
     view.mouseReleased.emit(mouse_release_event)
-    plugin_harness._on_view_mouse_released.assert_called_once_with(mouse_release_event)  # pyright: ignore[reportAttributeAccessIssue]
+    plugin_controller.on_view_mouse_released.assert_called_once_with(mouse_release_event)  # pyright: ignore[reportAttributeAccessIssue]
 
     key_press_event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier)
     view.keyPressed.emit(key_press_event)
-    plugin_harness._on_view_key_press.assert_called_once_with(key_press_event)  # pyright: ignore[reportAttributeAccessIssue]
+    plugin_controller.on_view_key_press.assert_called_once_with(key_press_event)  # pyright: ignore[reportAttributeAccessIssue]
 
     key_release_event = QKeyEvent(QEvent.Type.KeyRelease, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier)
     view.keyReleased.emit(key_release_event)
-    plugin_harness._on_view_key_release.assert_called_once_with(key_release_event)  # pyright: ignore[reportAttributeAccessIssue]
+    plugin_controller.on_view_key_release.assert_called_once_with(key_release_event)  # pyright: ignore[reportAttributeAccessIssue]
 
     sel_rect = QRect(0, 0, 20, 20)
     view.rectSelectionChanged.emit(sel_rect)
-    plugin_harness._on_view_rect_selection_changed.assert_called_once_with(sel_rect)  # pyright: ignore[reportAttributeAccessIssue]
+    plugin_controller.on_view_rect_selection_changed.assert_called_once_with(sel_rect)  # pyright: ignore[reportAttributeAccessIssue]
 
     view.rectSelectionFinished.emit(sel_rect)
-    plugin_harness._on_view_rect_selection_finished.assert_called_once_with(sel_rect)  # pyright: ignore[reportAttributeAccessIssue]
+    plugin_controller.on_view_rect_selection_finished.assert_called_once_with(sel_rect)  # pyright: ignore[reportAttributeAccessIssue]
 
     # Status loading signals
     with qtbot.waitSignal(mgr.statusLoadingStarted) as blocker:
@@ -528,7 +527,7 @@ def test_switch_tab_enabled(
 @pytest.mark.vpy("no-core")
 def test_switch_tab_busy_guard_reverts(
     tab_manager: TabManager,
-    plugin_harness: PluginTestHarness,
+    plugin_controller: HarnessPluginController,
     make_video_output: Callable[..., VideoOutput],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -540,14 +539,13 @@ def test_switch_tab_busy_guard_reverts(
     mgr.disable_switch = False
 
     # Switch to tab 1 while not busy
-    plugin_harness.busy = False
+    assert not plugin_controller.busy
     mgr.switch_tab(1)
     assert mgr.tabs.currentIndex() == 1
     assert mgr.tabs.previous_tab_index == 0
 
     # When api.busy is True, switching to tab 2 must be rejected and reverted
-    plugin_harness.busy = True
-    with caplog.at_level("WARNING"):
+    with plugin_controller.create_blocker(plugin_controller.api), caplog.at_level("WARNING"):
         mgr.switch_tab(2)
 
     assert "Workspace is busy, cannot switch output" in caplog.text
@@ -648,7 +646,6 @@ def test_on_sync_zoom_toggled_syncs_current_view_zoom(
 def test_pan_sync_on_tab_changed(
     qtbot: QtBot,
     tab_manager: TabManager,
-    plugin_harness: PluginTestHarness,
     make_video_output: Callable[..., VideoOutput],
     mocker: MockerFixture,
 ) -> None:
@@ -658,7 +655,6 @@ def test_pan_sync_on_tab_changed(
     tabs = mgr.create_tabs(outputs)
     mgr.swap_tabs(tabs, 0)
     mgr.disable_switch = False
-    plugin_harness.busy = False
 
     # Setup pixmap on tab 0 (prev_view)
     pix = QPixmap(120, 80)
@@ -680,7 +676,6 @@ def test_pan_sync_on_tab_changed(
 def test_pan_sync_skipped_when_disabled_or_autofit(
     qtbot: QtBot,
     tab_manager: TabManager,
-    plugin_harness: PluginTestHarness,
     make_video_output: Callable[..., VideoOutput],
     mocker: MockerFixture,
 ) -> None:
@@ -690,7 +685,6 @@ def test_pan_sync_skipped_when_disabled_or_autofit(
     tabs = mgr.create_tabs(outputs)
     mgr.swap_tabs(tabs, 0)
     mgr.disable_switch = False
-    plugin_harness.busy = False
 
     pix = QPixmap(100, 100)
     pix.fill(Qt.GlobalColor.blue)

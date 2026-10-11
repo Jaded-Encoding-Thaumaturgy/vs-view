@@ -15,7 +15,7 @@ from pytestqt.qtbot import QtBot
 from vsengine.loops import NO_LOOP, set_loop
 from vsengine.policy import ManagedEnvironment
 
-from tests.harness import PluginTestHarness
+from tests.harness import HarnessPluginController
 from vsview.app.outputs.audio import AudioOutput
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.packing import Packer
@@ -182,9 +182,8 @@ def mock_api() -> MagicMock:
 
 
 @pytest.fixture
-def plugin_harness(qtbot: QtBot, tmp_path: Path) -> PluginTestHarness:
-    """Formalized test harness satisfying PluginAPI protocol with real signals and settings."""
-    return PluginTestHarness(qtbot, tmp_path)
+def plugin_controller(qtbot: QtBot, tmp_path: Path) -> HarnessPluginController:
+    return HarnessPluginController(qtbot, tmp_path)
 
 
 # VapourSynth & Environment Fixtures

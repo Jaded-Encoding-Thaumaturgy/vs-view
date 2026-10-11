@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
 
 import pytest
 from PySide6.QtCore import QObject
 from pytest_mock import MockerFixture
 
+from vsview.app.plugins._controller import PluginWorkspaceController
 from vsview.app.plugins.api import PluginAPI, WorkspaceBlocker
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
 
 
-def create_api(mocker: MockerFixture) -> Any:
+def create_api(mocker: MockerFixture) -> PluginAPI:
     mock_workspace = mocker.MagicMock()
-    return PluginAPI(mock_workspace)
+    controller = PluginWorkspaceController(mock_workspace)
+    return controller.api
 
 
 def test_workspace_blocker_init(mocker: MockerFixture) -> None:
@@ -22,7 +23,7 @@ def test_workspace_blocker_init(mocker: MockerFixture) -> None:
     caller = QObject()
 
     # Create blocker with caller
-    blocker = api.blocker(caller)
+    blocker = api.blocker(caller)  # pyright: ignore[reportArgumentType]
     assert isinstance(blocker, WorkspaceBlocker)
     assert blocker.locked is False
 
@@ -35,7 +36,7 @@ def test_workspace_blocker_init(mocker: MockerFixture) -> None:
 def test_workspace_blocker_acquire_release(mocker: MockerFixture) -> None:
     api = create_api(mocker)
     caller = QObject()
-    blocker = api.blocker(caller)
+    blocker = api.blocker(caller)  # pyright: ignore[reportArgumentType]
 
     assert api.busy is False
 
@@ -75,7 +76,7 @@ def test_workspace_blocker_acquire_nonblocking(mocker: MockerFixture) -> None:
 def test_workspace_blocker_context_manager(mocker: MockerFixture) -> None:
     api = create_api(mocker)
     caller = QObject()
-    blocker = api.blocker(caller)
+    blocker = api.blocker(caller)  # pyright: ignore[reportArgumentType]
 
     assert api.busy is False
 

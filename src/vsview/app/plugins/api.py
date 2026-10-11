@@ -10,13 +10,13 @@ from contextlib import contextmanager
 from datetime import timedelta
 from logging import getLogger
 from pathlib import Path
-from types import SimpleNamespace, TracebackType
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Protocol, TypeVar, cast, override, runtime_checkable
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Protocol, TypeVar, cast, runtime_checkable
 
 import vapoursynth as vs
 from jetpytools import copy_signature, to_arr
 from pydantic import BaseModel
-from PySide6.QtCore import QPoint, QPointF, QRect, Qt, Signal
+from PySide6.QtCore import QObject, QPoint, QPointF, QRect, Qt, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -33,23 +33,16 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QGraphicsView, QWidget
 from shiboken6 import Shiboken
 
-from vsview.app.packing import Packer
 from vsview.app.settings import SettingsManager, ShortcutManager
 from vsview.app.settings.action import ActionDefinition
 from vsview.app.views.video import BaseGraphicsView
 from vsview.types import Frame, Time
 from vsview.vsenv.loop import run_in_loop
 
-if sys.version_info >= (3, 13):
-    from warnings import deprecated
-else:
-    from typing_extensions import deprecated
-
-
+from ._controller import get_controller as _get_controller
 from ._interface import (
     _GraphicsViewProxy,
     _PlaybackProxy,
-    _PluginAPI,
     _PluginBaseMeta,
     _PluginLike,
     _PluginSecrets,
@@ -130,14 +123,14 @@ class GraphicsViewProxy(_GraphicsViewProxy):
             v.setCursor(cursor)
 
             if self.__cursor_reset_conn:
-                self.__workspace.tab_manager.tabChanged.disconnect(self.__cursor_reset_conn)
+                self.__tab_changed.disconnect(self.__cursor_reset_conn)
 
             def reset_cursor() -> None:
                 if Shiboken.isValid(v):
                     v.setCursor(Qt.CursorShape.OpenHandCursor)
                 self.__cursor_reset_conn = None
 
-            self.__cursor_reset_conn = self.__workspace.tab_manager.tabChanged.connect(
+            self.__cursor_reset_conn = self.__tab_changed.connect(
                 reset_cursor,
                 Qt.ConnectionType.SingleShotConnection,  # Auto-disconnects after first emit
             )
@@ -145,7 +138,7 @@ class GraphicsViewProxy(_GraphicsViewProxy):
     @property
     def viewport(self) -> GraphicsViewProxy.ViewportProxy:
         """Return a proxy for the viewport."""
-        return GraphicsViewProxy.ViewportProxy(self.__workspace, self.__view.viewport())
+        return GraphicsViewProxy.ViewportProxy(self.__tab_changed, self.__view.viewport())
 
     @copy_signature(QGraphicsView().mapToScene if TYPE_CHECKING else lambda *args, **kwargs: cast(Any, None))
     def map_to_scene(self, *args: Any, **kwargs: Any) -> Any:
@@ -282,22 +275,20 @@ class PlaybackProxy(_PlaybackProxy):
         Returns:
             bool: True if the seek was successful, False otherwise.
         """
-        if self.__workspace.playback.state.is_playing:
+        if self.__playback_manager.state.is_playing:
             logger.debug("Video is playing, skipping seek request")
             return False
 
-        if isinstance(frame_or_time, timedelta):
-            frame = self.__workspace.api.current_voutput.time_to_frame(frame_or_time)
-        else:
-            frame = frame_or_time
+        if not (v := self.__playback_manager._outputs_manager.current_voutput):
+            raise NoCurrentVideoOutputError("No video output is currently available in the active workspace.")
 
-        if not 0 <= frame < self.__workspace.api.current_voutput.vs_output.clip.num_frames:
+        frame = v.time_to_frame(frame_or_time) if isinstance(frame_or_time, timedelta) else frame_or_time
+
+        if not 0 <= frame < v.vs_output.clip.num_frames:
             logger.warning("Requested frame is out of bounds")
             return False
 
-        self.__workspace.playback.request_frame(frame)
-
-        return True
+        return self.__playback_manager.request_frame(frame)
 
 
 class PluginSecrets(_PluginSecrets):
@@ -404,91 +395,67 @@ class PluginSecrets(_PluginSecrets):
             """
 
 
-class PluginAPI(_PluginAPI):
+class PluginAPI(QObject):
     """API for plugins to interact with the workspace."""
 
-    if TYPE_CHECKING:
-        statusMessage = Signal(str)  # message
-        """Signal to emit status messages."""
+    statusMessage = Signal(str)  # message
+    """Signal to emit status messages."""
 
-        globalSettingsChanged = Signal()
-        """Signal to emit when global settings change."""
+    globalSettingsChanged = Signal()
+    """Signal to emit when global settings change."""
 
-        localSettingsChanged = Signal(str)
-        """Signal to emit when local settings change."""
+    localSettingsChanged = Signal(str)
+    """Signal to emit when local settings change."""
 
-        aboutToSaveGlobal = Signal()
-        """Signal to emit before global settings are saved."""
+    aboutToSaveGlobal = Signal()
+    """Signal to emit before global settings are saved."""
 
-        aboutToSaveLocal = Signal(str)  # path
-        """Signal to emit before local settings are saved."""
+    aboutToSaveLocal = Signal(str)  # path
+    """Signal to emit before local settings are saved."""
 
     @property
     def file_path(self) -> Path | None:
         """Return the file path of the currently loaded file, or None if not a file."""
-        return self._settings_store.file_path
+        return _get_controller(self).file_path
 
     @property
     def current_frame(self) -> Frame:
         """Return the current frame number."""
-        return Frame(self.__workspace.playback.state.current_frame)
+        return _get_controller(self).current_frame
 
     @property
     def current_time(self) -> Time:
         """Return the current time."""
-        if voutput := self.__workspace.outputs_manager.current_voutput:
-            return voutput.frame_to_time(self.current_frame)
-
-        raise NoCurrentVideoOutputError("No video output is currently available in the active workspace.")
+        return _get_controller(self).current_time
 
     @property
     def current_video_index(self) -> int:
         """Return the index of the currently selected tab."""
-        return self.__workspace.outputs_manager.current_video_index
+        return _get_controller(self).current_video_index
 
-    if TYPE_CHECKING:
+    @property
+    def voutputs(self) -> list[VideoOutputProxy]:
+        """Return a dictionary of VideoOutputProxy objects for all tabs."""
+        return _get_controller(self).voutputs
 
-        @property
-        @override
-        def voutputs(self) -> list[VideoOutputProxy]:
-            """Return a dictionary of VideoOutputProxy objects for all tabs."""
-            ...
-
-        @property
-        @override
-        def current_voutput(self) -> VideoOutputProxy:
-            """Return the VideoOutput for the currently selected tab."""
-            ...
+    @property
+    def current_voutput(self) -> VideoOutputProxy:
+        """Return the VideoOutput for the currently selected tab."""
+        return _get_controller(self).current_voutput
 
     @property
     def aoutputs(self) -> list[AudioOutputProxy]:
         """Return a list of AudioOutputProxy objects."""
-        return [
-            AudioOutputProxy(aoutput.vs_index, aoutput.vs_name, aoutput.vs_output, aoutput.kwargs)
-            for aoutput in self.__workspace.outputs_manager.aoutputs
-        ]
+        return _get_controller(self).aoutputs
 
     @property
     def current_aoutput(self) -> AudioOutputProxy | None:
-        if aoutput := self.__workspace.outputs_manager.current_aoutput:
-            return AudioOutputProxy(aoutput.vs_index, aoutput.vs_name, aoutput.vs_output, aoutput.kwargs)
-
-        return None
+        return _get_controller(self).current_aoutput
 
     @property
     def is_playing(self) -> bool:
         """Return whether playback is currently active."""
-        return self.__workspace.playback.state.is_playing
-
-    @property
-    @deprecated(
-        "Accessing this property is deprecated. "
-        "Use `self.api.current_voutput.packer` or `self.api.current_voutput.packer_sdr`",
-        category=DeprecationWarning,
-    )
-    def packer(self) -> Packer:
-        """Return the packer used by the workspace."""
-        return self.current_voutput.packer_sdr
+        return _get_controller(self).is_playing
 
     @property
     def settings(self) -> SimpleNamespace:
@@ -503,7 +470,7 @@ class PluginAPI(_PluginAPI):
         global_ = SettingsManager.global_settings.model_copy(deep=True).model_dump(exclude={"plugins"})
         local_ = (
             SettingsManager.get_local_settings(p).model_copy(deep=True).model_dump(exclude={"plugins"})
-            if (p := self._settings_store.file_path)
+            if (p := self.file_path)
             else {}
         )
         settings = SimpleNamespace()
@@ -515,84 +482,53 @@ class PluginAPI(_PluginAPI):
     @property
     def current_view(self) -> GraphicsViewProxy:
         """Return a proxy for the current view."""
-        return GraphicsViewProxy(self.__workspace, self.__workspace.tab_manager.current_view)
+        return _get_controller(self).current_view_proxy
 
     @property
     def timeline(self) -> TimelineProxy:
         """Return a proxy for the timeline."""
-        return TimelineProxy(self.__workspace, self.__workspace.tbar.timeline)
+        return _get_controller(self).timeline_proxy
 
     @property
     def playback(self) -> PlaybackProxy:
         """Return a proxy for the playback."""
-        return PlaybackProxy(self.__workspace, self.__workspace.playback)
+        return _get_controller(self).playback_proxy
 
     @property
     def busy(self) -> bool:
         """Return whether the plugin API is busy by any plugins."""
-        return bool(self.__busy_callers)
+        return _get_controller(self).busy
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """
         Return a path to a local storage directory for the given plugin,
         or None if the current workspace has no file path.
         """
-        if not self.file_path:
-            return None
-
-        settings_path = SettingsManager.local_settings_path(self.file_path)
-        local_storage = settings_path.with_suffix("").with_stem(settings_path.stem.upper()) / plugin.identifier
-        local_storage.mkdir(parents=True, exist_ok=True)
-
-        return local_storage
+        return _get_controller(self).get_local_storage(plugin)
 
     def register_on_destroy(self, cb: Callable[[], Any]) -> None:
         """
         Register a callback to be called before the workspace begins a reload or when the workspace is destroyed.
         This is generally used to clean up VapourSynth resources.
         """
-        self.__workspace.cbs_on_destroy.append(cb)
+        _get_controller(self).register_on_destroy(cb)
 
     @contextmanager
     def vs_context(self) -> Generator[None]:
         """
         Context manager for using the VapourSynth environment of the workspace.
         """
-        with self.__workspace.env.use():
+        with _get_controller(self).vs_context():
             try:
                 yield
             finally:
                 pass
 
-    @contextmanager
-    @deprecated(
-        "This context manager is deprecated. Use `self.api.blocker()`",
-        category=DeprecationWarning,
-    )
-    def block_workspace(self, caller: WidgetPluginBase[Any, Any]) -> Generator[None]:
+    def blocker(self, caller: WidgetPluginBase[Any, Any] | None = None) -> WorkspaceBlocker:
         """
-        Mark the workspace as busy for the duration of the context.
-
-        Specifically, a busy workspace will prevent:
-
-        * Automatic or manual reloading.
-        * Frame requests (via seeking, programmatic calls, or playback start).
+        Create a WorkspaceBlocker for this plugin.
         """
-        self.__busy_callers.add(caller)
-
-        try:
-            yield
-        finally:
-            self.__busy_callers.discard(caller)
-
-    if TYPE_CHECKING:
-
-        @override
-        def blocker(self, caller: WidgetPluginBase[Any, Any] | None = None) -> WorkspaceBlocker:
-            """
-            Create a WorkspaceBlocker for this plugin.
-            """
-            ...
+        return _get_controller(self).create_blocker(self, caller)
 
     def register_action(
         self,
@@ -655,13 +591,7 @@ class WorkspaceBlocker(Protocol):
     """
 
     def __enter__(self) -> None: ...
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None: ...
+    def __exit__(self, *_: object) -> None: ...
 
     @property
     def locked(self) -> bool:
@@ -707,12 +637,12 @@ class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     @property
     def global_(self) -> TGlobalSettings:
         """Get the current global settings."""
-        return self._plugin.api._get_cached_proxy_settings(self._plugin, "global")
+        return _get_controller(self._plugin.api).get_cached_proxy_settings(self._plugin, "global")  # type: ignore[return-value]
 
     @property
     def local_(self) -> TLocalSettings:
         """Get the current local settings (resolved with global fallbacks)."""
-        return self._plugin.api._get_cached_proxy_settings(self._plugin, "local")
+        return _get_controller(self._plugin.api).get_cached_proxy_settings(self._plugin, "local")  # type: ignore[return-value]
 
 
 class _PluginBase(Generic[TGlobalSettings, TLocalSettings], metaclass=_PluginBaseMeta):
@@ -746,11 +676,11 @@ class _PluginBase(Generic[TGlobalSettings, TLocalSettings], metaclass=_PluginBas
 
     def update_global_settings(self, **updates: Any) -> None:
         """Update specific global settings fields and trigger persistence."""
-        self.api._update_settings(self, "global", **updates)
+        _get_controller(self.api).update_settings(self, "global", **updates)
 
     def update_local_settings(self, **updates: Any) -> None:
         """Update specific local settings fields and trigger persistence."""
-        self.api._update_settings(self, "local", **updates)
+        _get_controller(self.api).update_settings(self, "local", **updates)
 
 
 class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, metaclass=_PluginBaseMeta):
@@ -910,7 +840,7 @@ class PluginGraphicsView(BaseGraphicsView):
 
     def refresh(self) -> None:
         """Refresh the view."""
-        self.api._init_view(self, refresh=True)
+        _get_controller(self.api).init_view(self, refresh=True)
 
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
         """

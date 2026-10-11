@@ -4,32 +4,25 @@ from collections.abc import Callable
 from itertools import zip_longest
 from logging import getLogger
 from pathlib import Path
-from threading import Lock
-from types import TracebackType, get_original_bases
+from types import get_original_bases
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, get_args, get_origin, override
 from weakref import WeakKeyDictionary
 
-import vapoursynth as vs
 from pydantic import BaseModel
-from PySide6.QtCore import QMetaObject, QObject, QRect, Signal, Slot
-from PySide6.QtGui import QContextMenuEvent, QKeyEvent, QMouseEvent
-from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
+from PySide6.QtCore import QMetaObject, QObject, SignalInstance
+from PySide6.QtWidgets import QWidget
 
 from vsview.app.settings import SecretsManager, SettingsManager
-from vsview.app.utils import ObjectType, QObjectCounter
-from vsview.app.views.timeline import Timeline
-from vsview.app.views.video import GraphicsView
-from vsview.vsenv.loop import run_in_loop
+from vsview.app.utils import ObjectType
 
-from .contracts import LocalSettingsModel, VideoOutputProxy
-from .exceptions import NoCurrentVideoOutputError
+from .contracts import LocalSettingsModel
 
 if TYPE_CHECKING:
-    from vsview.app.outputs import FrameBuffer
-    from vsview.app.workspace import BaseWorkspace, LoaderWorkspace
+    from vsview.app.views.timeline import Timeline
+    from vsview.app.views.video import GraphicsView
     from vsview.app.workspace.playback import PlaybackManager
 
-    from .api import PluginAPI, PluginGraphicsView, WidgetPluginBase, WorkspaceBlocker
+    from .api import PluginAPI
 
 logger = getLogger(__name__)
 
@@ -78,8 +71,8 @@ class _SettingsProxy[T: BaseModel]:
 
 
 class _PluginSettingsStore:
-    def __init__(self, workspace: BaseWorkspace) -> None:
-        self._workspace = workspace
+    def __init__(self, source: Callable[[], Path | None]) -> None:
+        self._source = source
         self._caches: dict[str, WeakKeyDictionary[_PluginLike, BaseModel]] = {
             "global": WeakKeyDictionary(),
             "local": WeakKeyDictionary(),
@@ -87,17 +80,18 @@ class _PluginSettingsStore:
 
     @property
     def file_path(self) -> Path | None:
-        from vsview.app.workspace import BaseGenericFileWorkspace
-
-        return self._workspace.current_file_path if isinstance(self._workspace, BaseGenericFileWorkspace) else None
+        return self._source()
 
     def get(self, plugin: _PluginLike, scope: str) -> BaseModel | None:
+        if scope not in ("global", "local"):
+            raise ValueError(f"Invalid settings scope {scope!r}, must be 'global' or 'local'.")
+
         cache = self._caches[scope]
 
         if plugin in cache:
             return cache[plugin]
 
-        model_cls: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model")
+        model_cls: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model", None)
         if model_cls is None:
             return None
 
@@ -115,12 +109,19 @@ class _PluginSettingsStore:
         cache[plugin] = settings
         return settings
 
-    def update(self, plugin: _PluginLike, scope: str, **updates: Any) -> None:
-        model_cls: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model")
+    def get_proxy(self, plugin: _PluginLike, scope: str) -> _SettingsProxy[BaseModel] | None:
+        model = self.get(plugin, scope)
+        if model is None:
+            return None
+        return _SettingsProxy(model, lambda k, v: self.update(plugin, scope, **{k: v}))
 
+    def update(self, plugin: _PluginLike, scope: str, **updates: Any) -> None:
+        if scope not in ("global", "local"):
+            raise ValueError(f"Invalid settings scope {scope!r}, must be 'global' or 'local'.")
+
+        model_cls: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model", None)
         if model_cls is None:
-            logger.warning("No model for plugin %r scope %r", plugin.identifier, scope)
-            return
+            raise ValueError(f"Plugin {plugin.identifier!r} has no {scope}_settings_model defined.")
 
         # Always update against the raw (unresolved) state
         raw_data = self._get_raw_settings(plugin.identifier, scope)
@@ -151,368 +152,6 @@ class _PluginSettingsStore:
             SettingsManager.global_settings.plugins[plugin_id] = settings
         elif self.file_path is not None:
             SettingsManager.get_local_settings(self.file_path).plugins[plugin_id] = settings
-
-
-class _PluginLimitedApi(QObject):
-    globalSettingsChanged = Signal()
-    localSettingsChanged = Signal(str)
-    aboutToSaveGlobal = Signal()
-    aboutToSaveLocal = Signal(str)
-
-    def __init__(self, workspace: BaseWorkspace) -> None:
-        super().__init__()
-        self.__workspace = workspace
-        self.__settings_store: _PluginSettingsStore | None = None
-
-        SettingsManager.signals.connect_global_weak(self._on_global_settings_changed)
-        SettingsManager.signals.connect_local_weak(self._on_local_settings_changed)
-        SettingsManager.signals.connect_about_global_weak(self._on_about_to_save_global)
-        SettingsManager.signals.connect_about_local_weak(self._on_about_to_save_local)
-
-    @property
-    def _settings_store(self) -> _PluginSettingsStore:
-        if self.__settings_store is None:
-            self.__settings_store = _PluginSettingsStore(self.__workspace)
-        return self.__settings_store
-
-    def _on_global_settings_changed(self) -> None:
-        self._settings_store.invalidate("global")
-        self._settings_store.invalidate("local")
-        self.globalSettingsChanged.emit()
-
-    def _on_local_settings_changed(self, path: str) -> None:
-        self._settings_store.invalidate("local")
-        self.localSettingsChanged.emit(path)
-
-    def _on_about_to_save_global(self) -> None:
-        self.aboutToSaveGlobal.emit()
-
-    def _on_about_to_save_local(self, path: str) -> None:
-        self.aboutToSaveLocal.emit(path)
-
-
-class _PluginAPI(_PluginLimitedApi):
-    statusMessage = Signal(str)
-
-    def __init__(self, workspace: LoaderWorkspace[Any]) -> None:
-        super().__init__(workspace)
-        self.__workspace: LoaderWorkspace[Any] = workspace
-        self.__busy_callers = QObjectCounter[QObject]()
-
-    @property
-    def voutputs(self) -> list[VideoOutputProxy]:
-        """Return a dictionary of VideoOutputProxy objects for all tabs."""
-        return [
-            VideoOutputProxy(
-                v.vs_index,
-                v.vs_name,
-                v.vs_output,
-                v.props,
-                v.framedurs,
-                v.cum_durations,
-                v.midpoints,
-                v.kwargs,
-                v.info,
-                v.packer,
-            )
-            for v in self.__workspace.outputs_manager.voutputs
-        ]
-
-    @property
-    def current_voutput(self) -> VideoOutputProxy:
-        """Return the VideoOutput for the currently selected tab."""
-        if v := self.__workspace.outputs_manager.current_voutput:
-            return VideoOutputProxy(
-                v.vs_index,
-                v.vs_name,
-                v.vs_output,
-                v.props,
-                v.framedurs,
-                v.cum_durations,
-                v.midpoints,
-                v.kwargs,
-                v.info,
-                v.packer,
-            )
-
-        raise NoCurrentVideoOutputError("No video output is currently available in the active workspace.")
-
-    def blocker(self, caller: WidgetPluginBase[Any, Any] | None = None) -> WorkspaceBlocker:
-        """
-        Create a WorkspaceBlocker for this plugin/caller.
-        """
-        api = self
-
-        class WorkspaceBlocker(QObject):
-            def __init__(self) -> None:
-                super().__init__()
-                self._lock = Lock()
-                self.locked = False
-
-            def __enter__(self) -> None:
-                self.acquire(block=True)
-
-            def __exit__(
-                self,
-                exc_type: type[BaseException] | None,
-                exc_val: BaseException | None,
-                exc_tb: TracebackType | None,
-            ) -> None:
-                self.release()
-
-            def acquire(self, block: bool = True, timeout: float | None = None) -> bool:
-                t = -1.0 if timeout is None else timeout
-                success = self._lock.acquire(blocking=block, timeout=t)
-                if success and not self.locked:
-                    self.locked = True
-                    getattr(api, "_PluginAPI__busy_callers").add(caller or api)
-                return success
-
-            def release(self) -> None:
-                if self.locked:
-                    self.locked = False
-                    getattr(api, "_PluginAPI__busy_callers").discard(caller or api)
-                    self._lock.release()
-
-        return WorkspaceBlocker()
-
-    # PRIVATE API
-    @run_in_loop(return_future=False)
-    def _is_truly_visible(self, plugin: WidgetPluginBase[Any, Any]) -> bool:
-        # Check if this plugin is truly visible to the user.
-
-        # This accounts for:
-        # - Widgets in a QTabWidget that are not the current tab
-        # - Widgets in a QDockWidget that is tabified and not visible
-        # - Widgets in a QSplitter panel that is collapsed (size=0)
-        if not plugin.isVisible():
-            return False
-
-        widget: QObject | None = plugin
-
-        while widget:
-            parent = widget.parent()
-
-            # Plugin is not the current tab (compare against self, not intermediate widget)
-            if isinstance(parent, QTabWidget) and parent.currentWidget() is not plugin:
-                return False
-
-            # Dock widget is tabified and not visible
-            if isinstance(parent, QDockWidget) and parent.visibleRegion().isEmpty():
-                return False
-
-            # Check if our panel in the splitter is collapsed
-            if (
-                isinstance(parent, QSplitter)
-                and isinstance(widget, QWidget)
-                and (idx := parent.indexOf(widget)) >= 0
-                and parent.sizes()[idx] == 0
-            ):
-                return False
-
-            widget = parent
-
-        return True
-
-    @run_in_loop(return_future=False)
-    def _visible_views(self, plugin: WidgetPluginBase[Any, Any]) -> list[PluginGraphicsView]:
-        from .api import PluginGraphicsView
-
-        return [v for v in plugin.findChildren(PluginGraphicsView) if v.isVisible()]
-
-    def _register_plugin_nodes_to_buffer(self, buffer: FrameBuffer) -> None:
-        # Register visible plugin nodes with the buffer for pre-fetching during playback.
-        for plugin in self.__workspace.plugins:
-            if not self._is_truly_visible(plugin):
-                continue
-
-            for view in self._visible_views(plugin):
-                if view.current_tab in view.outputs:
-                    buffer.register_plugin_node(plugin.identifier, view.outputs[view.current_tab])
-
-    def _on_workspace_loaded(self) -> None:
-        for plugin in self.__workspace.plugins:
-            try:
-                plugin.on_workspace_loaded()
-            except Exception:
-                logger.exception("%s: Failed for plugin %r", plugin.on_workspace_loaded, plugin.identifier)
-
-    def _on_workspace_destroy(self) -> None:
-        for plugin in self.__workspace.plugins:
-            try:
-                plugin.on_workspace_destroy()
-            except Exception:
-                logger.exception("%s: Failed for plugin %r", plugin.on_workspace_destroy, plugin.identifier)
-
-    def _on_current_voutput_changed(self, refresh: bool = False) -> None:
-        # Notify all visible plugin views of output change.
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                self._init_plugin(plugin, refresh)
-
-    def _init_plugin(self, plugin: WidgetPluginBase[Any, Any], refresh: bool = False) -> None:
-        # Initialize plugin for the current output and render initial frame if needed.
-        if not self._is_truly_visible(plugin):
-            return
-
-        try:
-            plugin.on_current_voutput_changed(
-                self.current_voutput,
-                self.__workspace.outputs_manager.current_video_index,
-            )
-        except Exception:
-            logger.exception("on_current_voutput_changed: Failed to initialize plugin %r", plugin)
-            return
-
-        for view in self._visible_views(plugin):
-            try:
-                self._init_view(view, plugin, refresh)
-            except Exception:
-                logger.exception("Failed to initialize view %r", view)
-
-    @run_in_loop(return_future=False)
-    def _find_plugin_for_widget(self, widget: QWidget) -> WidgetPluginBase[Any, Any] | None:
-        from .api import WidgetPluginBase
-
-        current: QObject | None = widget.parent()
-
-        while current is not None:
-            if isinstance(current, WidgetPluginBase):
-                return current
-            current = current.parent()
-        logger.warning("Could not find plugin for widget %r", widget)
-        return None
-
-    def _init_view(
-        self, view: PluginGraphicsView, plugin: WidgetPluginBase[Any, Any] | None = None, refresh: bool = False
-    ) -> None:
-        if plugin is None and (plugin := self._find_plugin_for_widget(view)) is None:
-            return
-
-        if not self._is_truly_visible(plugin):
-            return
-
-        tab_index = self.__workspace.outputs_manager.current_video_index
-        current_frame = self.__workspace.playback.state.current_frame
-
-        # Detect if we are actually changing tabs or forcing a refresh
-        image_changed = view.current_tab != tab_index or view.last_frame != current_frame
-        view.current_tab = tab_index
-        view.last_frame = current_frame
-
-        logger.debug("Initializing view: %s, tab=%d (changed=%s), refresh=%s", view, tab_index, image_changed, refresh)
-
-        if refresh:
-            view.outputs.clear()
-
-        if tab_index not in view.outputs:
-            with self.__workspace.env.use():
-                node = view.get_node(self.current_voutput.vs_output.clip)
-                view.outputs[tab_index] = self.current_voutput.packer_sdr.pack_clip(node)
-                logger.debug("Created output node for tab %d", tab_index)
-
-        with self.__workspace.env.use():
-            view.on_current_voutput_changed(self.current_voutput, tab_index)
-
-        if view.pixmap_item.pixmap().isNull() or image_changed or refresh:
-            with self.__workspace.env.use(), view.outputs[tab_index].get_frame(current_frame) as frame:
-                logger.debug("Rendering initial frame %d for view", current_frame)
-                view.on_current_frame_changed(current_frame, frame)
-
-        view.update_scene_rect()
-        view.set_autofit(view.autofit)
-
-    def _on_current_frame_changed(self, n: int, plugin_frames: dict[str, vs.VideoFrame] | None = None) -> None:
-        # Notify plugins of frame change.
-        # If plugin_frames is provided, uses pre-fetched frames.
-        # Otherwise, fetches frames synchronously for each plugin view.
-        for plugin in self.__workspace.plugins:
-            if not self._is_truly_visible(plugin):
-                continue
-
-            plugin.on_current_frame_changed(n)
-
-            for view in self._visible_views(plugin):
-                if view.current_tab == -1 or view.current_tab not in view.outputs:
-                    continue
-
-                # Get pre-fetched frame or fall back to sync request
-                if plugin_frames and plugin.identifier in plugin_frames:
-                    view.on_current_frame_changed(n, plugin_frames[plugin.identifier])
-                else:
-                    with self.__workspace.env.use(), view.outputs[view.current_tab].get_frame(n) as frame:
-                        view.on_current_frame_changed(n, frame)
-
-    def _get_cached_proxy_settings(self, plugin: _PluginLike, scope: str) -> Any:
-        model = self._settings_store.get(plugin, scope)
-
-        if model is None:
-            return model
-
-        return _SettingsProxy(model, lambda k, v: self._settings_store.update(plugin, scope, **{k: v}))
-
-    def _update_settings(self, plugin: _PluginLike, scope: str, **updates: Any) -> None:
-        self._settings_store.update(plugin, scope, **updates)
-
-    @run_in_loop(return_future=False)
-    def _on_playback_started(self) -> None:
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                plugin.on_playback_started()
-
-    # Already run in loop from caller
-    def _on_playback_stopped(self) -> None:
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                plugin.on_playback_stopped()
-
-    @Slot(QContextMenuEvent)
-    def _on_view_context_menu(self, event: QContextMenuEvent) -> None:
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                plugin.on_view_context_menu(event)
-
-    @Slot(QMouseEvent)
-    def _on_view_mouse_moved(self, event: QMouseEvent) -> None:
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                plugin.on_view_mouse_moved(event)
-
-    @Slot(QMouseEvent)
-    def _on_view_mouse_pressed(self, event: QMouseEvent) -> None:
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                plugin.on_view_mouse_pressed(event)
-
-    @Slot(QMouseEvent)
-    def _on_view_mouse_released(self, event: QMouseEvent) -> None:
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                plugin.on_view_mouse_released(event)
-
-    @Slot(QRect)
-    def _on_view_rect_selection_changed(self, rect: QRect) -> None:
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                plugin.on_view_rect_selection_changed(rect)
-
-    @Slot(QRect)
-    def _on_view_rect_selection_finished(self, rect: QRect) -> None:
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                plugin.on_view_rect_selection_finished(rect)
-
-    @Slot(QKeyEvent)
-    def _on_view_key_press(self, event: QKeyEvent) -> None:
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                plugin.on_view_key_press(event)
-
-    @Slot(QKeyEvent)
-    def _on_view_key_release(self, event: QKeyEvent) -> None:
-        for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                plugin.on_view_key_release(event)
 
 
 class _PluginBaseMeta(ObjectType):
@@ -568,31 +207,29 @@ class _PluginBaseMeta(ObjectType):
 
 
 class _GraphicsViewProxy(QObject):
-    def __init__(self, workspace: LoaderWorkspace[Any], view: GraphicsView) -> None:
+    def __init__(self, tab_changed: SignalInstance, view: GraphicsView) -> None:
         super().__init__()
-        self.__workspace = workspace
+        self.__tab_changed = tab_changed
         self.__view = view
 
 
 class _ViewportProxy(QObject):
-    def __init__(self, workspace: LoaderWorkspace[Any], viewport: QWidget) -> None:
+    def __init__(self, tab_changed: SignalInstance, viewport: QWidget) -> None:
         super().__init__()
-        self.__workspace = workspace
+        self.__tab_changed = tab_changed
         self.__viewport = viewport
         self.__cursor_reset_conn: QMetaObject.Connection | None = None
 
 
 class _TimelineProxy(QObject):
-    def __init__(self, workspace: LoaderWorkspace[Any], timeline: Timeline) -> None:
+    def __init__(self, timeline: Timeline) -> None:
         super().__init__()
-        self.__workspace = workspace
         self.__timeline = timeline
 
 
 class _PlaybackProxy(QObject):
-    def __init__(self, workspace: LoaderWorkspace[Any], playback_manager: PlaybackManager) -> None:
+    def __init__(self, playback_manager: PlaybackManager) -> None:
         super().__init__()
-        self.__workspace = workspace
         self.__playback_manager = playback_manager
 
 

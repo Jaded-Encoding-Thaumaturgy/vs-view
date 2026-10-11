@@ -17,13 +17,13 @@ from vapoursynth import VideoFrame
 from ...assets import IconName
 from ...vsenv import run_in_loop
 from ..icon import IconReloadMixin
-from ..plugins.api import PluginAPI
 from ..settings import ActionID, SettingsManager, ShortcutManager
 from ..views import GraphicsView
 from ..views.tab import TabLabel, TabViewWidget
 
 if TYPE_CHECKING:
     from ..outputs import VideoOutput
+    from ..plugins._controller import PluginWorkspaceController
 
 logger = getLogger(__name__)
 
@@ -135,10 +135,10 @@ class TabManager(QWidget, IconReloadMixin):
     statusLoadingStarted = Signal(str)  # message
     statusLoadingFinished = Signal(str)  # completed message
 
-    def __init__(self, parent: QWidget, api: PluginAPI) -> None:
+    def __init__(self, parent: QWidget, controller: PluginWorkspaceController) -> None:
         super().__init__(parent)
 
-        self.api = api
+        self.controller = controller
 
         self.current_layout = QVBoxLayout(self)
         self.current_layout.setContentsMargins(0, 0, 0, 0)
@@ -258,14 +258,14 @@ class TabManager(QWidget, IconReloadMixin):
             view = GraphicsView(self)
             view.zoomChanged.connect(self._on_zoom_changed)
             view.autofitChanged.connect(partial(self._on_autofit_changed, view))
-            view.contextMenuRequested.connect(self.api._on_view_context_menu)
-            view.mouseMoved.connect(self.api._on_view_mouse_moved)
-            view.mousePressed.connect(self.api._on_view_mouse_pressed)
-            view.mouseReleased.connect(self.api._on_view_mouse_released)
-            view.rectSelectionChanged.connect(self.api._on_view_rect_selection_changed)
-            view.rectSelectionFinished.connect(self.api._on_view_rect_selection_finished)
-            view.keyPressed.connect(self.api._on_view_key_press)
-            view.keyReleased.connect(self.api._on_view_key_release)
+            view.contextMenuRequested.connect(self.controller.on_view_context_menu)
+            view.mouseMoved.connect(self.controller.on_view_mouse_moved)
+            view.mousePressed.connect(self.controller.on_view_mouse_pressed)
+            view.mouseReleased.connect(self.controller.on_view_mouse_released)
+            view.rectSelectionChanged.connect(self.controller.on_view_rect_selection_changed)
+            view.rectSelectionFinished.connect(self.controller.on_view_rect_selection_finished)
+            view.keyPressed.connect(self.controller.on_view_key_press)
+            view.keyReleased.connect(self.controller.on_view_key_release)
             view.statusSavingImageStarted.connect(self.statusLoadingStarted.emit)
             view.statusSavingImageFinished.connect(self.statusLoadingFinished.emit)
             view.displayTransformChanged.connect(lambda transform: self.sarTransformed.emit(transform.m11()))
@@ -372,7 +372,7 @@ class TabManager(QWidget, IconReloadMixin):
         if index < 0:
             return
 
-        if self.api.busy:
+        if self.controller.busy:
             logger.warning("Workspace is busy, cannot switch output")
             with QSignalBlocker(self.tabs):
                 self.tabs.setCurrentIndex(self.tabs.previous_tab_index)

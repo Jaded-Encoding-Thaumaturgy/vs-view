@@ -34,7 +34,8 @@ from ...env import getenv_bool
 from ...types import Frame
 from ...vsenv import clear_environment, run_in_background, run_in_loop, unset_environment
 from ..outputs import AudioOutput, OutputsManager, VideoOutput
-from ..plugins.api import PluginAPI, WidgetPluginBase
+from ..plugins._controller import PluginWorkspaceController
+from ..plugins.api import WidgetPluginBase
 from ..settings import ActionID, ShortcutManager
 from ..utils import ProcessMemorySnapshot, measure_memory
 from ..views import PluginDock, PluginSplitter
@@ -73,7 +74,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.current_layout.addWidget(self.stack)
 
         # API & plugins
-        self.api = PluginAPI(self)
+        self.plugin_controller = PluginWorkspaceController(self)
         self.cbs_on_destroy = list[Callable[[], Any]]()
         self.plugins = list[WidgetPluginBase[Any, Any]]()
         self.docks = list[PluginDock]()
@@ -137,7 +138,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.plugin_splitter = PluginSplitter(self.dock_container)
 
         # Video Area (Tabs)
-        self.tab_manager = TabManager(self.plugin_splitter, self.api)
+        self.tab_manager = TabManager(self.plugin_splitter, self.plugin_controller)
         self.tab_manager.tabChanged.connect(self._on_tab_changed)
         self.tab_manager.sarTransformed.connect(lambda _: self._emit_output_info())
         self.plugin_splitter.insert_main_widget(self.tab_manager)
@@ -159,13 +160,13 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.loaded_layout.addWidget(self.tbar)
         self.stack.addWidget(self.loaded_page)
 
-        self.outputs_manager = OutputsManager(self.api)
+        self.outputs_manager = OutputsManager()
 
         # PlaybackManager - handles video/audio playback logic
         self.playback = PlaybackManager(
             self.loop,
             lambda: self.env,
-            self.api,
+            self.plugin_controller,
             self.outputs_manager,
             self.tab_manager,
             self.tbar,
@@ -256,7 +257,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         self.playback.stop()
         self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
-        self.api._on_workspace_destroy()
+        self.plugin_controller.on_workspace_destroy()
         self.loop.wait_for_threads(10000)
 
         return super().deleteLater()
@@ -351,7 +352,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         # Load plugins in the load_content function so the plugins can get the file_path
         # and do VS things in the init since the environment is already created.
         self.load_plugins()
-        self.api._on_workspace_loaded()
+        self.plugin_controller.on_workspace_loaded()
 
         @run_in_loop(return_future=False)
         def on_complete(f: Future[int]) -> None:
@@ -380,7 +381,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.warning("Workspace is busy, cannot reload content")
             return 2
 
-        if self.api.busy:
+        if self.plugin_controller.busy:
             logger.warning("At least one plugin is busy, cannot reload content")
             return 2
 
@@ -440,7 +441,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             current_tab_i = self._restore_reload_tabs(tabs, voutputs, saved_state, current_tab_i, autofit_enabled)
 
             self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
-            self.api._on_workspace_loaded()
+            self.plugin_controller.on_workspace_loaded()
 
             @run_in_loop(return_future=False)
             def on_complete(f: Future[int]) -> None:
@@ -609,6 +610,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                     self.content,
                     self.video_outputs,
                     self.get_output_metadata(),
+                    self.plugin_controller.api,
                     last_frame=self.playback.state.current_frame,
                 )
 
@@ -619,6 +621,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                     self.content,
                     self.audio_outputs,
                     self.get_output_metadata(),
+                    self.plugin_controller.api,
                     delay_s=self.tbar.playback_container.audio_delay,
                 )
 
@@ -680,7 +683,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
                     if f.result() == 0:
                         with self.env.use():
-                            self.api._on_current_voutput_changed(refresh_plugins)
+                            self.plugin_controller.on_current_voutput_changed(refresh_plugins)
 
                 if cb_render:
                     cb_render(f)
@@ -689,7 +692,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.playback.request_frame(target_frame, on_complete, notify_plugins=False)
         else:
             with self.env.use():
-                self.api._on_current_voutput_changed(refresh_plugins)
+                self.plugin_controller.on_current_voutput_changed(refresh_plugins)
 
         return True
 
@@ -785,7 +788,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         for plugin_type in PluginManager.tooldocks:
             dock = PluginDock(plugin_type.display_name, plugin_type.identifier, self.dock_container)
-            plugin_obj = plugin_type(dock, self.api)
+            plugin_obj = plugin_type(dock, self.plugin_controller.api)
 
             dock.setWidget(plugin_obj)
             dock.visibilityChanged.connect(lambda visible, d=dock: self._on_dock_visibility_changed(visible, d))
@@ -805,7 +808,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         from ..plugins.manager import PluginManager
 
         for i, plugin_type in enumerate(PluginManager.toolpanels):
-            plugin_obj = plugin_type(self.plugin_splitter.plugin_tabs, self.api)
+            plugin_obj = plugin_type(self.plugin_splitter.plugin_tabs, self.plugin_controller.api)
 
             self.plugins.append(plugin_obj)
             self.plugin_splitter.add_plugin(plugin_obj, plugin_type.display_name)
@@ -829,7 +832,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         if visible:
             with self.env.use():
-                self.api._init_plugin(w)
+                self.plugin_controller.init_plugin(w)
 
             dock.truly_visible = True
         elif dock.truly_visible:
@@ -849,7 +852,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         if visible:
             if self.outputs_manager.current_voutput:
                 with self.env.use():
-                    self.api._init_plugin(w)
+                    self.plugin_controller.init_plugin(w)
         else:
             w.on_hide()
 
@@ -857,7 +860,7 @@ class LoaderWorkspace[T](BaseWorkspace):
     def _on_splitter_tab_changed(self, new_index: int, old_index: int) -> None:
         if isinstance(w := self.plugin_splitter.plugin_tabs.widget(new_index), WidgetPluginBase):
             with self.env.use():
-                self.api._init_plugin(w)
+                self.plugin_controller.init_plugin(w)
 
         if isinstance(w := self.plugin_splitter.plugin_tabs.widget(old_index), WidgetPluginBase):
             w.on_hide()

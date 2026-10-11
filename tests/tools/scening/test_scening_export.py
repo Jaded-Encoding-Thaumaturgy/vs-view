@@ -22,7 +22,7 @@ from vsview.app.tools.scening.plugin import GlobalSettings
 from vsview.app.tools.scening.worker import FFV1_ARGS, H264_ARGS, ExportJob, ExportQueueManager
 
 if TYPE_CHECKING:
-    from tests.harness import PluginTestHarness
+    from tests.harness import HarnessPluginController
 
 core = vs.core
 pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("initial-core")]
@@ -83,21 +83,21 @@ def mock_settings() -> SimpleNamespace:
 
 @pytest.fixture
 def export_harness(
-    plugin_harness: PluginTestHarness,
+    plugin_controller: HarnessPluginController,
     vpy_env_factory: Callable[[], ManagedEnvironment],
-) -> PluginTestHarness:
-    plugin_harness.env = vpy_env_factory()
-    return plugin_harness
+) -> HarnessPluginController:
+    plugin_controller.env = vpy_env_factory()
+    return plugin_controller
 
 
 @pytest.fixture
-def manager(export_harness: PluginTestHarness, mock_settings: Any) -> ExportQueueManager:
+def manager(export_harness: HarnessPluginController, mock_settings: SimpleNamespace) -> ExportQueueManager:
     return ExportQueueManager(export_harness, mock_settings)  # pyright: ignore[reportArgumentType]
 
 
 def test_export_queue_manager_lifecycle(
     qtbot: QtBot,
-    export_harness: PluginTestHarness,
+    export_harness: HarnessPluginController,
     manager: ExportQueueManager,
     sample_voutput_proxy: VideoOutputProxy,
 ) -> None:
@@ -244,7 +244,7 @@ def test_export_job_cleanup_on_cancel(
     qtbot: QtBot,
     mocker: MockerFixture,
     manager: ExportQueueManager,
-    export_harness: PluginTestHarness,
+    export_harness: HarnessPluginController,
     sample_voutput_proxy: VideoOutputProxy,
 ) -> None:
     # Arrange
@@ -289,7 +289,7 @@ def test_export_clip_pipes_frame_chunks_to_stdin(
     qtbot: QtBot,
     mocker: MockerFixture,
     manager: ExportQueueManager,
-    export_harness: PluginTestHarness,
+    export_harness: HarnessPluginController,
 ) -> None:
     # Arrange
     out_file = tmp_path / "out.mp4"
@@ -336,7 +336,7 @@ def test_export_clip_ffmpeg_error(
     qtbot: QtBot,
     mocker: MockerFixture,
     manager: ExportQueueManager,
-    export_harness: PluginTestHarness,
+    export_harness: HarnessPluginController,
     sample_voutput_proxy: VideoOutputProxy,
 ) -> None:
     # Arrange
@@ -386,7 +386,7 @@ def test_e2e_export_h264(
     tmp_path: Path,
     qtbot: QtBot,
     manager: ExportQueueManager,
-    export_harness: PluginTestHarness,
+    export_harness: HarnessPluginController,
 ) -> None:
     dest_file = tmp_path / "e2e_out.mp4"
 
@@ -416,7 +416,7 @@ def test_e2e_export_ffv1(
     tmp_path: Path,
     qtbot: QtBot,
     manager: ExportQueueManager,
-    export_harness: PluginTestHarness,
+    export_harness: HarnessPluginController,
 ) -> None:
     dest_file = tmp_path / "e2e_out.mkv"
 
@@ -447,7 +447,7 @@ def test_e2e_export_cancel_kills_process_and_cleans_file(
     qtbot: QtBot,
     mocker: MockerFixture,
     manager: ExportQueueManager,
-    export_harness: PluginTestHarness,
+    export_harness: HarnessPluginController,
 ) -> None:
     dest_file = tmp_path / "e2e_cancelled.mp4"
 

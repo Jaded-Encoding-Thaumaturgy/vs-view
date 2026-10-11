@@ -105,8 +105,11 @@ def test_e2e_complete_user_journey(
 
     # 5. Tool Inspection: Color Picker
     color_picker = next(p for p in ws.plugins if isinstance(p, ColorPickerPlugin))
-    with ws.api.vs_context():
-        color_picker.on_current_voutput_changed(ws.api.current_voutput, ws.api.current_video_index)
+    with ws.env.use():
+        color_picker.on_current_voutput_changed(
+            ws.plugin_controller.current_voutput,
+            ws.plugin_controller.current_video_index,
+        )
     color_picker.eyedropper_btn.setChecked(True)
 
     view = ws.tab_manager.current_view
@@ -133,8 +136,11 @@ def test_e2e_complete_user_journey(
 
     # 6. Region Selection / Cropping Tool
     crop_plugin = next(p for p in ws.plugins if isinstance(p, RegionSelectorPlugin))
-    with ws.api.vs_context():
-        crop_plugin.on_current_voutput_changed(ws.api.current_voutput, ws.api.current_video_index)
+    with ws.env.use():
+        crop_plugin.on_current_voutput_changed(
+            ws.plugin_controller.current_voutput,
+            ws.plugin_controller.current_video_index,
+        )
     crop_plugin.enable_btn.setChecked(True)
 
     crop_plugin.on_view_rect_selection_changed(QRect(8, 8, 32, 32))
