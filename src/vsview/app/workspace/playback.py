@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from jetpytools import clamp, cround
 from PySide6.QtCore import QObject, QPoint, Qt, QTime, QTimer, Signal, Slot
 from PySide6.QtGui import QColor, QFontMetrics, QImage, QPainter, QPolygon
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox, QWidget
 
 from ...assets import get_monospace_font
 from ...types import Frame, Time
@@ -318,22 +318,7 @@ class PlaybackManager(QObject):
         self.timelineCursorChanged.emit(n)
 
         if failed:
-
-            @run_in_loop(return_future=False)
-            def show_warning() -> None:
-                msg = QMessageBox(
-                    self._tbar.window(),
-                    text=error_msg,
-                    icon=QMessageBox.Icon.Warning,
-                    standardButtons=QMessageBox.StandardButton.Ok,
-                )
-                msg.setWindowTitle("Playback Error")
-                msg.setModal(False)
-                msg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-                msg.show()
-
-            show_warning()
-
+            self._loop.from_thread(show_warning, self._tbar.window(), error_msg).result()
             return 1
 
         return 0
@@ -888,3 +873,16 @@ def create_failed_image(text: str, width: int, height: int) -> QImage:
         painter.drawText(text_rect, flags, text)
 
     return image
+
+
+def show_warning(parent: QWidget, error_message: str) -> None:
+    msg = QMessageBox(
+        parent,
+        text=error_message,
+        icon=QMessageBox.Icon.Warning,
+        standardButtons=QMessageBox.StandardButton.Ok,
+    )
+    msg.setWindowTitle("Playback Error")
+    msg.setModal(False)
+    msg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+    msg.show()
