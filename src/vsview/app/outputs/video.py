@@ -115,10 +115,12 @@ class VideoOutput:
     def prepare_video(self, api: PluginAPI) -> None:
         from ..plugins.manager import PluginManager
 
-        clip = self.vs_output.clip.std.ModifyFrame(self.vs_output.clip, self._get_props_on_render)
-
         if PluginManager.video_processor:
-            clip = PluginManager.video_processor(api).prepare(clip)
+            clip = PluginManager.video_processor(api).prepare(self.vs_output.clip)
+        else:
+            clip = self.vs_output.clip
+
+        clip = clip.std.ModifyFrame(clip, self._get_props_on_render)
 
         if clip.format.id == vs.GRAY32:
             self.prepared_clip = clip
