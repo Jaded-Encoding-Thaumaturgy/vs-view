@@ -9,8 +9,8 @@ icon: lucide/git-pull-request
 ### Requirements
 
 - **[uv](https://github.com/astral-sh/uv)** is the default tool used for development in this repository.
-- For building [`vspackrgb`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/vspackrgb) and [`vsview-cli`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/vsview-cli), you will need [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html).
-
+- For building [`vspackrgb`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/vspackrgb) and [`vsview-histogram`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/histogram), you will need [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html).
+- For building [`vsview-editor`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/workspaces/editor), you will need [npm](https://www.npmjs.com/).
 ---
 
 Clone the repository and sync all packages:
@@ -26,15 +26,6 @@ Run the development version:
 ```bash
 uv run vsview
 ```
-
-!!! note "Native Extensions"
-
-    If you are in an environment where you cannot compile native extensions, in `pyproject.toml`:
-
-    - Remove `"src/vspackrgb"` and `"src/vsview-cli"` from `tool.uv.workspace.members`
-    - Comment out `vspackrgb = { workspace = true }` and `vsview-cli = { workspace = true }` in `tool.uv.sources`
-
-    You can now run `uv sync` to use the precompiled version from PyPI.
 
 ---
 
