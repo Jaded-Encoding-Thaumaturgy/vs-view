@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import urllib.error
+import urllib.request
 from collections.abc import Generator
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QCloseEvent, QKeyEvent
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QCloseEvent, QDesktopServices, QKeyEvent
+from PySide6.QtWidgets import QApplication, QMenu
 from pytestqt.qtbot import QtBot
 
 from vsview.app.main import Application, MainWindow, WorkspaceToolButton
@@ -217,3 +219,43 @@ def test_stack_switch_clears_old_workspace_cache(main_window: MainWindow) -> Non
 
     # Leaving btn1 should trigger mock_env.core.clear_cache()
     mock_env.core.clear_cache.assert_called_once()
+
+
+def _extract_menu_urls(menu: QMenu) -> list[tuple[str, str]]:
+    urls = list[tuple[str, str]]()
+    for action in menu.actions():
+        if isinstance(submenu := action.menu(), QMenu):
+            urls.extend(_extract_menu_urls(submenu))
+        else:
+            mock_open = MagicMock()
+            with patch.object(QDesktopServices, "openUrl", mock_open):
+                action.trigger()
+            if mock_open.called:
+                raw_url = mock_open.call_args[0][0]
+                url_str = raw_url.toString() if hasattr(raw_url, "toString") else str(raw_url)
+                urls.append((action.text(), url_str))
+    return urls
+
+
+def test_help_menu_urls_availability(main_window: MainWindow) -> None:
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    help_urls = _extract_menu_urls(main_window.help_menu)
+
+    assert len(help_urls) > 0
+
+    for action_text, url in help_urls:
+        assert url.startswith("https://"), f"Action '{action_text}' has invalid URL: {url}"
+
+        req = urllib.request.Request(url, headers=headers, method="HEAD")
+        try:
+            with urllib.request.urlopen(req, timeout=10) as response:
+                status_code = response.status
+        except urllib.error.HTTPError as err:
+            if err.code in (403, 405):
+                req_get = urllib.request.Request(url, headers=headers, method="GET")
+                with urllib.request.urlopen(req_get, timeout=10) as response_get:
+                    status_code = response_get.status
+            else:
+                raise
+
+        assert status_code == 200, f"URL for '{action_text}' returned status {status_code}: {url}"
