@@ -232,7 +232,11 @@ def test_create_voutputs_auto_gpu_download(plugin_controller: HarnessPluginContr
     if vs.__version__.release_major < 80:
         pytest.skip("VapourSynth < 80")
 
-    if not core.vulkan_devices:
+    try:
+        vulkan_devices = core.vulkan_devices
+    except vs.Error as exc:
+        pytest.skip(f"Vulkan unavailable: {exc}")
+    if not vulkan_devices:
         pytest.skip("No GPU available")
 
     clip = core.std.BlankClip(gpu=True)
