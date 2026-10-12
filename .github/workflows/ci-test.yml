@@ -125,6 +125,7 @@ jobs:
 
       - name: Run tests
         env:
+          QT_AUDIO_BACKEND: null
           QT_DEBUG_PLUGINS: 1
         run: uv run ${{ steps.setup-pkg.outputs.package_arg }} pytest
 
