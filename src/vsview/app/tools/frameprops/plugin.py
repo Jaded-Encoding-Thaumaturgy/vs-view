@@ -628,6 +628,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
         self.categorize_toggle.toggled.connect(self._on_categorize_toggled)
         self.categorize_toggle.setChecked(fallback(self.settings.local_.categorize, self.settings.global_.categorize))
+        self.categorize_toggle.toggled.connect(lambda checked: self.update_local_settings(categorize=bool(checked)))
 
         self.formatted_toggle.toggled.connect(self.categorize_tree.set_show_formatted)
         self.formatted_toggle.setChecked(fallback(self.settings.local_.format, self.settings.global_.format))
@@ -798,7 +799,6 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
     def _on_categorize_toggled(self, checked: bool) -> None:
         self.stack.setCurrentIndex(int(checked))
         self.formatted_toggle.setEnabled(checked)
-        self.settings.local_.categorize = checked
         if self._current_props:
             self.update_views(self._current_props)
 
