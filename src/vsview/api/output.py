@@ -265,6 +265,7 @@ def catch_output[**P, N: OutputNode](
     name: str | bool | None = ...,
     alpha: vs.VideoNode | Literal[True] | None = ...,
     framedurs: Sequence[SupportsFloat] | None = ...,
+    hdr: bool | None = ...,
     downmix: bool | None = ...,
     **kwargs: Any,
 ) -> Callable[[Callable[P, N]], Callable[P, N]]: ...
@@ -278,6 +279,7 @@ def catch_output[**P, N: OutputNode](
     alpha: vs.VideoNode | Literal[True] | None = None,
     *,
     framedurs: Sequence[SupportsFloat] | None = None,
+    hdr: bool | None = None,
     downmix: bool | None = None,
     **kwargs: Any,
 ) -> Callable[P, N] | Callable[[Callable[P, N]], Callable[P, N]]:
@@ -305,6 +307,7 @@ def catch_output[**P, N: OutputNode](
         name: Explicit name override. If not provided, the function name is used.
         alpha: Optional alpha channel VideoNode or if True, fetch the `_Alpha` prop (only for VideoNode outputs).
         framedurs: Optional sequence of frame durations in seconds for VFR clips (only for VideoNode outputs).
+        hdr: Optional boolean override for the HDR detection for VideoNode outputs.
         downmix: If None (default), follows the global settings downmix of vsview if previewed through vsview.
             Otherwise True or False forces the behavior.
         **kwargs: Additional metadata passed to VSView plugins for custom configuration of this output.
@@ -316,19 +319,17 @@ def catch_output[**P, N: OutputNode](
     def decorator(fn: Callable[P, N]) -> Callable[P, N]:
         @wraps(fn)
         def wrapper(*fn_args: P.args, **fn_kwargs: P.kwargs) -> N:
-            nonlocal name
-
             result = fn(*fn_args, **fn_kwargs)
 
-            if name is True or name is None:
-                name = fn.__name__
+            effective_name = fn.__name__ if (name is True or name is None) else name
 
             set_output(  # type: ignore[misc]
                 result,  # type: ignore[arg-type]
                 index,  # type: ignore[arg-type]
-                name,
+                effective_name,
                 alpha=alpha,
                 framedurs=framedurs,
+                hdr=hdr,
                 downmix=downmix,
                 **kwargs,
             )
