@@ -51,7 +51,7 @@ class OutputsManager:
     @property
     def current_voutput(self) -> VideoOutput | None:
         """Current video output."""
-        if self.voutputs:
+        if 0 <= self.current_video_index < len(self.voutputs):
             return self.voutputs[self.current_video_index]
         return None
 
