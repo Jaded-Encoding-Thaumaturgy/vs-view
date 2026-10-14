@@ -196,6 +196,8 @@ markers = [
 ]
 
 [tool.coverage.run]
+disable_warnings = ["couldnt-parse"]
+source = ["src"]
 omit = ["tests/*"]
 
 [tool.mypy]
