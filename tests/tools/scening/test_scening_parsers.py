@@ -166,6 +166,13 @@ class TestMatroskaXMLParser:
         assert result.name == "test"
         assert result.ranges == []
 
+    def test_reject_doctype_and_entity(self, xml_p: MatroskaXMLParser, tmp_path: Path) -> None:
+        malicious_xml = '<!DOCTYPE Chapters [<!ENTITY evil "payload">]><Chapters>&evil;</Chapters>'
+        f = tmp_path / "evil.xml"
+        f.write_text(malicious_xml, encoding="utf-8")
+        with pytest.raises(ValueError, match=r"XML entity declarations \(DOCTYPE/ENTITY\) are prohibited"):
+            parse(xml_p, f)
+
 
 class TestXvidLogParser:
     def test_parse_logic(self, xvid_p: XvidLogParser) -> None:
