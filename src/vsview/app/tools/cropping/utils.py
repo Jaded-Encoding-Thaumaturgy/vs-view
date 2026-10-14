@@ -45,7 +45,8 @@ class CommandLabel(QLabel):
 
     def format(self, *args: object, **kwargs: object) -> None:
         self.reset_text()
-        self.setText(self.text().format(*args, **kwargs))
+        with contextlib.suppress(KeyError, ValueError, IndexError):
+            self.setText(self.text().format(*args, **kwargs))
 
     def reset_text(self) -> None:
         self.setText(self.original_text)

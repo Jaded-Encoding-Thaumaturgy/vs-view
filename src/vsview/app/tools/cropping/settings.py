@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Annotated, override
 
-from pydantic import BaseModel
+from pydantic import AfterValidator, BaseModel
 from PySide6.QtWidgets import QWidget
 
 from vsview.api import ListEdit, ListEditWidget, Spin
+
+from .utils import CropValues
 
 
 class CodeFormatListEdit(ListEdit[str]):
@@ -35,6 +37,16 @@ DEFAULT_CODE_FORMAT = [
 ]
 
 
+def _validate_templates(v: list[str]) -> list[str]:
+    sample = CropValues()._asdict()
+    for fmt in v:
+        try:
+            fmt.format(**sample)
+        except Exception as exc:
+            raise ValueError(f"Invalid crop code format template {fmt!r}: {exc}") from exc
+    return v
+
+
 class GlobalSettings(BaseModel):
     mod: Annotated[
         int,
@@ -48,6 +60,7 @@ class GlobalSettings(BaseModel):
 
     code_format: Annotated[
         list[str],
+        AfterValidator(_validate_templates),
         CodeFormatListEdit(
             label="Code Format",
             value_type=str,
