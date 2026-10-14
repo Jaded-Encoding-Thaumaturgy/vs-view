@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import Callable, Generator, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import KW_ONLY, dataclass, field
 from functools import wraps
 from logging import getLogger
@@ -139,32 +139,30 @@ class Login(WidgetMetadata[LoginCredentialsInput]):
     @override
     def load_value(self, widget: LoginCredentialsInput, value: str) -> None:
         username = value
-        password = self._get_password(username) if username else ""
+        password = ""
 
-        if username and password:
-            widget.credentials = username, password
+        if username:
+            password = SecretsManager.get(self.namespace, self.context, username) or ""
+        elif cred := SecretsManager.get_credential(self.namespace, self.context):
+            username = cred.username
+            password = cred.password or ""
+
+        widget.credentials = (username or "", password or "")
+        widget.setProperty("_old_username", username or "")
 
     @override
     def get_value(self, widget: LoginCredentialsInput) -> Any:
         username, password = widget.credentials
-        self._set_password((username, password))
-        return username
+        old_username = widget.property("_old_username")
 
-    def _get_password(self, username: str) -> str:
-        # Store the username for removal if the user passes a new username
-        object.__setattr__(self, "_old_username", username)
-        return SecretsManager.get(self.namespace, self.context, username) or ""
+        if old_username and old_username != username:
+            SecretsManager.delete(self.namespace, self.context, old_username)
 
-    def _set_password(self, cred: tuple[str, str]) -> None:
-        username, password = cred
-
-        # Remove old entry if the username has been changed
-        with suppress(AttributeError):
-            SecretsManager.delete(self.namespace, self.context, object.__getattribute__(self, "_old_username"))
-            object.__delattr__(self, "_old_username")
-
-        if username:
+        if username and password:
             SecretsManager.set(self.namespace, self.context, username, password)
+
+        widget.setProperty("_old_username", username)
+        return username
 
 
 @dataclass(frozen=True, slots=True)

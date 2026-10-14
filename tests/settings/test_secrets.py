@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QLineEdit
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
-from vsview.api import SecretLineEdit
+from vsview.api import Login, SecretLineEdit
 from vsview.app.settings.models import extract_settings
 from vsview.app.settings.secrets import SecretsError, SecretsManager
 
@@ -232,3 +232,45 @@ def test_secrets_manager_in_memory_integration() -> None:
 
     SecretsManager.delete("test_ns", "auth", "api_key")
     assert SecretsManager.get("test_ns", "auth", "api_key") is None
+
+
+def test_login_metadata_load_value_with_username(mocker: MockerFixture, qtbot: QtBot) -> None:
+    get_spy = mocker.patch.object(SecretsManager, "get", return_value="pass123")
+    meta = Login(label="Login", namespace="test_ns", context="login")
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+
+    meta.load_value(widget, "user@example.com")
+    get_spy.assert_called_once_with("test_ns", "login", "user@example.com")
+    assert widget.credentials == ("user@example.com", "pass123")
+    assert widget.property("_old_username") == "user@example.com"
+
+
+def test_login_metadata_load_value_fallback_to_keyring(mocker: MockerFixture, qtbot: QtBot) -> None:
+    cred_mock = mocker.MagicMock(username="keyring_user@example.com", password="keyring_pass")
+    get_cred_spy = mocker.patch.object(SecretsManager, "get_credential", return_value=cred_mock)
+    meta = Login(label="Login", namespace="test_ns", context="login")
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+
+    meta.load_value(widget, "")
+    get_cred_spy.assert_called_once_with("test_ns", "login")
+    assert widget.credentials == ("keyring_user@example.com", "keyring_pass")
+    assert widget.property("_old_username") == "keyring_user@example.com"
+
+
+def test_login_metadata_get_value_updates_and_deletes_old_username(mocker: MockerFixture, qtbot: QtBot) -> None:
+    set_spy = mocker.patch.object(SecretsManager, "set")
+    delete_spy = mocker.patch.object(SecretsManager, "delete")
+    meta = Login(label="Login", namespace="test_ns", context="login")
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+
+    widget.setProperty("_old_username", "old_user@example.com")
+    widget.credentials = ("new_user@example.com", "new_pass")
+
+    result = meta.get_value(widget)
+    assert result == "new_user@example.com"
+    delete_spy.assert_called_once_with("test_ns", "login", "old_user@example.com")
+    set_spy.assert_called_once_with("test_ns", "login", "new_user@example.com", "new_pass")
+    assert widget.property("_old_username") == "new_user@example.com"
