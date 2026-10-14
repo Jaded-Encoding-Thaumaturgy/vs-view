@@ -176,12 +176,10 @@ class FrameBuffer:
 
         if undone:
             logger.warning(
-                "Frame cleanup is still in progress after 10 seconds: %s of %s frame(s) remain pending",
+                "Frame cleanup timed out after 10 seconds: %s of %s frame(s) remain pending",
                 len(undone),
                 len(pending),
             )
-
-        wait(pending)
 
         del bundles
         gc.collect()
@@ -305,12 +303,10 @@ class AudioBuffer:
 
         if undone:
             logger.warning(
-                "Frame cleanup is still in progress after 10 seconds: %s of %s frame(s) remain pending",
+                "Audio cleanup timed out after 10 seconds: %s of %s frame(s) remain pending",
                 len(undone),
                 len(pending),
             )
-
-        wait(pending)
 
         del bundles
         gc.collect()
