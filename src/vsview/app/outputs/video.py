@@ -66,7 +66,7 @@ class VideoOutput:
         else:
             self.cum_durations = None
 
-        if self.cum_durations:
+        if (self.framedurs or self.vs_output.clip.fps == 0) and self.cum_durations:
             self.midpoints: tuple[float, ...] | None = tuple(
                 ((self.cum_durations[k - 1] if k > 0 else 0.0) + self.cum_durations[k]) / 2
                 for k in range(len(self.cum_durations) - 1)
