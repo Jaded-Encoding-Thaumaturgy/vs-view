@@ -60,7 +60,9 @@ class CategoryRegistry(Singleton):
 
     @inject_self
     def register(self, *matcher: CategoryMatcher | IterCategoryMatcher) -> None:
-        self._matchers.extend(flatten(matcher))
+        for m in flatten(matcher):
+            self._matchers = [existing for existing in self._matchers if existing.name != m.name]
+            self._matchers.append(m)
         # Keep matchers sorted by priority (highest first)
         self._matchers.sort(key=lambda m: m.priority, reverse=True)
 
