@@ -63,7 +63,7 @@ class PluginWorkspaceController(QObject):
         from .api import PluginAPI
 
         self.api = PluginAPI(self)
-        register_controller(self.api, self)  # pyright: ignore[reportArgumentType]
+        register_controller(self.api, self)
 
         self.globalSettingsChanged.connect(self.api.globalSettingsChanged)
         self.localSettingsChanged.connect(self.api.localSettingsChanged)
