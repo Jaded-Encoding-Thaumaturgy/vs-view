@@ -84,6 +84,8 @@ class AudioOutput:
     # https://github.com/vapoursynth/vapoursynth/blob/8cd1cba539bf70eea21dc242d43349603115632d/include/VapourSynth4.h#L36
     SAMPLES_PER_FRAME = 3072
 
+    sink: AudioSink
+
     def __init__(self, vs_output: vs.AudioNode, vs_index: int, metadata: AudioMetadata | None = None) -> None:
         self.vs_output = vs_output
         self.vs_index = vs_index
@@ -113,7 +115,11 @@ class AudioOutput:
     @volume.setter
     def volume(self, value: float) -> None:
         self._volume = clamp(value, 0.0, 1.0)
-        self.sink.setVolume(self._volume)
+
+        if hasattr(self, "sink"):
+            self.sink.setVolume(self._volume)
+        else:
+            logger.warning("No audio sink configured")
 
     def prepare_audio(self, delay_s: float, api: PluginAPI) -> None:
         from ..plugins.manager import PluginManager
@@ -161,8 +167,6 @@ class AudioOutput:
         self.qformat.setChannelCount(audio.num_channels)
         self.qformat.setSampleRate(audio.sample_rate)
         self.qformat.setSampleFormat(sample_format)
-
-        self.sink = AudioSink(self.qformat)
 
     def prepare_playback_audio(self, start_seconds: float, stop_seconds: float) -> None:
         duration_samples = ceil((stop_seconds - start_seconds) * self.prepared_audio.sample_rate)
@@ -222,8 +226,9 @@ class AudioOutput:
         Returns True if successful, False if audio format not supported.
         """
         self.qformat.setSampleRate(round(self.prepared_audio.sample_rate * speed))
-        self.sink.stop()
-        self.sink.deleteLater()
+        if hasattr(self, "sink"):
+            self.sink.stop()
+            self.sink.deleteLater()
         self.sink = AudioSink(self.qformat)
         self.sink.setup(SettingsManager.global_settings.playback.audio_buffer_size * self.bytes_per_frame, self.volume)
 
