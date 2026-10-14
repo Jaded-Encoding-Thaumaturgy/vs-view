@@ -250,8 +250,11 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             snapped_rect = QRect()
         else:
             snapped_rect = CustomRect(rect)
-            snapped_rect.sanitize(image_size, self.settings.global_.mod)
-            if snapped_rect.isNull() or snapped_rect.width() <= 0 or snapped_rect.height() <= 0:
+            try:
+                snapped_rect.sanitize(image_size, self.settings.global_.mod)
+                if snapped_rect.isNull() or snapped_rect.width() <= 0 or snapped_rect.height() <= 0:
+                    snapped_rect = QRect()
+            except ValueError:
                 snapped_rect = QRect()
 
         if rect != snapped_rect:
@@ -325,5 +328,8 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         right = clamp(right, 0, image_w - left - 1)
         bottom = clamp(bottom, 0, image_h - top - 1)
 
-        rect = CustomRect.from_crop(left, top, right, bottom, image_size, self.settings.global_.mod)
+        try:
+            rect = CustomRect.from_crop(left, top, right, bottom, image_size, self.settings.global_.mod)
+        except ValueError:
+            rect = QRect()
         self.api.current_view.set_rect_selection(rect, finished=True)
