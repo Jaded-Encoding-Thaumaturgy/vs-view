@@ -462,7 +462,7 @@ class FramePropPreviewGraphicsView(BaseGraphicsView):
         self.api.register_on_destroy(self._f2c_cache.clear)
 
     def set_frame(self, frame: vs.VideoFrame) -> None:
-        with self.api.blocker(), frame:
+        with self.api.blocker():
             qimage = self.frame_to_qimage(frame)
 
         self.pixmap_item.setPixmap(QPixmap.fromImage(qimage))
