@@ -331,20 +331,26 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
     @run_in_loop
     def update_labels(self, local_pos: QPoint | None = None) -> None:
-        with self.outputs[self.api.current_voutput].get_frame(self.api.current_frame) as vsframe:
-            self.update_format_strings(vsframe)
-
-        if local_pos is None:
-            local_pos = self.api.current_view.viewport.cursor_pos
-
-        pos_f = self.api.current_view.map_to_image(local_pos)
-        pos = QPoint(int(pos_f.x()), int(pos_f.y()))
-
-        if (image := self.api.current_view.image).isNull() or not image.valid(pos):
+        if not self.outputs or self.api.current_voutput not in self.outputs:
             return
 
-        self._update_source_labels(pos)
-        self._update_rgb_labels(pos, image)
+        with (
+            self.api.vs_context(),
+            self.outputs[self.api.current_voutput].get_frame(self.api.current_frame) as vsframe,
+        ):
+            self.update_format_strings(vsframe)
+
+            if local_pos is None:
+                local_pos = self.api.current_view.viewport.cursor_pos
+
+            pos_f = self.api.current_view.map_to_image(local_pos)
+            pos = QPoint(int(pos_f.x()), int(pos_f.y()))
+
+            if (image := self.api.current_view.image).isNull() or not image.valid(pos):
+                return
+
+            self._update_source_labels(pos, vsframe)
+            self._update_rgb_labels(pos, image)
 
     @run_in_loop(return_future=False)
     def update_format_strings(self, frame: vs.VideoFrame) -> None:
@@ -377,30 +383,29 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self.src_norm_fmt = f"{{:.{self.settings.global_.decimals_nb}f}}"
 
     # Internal methods
-    def _update_source_labels(self, pos: QPoint) -> None:
-        with self.api.vs_context(), self.outputs[self.api.current_voutput].get_frame(self.api.current_frame) as frame:
-            src_vals = self._extract_pixel_values(frame, pos)
+    def _update_source_labels(self, pos: QPoint, frame: vs.VideoFrame) -> None:
+        src_vals = self._extract_pixel_values(frame, pos)
 
-            self._set_row_values(self.src_labels, "Dec", [self.src_dec_fmt.format(v) for v in src_vals])
+        self._set_row_values(self.src_labels, "Dec", [self.src_dec_fmt.format(v) for v in src_vals])
 
-            if frame.format.sample_type == vs.INTEGER:
-                self._set_row_values(self.src_labels, "Hex", [self.src_hex_fmt.format(v) for v in src_vals])
+        if frame.format.sample_type == vs.INTEGER:
+            self._set_row_values(self.src_labels, "Hex", [self.src_hex_fmt.format(v) for v in src_vals])
 
-                norm_vals = [
-                    clamp(scale_value_to_float(v, frame, (chroma := not not i)) + 0.5 * chroma, 0, 1.0)  # noqa: SIM208
-                    for i, v in enumerate(src_vals)
-                ]
-            else:
-                self._set_row_values(self.src_labels, "Hex", ["—"] * len(src_vals))
+            norm_vals = [
+                clamp(scale_value_to_float(v, frame, (chroma := not not i)) + 0.5 * chroma, 0, 1.0)  # noqa: SIM208
+                for i, v in enumerate(src_vals)
+            ]
+        else:
+            self._set_row_values(self.src_labels, "Hex", ["—"] * len(src_vals))
 
-                norm_vals = list[float]()
-                for i, v in enumerate(src_vals):
-                    if i == 0 or frame.format.color_family == vs.RGB:
-                        norm_vals.append(clamp(v, 0, 1))
-                    else:
-                        norm_vals.append(clamp(v, -0.5, 0.5) + 0.5)
+            norm_vals = list[float]()
+            for i, v in enumerate(src_vals):
+                if i == 0 or frame.format.color_family == vs.RGB:
+                    norm_vals.append(clamp(v, 0, 1))
+                else:
+                    norm_vals.append(clamp(v, -0.5, 0.5) + 0.5)
 
-            self._set_row_values(self.src_labels, "Norm", [self.src_norm_fmt.format(v) for v in norm_vals])
+        self._set_row_values(self.src_labels, "Norm", [self.src_norm_fmt.format(v) for v in norm_vals])
 
     def _update_rgb_labels(self, pos: QPoint, image: QImage) -> None:
         img_format = image.format()
