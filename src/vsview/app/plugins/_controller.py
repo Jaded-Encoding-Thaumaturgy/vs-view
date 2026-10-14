@@ -225,7 +225,7 @@ class PluginWorkspaceController(QObject):
 
             for view in self._visible_views(plugin):
                 if view.current_tab in view.outputs:
-                    buffer.register_plugin_node(plugin.identifier, view.outputs[view.current_tab])
+                    buffer.register_plugin_node(f"{plugin.identifier}:{id(view)}", view.outputs[view.current_tab])
 
     def on_workspace_loaded(self) -> None:
         for plugin in self.__workspace.plugins:
@@ -298,7 +298,10 @@ class PluginWorkspaceController(QObject):
                 if view.current_tab == -1 or view.current_tab not in view.outputs:
                     continue
 
-                if plugin_frames and plugin.identifier in plugin_frames:
+                view_key = f"{plugin.identifier}:{id(view)}"
+                if plugin_frames and view_key in plugin_frames:
+                    view.on_current_frame_changed(n, plugin_frames[view_key])
+                elif plugin_frames and plugin.identifier in plugin_frames:
                     view.on_current_frame_changed(n, plugin_frames[plugin.identifier])
                 else:
                     with self.__workspace.env.use(), view.outputs[view.current_tab].get_frame(n) as frame:
