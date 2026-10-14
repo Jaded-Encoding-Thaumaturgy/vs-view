@@ -190,6 +190,8 @@ class _PluginBaseMeta(ObjectType):
                 continue
 
             for n, arg in zip_longest(scope, args, fillvalue=None):
+                if n is None:
+                    continue
                 if arg is None or not isinstance(arg, type):
                     setattr(cls, f"{n}_settings_model", None)
                     continue
