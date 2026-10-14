@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from importlib.util import find_spec
 from logging import getLogger
 from types import ModuleType
@@ -90,11 +91,19 @@ class SecretsManager(Singleton):
             raise ValueError("Empty usernames are prohibited.")
 
         # https://github.com/jaraco/keyring/issues/545
+        # Read existing secret in case writing fails after delete
+        old_secret: str | None = None
+        with suppress(Exception):
+            old_secret = self.keyring.get_password(self._service_name(namespace, context), username)
+
         self.delete(namespace, context, username)
 
         try:
             self.keyring.set_password(self._service_name(namespace, context), username, password)
         except self.KeyringError as exc:
+            if old_secret is not None:
+                with suppress(Exception):
+                    self.keyring.set_password(self._service_name(namespace, context), username, old_secret)
             raise SecretsError("Failed to store secret in keyring backend.") from exc
 
     @inject_self
