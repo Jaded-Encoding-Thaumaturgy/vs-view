@@ -23,6 +23,7 @@ from .. import tools
 from . import specs
 
 if TYPE_CHECKING:
+    from ..settings.models import SettingEntry
     from .api import NodeProcessor, WidgetPluginBase
     from .api_wk import PluginBaseWorkspace
 
@@ -89,6 +90,8 @@ class PluginManager(Singleton):
         self._entry_points_loaded = False
         self._load_future: Future[None] | None = None
         self._lock = Lock()
+        self._plugin_global_settings: list[SettingEntry] | None = None
+        self._plugin_local_settings: list[SettingEntry] | None = None
 
     @inject_self.property
     @ensure_loaded("entrypoints")
@@ -133,6 +136,14 @@ class PluginManager(Singleton):
         )
 
         return restricted_caller()
+
+    @inject_self.property
+    def plugin_global_settings(self) -> list[SettingEntry]:
+        return self._plugin_global_settings or []
+
+    @inject_self.property
+    def plugin_local_settings(self) -> list[SettingEntry]:
+        return self._plugin_local_settings or []
 
     @inject_self.property
     def loaded(self) -> bool:
@@ -238,7 +249,7 @@ class PluginManager(Singleton):
         # ShortcutManager._check_conflicts()
 
     def _construct_settings_registry(self) -> None:
-        from ..settings.dialog import PLUGIN_PREFIX, SettingsDialog
+        from ..settings.dialog import PLUGIN_PREFIX
         from ..settings.models import SettingEntry, extract_settings
 
         def extract_plugin_settings(model: type, plugin_id: str, section_prefix: str) -> list[SettingEntry]:
@@ -268,10 +279,8 @@ class PluginManager(Singleton):
                 local_entries.extend(extract_plugin_settings(local_model, identifier, section_prefix))
 
         self._populate_default_settings("global")
-
-        # Extend dialog registries
-        SettingsDialog.global_settings_registry.extend(global_entries)
-        SettingsDialog.local_settings_registry.extend(local_entries)
+        self._plugin_global_settings = global_entries
+        self._plugin_local_settings = local_entries
 
         logger.debug("Plugin settings extracted")
 

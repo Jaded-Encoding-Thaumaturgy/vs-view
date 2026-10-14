@@ -278,17 +278,21 @@ class SettingsDialog(QDialog, IconReloadMixin):
         self._local_widgets.clear()
         super().deleteLater()
 
-    @classproperty.cached
+    @classproperty
     @classmethod
     def global_settings_registry(cls) -> list[SettingEntry]:
-        """Registry of global settings extracted from GlobalSettings."""
-        return extract_settings(GlobalSettings)
+        """Registry of global settings extracted from GlobalSettings and plugins."""
+        from ..plugins.manager import PluginManager
 
-    @classproperty.cached
+        return cls._core_global_settings + PluginManager.plugin_global_settings
+
+    @classproperty
     @classmethod
     def local_settings_registry(cls) -> list[SettingEntry]:
-        """Registry of local settings extracted from LocalSettings."""
-        return extract_settings(LocalSettings)
+        """Registry of local settings extracted from LocalSettings and plugins."""
+        from ..plugins.manager import PluginManager
+
+        return cls._core_local_settings + PluginManager.plugin_local_settings
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -656,6 +660,16 @@ class SettingsDialog(QDialog, IconReloadMixin):
         from ..plugins.manager import PluginManager
 
         return {plugin.identifier: plugin.display_name for plugin in PluginManager.all_plugins}
+
+    @classproperty.cached
+    @classmethod
+    def _core_global_settings(cls) -> list[SettingEntry]:
+        return extract_settings(GlobalSettings)
+
+    @classproperty.cached
+    @classmethod
+    def _core_local_settings(cls) -> list[SettingEntry]:
+        return extract_settings(LocalSettings)
 
     def _reset_shortcut(self, aid: str) -> None:
         self._updating_shortcuts_ui = True
