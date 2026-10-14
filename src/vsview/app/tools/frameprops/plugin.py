@@ -760,8 +760,9 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
             return
 
         props = self.api.current_voutput.props[current_frame]
+        key = getattr(self, "current_preview_key", None)
 
-        if (key := self.current_preview_key) in props and isinstance(props[key], vs.VideoFrame):
+        if key and key in props and isinstance(props[key], vs.VideoFrame):
             self.preview_view.set_frame(props[key])
 
     @Slot(str)
