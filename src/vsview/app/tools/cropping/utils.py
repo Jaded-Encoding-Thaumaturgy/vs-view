@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from typing import NamedTuple, Self
 
 from jetpytools import clamp
@@ -93,7 +94,8 @@ class CustomRect(QRect):
         y1 = clamp(y1, 0, image_h)
 
         if x1 <= x0 or y1 <= y0:
-            raise ValueError("Rect is invalid")
+            self.setRect(0, 0, 0, 0)
+            return
 
         self.setLeft(x0)
         self.setTop(y0)
@@ -110,6 +112,6 @@ class CustomRect(QRect):
         x1 = clamp(image_w - right, 0, image_w)
         y1 = clamp(image_h - bottom, 0, image_h)
 
-        rect = cls(x0, y0, x1 - x0, y1 - y0)
+        rect = cls(x0, y0, max(0, x1 - x0), max(0, y1 - y0))
         rect.sanitize(size, mod)
         return rect

@@ -251,6 +251,8 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         else:
             snapped_rect = CustomRect(rect)
             snapped_rect.sanitize(image_size, self.settings.global_.mod)
+            if snapped_rect.isNull() or snapped_rect.width() <= 0 or snapped_rect.height() <= 0:
+                snapped_rect = QRect()
 
         if rect != snapped_rect:
             self.api.current_view.set_rect_selection(snapped_rect)
