@@ -10,7 +10,7 @@ from functools import wraps
 from logging import getLogger
 from typing import Any, Final, Literal, cast
 
-from jetpytools import CustomNotImplementedError, Singleton, inject_self
+from jetpytools import CustomNotImplementedError, Singleton, cachedproperty, inject_self
 from PySide6.QtCore import QKeyCombination, Qt, Slot
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import QWidget
@@ -419,6 +419,7 @@ class KeyboardLayoutMapper(Singleton):
     def clear_cache(self) -> None:
         """Clear cached key sequence translations."""
         self._cache.clear()
+        cachedproperty.clear_cache(self)
 
     @inject_self
     def translate_qwerty_to_active(self, key_sequence: QKeySequence) -> QKeySequence:
@@ -492,31 +493,9 @@ class KeyboardLayoutMapper(Singleton):
 
     @fallback_logged
     def _translate_darwin(self, upper_base: str) -> str | None:
-        if upper_base not in MACOS_KEYCODES or not (carbon_path := ctypes.util.find_library("Carbon")):
+        if upper_base not in MACOS_KEYCODES or not (carbon := self._darwin_carbon):
             return None
 
-        carbon = ctypes.CDLL(carbon_path)
-        carbon.TISCopyCurrentKeyboardInputSource.restype = ctypes.c_void_p
-        carbon.TISGetInputSourceProperty.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        carbon.TISGetInputSourceProperty.restype = ctypes.c_void_p
-        carbon.UCKeyTranslate.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_uint16,
-            ctypes.c_uint16,
-            ctypes.c_uint32,
-            ctypes.c_uint32,
-            ctypes.c_uint32,
-            ctypes.c_void_p,
-            ctypes.c_uint32,
-            ctypes.c_void_p,
-            ctypes.c_void_p,
-        ]
-        carbon.UCKeyTranslate.restype = ctypes.c_int32
-        # CoreFoundation symbols resolve through the Carbon handle
-        carbon.CFDataGetBytePtr.argtypes = [ctypes.c_void_p]
-        carbon.CFDataGetBytePtr.restype = ctypes.c_void_p
-        carbon.CFRelease.argtypes = [ctypes.c_void_p]
-        carbon.CFRelease.restype = None
         mac_keycode = MACOS_KEYCODES[upper_base]
 
         # Get current keyboard input source layout data pointer
@@ -562,31 +541,8 @@ class KeyboardLayoutMapper(Singleton):
 
     @fallback_logged
     def _translate_linux(self, upper_base: str) -> str | None:
-        xkb_path = ctypes.util.find_library("xkbcommon") or "libxkbcommon.so.0"
-        libxkb = ctypes.CDLL(xkb_path)
-
-        # Define function signatures so ctypes does not truncate opaque pointers to C ints.
-        libxkb.xkb_context_new.argtypes = [ctypes.c_int]
-        libxkb.xkb_context_new.restype = ctypes.c_void_p
-        libxkb.xkb_context_unref.argtypes = [ctypes.c_void_p]
-        libxkb.xkb_context_unref.restype = None
-
-        libxkb.xkb_keymap_new_from_names.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
-        libxkb.xkb_keymap_new_from_names.restype = ctypes.c_void_p
-        libxkb.xkb_keymap_unref.argtypes = [ctypes.c_void_p]
-        libxkb.xkb_keymap_unref.restype = None
-
-        libxkb.xkb_state_new.argtypes = [ctypes.c_void_p]
-        libxkb.xkb_state_new.restype = ctypes.c_void_p
-        libxkb.xkb_state_unref.argtypes = [ctypes.c_void_p]
-        libxkb.xkb_state_unref.restype = None
-        libxkb.xkb_state_key_get_utf8.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_uint32,
-            ctypes.POINTER(ctypes.c_char),
-            ctypes.c_size_t,
-        ]
-        libxkb.xkb_state_key_get_utf8.restype = ctypes.c_int
+        if not (libxkb := self._linux_lib):
+            return None
 
         ctx = libxkb.xkb_context_new(0)
         if not ctx:
@@ -616,3 +572,70 @@ class KeyboardLayoutMapper(Singleton):
             return buf.value.decode("utf-8")
 
         return None
+
+    @cachedproperty
+    def _darwin_carbon(self) -> ctypes.CDLL | None:
+        if not (carbon_path := ctypes.util.find_library("Carbon")):
+            return None
+
+        try:
+            carbon = ctypes.CDLL(carbon_path)
+        except OSError:
+            return None
+
+        carbon.TISCopyCurrentKeyboardInputSource.restype = ctypes.c_void_p
+        carbon.TISGetInputSourceProperty.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        carbon.TISGetInputSourceProperty.restype = ctypes.c_void_p
+        carbon.UCKeyTranslate.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_uint16,
+            ctypes.c_uint16,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+        ]
+        carbon.UCKeyTranslate.restype = ctypes.c_int32
+        # CoreFoundation symbols resolve through the Carbon handle
+        carbon.CFDataGetBytePtr.argtypes = [ctypes.c_void_p]
+        carbon.CFDataGetBytePtr.restype = ctypes.c_void_p
+        carbon.CFRelease.argtypes = [ctypes.c_void_p]
+        carbon.CFRelease.restype = None
+
+        return carbon
+
+    @cachedproperty
+    def _linux_lib(self) -> ctypes.CDLL | None:
+        xkb_path = ctypes.util.find_library("xkbcommon") or "libxkbcommon.so.0"
+        try:
+            libxkb = ctypes.CDLL(xkb_path)
+        except OSError:
+            return None
+
+        # Define function signatures so ctypes does not truncate opaque pointers to C ints.
+        libxkb.xkb_context_new.argtypes = [ctypes.c_int]
+        libxkb.xkb_context_new.restype = ctypes.c_void_p
+        libxkb.xkb_context_unref.argtypes = [ctypes.c_void_p]
+        libxkb.xkb_context_unref.restype = None
+
+        libxkb.xkb_keymap_new_from_names.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+        libxkb.xkb_keymap_new_from_names.restype = ctypes.c_void_p
+        libxkb.xkb_keymap_unref.argtypes = [ctypes.c_void_p]
+        libxkb.xkb_keymap_unref.restype = None
+
+        libxkb.xkb_state_new.argtypes = [ctypes.c_void_p]
+        libxkb.xkb_state_new.restype = ctypes.c_void_p
+        libxkb.xkb_state_unref.argtypes = [ctypes.c_void_p]
+        libxkb.xkb_state_unref.restype = None
+        libxkb.xkb_state_key_get_utf8.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_char),
+            ctypes.c_size_t,
+        ]
+        libxkb.xkb_state_key_get_utf8.restype = ctypes.c_int
+
+        return libxkb
