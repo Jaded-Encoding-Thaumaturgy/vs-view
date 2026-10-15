@@ -47,52 +47,66 @@ Copy them into your `vsview/.vscode/settings.json`:
 
 ```json title="vsview/.vscode/settings.json"
 {
-    "[python]": {
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "charliermarsh.ruff",
-        "editor.codeActionsOnSave": {
-            "source.organizeImports.ruff": "explicit",
-        }
+  "[github-actions-workflow]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2
+  },
+  "[python]": {
+    "editor.codeActionsOnSave": {
+      "source.organizeImports.ruff": "explicit"
     },
-    "[json]": {
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "oxc.oxc-vscode",
-        "editor.tabSize": 2
-    },
-    "[toml]": {
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "tamasfe.even-better-toml"
-    },
-    "[github-actions-workflow]": {
-        "editor.defaultFormatter": "oxc.oxc-vscode"
-    },
-    "files.associations": {
-        "*.vpy": "python"
-    },
-    "mypy-type-checker.args": [
-        "--fixed-format-cache",
-        "--config-file .\\pyproject.toml"
-    ],
-    "mypy-type-checker.importStrategy": "fromEnvironment",
-    "python.analysis.autoFormatStrings": true,
-    "python.analysis.autoImportCompletions": true,
-    "python.analysis.packageIndexDepths": [
-        {
-            "depth": 2,
-            "name": "PySide6"
-        }
-    ],
-    "python.analysis.stubPath": "stubs",
-    "python.analysis.typeCheckingMode": "standard",
-    "python.analysis.typeEvaluation.deprecateTypingAliases": true,
-    "python.analysis.typeEvaluation.enableReachabilityAnalysis": true,
-    "python.testing.pytestArgs": [
-        "."
-    ],
-    "python.testing.pytestEnabled": true,
-    "python.testing.unittestEnabled": false,
-    "search.exclude": {
-        "**/submodules": true
-    },
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true
+  },
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    "editor.formatOnSave": true
+  },
+  "[toml]": {
+    "editor.defaultFormatter": "tamasfe.even-better-toml",
+    "editor.formatOnSave": true
+  },
+  "editor.formatOnSave": true,
+  "files.associations": {
+    "*.vpy": "python",
+    "**/.github/actions/**/action.yml": "github-actions-workflow",
+    "**/.github/workflows/*.yml": "github-actions-workflow"
+  },
+  "mypy-type-checker.importStrategy": "fromEnvironment",
+  "oxc.enable.oxfmt": true,
+  "oxc.enable.oxlint": true,
+  "python.analysis.autoFormatStrings": true,
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.packageIndexDepths": [
+    {
+      "depth": 2,
+      "name": "PySide6"
+    }
+  ],
+  "python.analysis.stubPath": "stubs",
+  "python.analysis.typeCheckingMode": "standard",
+  "python.analysis.typeEvaluation.deprecateTypingAliases": true,
+  "python.analysis.typeEvaluation.enableReachabilityAnalysis": true,
+  "python.testing.pytestArgs": ["."],
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.linkedProjects": [
+    "src/vspackrgb/Cargo.toml",
+    "src/plugins/histogram/src/rust/Cargo.toml"
+  ],
+  "search.exclude": {
+    "**/submodules": true
+  },
+  "vitest.debugExclude": ["submodules:**", "<node_internals>/**"],
+  "vitest.rootConfig": "src/workspaces/editor",
+  "vsstubs.watchPlugins": false,
+  "yaml.schemas": {
+    "https://www.schemastore.org/github-action.json": "**/.github/actions/**/*.yml"
+  }
 }
 ```
