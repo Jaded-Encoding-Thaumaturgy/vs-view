@@ -870,7 +870,8 @@ class Timeline(QWidget):
             self._cursor_val = new_x
             self.update()
 
-            self.clicked.emit(self.x_to_frame(new_x), self.x_to_time(new_x))
+            frame = clamp(self.x_to_frame(new_x), Frame(0), Frame(max(0, self.total_frames - 1)))
+            self.clicked.emit(frame, self.x_to_time(new_x))
 
     @override
     def resizeEvent(self, event: QResizeEvent) -> None:
@@ -1515,12 +1516,9 @@ class PlaybackContainer(QWidget, IconReloadMixin):
             self.zone_frame_spinbox.setValue(self.settings.zone_frames)
 
         if self.cum_durations:
+            idx = min(self.settings.zone_frames - 1, len(self.cum_durations) - 1)
             with QSignalBlocker(self.zone_time_edit):
-                self.zone_time_edit.setTime(
-                    self.cum_durations[self.settings.zone_frames - 1].to_qtime()
-                    if self.settings.zone_frames > 0
-                    else QTime()
-                )
+                self.zone_time_edit.setTime(self.cum_durations[idx].to_qtime() if idx >= 0 else QTime())
 
         with QSignalBlocker(self.step_frame_spinbox):
             self.step_frame_spinbox.setValue(self.settings.step)
@@ -1748,14 +1746,17 @@ class TimelineControlBar(QWidget):
         self.timeline.update()
 
         # Playback Container
+        max_zone = max(1, total_frames - 1)
+        self.playback_container.settings.zone_frames = clamp(self.playback_container.settings.zone_frames, 1, max_zone)
+
         with QSignalBlocker(self.playback_container.zone_frame_spinbox):
-            self.playback_container.zone_frame_spinbox.setMaximum(Frame(total_frames - 1))
+            self.playback_container.zone_frame_spinbox.setMaximum(Frame(max_zone))
 
         with QSignalBlocker(self.playback_container.zone_time_edit):
             self.playback_container.zone_time_edit.setMaximumTime(self.total_time.to_qtime())
 
         with QSignalBlocker(self.playback_container.frame_edit):
-            self.playback_container.frame_edit.setMaximum(Frame(total_frames - 1))
+            self.playback_container.frame_edit.setMaximum(Frame(max(0, total_frames - 1)))
 
         with QSignalBlocker(self.playback_container.time_edit):
             self.playback_container.time_edit.setMaximumTime(self.total_time.to_qtime())
