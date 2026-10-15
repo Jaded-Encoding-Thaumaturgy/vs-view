@@ -11,10 +11,10 @@ path = "src/rust/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [build-dependencies]
-pyo3-build-config = "0.30.0"
+pyo3-build-config = "0.30.1"
 
 [dependencies.pyo3]
-version = "0.30.0"
+version = "0.30.1"
 features = ["extension-module"]
 
 [features]
