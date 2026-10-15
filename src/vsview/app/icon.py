@@ -174,7 +174,10 @@ class IconReloadMixin:
                 reload()
             else:
                 # Qt can delete C++ object while Python wrapper still exists
-                del qobj
+                if isinstance(qobj, QToolButton):
+                    self._button_reloaders.pop(qobj, None)
+                if isinstance(qobj, QAction):
+                    self._action_reloaders.pop(qobj, None)
 
         for cb in self._custom_callbacks.copy():
             try:
