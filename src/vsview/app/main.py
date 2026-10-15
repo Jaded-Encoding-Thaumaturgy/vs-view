@@ -428,9 +428,9 @@ class MainWindow(QMainWindow):
 
         return btn
 
-    def delete_workspace[WorkspaceT: BaseWorkspace](self, btn: WorkspaceToolButton[WorkspaceT]) -> None:
+    def delete_workspace[WorkspaceT: BaseWorkspace](self, btn: WorkspaceToolButton[WorkspaceT]) -> bool:
         if Shiboken.isValid(btn.workspace) and not btn.workspace.confirm_close():
-            return
+            return False
 
         self.disconnect_workspace()
 
@@ -458,6 +458,8 @@ class MainWindow(QMainWindow):
 
         with check_leaks.ctx():
             QTimer.singleShot(0, gc.collect)
+
+        return True
 
     def connect_workspace(self, workspace: BaseWorkspace) -> None:
         if isinstance(workspace, LoaderWorkspace):
@@ -626,7 +628,8 @@ class MainWindow(QMainWindow):
         self.button_group.blockSignals(True)
 
         try:
-            self.delete_workspace(btn)
+            if not self.delete_workspace(btn):
+                return
             new_btn = self.add_workspace(workspace_type)
 
             self.nav_container.move_button(new_btn, old_index)
