@@ -351,36 +351,45 @@ class LRUCache[K, V](UserDict[K, V]):
             self.data.clear()
 
 
-class VideoFramesCache(UserDict[int, vs.VideoFrame]):
+class VideoFramesCache(LRUCache[int, vs.VideoFrame]):
     """Ported back from vstools"""
 
     def __init__(self, clip: vs.VideoNode, cache_size: int) -> None:
-        super().__init__()
+        super().__init__(cache_size)
 
-        self.clip = weakref.ref(clip)
-        self.cache_size = cache_size
-        self.lock = threading.Lock()
-
+        self.clip: vs.VideoNode | None = clip
         vs.register_on_destroy(self.clear)
 
     @override
     def __setitem__(self, key: int, value: vs.VideoFrame) -> None:
         with self.lock:
-            super().__setitem__(key, value)
-
-            if len(self) > self.cache_size:
-                del self[next(iter(self.data.keys()))]
+            self.data[key] = value
+            self.data.move_to_end(key)
+            while len(self.data) > self.cache_size:
+                _, frame = self.data.popitem(last=False)
+                frame.close()
 
     @override
     def __getitem__(self, key: int) -> vs.VideoFrame:
         with self.lock:
-            in_cache = key in self
+            if key in self.data:
+                return super().__getitem__(key)
 
-        if not in_cache and (c := self.clip()):
-            return self.add_frame(key, c.get_frame(key))
+            if self.clip is not None:
+                with self.clip.get_frame(key) as frame:
+                    return self.add_frame(key, frame)
 
-        with self.lock:
             return super().__getitem__(key)
+
+    @override
+    def __delitem__(self, key: int) -> None:
+        with self.lock:
+            self.data.pop(key).close()
+
+    @override
+    def __contains__(self, key: object) -> bool:
+        with self.lock:
+            return key in self.data
 
     def add_frame(self, n: int, f: vs.VideoFrame) -> vs.VideoFrame:
         f = f.copy()
@@ -389,6 +398,14 @@ class VideoFramesCache(UserDict[int, vs.VideoFrame]):
 
     def get_frame(self, n: int, f: vs.VideoFrame) -> vs.VideoFrame:
         return self[n]
+
+    @override
+    def clear(self) -> None:
+        with self.lock:
+            for frame in self.data.values():
+                frame.close()
+            super().clear()
+            self.clip = None
 
 
 def cache_clip(clip: vs.VideoNode, cache_size: int) -> vs.VideoNode:
