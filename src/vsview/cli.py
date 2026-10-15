@@ -280,7 +280,7 @@ def main(
 
     if files:
         for file in files:
-            if file.suffix in [".py", ".vpy"]:
+            if file.suffix.lower() in [".py", ".vpy"]:
                 main_window.load_new_script(file, **arg)
             else:
                 main_window.load_new_file(file)
