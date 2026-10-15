@@ -699,7 +699,10 @@ class PlaybackManager(QObject):
         sar_num, sar_den = props.get("_SARNum"), props.get("_SARDen")
 
         if isinstance(sar_num, int) and isinstance(sar_den, int):
-            return sar_num / sar_den
+            try:
+                return sar_num / sar_den
+            except ZeroDivisionError:
+                logger.warning("Frame property SARDen is equal to 0")
 
         return 1.0
 
