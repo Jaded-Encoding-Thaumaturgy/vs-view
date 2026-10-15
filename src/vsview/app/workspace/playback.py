@@ -666,24 +666,36 @@ class PlaybackManager(QObject):
             or not (aoutput := self._outputs_manager.current_aoutput)
             or self._tbar.playback_container.is_muted
             or self.state.audio_frame_interval_ns <= 0
+            or not self.state.audio_buffer
         ):
             self.state.audio_timer.stop()
             return
 
+        # If audio sink is full, retry when space opens up without advancing audio clock
+        if aoutput.sink.bytesFree() < aoutput.bytes_per_frame:
+            delay_ms = max(
+                1,
+                cround((self.state.next_audio_frame_time_ns - perf_counter_ns()) / 1_000_000)
+                if self.state.next_audio_frame_time_ns > perf_counter_ns()
+                else cround(self.state.audio_frame_interval_ns / 4_000_000),
+            )
+            self.state.audio_timer.start(delay_ms)
+            return
+
+        # Stop timer once audio buffer is exhausted
+        if not (result := self.state.audio_buffer.get_next_frame()):
+            self.state.audio_timer.stop()
+            return
+
+        with (frame := result[1]):
+            aoutput.render_raw_audio_frame(frame)
+
         # Use absolute targets to prevent clock drift; catch up immediately if lagging
         self.state.next_audio_frame_time_ns += self.state.audio_frame_interval_ns
 
-        if (
-            aoutput.sink.bytesFree() >= aoutput.bytes_per_frame
-            and self.state.audio_buffer
-            and (result := self.state.audio_buffer.get_next_frame())
-        ):
-            with (frame := result[1]):
-                aoutput.render_raw_audio_frame(frame)
-
         # Audio uses strict 0 to minimize jitter; any lag must be processed immediately
         if (delay_ns := self.state.next_audio_frame_time_ns - perf_counter_ns()) > 0:
-            self.state.audio_timer.start(cround(delay_ns / 1_000_000))
+            self.state.audio_timer.start(max(1, cround(delay_ns / 1_000_000)))
         else:
             self._play_next_audio_frame()
 
