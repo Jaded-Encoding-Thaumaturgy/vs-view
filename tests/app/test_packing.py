@@ -35,6 +35,18 @@ def test_frame_props_filter() -> None:
     assert filter_obj.filter(record3) is True
     assert "Other warning" in filter_obj.msgs
 
+    # Messages with same format string but different args should both log
+    fmt_record1 = logging.LogRecord("test_filter", logging.WARNING, "file.py", 13, "Missing: %r", (["Matrix"],), None)
+    fmt_record2 = logging.LogRecord(
+        "test_filter", logging.WARNING, "file.py", 14, "Missing: %r", (["Primaries"],), None
+    )
+    fmt_record1_dup = logging.LogRecord(
+        "test_filter", logging.WARNING, "file.py", 15, "Missing: %r", (["Matrix"],), None
+    )
+    assert filter_obj.filter(fmt_record1) is True
+    assert filter_obj.filter(fmt_record2) is True
+    assert filter_obj.filter(fmt_record1_dup) is False
+
     # Test super().filter failure (different logger name filter)
     strict_filter = FramePropsFilter("specific_name")
     unmatched_record = logging.LogRecord("other_name", logging.INFO, "f.py", 1, "Msg", (), None)

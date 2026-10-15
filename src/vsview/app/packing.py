@@ -27,8 +27,8 @@ class FramePropsFilter(Filter):
     def filter(self, record: LogRecord) -> bool | LogRecord:
         logged = super().filter(record)
 
-        if logged and record.msg not in self.msgs:
-            self.msgs.add(record.msg)
+        if logged and (msg := record.getMessage()) not in self.msgs:
+            self.msgs.add(msg)
             return logged
         return False
 
