@@ -458,7 +458,7 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
     def loader(self) -> None:
         # Register source with linecache so traceback can display source lines for virtual files
         linecache.cache[self.filename] = (
-            len(self.content),
+            len(self.content.code),
             None,
             self.content.splitlines(keepends=True),
             self.filename,
