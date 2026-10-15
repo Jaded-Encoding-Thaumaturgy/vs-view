@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from cyclopts import CoercionError, Token, ValidationError
+from cyclopts import CoercionError, CycloptsError, Token, ValidationError
 from pytest_mock import MockerFixture
 
 from vsview.app.plugins.manager import PluginManager
@@ -47,7 +47,7 @@ class TestTokenConverters:
 
     def test_convert_arg_malformed_token_raises_value_error(self) -> None:
         tokens = [Token(value="malformed_token_without_equal")]
-        with pytest.raises(ValueError, match=r"not enough values to unpack"):
+        with pytest.raises(CycloptsError, match=r"Invalid value for --arg: expected KEY=VALUE, got"):
             convert_arg(dict, tokens)
 
     @pytest.mark.parametrize(

@@ -10,7 +10,7 @@ from pathlib import Path
 from signal import SIG_DFL, SIGINT, signal
 from typing import TYPE_CHECKING, Annotated, Any, cast, override
 
-from cyclopts import App, Group, Parameter, Token, config, validators
+from cyclopts import App, CycloptsError, Group, Parameter, Token, config, validators
 from cyclopts.help import DefaultFormatter, HelpPanel, InlineText
 from cyclopts.help.silent import SILENT
 from cyclopts.help.specs import DefaultStyled, TableSpec, get_default_command_columns, get_default_parameter_columns
@@ -99,7 +99,10 @@ def convert_log_level(type_: str, tokens: list[Token]) -> int:
 def convert_arg(type_: type[Mapping[str, str]], tokens: list[Token]) -> dict[str, str]:
     d = dict[str, str]()
     for arg in tokens:
-        k, v = arg.value.split("=", 1)
+        try:
+            k, v = arg.value.split("=", 1)
+        except ValueError:
+            raise CycloptsError(f"Invalid value for --arg: expected KEY=VALUE, got {arg.value!r}")
         d[k] = v
     return d
 
