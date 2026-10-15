@@ -84,8 +84,6 @@ class AudioOutput:
     # https://github.com/vapoursynth/vapoursynth/blob/8cd1cba539bf70eea21dc242d43349603115632d/include/VapourSynth4.h#L36
     SAMPLES_PER_FRAME = 3072
 
-    sink: AudioSink
-
     def __init__(self, vs_output: vs.AudioNode, vs_index: int, metadata: AudioMetadata | None = None) -> None:
         self.vs_output = vs_output
         self.vs_index = vs_index
@@ -97,6 +95,7 @@ class AudioOutput:
         )
         self.kwargs = metadata.kwargs if metadata and metadata.kwargs else {}
         self.chanels_layout = PrettyChannelsLayout(tuple(self.vs_output.channels))
+        self.sink: AudioSink | None = None
 
         self._cache_delay_audio = LRUCache[float, vs.AudioNode]()
 
@@ -116,7 +115,7 @@ class AudioOutput:
     def volume(self, value: float) -> None:
         self._volume = clamp(value, 0.0, 1.0)
 
-        if hasattr(self, "sink"):
+        if self.sink is not None:
             self.sink.setVolume(self._volume)
         else:
             logger.warning("No audio sink configured")
@@ -180,10 +179,10 @@ class AudioOutput:
 
     def clear(self) -> None:
         """Clear VapourSynth resources."""
-        if hasattr(self, "sink"):
+        if self.sink is not None:
             self.sink.stop()
             self.sink.deleteLater()
-            del self.sink
+            self.sink = None
 
         for name in ["prepared_audio", "vs_output", "playback_audio", "kwargs"]:
             with suppress(AttributeError):
@@ -192,7 +191,7 @@ class AudioOutput:
         self._cache_delay_audio.clear()
 
     def render_raw_audio_frame(self, frame: vs.AudioFrame) -> None:
-        if not self.sink.ready:
+        if not (sink := self.sink) or not sink.ready:
             return
 
         num_channels = self.prepared_audio.num_channels
@@ -216,7 +215,7 @@ class AudioOutput:
 
         # Handle cases where the sink is stopped between the initial check and writing
         with suppress(RuntimeError):
-            self.sink.io.write(data)
+            sink.io.write(data)
 
     @run_in_loop(return_future=False)
     def setup_sink(self, speed: float = 1.0, volume: float = 1.0) -> bool:
@@ -226,7 +225,7 @@ class AudioOutput:
         Returns True if successful, False if audio format not supported.
         """
         self.qformat.setSampleRate(round(self.prepared_audio.sample_rate * speed))
-        if hasattr(self, "sink"):
+        if self.sink is not None:
             self.sink.stop()
             self.sink.deleteLater()
         self.sink = AudioSink(self.qformat)

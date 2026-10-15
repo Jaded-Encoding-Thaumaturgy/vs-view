@@ -448,7 +448,7 @@ class PlaybackManager(QObject):
     def _stop_audio(self) -> None:
         self.state.audio_timer.stop()
 
-        if aoutput := self._outputs_manager.current_aoutput:
+        if (aoutput := self._outputs_manager.current_aoutput) and aoutput.sink is not None:
             aoutput.sink.reset()
 
         self.state.reset_audio()
@@ -667,6 +667,7 @@ class PlaybackManager(QObject):
             or self._tbar.playback_container.is_muted
             or self.state.audio_frame_interval_ns <= 0
             or not self.state.audio_buffer
+            or aoutput.sink is None
         ):
             self.state.audio_timer.stop()
             return

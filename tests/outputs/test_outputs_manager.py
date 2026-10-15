@@ -435,7 +435,7 @@ def test_audio_output_volume_before_sink_logs_warning(
     sample_audio_node: vs.AudioNode, caplog: pytest.LogCaptureFixture
 ) -> None:
     output = AudioOutput(sample_audio_node, 0)
-    assert not hasattr(output, "sink")
+    assert output.sink is None
 
     try:
         with caplog.at_level(logging.WARNING):
@@ -443,5 +443,17 @@ def test_audio_output_volume_before_sink_logs_warning(
 
         assert output.volume == 0.75
         assert "No audio sink configured" in caplog.text
+    finally:
+        output.clear()
+
+
+@pytest.mark.vpy("initial-core")
+def test_audio_output_render_frame_before_sink(sample_audio_node: vs.AudioNode) -> None:
+    output = AudioOutput(sample_audio_node, 0)
+    assert output.sink is None
+
+    try:
+        frame = sample_audio_node.get_frame(0)
+        output.render_raw_audio_frame(frame)
     finally:
         output.clear()

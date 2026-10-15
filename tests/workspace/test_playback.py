@@ -362,6 +362,38 @@ def test_playback_manager_volume_and_mute(
     tbar.playback_container.muteChanged.emit(False)
     restart_mock.assert_not_called()
 
+    mock_outputs.current_aoutput = aoutput
+    assert aoutput.sink is None
+    manager.state.audio_timer.start(100)
+    tbar.playback_container.muteChanged.emit(True)
+    assert not manager.state.audio_timer.isActive()
+
+
+@pytest.mark.vpy("no-core")
+def test_playback_manager_muted_playback_lifecycle(
+    playback_manager_setup: PlaybackManagerSetup,
+    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+) -> None:
+    manager, env, _, mock_outputs, _, tbar = playback_manager_setup
+    voutput = create_test_video_output(env, 100)
+    aoutput = create_test_audio_output(env, 100)
+    mock_outputs.current_voutput = voutput
+    mock_outputs.current_aoutput = aoutput
+
+    assert aoutput.sink is None
+
+    # Start playback while muted
+    tbar.playback_container.is_muted = True
+    manager.toggle_playback()
+    assert manager.state.is_playing is True
+    assert manager.state.audio_buffer is None
+    assert aoutput.sink is None
+
+    # Stop playback while muted
+    manager.toggle_playback()
+    assert manager.state.is_playing is False
+
 
 def test_playback_manager_signal_declarations(playback_manager_setup: PlaybackManagerSetup) -> None:
     manager, *_ = playback_manager_setup
