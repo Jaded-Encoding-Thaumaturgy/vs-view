@@ -193,6 +193,7 @@ markers = [
     "integration: Multi-subsystem integration tests",
     "qt: Tests requiring PySide6 QApplication or QtBot",
     "vpy: Tests interacting with VapourSynth environments (managed by vsengine)",
+    "network: Tests making live HTTP requests",
 ]
 
 [tool.coverage.run]

@@ -222,8 +222,7 @@ def _extract_menu_urls(menu: QMenu) -> list[tuple[str, str]]:
     return urls
 
 
-def test_help_menu_urls_availability(main_window: MainWindow) -> None:
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+def test_help_menu_urls_format(main_window: MainWindow) -> None:
     help_urls = _extract_menu_urls(main_window.help_menu)
 
     assert len(help_urls) > 0
@@ -231,6 +230,15 @@ def test_help_menu_urls_availability(main_window: MainWindow) -> None:
     for action_text, url in help_urls:
         assert url.startswith("https://"), f"Action '{action_text}' has invalid URL: {url}"
 
+
+@pytest.mark.network
+def test_help_menu_urls_availability(main_window: MainWindow) -> None:
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    help_urls = _extract_menu_urls(main_window.help_menu)
+
+    assert len(help_urls) > 0
+
+    for action_text, url in help_urls:
         req = urllib.request.Request(url, headers=headers, method="HEAD")
         try:
             with urllib.request.urlopen(req, timeout=10) as response:
