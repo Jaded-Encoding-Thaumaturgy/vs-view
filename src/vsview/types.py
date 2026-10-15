@@ -21,11 +21,11 @@ class Time(timedelta):
 
     def to_ts(self, fmt: str = "{H:02d}:{M:02d}:{S:02d}.{ms:03d}") -> str:
         """Formats a timedelta object using standard Python formatting syntax."""
-        total_seconds = int(self.total_seconds())
-        days = self.days
-        hours, remainder = divmod(self.seconds, 3600)
+        total_ms = cround(self.total_seconds() * 1000)
+        total_seconds, milliseconds = divmod(total_ms, 1000)
+        days, remainder_seconds = divmod(total_seconds, 86400)
+        hours, remainder = divmod(remainder_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
-        milliseconds = cround(self.microseconds / 1000)
 
         return fmt.format(
             D=days,

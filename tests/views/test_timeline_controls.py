@@ -741,6 +741,9 @@ def test_time_formatting_to_ts() -> None:
     assert t.to_ts("{H}:{M:02d}:{S:02d}") == "1:16:41"
     assert t.to_ts("{S}.{ms:03d}") == "41.500"
     assert t.to_ts("{ts}") == "4601"
+    # Millisecond rounding carry boundary tests
+    assert Time(seconds=1.9996).to_ts() == "00:00:02.000"
+    assert Time(seconds=59.9999).to_ts() == "00:01:00.000"
 
 
 def test_time_qtime_roundtrip() -> None:
