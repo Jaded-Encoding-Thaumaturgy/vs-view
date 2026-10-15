@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import cache
+from itertools import chain
 from logging import getLogger
 from math import floor
 from typing import Any, Literal, NamedTuple, override
@@ -742,6 +743,18 @@ class Timeline(QWidget):
                 setup_key,
                 Notch.CacheValue(self.scroll_rect, labels_notches, rects_to_draw),
             )
+            # Update custom notch lines
+            top = self.scroll_rect.top()
+            bottom = top + self.scroll_rect.height() - 1
+
+            for p_notch in chain(*self.custom_notches.values()):
+                x = self.cursor_to_x(p_notch.data)
+                p_notch.line = QLineF(x, top, x, bottom)
+                if p_notch.end_data is not None:
+                    end_x = self.cursor_to_x(p_notch.end_data)
+                    p_notch.end_line = QLineF(end_x, top, end_x, bottom)
+                else:
+                    p_notch.end_line = None
 
         # Define the cursor line position (contained within scroll_rect)
         cursor_line = QLineF(self.cursor_x, self.scroll_rect.top(), self.cursor_x, self.scroll_rect.bottom())
@@ -961,21 +974,13 @@ class Timeline(QWidget):
         id: Hashable | None = None,
     ) -> None:
         cursor_x = self.cursor_to_x(data)
-        cursor_line = QLineF(
-            cursor_x,
-            self.scroll_rect.top(),
-            cursor_x,
-            self.scroll_rect.top() + self.scroll_rect.height() - 1,
-        )
+        top = self.scroll_rect.top()
+        bottom = top + self.scroll_rect.height() - 1
+        cursor_line = QLineF(cursor_x, top, cursor_x, bottom)
 
         if end_data is not None:
             end_x = self.cursor_to_x(end_data)
-            end_line = QLineF(
-                end_x,
-                self.scroll_rect.top(),
-                end_x,
-                self.scroll_rect.top() + self.scroll_rect.height() - 1,
-            )
+            end_line = QLineF(end_x, top, end_x, bottom)
         else:
             end_line = None
 
