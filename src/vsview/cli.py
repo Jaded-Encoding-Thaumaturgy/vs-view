@@ -220,7 +220,6 @@ def main(
     from .app.main import Application, MainWindow
     from .app.plugins.manager import PluginManager
     from .app.workspace import BaseWorkspace, PythonScriptWorkspace, QuickScriptWorkspace, VideoFileWorkspace
-    from .assets import load_fonts
 
     # Setup env vars
     os.environ["JETPYTOOLS_NO_COLOR"] = "true"
@@ -272,7 +271,6 @@ def main(
     app = Application([sys.argv[0], *qt_arg], no_settings=no_settings)
 
     PluginManager.load()
-    load_fonts()
 
     main_window = MainWindow()
     # Show window first for faster perceived startup

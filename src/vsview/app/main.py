@@ -62,7 +62,7 @@ from shiboken6 import Shiboken
 from vsengine import UnifiedFuture
 from vsengine.loops import set_loop
 
-from ..assets import app_icon
+from ..assets import app_icon, load_fonts
 from ..vsenv import QtEventLoop, get_policy, run_in_background, unregister_policy
 from .icon import IconReloadMixin
 from .plugins.manager import PluginManager
@@ -110,6 +110,8 @@ class Application(QApplication):
         # Register custom plugin paths first
         for path in SettingsManager.global_settings.qt_settings.custom_plugin_paths:
             QApplication.addLibraryPath(path)
+
+        load_fonts()
 
         # And then set the style
         self.setStyle(SettingsManager.global_settings.appearance.style or "")
