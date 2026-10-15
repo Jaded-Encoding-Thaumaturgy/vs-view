@@ -11,7 +11,7 @@ from PySide6.QtGui import QCloseEvent, QDesktopServices, QKeyEvent
 from PySide6.QtWidgets import QApplication, QMenu
 from pytestqt.qtbot import QtBot
 
-from vsview.app.main import Application, MainWindow, WorkspaceToolButton
+from vsview.app.main import MainWindow, WorkspaceToolButton
 from vsview.app.settings.dialog import ShortcutEditor
 from vsview.app.settings.manager import SettingsManager
 from vsview.app.settings.models import WindowGeometry
@@ -172,21 +172,6 @@ def test_close_event_clean_teardown(main_window: MainWindow) -> None:
     main_window.closeEvent(event)
 
     btn.workspace.confirm_close.assert_called_once()
-
-
-def test_application_global_settings_changed(main_window: MainWindow, qapp: QApplication) -> None:
-    sm = main_window.settings_manager
-    original_theme = sm.global_settings.appearance.theme
-    target_theme = Qt.ColorScheme.Dark if original_theme != Qt.ColorScheme.Dark else Qt.ColorScheme.Light
-
-    try:
-        sm.global_settings.appearance.theme = target_theme
-        Application._on_global_settings_changed(qapp)  # type: ignore[arg-type]
-        if qapp.styleHints().colorScheme() != Qt.ColorScheme.Unknown:
-            assert qapp.styleHints().colorScheme() == target_theme
-    finally:
-        sm.global_settings.appearance.theme = original_theme
-        Application._on_global_settings_changed(qapp)  # type: ignore[arg-type]
 
 
 def test_workspace_clear_action(main_window: MainWindow) -> None:

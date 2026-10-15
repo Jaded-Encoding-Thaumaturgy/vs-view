@@ -14,7 +14,7 @@ from vsengine.policy import ManagedEnvironment
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.tools.colorpicker.plugin import ColorPickerPlugin, TrackingState
 from vsview.app.tools.cropping.plugin import RegionSelectorPlugin
-from vsview.app.tools.frameprops.plugin import FramePropsModel, FramePropsPlugin
+from vsview.app.tools.frameprops.plugin import FramePropPreviewGraphicsView, FramePropsModel, FramePropsPlugin
 
 if TYPE_CHECKING:
     from tests.harness import HarnessPluginController
@@ -467,3 +467,31 @@ def test_frameprops_videoframe_preview_lifecycle(qtbot: QtBot, plugin_controller
     qtbot.waitUntil(lambda: plugin.splitter.sizes()[1] == 0)
     assert plugin.splitter.sizes()[1] == 0
     assert not hasattr(plugin, "current_preview_key")
+
+
+@pytest.mark.parametrize("format_id", [vs.RGB24, vs.GRAY8, vs.YUV420P8], ids=lambda fmt: fmt.name)
+def test_frameprop_preview_graphics_view_set_frame_does_not_close_frame(
+    qtbot: QtBot,
+    plugin_controller: HarnessPluginController,
+    format_id: vs.ColorFamily | int,
+) -> None:
+    # Arrange: instantiate graphics view with harness api
+    assert plugin_controller.env is not None
+    view = FramePropPreviewGraphicsView(None, plugin_controller.api)
+    qtbot.addWidget(view)
+
+    with plugin_controller.env.use():
+        clip = vs.core.std.BlankClip(width=32, height=32, format=format_id, length=1)
+        matrix = vs.MATRIX_RGB if format_id == vs.RGB24 else vs.MATRIX_BT709
+        clip = vs.core.std.SetFrameProps(
+            clip, _Matrix=matrix, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709
+        )
+        frame = clip.get_frame(0)
+
+    assert frame.closed is False
+
+    # Act: set frame in preview graphics view
+    view.set_frame(frame)
+
+    # Assert: contract invariant that set_frame does not close the passed VideoFrame
+    assert frame.closed is False

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import pytest
 import vapoursynth as vs
+from pydantic import ValidationError
 from PySide6.QtCore import QRect, QSize
 from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 
+from vsview.app.tools.cropping.settings import GlobalSettings
 from vsview.app.tools.cropping.utils import CommandLabel, CropValues, CustomRect, CustomSize
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
@@ -114,14 +116,26 @@ def test_custom_rect_sanitize_boundary_clamping() -> None:
 @pytest.mark.parametrize(
     "invalid_rect",
     [
+        # Out-of-bounds collapse (x1 == x0 or y1 == y0 due to clamping to bounds)
         CustomRect(120, 10, 20, 20),
         CustomRect(10, 120, 20, 20),
         CustomRect(-50, 10, 10, 10),
         CustomRect(10, -50, 10, 10),
+        # Inverted coordinates: x1 < x0
         CustomRect(50, 50, -60, 20),
+        CustomRect(60, 20, -30, 20),
+        # Inverted coordinates: x1 == x0 (zero width)
+        CustomRect(40, 20, 0, 20),
+        # Inverted coordinates: y1 < y0
+        CustomRect(20, 60, 20, -30),
+        CustomRect(50, 50, 20, -60),
+        # Inverted coordinates: y1 == y0 (zero height)
+        CustomRect(20, 40, 20, 0),
+        # Both inverted: x1 < x0 and y1 < y0
+        CustomRect(60, 60, -30, -30),
     ],
 )
-def test_custom_rect_sanitize_collapse_raises_value_error(invalid_rect: CustomRect) -> None:
+def test_custom_rect_sanitize_inverted_coordinates_raises(invalid_rect: CustomRect) -> None:
     size = QSize(100, 100)
 
     with pytest.raises(ValueError, match=r"^Rect is invalid$"):
@@ -144,10 +158,29 @@ def test_custom_rect_from_crop_valid(margins: tuple[int, int, int, int], expecte
     assert rect == expected_rect
 
 
-@pytest.mark.parametrize("excessive_margins", [(60, 10, 60, 10), (10, 60, 10, 60)])
-def test_custom_rect_from_crop_excessive_raises(excessive_margins: tuple[int, int, int, int]) -> None:
+@pytest.mark.parametrize(
+    "inverted_margins",
+    [
+        # Inverted horizontal coordinates: x1 < x0 (left + right > size.width())
+        (60, 10, 60, 10),
+        (80, 0, 30, 0),
+        # Inverted horizontal coordinates: x1 == x0 (left + right == size.width())
+        (50, 10, 50, 10),
+        (100, 0, 0, 0),
+        # Inverted vertical coordinates: y1 < y0 (top + bottom > size.height())
+        (10, 60, 10, 60),
+        (0, 80, 0, 30),
+        # Inverted vertical coordinates: y1 == y0 (top + bottom == size.height())
+        (10, 50, 10, 50),
+        (0, 100, 0, 0),
+        # Both horizontal and vertical inverted
+        (60, 60, 60, 60),
+        (50, 50, 50, 50),
+    ],
+)
+def test_custom_rect_from_crop_inverted_coordinates_raises(inverted_margins: tuple[int, int, int, int]) -> None:
     size = QSize(100, 100)
-    left, top, right, bottom = excessive_margins
+    left, top, right, bottom = inverted_margins
 
     with pytest.raises(ValueError, match=r"^Rect is invalid$"):
         CustomRect.from_crop(left, top, right, bottom, size, mod=2)
@@ -214,3 +247,64 @@ def test_command_label(qtbot: QtBot) -> None:
     qtbot.addWidget(pos_label)
     pos_label.format(100, 200)
     assert pos_label.text() == "Crop: 100, 200"
+
+
+@pytest.mark.parametrize(
+    "valid_templates",
+    [
+        ["{left}, {top}, {width}, {height}"],
+        ["std.Crop({left}, {right}, {top}, {bottom})"],
+        ["std.CropAbs({width}, {height}, {left}, {top})", "{left}x{top}"],
+        ["{left}", "{top}", "{right}", "{bottom}", "{width}", "{height}"],
+        ["static string without variables"],
+    ],
+)
+def test_global_settings_code_format_valid(valid_templates: list[str]) -> None:
+    settings = GlobalSettings(code_format=valid_templates)
+    assert settings.code_format == valid_templates
+
+
+@pytest.mark.parametrize(
+    "invalid_templates",
+    [
+        ["{unknown_key}"],
+        ["{left"],
+        ["{unclosed"],
+        ["{left} {unknown_key} {top}"],
+        ["{0}"],
+    ],
+)
+def test_global_settings_code_format_invalid(invalid_templates: list[str]) -> None:
+    with pytest.raises(ValidationError, match=r"Invalid crop code format template"):
+        GlobalSettings(code_format=invalid_templates)
+
+
+@pytest.mark.parametrize(
+    ("template", "format_args", "format_kwargs"),
+    [
+        # KeyError: template references unknown key not provided in kwargs
+        ("clip.std.Crop(left={unknown_key})", (), {"left": 10}),
+        # ValueError: malformed format string (unclosed brace or invalid format specifier)
+        ("clip.std.Crop(left={left", (), {"left": 10}),
+        ("clip.std.Crop(left={left:invalid_spec})", (), {"left": 10}),
+        # IndexError: positional argument index out of range
+        ("Crop: {0} {1}", (42,), {}),
+    ],
+)
+def test_command_label_format_suppression(
+    qtbot: QtBot,
+    template: str,
+    format_args: tuple[object, ...],
+    format_kwargs: dict[str, object],
+) -> None:
+    parent = QWidget()
+    qtbot.addWidget(parent)
+
+    label = CommandLabel(template, parent)
+    qtbot.addWidget(label)
+
+    # Act: format invocation with mismatched arguments should safely suppress exceptions
+    label.format(*format_args, **format_kwargs)
+
+    # Assert: error suppressed without raising, text remains reset to original template
+    assert label.text() == template

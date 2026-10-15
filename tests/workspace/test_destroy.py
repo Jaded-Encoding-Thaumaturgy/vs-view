@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import linecache
 import sys
+from collections.abc import Callable
 from types import ModuleType
-from typing import Any
+from typing import Any, override
 
 import pytest
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
+from vsengine.policy import ManagedEnvironment
 
+from vsview.api._helpers import output_metadata
 from vsview.api.info import Context, register_on_workspace_destroy
 from vsview.app.workspace.base import BaseWorkspace
 from vsview.app.workspace.loader import VSEngineWorkspace
+from vsview.app.workspace.quick_script import QuickScriptWorkspace
+from vsview.app.workspace.utils import CodeContent
 from vsview.assets import IconName
 from vsview.vsenv import QtEventLoop
 
@@ -145,3 +151,64 @@ def test_vsengine_workspace_state_available_during_destroy(qtbot: QtBot, qt_even
     assert read_state["test_key"] == "test_value"
     # State cleared afterwards
     assert workspace.persistent_state == {}
+
+
+def test_quick_script_workspace_delete_later_cleans_caches(
+    qtbot: QtBot,
+    qt_event_loop: QtEventLoop,
+) -> None:
+    workspace = QuickScriptWorkspace()
+    qtbot.addWidget(workspace)
+
+    filename = workspace.filename
+    linecache.cache[filename] = (100, None, ["line1\n", "line2\n"], filename)
+    output_metadata[filename] = {0: "test_output_meta"}
+
+    assert filename in linecache.cache
+    assert filename in output_metadata
+
+    workspace.deleteLater()
+
+    assert filename not in linecache.cache
+    assert filename not in output_metadata
+
+
+@pytest.mark.vpy("no-core")
+def test_quick_script_workspace_loader_registers_source_length(
+    qtbot: QtBot,
+    qt_event_loop: QtEventLoop,
+    vpy_env_factory: Callable[[], ManagedEnvironment],
+) -> None:
+    class TestQuickScriptWorkspace(QuickScriptWorkspace):
+        @property
+        @override
+        def env(self) -> ManagedEnvironment:
+            if not self._env or self._env.disposed:
+                self._env = vpy_env_factory()
+            return self._env
+
+    workspace = TestQuickScriptWorkspace()
+    qtbot.addWidget(workspace)
+
+    test_code = (
+        "import vapoursynth as vs\n"
+        "core = vs.core\n"
+        "clip = core.std.BlankClip(length=5, width=64, height=64, format=vs.RGB24)\n"
+        "clip.set_output(0)\n"
+    )
+    workspace.content = CodeContent(test_code, workspace.filename)
+
+    linecache.cache.pop(workspace.filename, None)
+    try:
+        with workspace.env.use():
+            workspace.loader()
+
+        assert workspace.filename in linecache.cache
+        entry = linecache.cache[workspace.filename]
+        assert len(entry) == 4
+        assert isinstance(entry[0], int)
+        assert entry[0] == len(workspace.content.code)
+        assert entry[0] == len(test_code)
+        assert entry[3] == workspace.filename
+    finally:
+        linecache.cache.pop(workspace.filename, None)

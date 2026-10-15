@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 import pytest
 from pydantic import BaseModel
@@ -11,6 +11,9 @@ from pytestqt.qtbot import QtBot
 from vsview.api import Login, SecretLineEdit
 from vsview.app.settings.models import extract_settings
 from vsview.app.settings.secrets import SecretsError, SecretsManager
+
+if TYPE_CHECKING:
+    from tests.conftest import InMemoryKeyring
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
 
@@ -274,3 +277,31 @@ def test_login_metadata_get_value_updates_and_deletes_old_username(mocker: Mocke
     delete_spy.assert_called_once_with("test_ns", "login", "old_user@example.com")
     set_spy.assert_called_once_with("test_ns", "login", "new_user@example.com", "new_pass")
     assert widget.property("_old_username") == "new_user@example.com"
+
+
+def test_secrets_manager_set_rollback_on_write_failure(
+    isolate_secrets: InMemoryKeyring, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = "jet.vsview.test_ns/auth"
+    username = "token"
+    old_secret = "initial_secret_123"
+    new_secret = "failing_secret_456"
+
+    SecretsManager.set("test_ns", "auth", username, old_secret)
+    assert isolate_secrets.get_password(service, username) == old_secret
+    assert SecretsManager.get("test_ns", "auth", username) == old_secret
+
+    real_set_password = isolate_secrets.set_password
+
+    def fail_on_new_secret(svc: str, user: str, pwd: str) -> None:
+        if pwd == new_secret:
+            raise isolate_secrets.errors.KeyringError("Backend write error")
+        real_set_password(svc, user, pwd)
+
+    monkeypatch.setattr(isolate_secrets, "set_password", fail_on_new_secret)
+
+    with pytest.raises(SecretsError, match=r"Failed to store secret in keyring backend\."):
+        SecretsManager.set("test_ns", "auth", username, new_secret)
+
+    assert isolate_secrets.get_password(service, username) == old_secret
+    assert SecretsManager.get("test_ns", "auth", username) == old_secret

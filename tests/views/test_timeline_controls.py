@@ -1063,3 +1063,109 @@ def test_playback_container_audio_delay_reset_to_global(qtbot: QtBot) -> None:
     # Trigger reset action
     pc.reset_audio_delay_to_global_action.trigger()
     assert pc.audio_delay == 0.05
+
+
+def test_timeline_click_bounds_clamping(timeline_control_bar: TimelineControlBar) -> None:
+    bar = timeline_control_bar
+    total_frames = 100
+    bar.set_data(total_frames, [(i + 1) / 25.0 for i in range(total_frames)])
+    timeline = bar.timeline
+    timeline.rect_f = QRectF(0, 0, 1000, 33)
+
+    image = QImage(1000, 33, QImage.Format.Format_ARGB32_Premultiplied)
+    with QPainter(image) as painter:
+        timeline._draw_widget(painter)
+
+    emitted_frames = list[Frame]()
+    timeline.clicked.connect(lambda f, _t: emitted_frames.append(f))
+
+    scroll_rect = timeline.notches_cache[timeline.mode].value.scroll_rect
+    center_y = scroll_rect.center().y()
+
+    # 1. Click at left bound (x = 0)
+    event_left = QMouseEvent(
+        QEvent.Type.MouseButtonPress,
+        QPointF(0, center_y),
+        QPointF(0, center_y),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    timeline.mousePressEvent(event_left)
+    timeline.mouseReleaseEvent(event_left)
+
+    # 2. Click at right bound (x = width, which without clamping maps to Frame(total_frames))
+    width = timeline.rect_f.width()
+    assert timeline.x_to_frame(int(width)) == Frame(total_frames)
+
+    event_right = QMouseEvent(
+        QEvent.Type.MouseButtonPress,
+        QPointF(width, center_y),
+        QPointF(width, center_y),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    timeline.mousePressEvent(event_right)
+    timeline.mouseReleaseEvent(event_right)
+
+    assert len(emitted_frames) == 2
+    assert emitted_frames[0] == Frame(0)
+    assert emitted_frames[1] == Frame(total_frames - 1)
+    assert emitted_frames[1] == Frame(99)
+
+
+def test_timeline_zero_frame_clips_bounds(timeline_control_bar: TimelineControlBar) -> None:
+    bar = timeline_control_bar
+    bar.set_data(0)
+
+    assert bar.total_frames == 0
+    assert bar.playback_container.frame_edit.maximum() == 0
+    assert bar.playback_container.zone_frame_spinbox.maximum() >= 1
+    assert bar.playback_container.zone_frame_spinbox.maximum() == 1
+
+
+def test_timeline_custom_notches_line_coordinates_updated_on_scroll_rect_recalculated(
+    timeline_control_bar: TimelineControlBar,
+) -> None:
+    bar = timeline_control_bar
+    timeline = bar.timeline
+    timeline.rect_f = QRectF(0, 0, 500, 33)
+
+    image1 = QImage(500, 33, QImage.Format.Format_ARGB32_Premultiplied)
+    with QPainter(image1) as painter:
+        timeline._draw_widget(painter)
+
+    timeline.add_notch("bookmarks", Frame(50), label="Midpoint")
+    timeline.add_notch("ranges", Frame(20), end_data=Frame(80), label="Range")
+
+    bookmark_notch = next(n for n in timeline.custom_notches["bookmarks"] if n.data == Frame(50))
+    range_notch = next(n for n in timeline.custom_notches["ranges"] if n.data == Frame(20))
+
+    initial_scroll_rect = QRectF(timeline.scroll_rect)
+    assert bookmark_notch.line.x1() == 250
+    assert bookmark_notch.line.y1() == initial_scroll_rect.top()
+    assert bookmark_notch.line.y2() == initial_scroll_rect.top() + initial_scroll_rect.height() - 1
+
+    assert range_notch.line.x1() == 100
+    assert range_notch.end_line is not None
+    assert range_notch.end_line.x1() == 400
+
+    timeline.rect_f = QRectF(0, 0, 1000, 33)
+    image2 = QImage(1000, 33, QImage.Format.Format_ARGB32_Premultiplied)
+    with QPainter(image2) as painter:
+        timeline._draw_widget(painter)
+
+    new_scroll_rect = QRectF(timeline.scroll_rect)
+    assert new_scroll_rect.width() == 1000
+
+    assert bookmark_notch.line.x1() == 500
+    assert bookmark_notch.line.x2() == 500
+    assert bookmark_notch.line.y1() == new_scroll_rect.top()
+    assert bookmark_notch.line.y2() == new_scroll_rect.top() + new_scroll_rect.height() - 1
+
+    assert range_notch.line.x1() == 200
+    assert range_notch.end_line is not None
+    assert range_notch.end_line.x1() == 800
+    assert range_notch.end_line.y1() == new_scroll_rect.top()
+    assert range_notch.end_line.y2() == new_scroll_rect.top() + new_scroll_rect.height() - 1

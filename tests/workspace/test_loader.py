@@ -8,6 +8,7 @@ import pytest
 from PySide6.QtWidgets import QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
+from shiboken6 import Shiboken
 from vsengine.policy import ManagedEnvironment
 
 from vsview.app.outputs.video import VideoOutput
@@ -540,6 +541,8 @@ def test_error_recovery_lifecycle_syntax_error(
     assert isinstance(voutput, VideoOutput)
     assert voutput.vs_output.clip.num_frames == 80
     assert ws.playback.can_reload is True
+    assert ws.tbar.isEnabled() is True
+    assert ws.tbar.timeline.is_events_blocked is False
 
 
 def test_error_recovery_lifecycle_name_error(
@@ -630,3 +633,91 @@ def test_repeated_error_recovery_cycles(
         voutput = ws.outputs_manager.current_voutput
         assert isinstance(voutput, VideoOutput)
         assert voutput.vs_output.clip.num_frames == 50 + (cycle + 1) * 10
+
+
+def test_reload_content_tbar_lifecycle(
+    qtbot: QtBot,
+    vpy_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+    init_plugin_manager: PluginManager,
+    mocker: MockerFixture,
+) -> None:
+    script_file = tmp_path / "tbar_lifecycle.vpy"
+    script_file.write_text(_make_valid_script_content(length=50), encoding="utf-8")
+
+    ws = ConcreteScriptWorkspace(vpy_env_factory)
+    qtbot.addWidget(ws)
+
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.stack.currentWidget() is ws.loaded_page, timeout=3000)
+    assert fut.result() == 0
+
+    assert ws.tbar.isEnabled() is True
+    assert ws.tbar.timeline.is_events_blocked is False
+
+    spy_disable = mocker.spy(ws.tbar, "disable")
+    spy_enable = mocker.spy(ws.tbar, "enable")
+
+    # Update script file and trigger hot reload
+    script_file.write_text(_make_valid_script_content(length=60), encoding="utf-8")
+    fut_reload = ws.reload_content()
+
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.can_reload, timeout=3000)
+
+    assert fut_reload.result() == 0
+    assert spy_disable.call_count == 1
+    assert spy_enable.call_count == 1
+    assert ws.tbar.isEnabled() is True
+    assert ws.tbar.timeline.is_events_blocked is False
+
+
+def test_reload_content_failure_destroys_freeze_screenshot_and_enables_tbar(
+    qtbot: QtBot,
+    vpy_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+    init_plugin_manager: PluginManager,
+    mocker: MockerFixture,
+) -> None:
+    mocker.patch("vsview.app.error.display_error_dialog", return_value=0)
+    script_file = tmp_path / "reload_failure.vpy"
+    script_file.write_text(_make_valid_script_content(length=50), encoding="utf-8")
+
+    ws = ConcreteScriptWorkspace(vpy_env_factory)
+    qtbot.addWidget(ws)
+
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.stack.currentWidget() is ws.loaded_page, timeout=3000)
+    assert fut.result() == 0
+
+    spy_disable = mocker.spy(ws.tbar, "disable")
+    spy_enable = mocker.spy(ws.tbar, "enable")
+    spy_destroy_screenshot = mocker.spy(ws, "_destroy_freeze_screenshot")
+    spy_clear_failed = mocker.spy(ws, "clear_failed_load")
+
+    # Corrupt script with invalid syntax to force reload failure
+    script_file.write_text("invalid python code syntax (((", encoding="utf-8")
+
+    fut_reload = ws.reload_content()
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.stack.currentWidget() is ws.error_page, timeout=3000)
+
+    assert fut_reload.result() == 1
+    assert spy_disable.call_count == 1
+    assert spy_destroy_screenshot.call_count == 1
+    screenshot = spy_destroy_screenshot.call_args[0][0]
+    assert not Shiboken.isValid(screenshot)
+    assert spy_clear_failed.call_count == 1
+    assert ws.stack.currentWidget() is ws.error_page
+
+    # Verify tbar is not left permanently disabled after failed reload
+    assert ws.tbar.isEnabled() is True
+    assert ws.tbar.timeline.is_events_blocked is False
+    assert spy_enable.call_count == 1
+
+    # Fix script and recover via reload button
+    script_file.write_text(_make_valid_script_content(length=70), encoding="utf-8")
+    ws.reload_btn.click()
+    qtbot.waitUntil(lambda: ws.stack.currentWidget() is ws.loaded_page and ws.playback.can_reload, timeout=3000)
+
+    assert ws.stack.currentWidget() is ws.loaded_page
+    assert ws.tbar.isEnabled() is True
+    assert ws.tbar.timeline.is_events_blocked is False

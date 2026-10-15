@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
+from time import perf_counter_ns
 from typing import Any, NamedTuple
 from unittest.mock import MagicMock
 
 import pytest
+import vapoursynth as vs
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication
@@ -17,6 +20,8 @@ from tests.harness import HarnessPluginController
 from vsview.app.outputs import AudioBuffer, FrameBuffer
 from vsview.app.outputs.audio import AudioOutput
 from vsview.app.outputs.video import VideoOutput
+from vsview.app.packing import Packer
+from vsview.app.plugins.manager import PluginManager
 from vsview.app.views.timeline import TimelineControlBar
 from vsview.app.workspace.playback import PlaybackManager, PlaybackState
 from vsview.types import Frame, Time
@@ -499,3 +504,125 @@ def test_playback_manager_api_busy_frame_request(
     finally:
         voutput.clear()
         mock_outputs.current_voutput = None
+
+
+@pytest.mark.vpy("initial-core")
+def test_playback_manager_sar_denominator_zero(
+    playback_manager_setup: PlaybackManagerSetup,
+    plugin_controller: HarnessPluginController,
+    init_plugin_manager: PluginManager,
+    qtbot: QtBot,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manager, env, _, mock_outputs, _, _ = playback_manager_setup
+    with env.use():
+        clip = env.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=10, fpsnum=24, fpsden=1)
+        clip = env.core.std.SetFrameProps(
+            clip,
+            _Matrix=vs.MATRIX_RGB,
+            _Primaries=vs.PRIMARIES_BT709,
+            _Transfer=vs.TRANSFER_BT709,
+            _SARNum=16,
+            _SARDen=0,
+        )
+        packer = Packer()
+        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, packer)
+        voutput.prepare_video(plugin_controller.api)
+        mock_outputs.current_voutput = voutput
+
+    try:
+        with caplog.at_level(logging.WARNING), qtbot.waitSignal(manager.frameRendered, timeout=2000) as blocker:
+            assert manager.request_frame(0) is True
+
+        assert blocker.args
+        assert len(blocker.args) == 3
+        assert isinstance(blocker.args[0], QImage)
+        assert blocker.args[1] is None
+        assert isinstance(blocker.args[2], float)
+        assert blocker.args[2] == 1.0
+        assert "Frame property SARDen is equal to 0" in caplog.text
+    finally:
+        voutput.clear()
+        mock_outputs.current_voutput = None
+
+
+@pytest.mark.vpy("initial-core")
+def test_playback_manager_buffered_audio_backpressure(
+    playback_manager_setup: PlaybackManagerSetup,
+    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    mocker: MockerFixture,
+    qtbot: QtBot,
+) -> None:
+    manager, env, _, mock_outputs, _, _ = playback_manager_setup
+    aoutput = create_test_audio_output(env, 100)
+    mock_outputs.current_aoutput = aoutput
+
+    # Mock audio sink with backpressure (free bytes strictly less than bytes_per_frame)
+    mock_sink = mocker.MagicMock()
+    mock_sink.bytesFree.return_value = aoutput.bytes_per_frame - 1
+    aoutput.sink = mock_sink
+
+    audio_buffer = AudioBuffer(aoutput, env)
+    manager.state.audio_buffer = audio_buffer
+    manager.state.is_playing = True
+    manager.state.audio_frame_interval_ns = 20_000_000
+
+    target_next_time_ns = perf_counter_ns() + 100_000_000
+    manager.state.next_audio_frame_time_ns = target_next_time_ns
+
+    try:
+        manager.state.audio_timer.timeout.emit()
+        qtbot.waitUntil(lambda: manager.state.audio_timer.isActive(), timeout=2000)
+
+        # Timer was rescheduled without advancing target audio frame time
+        assert manager.state.audio_timer.isActive() is True
+        assert manager.state.next_audio_frame_time_ns == target_next_time_ns
+        mock_sink.bytesFree.assert_called()
+    finally:
+        manager.state.reset_audio()
+        aoutput.clear()
+        mock_outputs.current_aoutput = None
+
+
+@pytest.mark.vpy("initial-core")
+def test_playback_manager_buffered_audio_buffer_exhaustion(
+    playback_manager_setup: PlaybackManagerSetup,
+    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    mocker: MockerFixture,
+    qtbot: QtBot,
+) -> None:
+    manager, env, _, mock_outputs, _, _ = playback_manager_setup
+    aoutput = create_test_audio_output(env, 100)
+    mock_outputs.current_aoutput = aoutput
+
+    # Mock audio sink with sufficient space
+    mock_sink = mocker.MagicMock()
+    mock_sink.bytesFree.return_value = aoutput.bytes_per_frame + 1024
+    aoutput.sink = mock_sink
+
+    # Real AudioBuffer with no buffered frames (get_next_frame returns None)
+    audio_buffer = AudioBuffer(aoutput, env)
+    assert audio_buffer.get_next_frame() is None
+
+    manager.state.audio_buffer = audio_buffer
+    manager.state.is_playing = True
+    manager.state.audio_frame_interval_ns = 20_000_000
+
+    target_next_time_ns = 500_000_000
+    manager.state.next_audio_frame_time_ns = target_next_time_ns
+
+    # Start audio timer initially so stopping it is an observable change
+    manager.state.audio_timer.start(100)
+    assert manager.state.audio_timer.isActive() is True
+
+    try:
+        manager.state.audio_timer.timeout.emit()
+        qtbot.waitUntil(lambda: not manager.state.audio_timer.isActive(), timeout=2000)
+
+        # Timer stopped on buffer exhaustion without advancing target audio frame time
+        assert manager.state.audio_timer.isActive() is False
+        assert manager.state.next_audio_frame_time_ns == target_next_time_ns
+    finally:
+        manager.state.reset_audio()
+        aoutput.clear()
+        mock_outputs.current_aoutput = None

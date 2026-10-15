@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable, Generator
 
 import pytest
@@ -12,6 +13,7 @@ from tests.harness import HarnessPluginController
 from vsview.app.outputs.audio import AudioMetadata, AudioOutput
 from vsview.app.outputs.manager import OutputsManager
 from vsview.app.outputs.video import VideoMetadata, VideoOutput
+from vsview.app.packing import Packer
 from vsview.app.plugins import PluginAPI
 from vsview.app.plugins.manager import PluginManager
 
@@ -115,6 +117,27 @@ def test_outputs_manager_current_voutput_with_items(
 
     manager.current_video_index = 1
     assert manager.current_voutput is vouts[1]
+
+
+@pytest.mark.vpy("initial-core")
+def test_outputs_manager_current_voutput_out_of_bounds(
+    plugin_controller: HarnessPluginController,
+    manager: OutputsManager,
+    sample_video_clip: vs.VideoNode,
+) -> None:
+    tup0 = vs.VideoOutputTuple(sample_video_clip, None, 0)
+    tup1 = vs.VideoOutputTuple(sample_video_clip, None, 0)
+    vouts = manager.create_voutputs("test", {0: tup0, 1: tup1}, {}, plugin_controller.api)
+    assert len(vouts) == 2
+
+    manager.current_video_index = -1
+    assert manager.current_voutput is None
+
+    manager.current_video_index = len(vouts)
+    assert manager.current_voutput is None
+
+    manager.current_video_index = len(vouts) + 1
+    assert manager.current_voutput is None
 
 
 # create_voutputs Tests
@@ -340,3 +363,85 @@ def test_outputs_manager_clear(
     ao_clear_spy.assert_called_once()
     assert manager.voutputs == []
     assert manager.aoutputs == []
+
+
+# VideoOutput Tests
+@pytest.mark.vpy("no-core")
+def test_video_output_info_sar_denominator_zero(
+    plugin_controller: HarnessPluginController,
+    vpy_env_factory: Callable[[], ManagedEnvironment],
+) -> None:
+    env = vpy_env_factory()
+    plugin_controller.env = env
+    with env.use():
+        clip = env.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=10, fpsnum=24, fpsden=1)
+        clip = env.core.std.SetFrameProps(
+            clip,
+            _Matrix=vs.MATRIX_RGB,
+            _Primaries=vs.PRIMARIES_BT709,
+            _Transfer=vs.TRANSFER_BT709,
+            _SARNum=1,
+            _SARDen=0,
+        )
+        packer = Packer()
+        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, packer)
+        voutput.prepare_video(plugin_controller.api)
+        try:
+            voutput.prepared_clip.get_frame(0).close()
+            assert math.isnan(voutput.info.sar) is True
+        finally:
+            voutput.clear()
+
+
+@pytest.mark.vpy("unique-core")
+def test_video_output_midpoints_cfr_and_vfr() -> None:
+    # CFR clip (fps > 0 and no framedurs) has output.midpoints is None
+    cfr_clip = core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=5, fpsnum=24, fpsden=1)
+    cfr_output = VideoOutput(vs.VideoOutputTuple(cfr_clip, None, 0), 0, Packer())
+    try:
+        assert cfr_output.framedurs is None
+        assert cfr_output.vs_output.clip.fps > 0
+        assert cfr_output.midpoints is None
+    finally:
+        cfr_output.clear()
+
+    # VFR clip with framedurs (fps > 0) has output.midpoints as a valid tuple
+    durs = (0.5, 0.25, 0.5, 0.25, 0.5)
+    vfr_clip_1 = core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=len(durs), fpsnum=24, fpsden=1)
+    meta_1 = VideoMetadata(name="VFR1", framedurs=durs)
+    vfr_output_1 = VideoOutput(vs.VideoOutputTuple(vfr_clip_1, None, 0), 1, Packer(), metadata=meta_1)
+    try:
+        assert vfr_output_1.framedurs == durs
+        assert isinstance(vfr_output_1.midpoints, tuple)
+        assert vfr_output_1.midpoints == (0.25, 0.625, 1.0, 1.375)
+    finally:
+        vfr_output_1.clear()
+
+    # VFR clip with fps == 0 has output.midpoints as a valid tuple
+    vfr_clip_2 = core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=len(durs), fpsnum=0, fpsden=1)
+    meta_2 = VideoMetadata(name="VFR2", framedurs=durs)
+    vfr_output_2 = VideoOutput(vs.VideoOutputTuple(vfr_clip_2, None, 0), 2, Packer(), metadata=meta_2)
+    try:
+        assert vfr_output_2.vs_output.clip.fps == 0
+        assert isinstance(vfr_output_2.midpoints, tuple)
+        assert vfr_output_2.midpoints == (0.25, 0.625, 1.0, 1.375)
+    finally:
+        vfr_output_2.clear()
+
+
+# AudioOutput Tests
+@pytest.mark.vpy("initial-core")
+def test_audio_output_volume_before_sink_logs_warning(
+    sample_audio_node: vs.AudioNode, caplog: pytest.LogCaptureFixture
+) -> None:
+    output = AudioOutput(sample_audio_node, 0)
+    assert not hasattr(output, "sink")
+
+    try:
+        with caplog.at_level(logging.WARNING):
+            output.volume = 0.75
+
+        assert output.volume == 0.75
+        assert "No audio sink configured" in caplog.text
+    finally:
+        output.clear()

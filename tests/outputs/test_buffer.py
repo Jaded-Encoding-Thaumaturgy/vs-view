@@ -61,6 +61,20 @@ class DelegatingVideoNode:
         return fut
 
 
+class PendingVideoNode:
+    """Delegating wrapper to control completion of get_frame_async for testing."""
+
+    def __init__(self, real_node: vs.VideoNode, future: Future[vs.VideoFrame]) -> None:
+        self._real = real_node
+        self._future = future
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._real, name)
+
+    def get_frame_async(self, n: int) -> Future[vs.VideoFrame]:
+        return self._future
+
+
 class PendingAudioNode:
     """Delegating wrapper to control completion of get_frame_async for testing."""
 
@@ -397,6 +411,40 @@ def test_frame_buffer_invalidate_and_clear(video_output: VideoOutput, env: Manag
     assert fb.get_next_frame() is None
 
 
+def test_frame_buffer_clear_timeout_warning_non_blocking(
+    video_output: VideoOutput,
+    env: ManagedEnvironment,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unresolved_fut = Future[vs.VideoFrame]()
+    monkeypatch.setattr(video_output, "prepared_clip", PendingVideoNode(video_output.prepared_clip, unresolved_fut))
+
+    fb = FrameBuffer(video_output, env)
+    fb.allocate(range(2))
+
+    captured_timeout: float | None = None
+
+    def fake_wait(fs: Any, timeout: float | None = None) -> tuple[set[Any], set[Any]]:
+        nonlocal captured_timeout
+        captured_timeout = timeout
+        return set(), set(fs)
+
+    monkeypatch.setattr("vsview.app.outputs.buffer.wait", fake_wait)
+
+    with caplog.at_level(logging.WARNING):
+        fut = fb.clear()
+        assert isinstance(fut, Future)
+        result = fut.result(timeout=2.0)
+
+    assert result is None
+    assert captured_timeout == 10.0
+    assert fb.get_next_frame() is None
+    assert "Frame cleanup timed out after 10 seconds: 1 of 1 frame(s) remain pending" in caplog.text
+
+    unresolved_fut.cancel()
+
+
 # AudioBuffer Tests
 def test_audio_buffer_init(audio_output: AudioOutput, env: ManagedEnvironment) -> None:
     ab = AudioBuffer(audio_output, env)
@@ -466,10 +514,14 @@ def test_audio_buffer_get_next_frame_normal(audio_output: AudioOutput, env: Mana
     assert isinstance(frame2, vs.AudioFrame)
 
 
-def test_audio_buffer_get_next_frame_not_done(audio_output: AudioOutput, env: ManagedEnvironment) -> None:
+def test_audio_buffer_get_next_frame_not_done(
+    audio_output: AudioOutput,
+    env: ManagedEnvironment,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     raw_audio = audio_output.playback_audio
     pending_fut = Future[vs.AudioFrame]()
-    audio_output.playback_audio = PendingAudioNode(raw_audio, pending_fut)  # type: ignore[assignment]
+    monkeypatch.setattr(audio_output, "playback_audio", PendingAudioNode(raw_audio, pending_fut))
 
     ab = AudioBuffer(audio_output, env)
     ab.allocate(range(1))
@@ -521,7 +573,9 @@ def test_audio_buffer_get_next_frame_exception(
     assert "Failed to get audio frame 3" in caplog.text
 
 
-def test_audio_buffer_wait_for_first_frame(audio_output: AudioOutput, env: ManagedEnvironment) -> None:
+def test_audio_buffer_wait_for_first_frame(
+    audio_output: AudioOutput, env: ManagedEnvironment, monkeypatch: pytest.MonkeyPatch
+) -> None:
     ab = AudioBuffer(audio_output, env)
     ab.allocate(range(5))
 
@@ -548,7 +602,7 @@ def test_audio_buffer_wait_for_first_frame(audio_output: AudioOutput, env: Manag
     # Timeout case
     raw_audio = audio_output.playback_audio
     pending_fut = Future[vs.AudioFrame]()
-    audio_output.playback_audio = PendingAudioNode(raw_audio, pending_fut)  # type: ignore[assignment]
+    monkeypatch.setattr(audio_output, "playback_audio", PendingAudioNode(raw_audio, pending_fut))
 
     with env.use():
         real_frame = raw_audio.get_frame(0)
@@ -580,3 +634,37 @@ def test_audio_buffer_invalidate_and_clear(audio_output: AudioOutput, env: Manag
     assert ab.get_next_frame() is None
     ab.allocate(range(5))
     assert ab.get_next_frame() is None
+
+
+def test_audio_buffer_clear_timeout_warning_non_blocking(
+    audio_output: AudioOutput,
+    env: ManagedEnvironment,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unresolved_fut = Future[vs.AudioFrame]()
+    monkeypatch.setattr(audio_output, "playback_audio", PendingAudioNode(audio_output.playback_audio, unresolved_fut))
+
+    ab = AudioBuffer(audio_output, env)
+    ab.allocate(range(1))
+
+    captured_timeout: float | None = None
+
+    def fake_wait(fs: Any, timeout: float | None = None) -> tuple[set[Any], set[Any]]:
+        nonlocal captured_timeout
+        captured_timeout = timeout
+        return set(), set(fs)
+
+    monkeypatch.setattr("vsview.app.outputs.buffer.wait", fake_wait)
+
+    with caplog.at_level(logging.WARNING):
+        fut = ab.clear()
+        assert isinstance(fut, Future)
+        result = fut.result(timeout=2.0)
+
+    assert result is None
+    assert captured_timeout == 10.0
+    assert ab.get_next_frame() is None
+    assert "Audio cleanup timed out after 10 seconds: 1 of 1 frame(s) remain pending" in caplog.text
+
+    unresolved_fut.cancel()

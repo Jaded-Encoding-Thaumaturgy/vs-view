@@ -9,12 +9,16 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import pytest
+import vapoursynth as vs
 from jetpytools import inject_self
 from pydantic import BaseModel
+from PySide6.QtWidgets import QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
 from vsview.app.plugins import specs
+from vsview.app.plugins._controller import PluginWorkspaceController
+from vsview.app.plugins.api import NodeProcessor, PluginGraphicsView, WidgetPluginBase
 from vsview.app.plugins.manager import Notifier, PluginManager, _safe_validate, ensure_loaded
 from vsview.app.settings.action import ActionDefinition
 from vsview.app.settings.dialog import SettingsDialog
@@ -807,3 +811,77 @@ def test_plugin_manager_call_when_loaded_delegates_to_notifier(
 
     qtbot.waitUntil(lambda: called[0], timeout=2000)
     assert called[0] is True
+
+
+def test_plugin_workspace_controller_multiple_graphics_views_distinct_buffer_keys(
+    qt_event_loop: QtEventLoop, qtbot: QtBot, mocker: MockerFixture
+) -> None:
+    mock_workspace = mocker.MagicMock()
+    controller = PluginWorkspaceController(mock_workspace)
+
+    class MultiViewPlugin(QWidget):
+        identifier = "test_multi_view_plugin"
+
+    plugin_widget = MultiViewPlugin()
+    qtbot.addWidget(plugin_widget)
+
+    view1 = PluginGraphicsView(plugin_widget, controller.api)
+    view2 = PluginGraphicsView(plugin_widget, controller.api)
+    qtbot.addWidget(view1)
+    qtbot.addWidget(view2)
+
+    plugin_widget.setVisible(True)
+    view1.setVisible(True)
+    view2.setVisible(True)
+
+    node1 = mocker.MagicMock(spec=vs.VideoNode)
+    node2 = mocker.MagicMock(spec=vs.VideoNode)
+    view1.current_tab = 0
+    view2.current_tab = 0
+    view1.outputs = {0: node1}
+    view2.outputs = {0: node2}
+
+    mock_workspace.plugins = [plugin_widget]
+
+    mock_buffer = mocker.MagicMock()
+
+    controller.register_plugin_nodes_to_buffer(mock_buffer)
+
+    expected_key1 = f"test_multi_view_plugin:{id(view1)}"
+    expected_key2 = f"test_multi_view_plugin:{id(view2)}"
+
+    assert expected_key1 != expected_key2
+    assert mock_buffer.register_plugin_node.call_count == 2
+    mock_buffer.register_plugin_node.assert_any_call(expected_key1, node1)
+    mock_buffer.register_plugin_node.assert_any_call(expected_key2, node2)
+
+
+def test_plugin_base_meta_ignores_none_scope_on_tuple_length_mismatch() -> None:
+    class DummyGlobalModel(BaseModel):
+        flag: bool = True
+
+    class DummyLocalModel(BaseModel):
+        count: int = 42
+
+    class ExtraType: ...
+
+    class TriGenericWidgetPlugin[G: DummyGlobalModel, L: DummyLocalModel, E](WidgetPluginBase[G, L]):
+        __plugin_base__ = True
+
+    class ConcretePlugin(TriGenericWidgetPlugin[DummyGlobalModel, DummyLocalModel, ExtraType]):
+        identifier = "concrete_plugin"
+
+    assert ConcretePlugin.global_settings_model is DummyGlobalModel
+    assert ConcretePlugin.local_settings_model is DummyLocalModel
+    assert hasattr(ConcretePlugin, "None_settings_model") is False
+
+    class QuadGenericNodeProcessor[N: vs.VideoNode, G: DummyGlobalModel, L: DummyLocalModel, E](NodeProcessor[N, G, L]):
+        __plugin_base__ = True
+
+    class ConcreteQuadNodeProcessor(
+        QuadGenericNodeProcessor[vs.VideoNode, DummyGlobalModel, DummyLocalModel, ExtraType]
+    ): ...
+
+    assert ConcreteQuadNodeProcessor.global_settings_model is DummyGlobalModel
+    assert ConcreteQuadNodeProcessor.local_settings_model is DummyLocalModel
+    assert hasattr(ConcreteQuadNodeProcessor, "None_settings_model") is False

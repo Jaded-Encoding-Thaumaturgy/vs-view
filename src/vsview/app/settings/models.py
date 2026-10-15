@@ -10,7 +10,7 @@ from datetime import time, timedelta
 from logging import getLogger
 from operator import attrgetter
 from pathlib import Path
-from typing import Annotated, Any, Literal, NamedTuple, override
+from typing import Annotated, Any, Generic, Literal, NamedTuple, TypeVar, override
 
 import vapoursynth as vs
 from jetpytools import SPath, classproperty
@@ -48,17 +48,25 @@ from .metadata import (
     WidgetTimeEdit,
 )
 
+if sys.version_info >= (3, 13):
+    QWidgetT = TypeVar("QWidgetT", bound=QWidget, default=QWidget)
+else:
+    import typing_extensions
+
+    QWidgetT = typing_extensions.TypeVar("QWidgetT", bound=QWidget, default=QWidget)
+
+
 logger = getLogger(__name__)
 
 
-class SettingEntry(NamedTuple):
+class SettingEntry(NamedTuple, Generic[QWidgetT]):
     """A setting field with its key path, section, and metadata."""
 
     key: str
     """Dotted path to the setting (e.g., 'timeline.mode')."""
     section: str
     """UI section name (e.g., 'Timeline')."""
-    metadata: WidgetMetadata[QWidget]
+    metadata: WidgetMetadata[QWidgetT]
     """Widget metadata for this setting."""
 
 

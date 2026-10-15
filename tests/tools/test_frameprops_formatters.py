@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 import vapoursynth as vs
 
+from vsview.app.tools.frameprops.categories import CategoryMatcher, CategoryRegistry
 from vsview.app.tools.frameprops.formatters import CustomEllipsis, FormatterProperty, FormatterRegistry
 
 pytestmark = [pytest.mark.unit]
@@ -204,3 +205,57 @@ def test_formatter_registry_format_value(isolate_formatter_registry: None) -> No
     assert FormatterRegistry.format_value("unknown_int", 42) == "42"
     assert FormatterRegistry.format_value("unknown_float", 1.2345678) == f"{1.2345678:.6g}"
     assert FormatterRegistry.format_value("unknown_bytes", b"bytes") == "bytes"
+
+
+def test_category_registry_register_deduplication_and_priority(isolate_category_registry: None) -> None:
+    # Arrange 1: Two categories matching the same prefix with different priorities
+    m_metrics = CategoryMatcher(name="Metrics", priority=10, prefixes={"psnr_"}, order=1)
+    m_quality = CategoryMatcher(name="Quality", priority=20, prefixes={"psnr_"}, order=2)
+
+    # Act 1: Register initial matchers
+    CategoryRegistry.register(m_metrics, m_quality)
+
+    # Assert 1: Quality takes precedence due to priority 20 > 10
+    assert CategoryRegistry.get_category("psnr_y") == "Quality"
+    assert CategoryRegistry.get_category_order("Quality") == 2
+    assert CategoryRegistry.get_category_order("Metrics") == 1
+
+    # Act 2: Re-register "Metrics" with the same name, boosted priority 30, and order 0 (deduplication)
+    m_metrics_boosted = CategoryMatcher(name="Metrics", priority=30, prefixes={"psnr_"}, order=0)
+    CategoryRegistry.register(m_metrics_boosted)
+
+    # Assert 2: Deduplication kept only the latest "Metrics" entry; priority 30 > 20 now wins
+    assert CategoryRegistry.get_category("psnr_y") == "Metrics"
+    assert CategoryRegistry.get_category_order("Metrics") == 0
+
+    # Act 3: Re-register "Metrics" with same name but new prefixes, verifying the old match was replaced
+    m_metrics_ssim = CategoryMatcher(name="Metrics", priority=50, prefixes={"ssim_"}, order=5)
+    CategoryRegistry.register(m_metrics_ssim)
+
+    # Assert 3: Old "Metrics" pattern for "psnr_" no longer exists; Quality (priority 20) now matches "psnr_y"
+    assert CategoryRegistry.get_category("psnr_y") == "Quality"
+    assert CategoryRegistry.get_category("ssim_y") == "Metrics"
+    assert CategoryRegistry.get_category_order("Metrics") == 5
+
+    # Arrange 2: Multiple matchers registered in arbitrary priority order
+    c1 = CategoryMatcher(name="Cat1", priority=5, exact_matches={"key_target"})
+    c2 = CategoryMatcher(name="Cat2", priority=25, exact_matches={"key_target"})
+    c3 = CategoryMatcher(name="Cat3", priority=15, exact_matches={"key_target"})
+
+    # Act 4: Register iterable batch [c1, c2, c3]
+    CategoryRegistry.register([c1, c2, c3])
+
+    # Assert 4: Cat2 has highest priority (25), so it wins
+    assert CategoryRegistry.get_category("key_target") == "Cat2"
+
+    # Act 5: Boost Cat1 to priority 40
+    CategoryRegistry.register(CategoryMatcher(name="Cat1", priority=40, exact_matches={"key_target"}))
+    assert CategoryRegistry.get_category("key_target") == "Cat1"
+
+    # Act 6: Demote Cat1 to priority 1
+    CategoryRegistry.register(CategoryMatcher(name="Cat1", priority=1, exact_matches={"key_target"}))
+    assert CategoryRegistry.get_category("key_target") == "Cat2"
+
+    # Assert 5: Fallback for unmatched keys and unknown category order
+    assert CategoryRegistry.get_category("unmatched_key") == CategoryRegistry.default_category
+    assert CategoryRegistry.get_category_order("UnknownCategory") == 999

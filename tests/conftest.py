@@ -24,6 +24,7 @@ from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.manager import SettingsManager, SettingsSignals
 from vsview.app.settings.models import GlobalSettings
 from vsview.app.settings.secrets import SecretsManager
+from vsview.app.tools.frameprops.categories import CategoryRegistry
 from vsview.app.tools.frameprops.formatters import FormatterRegistry
 from vsview.app.utils import path_to_hash
 from vsview.vsenv.loop import QtEventLoop
@@ -271,3 +272,17 @@ def isolate_formatter_registry() -> Generator[None]:
         registry._order.clear()
         registry._order.update(orig_order)
         registry._next_order = orig_next_order
+
+
+# Category Registry Isolation
+@pytest.fixture
+def isolate_category_registry() -> Generator[None]:
+    """Isolate CategoryRegistry singleton between tests."""
+    registry = CategoryRegistry()
+    orig_matchers = registry._matchers.copy()
+    try:
+        registry._matchers.clear()
+        yield
+    finally:
+        registry._matchers.clear()
+        registry._matchers.extend(orig_matchers)

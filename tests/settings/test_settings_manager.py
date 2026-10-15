@@ -9,8 +9,18 @@ import pytest
 from jetpytools import CustomTypeError
 from PySide6.QtGui import QKeySequence
 
+from vsview.app.plugins.manager import PluginManager
+from vsview.app.settings.dialog import SettingsDialog
 from vsview.app.settings.manager import SettingsManager, SettingsSignals
-from vsview.app.settings.models import GlobalSettings, LocalSettings, ShortcutConfig
+from vsview.app.settings.metadata import LineEdit
+from vsview.app.settings.models import (
+    GlobalSettings,
+    LocalSettings,
+    SettingEntry,
+    ShortcutConfig,
+    ViewSettings,
+    extract_settings,
+)
 from vsview.app.utils import path_to_hash
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
@@ -306,3 +316,39 @@ def test_settings_manager_noop_mode(
     assert loc_path.exists() is False
     # But in-memory dictionary is updated
     assert noop_sm.get_local_settings(script).last_frame == 999
+
+
+@pytest.mark.parametrize(
+    ("input_factors", "expected_factors"),
+    [
+        ([-1.0, 0, 2.0], [2.0]),
+        ([], [1.0]),
+        ([-5.0, -1.0, 0.0], [1.0]),
+        ([3.0, 0.5, -2.0, 1.0], [0.5, 1.0, 3.0]),
+    ],
+)
+def test_view_settings_zoom_factors_validator(input_factors: list[float], expected_factors: list[float]) -> None:
+    settings = ViewSettings(zoom_factors=input_factors)
+    assert settings.zoom_factors == expected_factors
+
+
+def test_settings_dialog_global_settings_registry_dynamic_combination(monkeypatch: pytest.MonkeyPatch) -> None:
+    core_entries = extract_settings(GlobalSettings)
+    dummy_entry1 = SettingEntry("plugins.plugin_a.option1", "Plugin - Plugin A", metadata=LineEdit(label="Option 1"))
+    dummy_entry2 = SettingEntry("plugins.plugin_b.option2", "Plugin - Plugin B", metadata=LineEdit(label="Option 2"))
+
+    # First state: overwrite the property on the class with a list
+    monkeypatch.setattr(PluginManager, "plugin_global_settings", [dummy_entry1])
+
+    registry1 = SettingsDialog.global_settings_registry
+    assert len(registry1) == len(core_entries) + 1
+    assert registry1[: len(core_entries)] == core_entries
+    assert registry1[-1] == dummy_entry1
+
+    # Second state: update the attribute directly
+    monkeypatch.setattr(PluginManager, "plugin_global_settings", [dummy_entry1, dummy_entry2])
+
+    registry2 = SettingsDialog.global_settings_registry
+    assert len(registry2) == len(core_entries) + 2
+    assert registry2[: len(core_entries)] == core_entries
+    assert registry2[len(core_entries) :] == [dummy_entry1, dummy_entry2]

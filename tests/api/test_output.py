@@ -404,6 +404,42 @@ def test_catch_output_multiple_nodes_returned(mock_vsview_script: Path) -> None:
     assert outputs[3].clip == results[1]
 
 
+def test_catch_output_multiple_unnamed_functions_preserves_independent_names(
+    mock_vsview_script: Path,
+) -> None:
+    @catch_output
+    def source_stream() -> vs.VideoNode:
+        return core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=5)
+
+    @catch_output
+    def filtered_stream() -> vs.VideoNode:
+        return core.std.BlankClip(format=vs.RGB24, width=32, height=32, length=5)
+
+    @catch_output(hdr=True)
+    def encoded_stream() -> vs.VideoNode:
+        return core.std.BlankClip(format=vs.YUV420P10, width=3840, height=2160, length=5)
+
+    source_clip = source_stream()
+    filtered_clip = filtered_stream()
+    encoded_clip = encoded_stream()
+
+    outputs = vs.get_outputs()
+    assert len(outputs) == 3
+    assert outputs[0].clip == source_clip
+    assert outputs[1].clip == filtered_clip
+    assert outputs[2].clip == encoded_clip
+
+    meta0 = get_output(0)
+    meta1 = get_output(1)
+    meta2 = get_output(2)
+
+    assert meta0.name == "source_stream"
+    assert meta1.name == "filtered_stream"
+    assert meta2.name == "encoded_stream"
+    assert isinstance(meta2, VideoMetadata)
+    assert meta2.hdr is True
+
+
 # get_output & get_outputs Tests
 def test_get_output_without_vsview_module_raises() -> None:
     with pytest.raises(
