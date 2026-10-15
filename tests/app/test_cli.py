@@ -347,6 +347,40 @@ class TestMainCommandRouting:
         mock_window.load_new_script.assert_called_once_with(script, bitdepth="10")
         mock_window.load_new_file.assert_not_called()
 
+    def test_cli_dispatch_uppercase_script_file(
+        self,
+        mock_gui_components: tuple[MagicMock, MagicMock],
+        tmp_path: Path,
+    ) -> None:
+        _, mock_window = mock_gui_components
+        script = tmp_path / "video.VPY"
+        script.write_text("import vapoursynth as vs", encoding="utf-8")
+
+        with pytest.raises(SystemExit, match=r"^0$"):
+            app([str(script), "--no-default-workspace"], exit_on_error=False)
+
+        mock_window.load_new_script.assert_called_once_with(script)
+        mock_window.load_new_file.assert_not_called()
+
+    def test_cli_dispatch_qt_arg_passes_to_application(
+        self,
+        mock_gui_components: tuple[MagicMock, MagicMock],
+        mocker: MockerFixture,
+    ) -> None:
+        mock_app_cls = mocker.patch("vsview.app.main.Application")
+        mock_app = MagicMock()
+        mock_app.exit.return_value = 0
+        mock_app.exec.return_value = 0
+        mock_app_cls.return_value = mock_app
+
+        with pytest.raises(SystemExit, match=r"^0$"):
+            app(["-q", '--style "Fusion"', "--no-default-workspace"], exit_on_error=False)
+
+        mock_app_cls.assert_called_once()
+        call_args = mock_app_cls.call_args[0][0]
+        assert "--style" in call_args
+        assert "Fusion" in call_args
+
     def test_cli_dispatch_media_file(self, mock_gui_components: tuple[MagicMock, MagicMock], tmp_path: Path) -> None:
         _, mock_window = mock_gui_components
         media = tmp_path / "movie.mkv"
