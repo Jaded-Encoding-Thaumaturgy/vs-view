@@ -124,8 +124,8 @@ class Application(QApplication):
             self.styleHints().unsetColorScheme()
 
         # Custom style sheet
-        if sheet := SettingsManager.global_settings.appearance.custom_stylesheet:
-            self.setStyleSheet(Path(sheet).read_text())
+        if stylesheet := self.read_custom_stylesheet():
+            self.setStyleSheet(stylesheet)
 
         SettingsManager.signals.globalChanged.connect(self._on_global_settings_changed)
 
@@ -149,13 +149,10 @@ class Application(QApplication):
             self.styleHints().setColorScheme(theme)
             refresh_widgets = True
 
-        if (  # nofmt
-            (stylesheet_path := SettingsManager.global_settings.appearance.custom_stylesheet)
-            and (stylesheet := Path(stylesheet_path).read_text()) != self.styleSheet()
-        ):
+        if (stylesheet := self.read_custom_stylesheet()) != self.styleSheet():
             self.setStyleSheet(stylesheet)
             refresh_widgets = True
-        elif not stylesheet_path and self.styleSheet() != "":
+        elif not stylesheet and self.styleSheet() != "":
             self.setStyleSheet("")
             refresh_widgets = True
 
@@ -167,6 +164,19 @@ class Application(QApplication):
                 style.polish(widget)
                 widget.ensurePolished()
                 widget.update()
+
+    def read_custom_stylesheet(self) -> str:
+        if ss := SettingsManager.global_settings.appearance.custom_stylesheet:
+            if not (sheet := Path(ss)).is_file():
+                logger.warning("The custom stylesheet path isn't a valid file.")
+            else:
+                try:
+                    stylesheet = sheet.read_text(encoding="utf-8")
+                except OSError as e:
+                    logger.warning("Failed to open the custom stylesheet with the error message: %s", e)
+                else:
+                    return stylesheet
+        return ""
 
     @staticmethod
     @run_in_background(name="WarmupCJK")
