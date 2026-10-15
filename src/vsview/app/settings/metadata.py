@@ -267,6 +267,8 @@ class Checkbox(WidgetMetadata[QCheckBox]):
 class LineEdit(WidgetMetadata[QLineEdit]):
     """LineEdit widget metadata."""
 
+    default_value: Any = field(default=None, kw_only=True)
+
     @override
     def create_widget(self, parent: QWidget | None = None) -> QLineEdit:
         return QLineEdit(parent)
@@ -279,7 +281,7 @@ class LineEdit(WidgetMetadata[QLineEdit]):
     @override
     def get_value(self, widget: QLineEdit) -> Any:
         with self.apply_transform(widget.text(), self.from_ui) as value:
-            return value
+            return self.default_value if not value and self.default_value is not None else value
 
 
 @dataclass(frozen=True, slots=True)
