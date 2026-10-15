@@ -220,6 +220,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.scenes_model.sceneDisplayModified.connect(self._refresh_scene_on_timeline)
         self.scenes_model.sceneColorModified.connect(self._refresh_scene_on_timeline)
         self.scenes_model.sceneCheckOutputsModified.connect(self._refresh_scene_on_timeline)
+        self.scenes_model.sceneRemoved.connect(self._on_scene_removed)
         self.scenes_delegate = SceneTableDelegate(self.output_map, self.scenes_container)
 
         self.scenes_view = QTableView(self.scenes_container, showGrid=False)
@@ -751,7 +752,12 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.range_start_action.setChecked(False)
         self.range_end_action.setChecked(False)
 
-        self.api.timeline.add_notch(scene.notch_id, [r.to_tuple()], scene.color, r.label, r.id)
+        if scene.display and (not scene.checked_outputs or self.api.current_voutput.vs_index in scene.checked_outputs):
+            self.api.timeline.add_notch(scene.notch_id, [r.to_tuple()], scene.color, r.label, r.id)
+
+    @Slot(object)
+    def _on_scene_removed(self, scene: SceneRow) -> None:
+        self.api.timeline.clear_notches(scene.notch_id, update=True)
 
     @Slot()
     def _persist_scenes(self) -> None:
@@ -775,7 +781,8 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
     @Slot(object, object)
     def _refresh_range_on_timeline(self, r: RangeFrame | RangeTime, scene: SceneRow, *, update: bool = True) -> None:
         self.api.timeline.discard_notch(scene.notch_id, [r.to_tuple()], r.id, update=False)
-        self.api.timeline.add_notch(scene.notch_id, [r.to_tuple()], scene.color, r.label, r.id, update=False)
+        if scene.display and (not scene.checked_outputs or self.api.current_voutput.vs_index in scene.checked_outputs):
+            self.api.timeline.add_notch(scene.notch_id, [r.to_tuple()], scene.color, r.label, r.id, update=False)
 
         if update:
             self.api.timeline.update()

@@ -6,7 +6,7 @@ from datetime import timedelta
 from enum import IntEnum
 from typing import Any, Self, override
 
-from jetpytools import cachedproperty, to_arr
+from jetpytools import cachedproperty
 from PySide6.QtCore import (
     QAbstractItemModel,
     QEvent,
@@ -71,6 +71,7 @@ class SceneTableModel(AbstractTableModel):
 
     SceneRowRole = Qt.ItemDataRole.UserRole + 1
     scenesModified = Signal()
+    sceneRemoved = Signal(SceneRow)
     sceneDisplayModified = Signal(SceneRow)
     sceneColorModified = Signal(SceneRow)
     sceneCheckOutputsModified = Signal(SceneRow)
@@ -203,16 +204,19 @@ class SceneTableModel(AbstractTableModel):
         return self.index(row, 0)
 
     def remove_scene(self, row: int | Sequence[int]) -> None:
-        if isinstance(row, Sequence):
-            start, end = min(row), max(row)
-        else:
-            start, end = row, row
+        rows = [row] if isinstance(row, int) else sorted(set(row), reverse=True)
 
-        with self.remove_rows(start, end):
-            for r in to_arr(row):
-                self.scenes.pop(r)
+        removed_scenes = list[SceneRow]()
+        for r in rows:
+            if 0 <= r < len(self.scenes):
+                with self.remove_rows(r, r):
+                    removed_scenes.append(self.scenes.pop(r))
 
-        self.scenesModified.emit()
+        for scene in removed_scenes:
+            self.sceneRemoved.emit(scene)
+
+        if removed_scenes:
+            self.scenesModified.emit()
 
 
 class SceneTableDelegate(QStyledItemDelegate):
