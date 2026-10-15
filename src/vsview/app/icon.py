@@ -181,7 +181,7 @@ class IconReloadMixin:
                 cb()
             except RuntimeError:
                 self._custom_callbacks.remove(cb)
-                logger.log(DEBUG - 1, "%r callback failed to reload icon. Removed it.")
+                logger.log(DEBUG - 1, "%r callback failed to reload icon. Removed it.", cb)
 
     @staticmethod
     def make_icon(
