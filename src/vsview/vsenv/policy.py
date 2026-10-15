@@ -4,6 +4,7 @@ from collections.abc import Callable
 from logging import DEBUG, ERROR, FATAL, INFO, WARNING, getLogger
 from typing import override
 
+from jetpytools import fallback
 from vapoursynth import (
     DISABLE_LIBRARY_UNLOADING,
     ENABLE_GRAPH_INSPECTION,
@@ -26,7 +27,7 @@ class CustomPolicy(Policy):
     def new_environment(self, flags_creation: int | None = None, *, set_logger: bool = True) -> ManagedEnvironment:
         _logger.debug("Creating new VS environment")
 
-        data = self.api.create_environment(self.flags_creation)
+        data = self.api.create_environment(fallback(flags_creation, self.flags_creation))
 
         if set_logger:
             _logger.debug("Creating log handler for environment %r", data)
