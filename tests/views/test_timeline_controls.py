@@ -464,9 +464,9 @@ def test_timeline_block_events_and_reset_interaction(timeline_control_bar: Timel
     assert timeline.mousepressed is False
     assert timeline.hover_x is None
 
-    # Context manager block_events
-    with timeline.block_events():
-        assert timeline.is_events_blocked is True
+    timeline.reset_interaction()
+    timeline.is_events_blocked = True
+    try:
         # Mouse event during block is ignored
         dummy_event = QMouseEvent(
             QEvent.Type.MouseButtonPress,
@@ -478,8 +478,8 @@ def test_timeline_block_events_and_reset_interaction(timeline_control_bar: Timel
         )
         timeline.mousePressEvent(dummy_event)
         assert timeline.mousepressed is False
-
-    assert timeline.is_events_blocked is False
+    finally:
+        timeline.is_events_blocked = False
 
 
 # PlaybackContainer Tests
@@ -858,9 +858,12 @@ def test_timeline_control_bar_disabled_context_manager(
 ) -> None:
     bar = timeline_control_bar
 
-    with bar.disabled():
+    bar.disable()
+    try:
         assert bar.isEnabled() is False
         assert bar.timeline.is_events_blocked is True
+    finally:
+        bar.enable()
 
     assert bar.isEnabled() is True
     assert bar.timeline.is_events_blocked is False

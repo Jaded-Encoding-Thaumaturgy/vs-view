@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from collections.abc import Generator, Hashable, Sequence
-from contextlib import contextmanager
+from collections.abc import Hashable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import cache
@@ -65,7 +64,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QWidgetAction,
 )
-from vsengine.loops import get_loop
 
 from ...assets import IconName
 from ...types import Frame, Time
@@ -1013,16 +1011,6 @@ class Timeline(QWidget):
         self.hover_popup.hide()
         self.update()
 
-    @contextmanager
-    def block_events(self) -> Generator[None]:
-        self.reset_interaction()
-        self.is_events_blocked = True
-
-        try:
-            yield
-        finally:
-            self.is_events_blocked = False
-
     def _init_notches_cache(self) -> dict[Literal["frame", "time"], Notch.CacheEntry[Any]]:
         return {
             "frame": Notch.CacheEntry(Notch.CacheKey(QRectF(), -1), Notch.CacheValue(QRectF(), [], [])),
@@ -1781,27 +1769,16 @@ class TimelineControlBar(QWidget):
         self.playback_container.time_edit.setEnabled(enabled)
         self.playback_container.frame_edit.setEnabled(enabled)
 
-    @contextmanager
-    def disabled(self) -> Generator[None]:
-        """
-        Context manager to disable the control bar and block timeline events.
+    @run_in_loop(return_future=False)
+    def disable(self) -> None:
+        """Disable the control bar and block timeline events."""
+        self.timeline.hover_popup.hide()
+        self.setEnabled(False)
+        self.timeline.reset_interaction()
+        self.timeline.is_events_blocked = True
 
-        Disables the widget, blocks mouse events on the timeline, and re-enables on exit.
-        If an exception occurs, the toolbar stays disabled.
-
-        Use for single-frame renders, not for continuous playback (use set_playback_controls_enabled instead).
-        """
-        loop = get_loop()
-
-        @run_in_loop(return_future=False)
-        def disable() -> None:
-            self.timeline.hover_popup.hide()
-            self.setEnabled(False)
-
-        disable()
-
-        # Keep toolbar disabled on error
-        with self.timeline.block_events():
-            yield
-
-        loop.from_thread(self.setEnabled, True).result()
+    @run_in_loop(return_future=False)
+    def enable(self) -> None:
+        """Enable the control bar and timeline events."""
+        self.timeline.is_events_blocked = False
+        self.setEnabled(True)

@@ -398,7 +398,10 @@ class LoaderWorkspace[T](BaseWorkspace):
         mmm = measure_memory() if is_debug else nullcontext()
         mmm.__enter__()
 
-        with self.tbar.disabled(), self.freeze_viewport():
+        screenshot = self._create_freeze_screenshot()
+        self.tbar.disable()
+
+        try:
             self.tab_manager.disable_switch = True
             self.playback.state.wait_for_cleanup(
                 0.25,
@@ -430,7 +433,9 @@ class LoaderWorkspace[T](BaseWorkspace):
             outputs = self._get_outputs()
 
             if not outputs:
+                self._destroy_freeze_screenshot(screenshot)
                 self.clear_failed_load()
+                mmm.__exit__(None, None, None)
                 return 1
 
             voutputs, aoutputs = outputs
@@ -445,7 +450,9 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             @run_in_loop(return_future=False)
             def on_complete(f: Future[int]) -> None:
-                if f.exception():
+                self._destroy_freeze_screenshot(screenshot)
+                mmm.__exit__(None, None, None)
+                if f.exception() or f.result() != 0:
                     logger.error("Failed to reload content: %r", self.content)
                     self.clear_failed_load()
                     return
@@ -455,14 +462,18 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.playback.can_reload = True
                 self.tab_manager.disable_switch = False
                 self._is_failed = False
+                self.tbar.enable()
 
                 logger.info("Content reloaded successfully: %r", self.content)
-                mmm.__exit__(None, None, None)
                 self.on_content_reloaded()
 
             self._on_tab_changed(current_tab_i, seamless=True, cb_render=on_complete, refresh_plugins=True)
 
             return 0
+        except Exception:
+            self._destroy_freeze_screenshot(screenshot)
+            mmm.__exit__(None, None, None)
+            raise
 
     @run_in_loop(return_future=False)
     def _capture_reload_ui_state(self) -> tuple[ViewState, int, bool]:
@@ -499,29 +510,22 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         return resolved_index
 
-    @contextmanager
-    def freeze_viewport(self) -> Generator[None]:
-        @run_in_loop(return_future=False)
-        def show_screenshot() -> QLabel:
-            viewport = self.tab_manager.current_view.viewport()
+    @run_in_loop(return_future=False)
+    def _create_freeze_screenshot(self) -> QLabel:
+        viewport = self.tab_manager.current_view.viewport()
+        screenshot = QLabel(self)
+        screenshot.setPixmap(viewport.grab())  # Grab just the viewport, no frame/scrollbars
 
-            screenshot = QLabel(self)
-            screenshot.setPixmap(viewport.grab())  # Grab just the viewport, no frame/scrollbars
+        pos = viewport.mapTo(self, viewport.rect().topLeft())
+        screenshot.setGeometry(pos.x(), pos.y(), viewport.width(), viewport.height())
+        screenshot.raise_()
+        screenshot.show()
+        return screenshot
 
-            pos = viewport.mapTo(self, viewport.rect().topLeft())
-            screenshot.setGeometry(pos.x(), pos.y(), viewport.width(), viewport.height())
-            screenshot.raise_()
-            screenshot.show()
-            return screenshot
-
-        screenshot = show_screenshot()
-
-        try:
-            yield
-        finally:
-            self.loop.from_thread(screenshot.setVisible, False)
-            self.loop.from_thread(screenshot.deleteLater)
-            del screenshot
+    @run_in_loop(return_future=False)
+    def _destroy_freeze_screenshot(self, screenshot: QLabel) -> None:
+        screenshot.setVisible(False)
+        screenshot.deleteLater()
 
     @run_in_loop(return_future=False)
     def clear_failed_load(self) -> None:
@@ -539,6 +543,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         self.statusLoadingErrored.emit("Error while loading content")
         self.set_error_page()
+        self.tbar.enable()
         gc.collect()
 
         self._is_failed = True
@@ -689,10 +694,15 @@ class LoaderWorkspace[T](BaseWorkspace):
                     cb_render(f)
 
             logger.debug("Requesting frame %d", target_frame)
-            self.playback.request_frame(target_frame, on_complete, notify_plugins=False)
-        else:
-            with self.env.use():
-                self.plugin_controller.on_current_voutput_changed(refresh_plugins)
+            return self.playback.request_frame(target_frame, on_complete, notify_plugins=False)
+
+        with self.env.use():
+            self.plugin_controller.on_current_voutput_changed(refresh_plugins)
+
+        if cb_render:
+            f = Future[int]()
+            f.set_result(0)
+            cb_render(f)
 
         return True
 
