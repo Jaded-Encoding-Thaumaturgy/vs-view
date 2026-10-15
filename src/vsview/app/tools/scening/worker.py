@@ -202,7 +202,7 @@ class ExportQueueManager:
                 "-s",
                 f"{clip.width}x{clip.height}",
                 "-r",
-                f"{clip.fps_num}/{clip.fps_den}",
+                f"{clip.fps_num}/{clip.fps_den}" if clip.fps_num > 0 else "25",
                 "-i",
                 "-",
             ]
@@ -234,7 +234,7 @@ class ExportQueueManager:
                 for idx, frame in enumerate(vsengine.video.frames(clip, prefetch=2)):
                     if job.cancel_event.is_set():
                         raise Cancelled
-                    if (i := idx + 1) % round(clip.fps) == 0 or i == total:
+                    if (i := idx + 1) % max(1, round(clip.fps)) == 0 or i == total:
                         logger.debug("Exporting %s %s/%s", destination_file.name, i, total)
 
                     if is_y4m:
