@@ -269,10 +269,7 @@ def main(
             case "darwin":
                 QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.Metal)
 
-    app = Application(
-        [sys.argv[0], *chain.from_iterable(shlex.split(q) for q in qt_arg)],
-        no_settings=no_settings,
-    )
+    app = Application([sys.argv[0], *qt_arg], no_settings=no_settings)
 
     PluginManager.load()
     load_fonts()
