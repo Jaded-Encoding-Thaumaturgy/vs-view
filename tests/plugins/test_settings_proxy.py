@@ -254,7 +254,7 @@ def test_proxy_nested_model_update(mocker: MockerFixture) -> None:
 
     assert model.nest.nest_attr == "new_nest_value"
     on_update.assert_called_once()
-    on_update.assert_called_once_with("nest", model.nest)
+    on_update.assert_called_once_with("nest.nest_attr", "new_nest_value")
 
 
 def test_proxy_deeply_nested_model_update(mocker: MockerFixture) -> None:
@@ -265,4 +265,51 @@ def test_proxy_deeply_nested_model_update(mocker: MockerFixture) -> None:
     proxy.l2.l3.val = 42
 
     assert model.l2.l3.val == 42
-    on_update.assert_called_once_with("l2", model.l2)
+    on_update.assert_called_once_with("l2.l3.val", 42)
+
+
+def test_store_nested_local_settings_inheritance(tmp_path: Path, mocker: MockerFixture) -> None:
+    class SubModel(BaseModel):
+        opacity: float | None = None
+        color: str | None = None
+
+    class NestedLocalSettings(LocalSettingsModel):
+        visual: SubModel = SubModel()
+
+    class NestedGlobalSettings(BaseModel):
+        visual: SubModel = SubModel(opacity=1.0, color="red")
+
+    plugin = mocker.MagicMock()
+    plugin.identifier = "nested_plugin"
+    plugin.global_settings_model = NestedGlobalSettings
+    plugin.local_settings_model = NestedLocalSettings
+
+    test_file = tmp_path / "test_nested.vpy"
+    store = _PluginSettingsStore(lambda: test_file)
+
+    SettingsManager.global_settings.plugins["nested_plugin"] = {"visual": {"opacity": 1.0, "color": "red"}}
+    SettingsManager.get_local_settings(test_file).plugins["nested_plugin"] = {}
+
+    proxy = store.get_proxy(plugin, "local")
+    assert proxy is not None
+    assert proxy.visual.opacity == 1.0
+    assert proxy.visual.color == "red"
+
+    # Mutate only opacity in local settings
+    proxy.visual.opacity = 0.5
+
+    # Verify raw local settings only has opacity set, color remains None
+    raw_local = SettingsManager.get_local_settings(test_file).plugins["nested_plugin"]
+    raw_dict = raw_local if isinstance(raw_local, dict) else raw_local.model_dump()
+    assert raw_dict["visual"]["opacity"] == 0.5
+    assert raw_dict["visual"]["color"] is None
+
+    # Update global color to "blue", local proxy should reflect inherited global change
+    SettingsManager.global_settings.plugins["nested_plugin"] = {"visual": {"opacity": 1.0, "color": "blue"}}
+    store.invalidate("global")
+    store.invalidate("local")
+
+    fresh_local = store.get(plugin, "local")
+    assert isinstance(fresh_local, NestedLocalSettings)
+    assert fresh_local.visual.opacity == 0.5
+    assert fresh_local.visual.color == "blue"

@@ -8,7 +8,18 @@ import sys
 import threading
 import weakref
 from collections import OrderedDict, UserDict
-from collections.abc import Callable, Container, Generator, ItemsView, Iterator, KeysView, MutableSet, Sized, ValuesView
+from collections.abc import (
+    Callable,
+    Container,
+    Generator,
+    ItemsView,
+    Iterator,
+    KeysView,
+    Mapping,
+    MutableSet,
+    Sized,
+    ValuesView,
+)
 from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import DEBUG, getLogger
@@ -536,3 +547,17 @@ class QObjectCounter[T: QObject](Container[T], Sized):
             self._counts[value] = count
 
             return count
+
+
+def deepmerge(source: Mapping[Any, Any], destination: dict[Any, Any]) -> dict[Any, Any]:
+    for key, value in source.items():
+        if isinstance(value, dict):
+            # Ensure destination[key] is actually a dict before recursing
+            node = destination.get(key)
+            if not isinstance(node, dict):
+                node = destination[key] = {}
+            deepmerge(value, node)
+        else:
+            destination[key] = value
+
+    return destination

@@ -38,15 +38,24 @@ class _SettingsProxy[T: BaseModel]:
     Reads are delegated transparently to the underlying model.
     """
 
-    __slots__ = ("_model", "_on_update")
+    __slots__ = ("_model", "_on_update", "_path")
 
-    def __init__(self, model: T, on_update: Callable[[str, Any], None]) -> None:
+    if TYPE_CHECKING:
+        _model: T
+        _on_update: Callable[[str, Any], None]
+        _path: str
+
+    def __init__(self, model: T, on_update: Callable[[str, Any], None], path: str = "") -> None:
         object.__setattr__(self, "_model", model)
         object.__setattr__(self, "_on_update", on_update)
+        object.__setattr__(self, "_path", path)
 
     def __getattr__(self, name: str) -> Any:
         attr = getattr(self._model, name)
-        return _SettingsProxy(attr, lambda _, __: self._on_update(name, attr)) if isinstance(attr, BaseModel) else attr
+        if isinstance(attr, BaseModel):
+            sub_path = f"{self._path}.{name}" if self._path else name
+            return _SettingsProxy(attr, self._on_update, sub_path)
+        return attr
 
     @override
     def __setattr__(self, name: str, value: Any) -> None:
@@ -57,7 +66,7 @@ class _SettingsProxy[T: BaseModel]:
                 value = value._model
 
             setattr(self._model, name, value)
-            self._on_update(name, value)
+            self._on_update(f"{self._path}.{name}" if self._path else name, value)
         else:
             raise AttributeError(f"{type(self._model).__name__!r} object has no attribute {name!r}")
 
@@ -128,7 +137,15 @@ class _PluginSettingsStore:
         settings = model_cls.model_validate(raw_data)
 
         for key, value in updates.items():
-            setattr(settings, key, value)
+            if isinstance(value, _SettingsProxy):
+                value = value._model
+
+            parts = key.split(".")
+            curr = settings
+            for part in parts[:-1]:
+                curr = getattr(curr, part)
+
+            setattr(curr, parts[-1], value)
 
         self._set_raw_settings(plugin.identifier, scope, settings)
         self._caches[scope].pop(plugin, None)

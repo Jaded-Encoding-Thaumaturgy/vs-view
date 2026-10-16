@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from vsview.app.outputs import VideoOutput
 from vsview.app.packing import Packer
+from vsview.app.utils import deepmerge
 from vsview.app.views import OutputInfo
 from vsview.types import Frame, Time
 
@@ -95,4 +96,4 @@ class LocalSettingsModel(BaseModel):
         base_values = global_settings.model_dump(include=set(self.__class__.model_fields))
         overrides = self.model_dump(exclude_none=True)
 
-        return self.__class__(**base_values | overrides)
+        return self.__class__(**deepmerge(overrides, base_values))
