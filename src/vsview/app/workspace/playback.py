@@ -394,7 +394,7 @@ class PlaybackManager(QObject):
             if not self.state.is_playing:
                 return  # type: ignore[unreachable]
 
-            self.state.reset()
+            self._loop.from_thread(self.state.reset).result()
 
             if not play_range:
                 play_range = range(self.state.current_frame, voutput.vs_output.clip.num_frames)
