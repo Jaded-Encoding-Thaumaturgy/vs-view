@@ -632,9 +632,8 @@ class PlaybackManager(QObject):
             return
 
         with self._env.use():
-            # Audio prepared from play_range.start + 1 to match video which skips its first frame
             aoutput.prepare_playback_audio(
-                voutput.frame_to_time(play_range.start + 1).total_seconds(),
+                voutput.frame_to_time(play_range.start).total_seconds(),
                 voutput.frame_to_time(play_range.stop).total_seconds(),
             )
 

@@ -171,10 +171,10 @@ def test_frame_buffer_allocate_loop(video_output: VideoOutput, env: ManagedEnvir
     fb = FrameBuffer(video_output, env)
     buffer_size = SettingsManager.global_settings.playback.buffer_size
 
-    # range(0, 3) skips frame 0, yielding cycle([1, 2]).
+    # range(0, 3) skips initial frame 0 on start, then loops [0, 1, 2] cyclically.
     fb.allocate(range(3), loop=True)
 
-    expected_frames = [1 if i % 2 == 0 else 2 for i in range(buffer_size * 2)]
+    expected_frames = ([1, 2, 0] * (buffer_size * 2 // 3 + 1))[: buffer_size * 2]
     drained_frames = list[int]()
     for _ in range(buffer_size * 2):
         result = fb.get_next_frame()

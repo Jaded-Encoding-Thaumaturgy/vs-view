@@ -199,13 +199,10 @@ class FrameBuffer:
 
     @staticmethod
     def _create_play_frames(play_range: Iterable[int], loop: bool) -> Generator[int]:
-        # Skip the first frame (already displayed)
-        play_range = islice(play_range, 1, None)
-
-        if loop:
-            play_range = cycle(play_range)
-
-        yield from play_range
+        play_range = cycle(play_range) if loop else play_range
+        # Skip the first frame (already displayed).
+        # If loop=True, the cycle above will display the first frame
+        yield from islice(play_range, 1, None)
 
 
 class AudioBuffer:
@@ -320,8 +317,7 @@ class AudioBuffer:
 
     @staticmethod
     def _create_play_frames(play_range: Iterable[int], loop: bool) -> Generator[int]:
-        # Do NOT skip the first frame
-        if loop:
-            play_range = cycle(play_range)
+        play_range = cycle(play_range) if loop else play_range
 
+        # Do NOT skip the first frame
         yield from play_range
