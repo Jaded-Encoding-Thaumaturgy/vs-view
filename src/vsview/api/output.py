@@ -245,10 +245,10 @@ def set_output(
                     tuple(float(f) for f in (framedurs or [])),
                     alpha is True or None,
                     hdr,
-                    kwargs,
+                    kwargs.copy(),
                 )
             elif isinstance(n, vs.AudioNode):
-                _output_metadata[file][i] = AudioMetadata(effective_name or f"{title} {i}", downmix, kwargs)
+                _output_metadata[file][i] = AudioMetadata(effective_name or f"{title} {i}", downmix, kwargs.copy())
 
         #     if scenes:
         #         set_scening(scenes, n, effective_name or f"{title} {i}")
