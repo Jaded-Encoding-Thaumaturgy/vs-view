@@ -510,6 +510,7 @@ class PlaybackManager(QObject):
                 finally:
                     for frame_to_close in plugin_frames.values():
                         frame_to_close.close()
+                    frame.close()
 
                 self._schedule_or_continue()
             else:
