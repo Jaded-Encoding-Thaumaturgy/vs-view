@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 from concurrent.futures import CancelledError as ConcurrentCancelledError
 from contextvars import ContextVar
 
@@ -257,6 +258,80 @@ def test_wait_for_threads_timeout(qt_loop: QtEventLoop, caplog: pytest.LogCaptur
         qt_loop.wait_for_threads(timeout_ms=1000)
 
 
+def test_wait_for_threads_owner_isolation(qt_loop: QtEventLoop) -> None:
+    wk_a = object()
+    wk_b = object()
+
+    a_started = threading.Event()
+    a_finish = threading.Event()
+
+    def long_task_a() -> None:
+        a_started.set()
+        a_finish.wait(1.0)
+
+    qt_loop.to_thread_scoped(wk_a, "WorkspaceATask", long_task_a)
+    assert a_started.wait(2.0), "Task A did not start"
+
+    # Task in workspace B calling wait_for_threads with owner=wk_b should return immediately
+    t0 = time.perf_counter()
+    qt_loop.wait_for_threads(timeout_ms=1000, owner=wk_b)
+    elapsed = time.perf_counter() - t0
+
+    assert elapsed < 0.2, f"Expected instant return, took {elapsed:.3f}s"
+
+    a_finish.set()
+    qt_loop.wait_for_threads(timeout_ms=1000, owner=wk_a)
+
+
+def test_wait_for_threads_names_filter(qt_loop: QtEventLoop) -> None:
+    started = threading.Event()
+    finish = threading.Event()
+
+    def blocked_task() -> None:
+        started.set()
+        finish.wait(1.0)
+
+    qt_loop.to_thread_named("UnrelatedTask", blocked_task)
+    assert started.wait(2.0), "Task did not start"
+
+    # Waiting for "OtherTask" should return immediately
+    t0 = time.perf_counter()
+    qt_loop.wait_for_threads(timeout_ms=1000, names=["OtherTask"])
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 0.2, f"Expected instant return, took {elapsed:.3f}s"
+
+    finish.set()
+    qt_loop.wait_for_threads(timeout_ms=1000)
+
+
+def test_wait_for_threads_same_name_concurrent(qt_loop: QtEventLoop) -> None:
+    wk_1 = object()
+    wk_2 = object()
+
+    r1_called = False
+    r2_called = False
+
+    def reload_worker_1() -> bool:
+        nonlocal r1_called
+        qt_loop.wait_for_threads(timeout_ms=500, owner=wk_1)
+        r1_called = True
+        return True
+
+    def reload_worker_2() -> bool:
+        nonlocal r2_called
+        qt_loop.wait_for_threads(timeout_ms=500, owner=wk_2)
+        r2_called = True
+        return True
+
+    fut1 = qt_loop.to_thread_scoped(wk_1, "ReloadContent", reload_worker_1)
+    fut2 = qt_loop.to_thread_scoped(wk_2, "ReloadContent", reload_worker_2)
+
+    assert fut1.result(timeout=2.0) is True
+    assert fut2.result(timeout=2.0) is True
+    assert r1_called is True
+    assert r2_called is True
+
+
 def test_run_in_loop_decorator(qt_loop: QtEventLoop, qtbot: QtBot) -> None:
     # Sync function with return_future=True (default)
     @run_in_loop
@@ -404,3 +479,18 @@ def test_to_thread_contextvars_propagation(qt_loop: QtEventLoop) -> None:
 
     fut = qt_loop.to_thread(worker)
     assert fut.result(timeout=2.0) == "custom_value"
+
+
+def test_run_in_background_owner_detection(qt_loop: QtEventLoop) -> None:
+    from vsview.app.workspace import BaseWorkspace
+
+    class FakeWorkspace(BaseWorkspace):
+        @run_in_background(name="FakeTask")
+        def do_work(self) -> str:
+            return "done"
+
+    wk = FakeWorkspace.__new__(FakeWorkspace)
+    fut = wk.do_work()
+    assert fut in qt_loop._tracked_tasks
+    assert qt_loop._tracked_tasks[fut].owner is wk
+    assert fut.result(timeout=2.0) == "done"

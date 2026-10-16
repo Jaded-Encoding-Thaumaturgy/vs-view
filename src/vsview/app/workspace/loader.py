@@ -260,7 +260,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.playback.stop()
         self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
         self.plugin_controller.on_workspace_destroy()
-        self.loop.wait_for_threads(10000)
+        self.loop.wait_for_threads(10000, owner=self)
 
         return super().deleteLater()
 
@@ -416,7 +416,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 0.25,
                 stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
             )
-            self.loop.wait_for_threads(10000)
+            self.loop.wait_for_threads(10000, owner=self)
             self.loop.next_cycle().result()
 
             # 1. Capture state

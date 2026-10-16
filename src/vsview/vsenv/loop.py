@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 from collections import Counter
-from collections.abc import Callable, Coroutine, Generator
-from concurrent.futures import CancelledError, Future
+from collections.abc import Callable, Coroutine, Generator, Sequence
+from concurrent.futures import CancelledError, Future, wait
 from contextlib import contextmanager
-from contextvars import copy_context
+from contextvars import ContextVar, copy_context
 from functools import wraps
 from inspect import iscoroutinefunction
 from logging import DEBUG, getLogger
-from threading import Lock, current_thread
-from typing import Any, Literal, Protocol, overload, override
+from typing import Any, Literal, NamedTuple, Protocol, overload, override
 
-from jetpytools import CustomTypeError
+from jetpytools import CustomTypeError, clamp
 from PySide6.QtCore import QObject, QRunnable, QThread, QThreadPool, Signal, Slot
 from PySide6.QtWidgets import QApplication
 from vsengine.futures import UnifiedFuture
@@ -22,6 +23,13 @@ type _CoroutineFunc[**P, R] = Callable[P, Coroutine[Any, Any, R]]
 type _Func[**P, R] = Callable[P, R]
 
 _logger = getLogger(__name__)
+_current_task_future = ContextVar[UnifiedFuture[Any] | None]("_current_task_future", default=None)
+
+
+class TaskInfo(NamedTuple):
+    future: UnifiedFuture[Any]
+    name: str
+    owner: object
 
 
 class QtEventLoop(QObject, EventLoop):
@@ -37,10 +45,12 @@ class QtEventLoop(QObject, EventLoop):
 
     @override
     def attach(self) -> None:
-        self._lock = Lock()
+        self._lock = threading.Lock()
         self._counter = 0
-        self._tasks_lock = Lock()
+        self._tasks_lock = threading.Lock()
         self._active_tasks = Counter[str]()
+        self._tracked_tasks = dict[UnifiedFuture[Any], TaskInfo]()
+        self._thread_futures = dict[int, UnifiedFuture[Any]]()
         self._pending = dict[int, Callable[[], None]]()
         self._cancelled = False
         self._invoke.connect(self._on_invoke)
@@ -55,6 +65,7 @@ class QtEventLoop(QObject, EventLoop):
         self.cancel()
         self.wait_for_threads(5000)
         self._invoke.disconnect(self._on_invoke)
+
         with self._lock:
             self._pending.clear()
 
@@ -110,19 +121,42 @@ class QtEventLoop(QObject, EventLoop):
         **kwargs: P.kwargs,
     ) -> UnifiedFuture[R]:
         """Run func in Qt's global thread pool with a custom thread name."""
+        return self.to_thread_scoped(None, name, func, *args, **kwargs)
+
+    def to_thread_scoped[**P, R](
+        self,
+        owner: object,
+        name: str,
+        func: Callable[P, R],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> UnifiedFuture[R]:
+        """Run func in Qt's global thread pool with a custom thread name and owner for scoped waits."""
         fut = UnifiedFuture[R]()
+        info = TaskInfo(fut, name, owner)
+
+        with self._tasks_lock:
+            self._active_tasks[name] += 1
+            self._tracked_tasks[fut] = info
+
         ctx = copy_context()
 
         def wrapper() -> None:
+            thread_id = threading.get_ident()
             with self._tasks_lock:
-                self._active_tasks[name] += 1
+                self._thread_futures[thread_id] = fut
 
             try:
-                current_thread().name = name
+                threading.current_thread().name = name
                 if not fut.set_running_or_notify_cancel():
                     return
+
+                def fn_wrapped() -> R:
+                    _current_task_future.set(fut)
+                    return func(*args, **kwargs)
+
                 try:
-                    result = ctx.run(func, *args, **kwargs)
+                    result = ctx.run(fn_wrapped)
                 except BaseException as e:
                     if isinstance(e, (Cancelled, CancelledError, asyncio.CancelledError)):
                         _logger.debug("Task %r cancelled: %s", name, e)
@@ -133,7 +167,9 @@ class QtEventLoop(QObject, EventLoop):
                     fut.set_result(result)
             finally:
                 with self._tasks_lock:
+                    self._thread_futures.pop(thread_id, None)
                     self._active_tasks[name] -= 1
+                    self._tracked_tasks.pop(fut, None)
 
         QThreadPool.globalInstance().start(QRunnable.create(wrapper))
         return fut
@@ -177,58 +213,66 @@ class QtEventLoop(QObject, EventLoop):
         with self._lock:
             self._cancelled = False
 
-    def wait_for_threads(self, timeout_ms: int = 500) -> None:
+    def wait_for_threads(self, timeout_ms: int = 500, *, owner: Any = None, names: Sequence[str] | None = None) -> None:
         """
         Wait for background threads to finish.
-        If called from a background thread, it ignores itself in the count.
+
+        Args:
+            timeout_ms: Maximum duration in milliseconds to wait.
+            owner: Optional owner object (e.g. workspace) to restrict wait targets.
+            names: Optional task names to restrict wait targets.
         """
-        _logger.debug("Calling wait_for_threads...")
+        _logger.debug("Calling wait_for_threads (owner=%r, names=%r)...", owner, names)
 
         if not (app := QApplication.instance()):
             _logger.warning("No QApplication instance found")
             return
 
         is_main_thread = QThread.currentThread() == app.thread()
-        current_name = current_thread().name
+        current_fut = _current_task_future.get() or self._thread_futures.get(threading.get_ident())
+        deadline = time.perf_counter() + (timeout_ms / 1000.0)
 
-        with self._tasks_lock:
-            target_count = int(self._active_tasks.get(current_name, 0) > 0)
+        while True:
+            with self._tasks_lock:
+                targets = [
+                    fut
+                    for fut, info in self._tracked_tasks.items()
+                    if fut is not current_fut
+                    and (owner is None or info.owner == owner)
+                    and (names is None or info.name in names)
+                ]
 
-        pool = QThreadPool.globalInstance()
-
-        for _ in range(max(1, timeout_ms // 10)):
-            count = pool.activeThreadCount()
-
-            if count <= target_count:
-                _logger.debug("Target thread count reached (%s), breaking loop.", count)
+            if not targets:
+                _logger.debug("Target thread count reached (0 remaining), breaking loop.")
                 break
 
-            with self._tasks_lock:
-                running = [k for k, v in self._active_tasks.items() if v > 0]
+            if (remaining := deadline - time.perf_counter()) <= 0:
+                with self._tasks_lock:
+                    remaining_names = [self._tracked_tasks[f].name for f in targets if f in self._tracked_tasks]
+                _logger.warning(
+                    "Timeout of %dms reached while waiting for threads. "  # No fmt
+                    "Proceeding while %d thread(s) are still active.",
+                    timeout_ms,
+                    len(targets),
+                )
+                _logger.debug("Remaining timed-out tasks: %r", remaining_names)
+                break
 
-            _logger.debug("Active threads: %s (Target: %s)", count, target_count)
-            _logger.debug("Running tasks: %r", running)
-
-            _logger.debug("Waiting 10 ms...")
-            pool.waitForDone(10)
+            wait(targets, timeout=clamp(remaining, 0.0, 0.01))
 
             if is_main_thread:
                 QApplication.processEvents()
-        else:
-            _logger.warning(
-                "Timeout of %dms reached while waiting for threads. "  # No fmt
-                "Proceeding while %d thread(s) are still active.",
-                timeout_ms,
-                pool.activeThreadCount(),
-            )
 
         if is_main_thread:
             # Final flush to process any signals from threads that just finished
             QApplication.processEvents()
 
+            if owner is None:
+                QThreadPool.globalInstance().waitForDone(10)
+
         if _logger.isEnabledFor(DEBUG):
             with self._tasks_lock:
-                _logger.debug("Final active threads count: %s", pool.activeThreadCount())
+                _logger.debug("Final active threads count: %s", len(self._tracked_tasks))
                 _logger.debug("Remaining thread(s): %s", [k for k, v in self._active_tasks.items() if v > 0])
 
 
@@ -320,8 +364,8 @@ def run_in_background[**P, R](func: _CoroutineFunc[P, R]) -> Callable[P, Unified
 @overload
 def run_in_background[**P, R](func: _Func[P, R]) -> Callable[P, UnifiedFuture[R]]: ...
 @overload
-def run_in_background(*, name: str) -> _DecoratorFuture: ...
-def run_in_background(func: Any = None, *, name: str | None = None) -> Any:
+def run_in_background(*, name: str | None = None, owner: object | None = None) -> _DecoratorFuture: ...
+def run_in_background(func: Any = None, *, name: str | None = None, owner: object | None = None) -> Any:
     """
     Executes the decorated function in a background thread (via QThreadPool)
     using the `QtEventLoop`'s `to_thread` logic.
@@ -329,6 +373,7 @@ def run_in_background(func: Any = None, *, name: str | None = None) -> Any:
     Args:
         func: The function to wrap (when used as `@run_in_background` without parens)
         name: Optional thread name for logging (when used as `@run_in_background(name="...")`)
+        owner: Optional owner object (e.g. workspace) for scoped wait operations.
 
     Returns:
         A future object representing the result of the execution.
@@ -351,11 +396,12 @@ def run_in_background(func: Any = None, *, name: str | None = None) -> Any:
                 raise CustomTypeError("The current running loop isn't QtEventLoop")
 
             func_name = name or fn.__name__
+            task_owner = owner if owner is not None else _detect_owner(args[0]) if args else None
 
             return (
-                loop.to_thread_named(func_name, asyncio.run, fn(*args, **kwargs))
+                loop.to_thread_scoped(task_owner, func_name, asyncio.run, fn(*args, **kwargs))
                 if iscoroutinefunction(fn)
-                else loop.to_thread_named(func_name, fn, *args, **kwargs)
+                else loop.to_thread_scoped(task_owner, func_name, fn, *args, **kwargs)
             )
 
         return wrapper
@@ -368,3 +414,18 @@ def _get_asyncio_running_loop() -> asyncio.AbstractEventLoop | None:
         return asyncio.get_running_loop()
     except RuntimeError:
         return None
+
+
+def _detect_owner(obj: Any) -> object:
+    from ..app.workspace import BaseWorkspace
+
+    if hasattr(obj, "workspace") and isinstance(obj.workspace, BaseWorkspace):
+        return obj.workspace
+
+    if isinstance(obj, QObject):
+        p: QObject | None = obj
+        while p is not None:
+            if isinstance(p, BaseWorkspace):
+                return p
+            p = p.parent()
+    return obj
