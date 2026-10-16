@@ -56,7 +56,7 @@ class OutputMetadata(DefaultUserDict[str, dict[int, Any]]):
 
     @override
     def __contains__(self, key: object) -> bool:
-        return super().__contains__(self._hash_key(str(key)))
+        return super().__contains__(self._hash_key(str(key))) if isinstance(key, (str, PathLike)) else False
 
     @override
     @copy_signature(DefaultUserDict[str, dict[int, Any]].pop)
