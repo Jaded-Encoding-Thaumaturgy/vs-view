@@ -101,6 +101,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         if hasattr(self, "content"):
             if (path := self.current_file_path) is not None:
                 SettingsManager.save_local(path, self.local_settings)
+                output_metadata.pop(str(path), None)
             del self.content
 
         return super().deleteLater()

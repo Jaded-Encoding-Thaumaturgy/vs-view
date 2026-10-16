@@ -30,6 +30,7 @@ from vsengine import keep_environment
 from vsengine.policy import ManagedEnvironment
 from vsengine.vpy import ExecutionError, Script, load_code, load_script
 
+from ...api._helpers import output_metadata
 from ...api.info import Context
 from ...env import getenv_bool
 from ...types import Frame
@@ -272,6 +273,9 @@ class LoaderWorkspace[T](BaseWorkspace):
             if any(excs := [f.exception() for f in done]):
                 for e in excs:
                     logger.error(e, exc_info=e)
+
+        if content := getattr(self, "content", None):
+            output_metadata.pop(str(content), None)
 
         self.outputs_manager.clear()
 
