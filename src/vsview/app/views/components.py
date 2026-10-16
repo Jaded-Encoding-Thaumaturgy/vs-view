@@ -287,10 +287,15 @@ class CustomLoadingPage(QWidget):
         self.loading_layout.addWidget(QLabel("Loading...", self))
         self.loading_layout.addWidget(self.progress_bar)
 
-        self.icon_animation = QVariantAnimation(self)
-        self.icon_animation.setDuration(1500)
-        self.icon_animation.setEasingCurve(QEasingCurve.Type.InBounce)
+        self.icon_animation = QVariantAnimation(
+            self,
+            startValue=0,
+            endValue=0,
+            duration=1500,
+            easingCurve=QEasingCurve(QEasingCurve.Type.InBounce),
+        )
         self.icon_animation.setLoopCount(-1)
+        self.icon_animation.setKeyValueAt(0.5, 30)
         self.icon_animation.valueChanged.connect(self._update_bounce)
 
     @override
@@ -298,19 +303,13 @@ class CustomLoadingPage(QWidget):
         super().showEvent(event)
 
         if self.icon_animation.state() != QAbstractAnimation.State.Running:
-            QTimer.singleShot(0, self._start_animation)
+            QTimer.singleShot(0, self.icon_animation.start)
 
     @override
     def hideEvent(self, event: QHideEvent) -> None:
         super().hideEvent(event)
 
         self.icon_animation.stop()
-
-    def _start_animation(self) -> None:
-        self.icon_animation.setStartValue(0)
-        self.icon_animation.setKeyValueAt(0.5, 30)
-        self.icon_animation.setEndValue(0)
-        self.icon_animation.start()
 
     @Slot(int)
     def _update_bounce(self, value: int) -> None:
