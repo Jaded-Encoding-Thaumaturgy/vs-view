@@ -154,7 +154,7 @@ class ExtractFramesWorker:
                 if self.is_cancelled:
                     break
                 sema.acquire()
-                qimage = self.packer.frame_to_qimage(vs_frame).copy()
+                qimage = self.packer.frame_to_qimage(vs_frame).owned(vs_frame.get_read_ptr(0))
                 f = self._qt_save(qimage, path.with_stem(path.stem % n))
                 f.add_done_callback(lambda _: sema.release())
                 workers.append(f)

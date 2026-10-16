@@ -486,7 +486,7 @@ class FramePropPreviewGraphicsView(BaseGraphicsView):
                     packed_clip = self._packer.pack_clip(self.frame2clip(frame), alpha)
 
                     with packed_clip.get_frame(0) as packed:
-                        return self._packer.frame_to_qimage(packed).copy()
+                        return self._packer.frame_to_qimage(packed).owned(force=True)
 
         return QImage(
             get_plane_buffer(frame, 0),  # type: ignore[call-overload]
