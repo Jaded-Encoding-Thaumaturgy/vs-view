@@ -2,7 +2,7 @@
 
 from functools import cache
 from importlib import resources
-from logging import getLogger
+from logging import DEBUG, getLogger
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt
@@ -50,10 +50,8 @@ def load_fonts() -> None:
 
             if font_id < 0:
                 _logger.warning("Failed to load font: %s", font_file)
-            else:
-                _logger.debug(
-                    "Loaded font %s: %r", font_file, lambda fid=font_id: QFontDatabase.applicationFontFamilies(fid)
-                )
+            elif _logger.isEnabledFor(DEBUG):
+                _logger.debug("Loaded font %s: %r", font_file, QFontDatabase.applicationFontFamilies(font_id))
         except Exception as e:
             _logger.warning("Error loading font %s: %s", font_file, e)
             _logger.debug("Full traceback", exc_info=True)
