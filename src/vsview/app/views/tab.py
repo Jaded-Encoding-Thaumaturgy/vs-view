@@ -33,7 +33,7 @@ class TabViewWidget(QTabWidget):
     def previous_tab_index(self) -> int:
         """Get the index of the previously active tab, or the only tab if just one exists."""
         tabs = list(self.recent_tabs)
-        return tabs[-2] if len(tabs) >= 2 else tabs[0]
+        return tabs[-2] if len(tabs) >= 2 else tabs[0] if tabs else max(0, self.currentIndex())
 
     @copy_signature(QTabWidget.addTab)
     @override
