@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from vsengine import keep_environment
 from vsengine.policy import ManagedEnvironment
 from vsengine.vpy import ExecutionError, Script, load_code, load_script
 
@@ -266,7 +267,11 @@ class LoaderWorkspace[T](BaseWorkspace):
     def clear_environment(self) -> None:
         if self._env and not self._env.disposed:
             with self._env.use():
-                wait(self.loop.from_thread(cb) for cb in self.cbs_on_destroy)
+                done, _ = wait(self.loop.from_thread(keep_environment(cb)) for cb in self.cbs_on_destroy)
+
+            if any(excs := [f.exception() for f in done]):
+                for e in excs:
+                    logger.error(e, exc_info=e)
 
         self.outputs_manager.clear()
 
