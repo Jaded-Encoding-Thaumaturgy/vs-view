@@ -177,6 +177,7 @@ class PluginManager(Singleton):
                         identifiers[res.identifier] = hookimpl.plugin_name
                 except Exception:
                     logger.exception("Failed to inspect hook %r in plugin %r", hook_name, hookimpl.plugin_name)
+                    self.manager.unregister(name=hookimpl.plugin_name)
 
         return identifiers
 
