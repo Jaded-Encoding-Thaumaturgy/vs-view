@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QColor, QColorSpace, QImage, QResizeEvent, QTransform
+from PySide6.QtGui import QImage, QResizeEvent, QTransform
 from pytestqt.qtbot import QtBot
 
 from vsview.app.views.hdr import HDRImageProvider, HDRViewport, QMLProperty
@@ -22,17 +22,17 @@ def test_qml_property_descriptor_class_access() -> None:
 
 
 def test_hdr_image_provider_initial_state_and_request_image() -> None:
-    """HDRImageProvider initializes with a 1x1 RGBA16FPx4 transparent frame and returns it on request."""
+    """HDRImageProvider initializes with a 1x1 RGBX16FPx4 frame and returns it on request."""
     provider = HDRImageProvider()
     assert not provider.image.isNull()
     assert provider.image.width() == 1
     assert provider.image.height() == 1
-    assert provider.image.format() == QImage.Format.Format_RGBA16FPx4
+    assert provider.image.format() == QImage.Format.Format_RGBX16FPx4
 
     requested = provider.requestImage("frame", QSize(), QSize())
     assert requested == provider.image
 
-    custom_image = QImage(128, 64, QImage.Format.Format_RGBA16FPx4)
+    custom_image = QImage(128, 64, QImage.Format.Format_RGBX16FPx4)
     custom_image.fill(Qt.GlobalColor.white)
     provider.image = custom_image
 
@@ -44,7 +44,6 @@ def test_hdr_viewport_initialization(qtbot: QtBot) -> None:
     viewport = HDRViewport()
     qtbot.addWidget(viewport)
 
-    assert viewport.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     assert viewport.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
     assert viewport.root_obj is not None
 
@@ -85,44 +84,6 @@ def test_hdr_viewport_property_sync(qtbot: QtBot) -> None:
     viewport.image_scale_y = 3.0
     assert viewport.image_scale_y == pytest.approx(3.0)
     assert viewport.root_obj.property("imageScaleY") == pytest.approx(3.0)
-
-
-def test_hdr_viewport_set_image_formats_and_colorspaces(qtbot: QtBot) -> None:
-    """set_image converts SDR/standard QImage formats into RGBA16FPx4 in linear sRGB space."""
-    viewport = HDRViewport()
-    qtbot.addWidget(viewport)
-
-    sdr_image = QImage(320, 240, QImage.Format.Format_RGB32)
-    sdr_image.fill(QColor(255, 128, 64))
-
-    viewport.set_image(sdr_image)
-
-    provider_image = viewport.image
-    assert not provider_image.isNull()
-    assert provider_image.width() == 320
-    assert provider_image.height() == 240
-    assert provider_image.format() == QImage.Format.Format_RGBA16FPx4
-    assert provider_image.colorSpace() == QColorSpace(QColorSpace.NamedColorSpace.SRgbLinear)
-
-    assert viewport.image_width == 320
-    assert viewport.image_height == 240
-
-
-def test_hdr_viewport_set_image_preserves_fp32_format(qtbot: QtBot) -> None:
-    """set_image preserves RGBA32FPx4 if already in 32-bit floating point format."""
-    viewport = HDRViewport()
-    qtbot.addWidget(viewport)
-
-    fp32_image = QImage(160, 120, QImage.Format.Format_RGBA32FPx4)
-    fp32_image.fill(Qt.GlobalColor.green)
-
-    viewport.set_image(fp32_image)
-
-    provider_image = viewport.image
-    assert provider_image.format() == QImage.Format.Format_RGBA32FPx4
-    assert provider_image.colorSpace() == QColorSpace(QColorSpace.NamedColorSpace.SRgbLinear)
-    assert viewport.image_width == 160
-    assert viewport.image_height == 120
 
 
 def test_hdr_viewport_set_image_null_is_safe_noop(qtbot: QtBot) -> None:

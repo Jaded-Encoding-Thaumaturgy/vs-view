@@ -128,19 +128,19 @@ def test_packer_format_config_enum() -> None:
     fmt_int16 = Packer.FormatConfig.INT16
     assert fmt_int16.bitdepth == 16
     assert fmt_int16.sample_type == vs.INTEGER
-    assert fmt_int16.qt == QImage.Format.Format_RGBA64
+    assert fmt_int16.qt == QImage.Format.Format_RGBX64
     assert fmt_int16.qt_alpha == QImage.Format.Format_RGBA64
 
     fmt_fp16 = Packer.FormatConfig.FP16
     assert fmt_fp16.bitdepth == 16
     assert fmt_fp16.sample_type == vs.FLOAT
-    assert fmt_fp16.qt == QImage.Format.Format_RGBA16FPx4
+    assert fmt_fp16.qt == QImage.Format.Format_RGBX16FPx4
     assert fmt_fp16.qt_alpha == QImage.Format.Format_RGBA16FPx4
 
     fmt_fp32 = Packer.FormatConfig.FP32
     assert fmt_fp32.bitdepth == 32
     assert fmt_fp32.sample_type == vs.FLOAT
-    assert fmt_fp32.qt == QImage.Format.Format_RGBA32FPx4
+    assert fmt_fp32.qt == QImage.Format.Format_RGBX32FPx4
     assert fmt_fp32.qt_alpha == QImage.Format.Format_RGBA32FPx4
 
 
@@ -392,7 +392,7 @@ def test_packer_frame_to_qimage_16bit_width_division() -> None:
     assert qimg.isNull() is False
     assert qimg.width() == 64
     assert qimg.height() == 48
-    assert qimg.format() == QImage.Format.Format_RGBA16FPx4
+    assert qimg.format() == QImage.Format.Format_RGBX16FPx4
     # Memory ownership check: bitdepth >= 16 forces a copy, so QImage buffer address is separate
     assert ctypes.addressof(ctypes.c_char.from_buffer(qimg.bits())) != frame.get_read_ptr(0).value
 
