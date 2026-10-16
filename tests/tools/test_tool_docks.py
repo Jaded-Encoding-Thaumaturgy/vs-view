@@ -181,7 +181,7 @@ def test_color_picker_tracking_state_transitions(plugin_controller: HarnessPlugi
     assert plugin.tracking == TrackingState.ACTIVE
     assert plugin.eyedropper_btn.isChecked() is True
 
-    assert plugin_controller.current_view_proxy.viewport._cursor == Qt.CursorShape.CrossCursor
+    assert plugin_controller.current_view_proxy.viewport.testing._cursor == Qt.CursorShape.CrossCursor
 
     # Active -> Deactivating via Right Mouse Button Press
     press_event = QMouseEvent(
@@ -194,7 +194,7 @@ def test_color_picker_tracking_state_transitions(plugin_controller: HarnessPlugi
     )
     plugin.on_view_mouse_pressed(press_event)
     assert plugin.tracking == TrackingState.DEACTIVATING
-    assert plugin_controller.current_view_proxy.viewport._cursor == Qt.CursorShape.OpenHandCursor
+    assert plugin_controller.current_view_proxy.viewport.testing._cursor == Qt.CursorShape.OpenHandCursor
 
     # Deactivating -> Inactive via Context Menu Event
     context_event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(10, 10), QPoint(10, 10))

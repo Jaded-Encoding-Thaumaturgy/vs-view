@@ -499,7 +499,7 @@ def test_load_worker_catches_entrypoint_loading_failure(
         pm.load()
         pm.wait_for_loaded()
 
-    assert pm._entry_points_loaded is True
+    assert pm.loaded is True
     assert "Couldn't load entry points!" in caplog.text
 
 
@@ -795,7 +795,7 @@ def test_plugin_manager_wait_for_loaded() -> None:
     pm._load_future = fut
 
     pm.wait_for_loaded()
-    assert pm._load_future.done() is True
+    assert pm.loaded
 
 
 def test_plugin_manager_call_when_loaded_delegates_to_notifier(

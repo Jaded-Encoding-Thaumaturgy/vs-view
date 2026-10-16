@@ -177,25 +177,25 @@ def test_loader_calculate_target_frame(
     voutput.last_frame = 45
 
     # UNLINK: returns voutput.last_frame
-    assert ws._calculate_target_frame(PlayHeadToolButton.State.UNLINK) == 45
+    assert ws.calculate_target_frame(PlayHeadToolButton.State.UNLINK) == 45
 
     # LINK_FRAME: returns clamped playback state current frame
     ws.playback.state.current_frame = 25
-    assert ws._calculate_target_frame(PlayHeadToolButton.State.LINK_FRAME) == 25
+    assert ws.calculate_target_frame(PlayHeadToolButton.State.LINK_FRAME) == 25
 
     # LINK_FRAME: clamps to upper boundary (num_frames - 1 = 99)
     ws.playback.state.current_frame = 200
-    assert ws._calculate_target_frame(PlayHeadToolButton.State.LINK_FRAME) == 99
+    assert ws.calculate_target_frame(PlayHeadToolButton.State.LINK_FRAME) == 99
 
     # LINK_TIME: maps playback current_time to frame, clamped to valid range
     ws.playback.state.current_time = Time(seconds=1.0)
     expected_frame = voutput.time_to_frame(Time(seconds=1.0))
-    assert ws._calculate_target_frame(PlayHeadToolButton.State.LINK_TIME) == expected_frame
+    assert ws.calculate_target_frame(PlayHeadToolButton.State.LINK_TIME) == expected_frame
 
     # LINK_ADAPT: resolves dynamically based on timeline mode
     ws.playback.state.current_frame = 30
     ws.tbar.timeline.mode = "frame"
-    assert ws._calculate_target_frame(PlayHeadToolButton.State.LINK_ADAPT) == 30
+    assert ws.calculate_target_frame(PlayHeadToolButton.State.LINK_ADAPT) == 30
 
 
 # Script Compilation and Loading Error Tests

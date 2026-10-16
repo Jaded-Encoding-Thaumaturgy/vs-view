@@ -297,15 +297,16 @@ def test_tab_manager_shortcuts_registration(tab_manager: TabManager) -> None:
     ]
 
     for aid in expected_actions:
-        assert aid.value in sm._shortcuts
-        assert any(sc.parent() is mgr for sc in sm._shortcuts[aid.value])
+        shortcuts = sm.get_shortcuts(aid)
+        assert len(shortcuts) > 0
+        assert any(sc.parent() is mgr for sc in shortcuts)
 
     # Trigger registered shortcuts and verify widget state toggling
-    for sc in sm._shortcuts[ActionID.SYNC_ZOOM.value]:
+    for sc in sm.get_shortcuts(ActionID.SYNC_ZOOM):
         sc.activated.emit()
     assert mgr.sync_zoom_btn.isChecked() is False
 
-    for sc in sm._shortcuts[ActionID.AUTOFIT_ALL_VIEWS.value]:
+    for sc in sm.get_shortcuts(ActionID.AUTOFIT_ALL_VIEWS):
         sc.activated.emit()
     assert mgr.autofit_btn.isChecked() is True
 
@@ -557,7 +558,7 @@ def test_on_tab_changed_negative_index_ignored(qtbot: QtBot, tab_manager: TabMan
     mgr = tab_manager
 
     with qtbot.assertNotEmitted(mgr.tabChanged):
-        mgr._on_tab_changed(-1)
+        mgr.tabs.currentChanged.emit(-1)
 
 
 # Cross-tab Synchronization Tests
@@ -575,7 +576,7 @@ def test_zoom_sync_across_non_autofit_tabs(
     assert mgr.is_sync_zoom_enabled is True
 
     # Zoom change on current tab syncs to tab 1 and tab 2
-    mgr._on_zoom_changed(2.5)
+    mgr.current_view.zoomChanged.emit(2.5)
 
     assert mgr.tabs.get_tab_label(0).zoom == 2.5
     assert mgr.tabs.view(1).current_zoom == 2.5
@@ -596,7 +597,7 @@ def test_zoom_sync_skips_autofit_tab(tab_manager: TabManager, make_video_output:
     mgr.tabs.view(2).set_autofit(True)
     initial_zoom_2 = mgr.tabs.view(2).current_zoom
 
-    mgr._on_zoom_changed(3.0)
+    mgr.current_view.zoomChanged.emit(3.0)
 
     assert mgr.tabs.get_tab_label(0).zoom == 3.0
     assert mgr.tabs.view(1).current_zoom == 3.0
@@ -616,7 +617,7 @@ def test_zoom_sync_disabled_behavior(tab_manager: TabManager, make_video_output:
     mgr.sync_zoom_btn.setChecked(False)
     assert mgr.is_sync_zoom_enabled is False
 
-    mgr._on_zoom_changed(4.0)
+    mgr.current_view.zoomChanged.emit(4.0)
 
     assert mgr.tabs.get_tab_label(0).zoom == 4.0
     assert mgr.tabs.view(1).current_zoom != 4.0
@@ -735,7 +736,7 @@ def test_global_autofit_under_reload(tab_manager: TabManager, make_video_output:
     mgr.swap_tabs(tabs, 0)
 
     mgr.tabs.view(0).set_autofit(True)
-    mgr._on_global_autofit_changed(enabled=False, under_reload=True)
+    mgr.set_global_autofit(enabled=False, under_reload=True)
 
     assert mgr.tabs.get_tab_label(0).zoom == 0
 

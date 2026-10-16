@@ -249,43 +249,43 @@ def test_playback_manager_seek_bounds(
 
         # Seek backward from frame 0 -> clamps at 0
         manager.seek_frame(-10)
-        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager._timeline_rendering, timeout=2000)
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
         assert manager.state.current_frame == 0
 
         # Seek forward past frame 99 -> clamps at 99
         manager.seek_frame(200)
-        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager._timeline_rendering, timeout=2000)
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
         assert manager.state.current_frame == 99
 
         # Seek relative step backward from 99
         # Default seek_step is 1, so seek_n_frames(-5) seeks by -5 frames
         manager.seek_n_frames(-5)
-        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager._timeline_rendering, timeout=2000)
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
         assert manager.state.current_frame == 94
 
         # Seek relative step forward
         manager.seek_n_frames(5)
-        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager._timeline_rendering, timeout=2000)
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
         assert manager.state.current_frame == 99
 
         # Seek to frame 50 then step forward and backward
         manager.seek_to_frame_coalesced(Frame(50))
-        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager._timeline_rendering, timeout=2000)
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
         assert manager.state.current_frame == 50
 
         manager.seek_n_frames(5)
-        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager._timeline_rendering, timeout=2000)
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
         assert manager.state.current_frame == 55
 
         manager.seek_n_frames(-5)
-        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager._timeline_rendering, timeout=2000)
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
         assert manager.state.current_frame == 50
 
         # Stepping backward past frame 0 clamps at 0
         manager.seek_to_frame_coalesced(Frame(3))
-        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager._timeline_rendering, timeout=2000)
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
         manager.seek_n_frames(-10)
-        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager._timeline_rendering, timeout=2000)
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
         assert manager.state.current_frame == 0
     finally:
         voutput.clear()
@@ -308,7 +308,7 @@ def test_playback_manager_pending_frame_prop(
 
     # When rendering completes, pending frame is rendered and cleared
     mocker.patch.object(manager, "_timeline_rendering", False)
-    manager._render_pending_frame()
+    manager.render_pending_frame()
     assert manager.has_pending_frame is False
 
 
@@ -323,17 +323,16 @@ def test_playback_manager_volume_and_mute(
     mock_aoutput = MagicMock()
     mock_outputs.current_aoutput = mock_aoutput
 
-    # Direct handler call
-    manager._on_volume_changed(0.85)
+    # Triggered via TimelineControlBar volumeChanged signal
+    tbar.playback_container.volumeChanged.emit(0.85)
     assert mock_aoutput.volume == 0.85
 
-    # Triggered via TimelineControlBar volumeChanged signal
     tbar.playback_container.volumeChanged.emit(0.4)
     assert mock_aoutput.volume == 0.4
 
     # Guard check when current_aoutput is None
     mock_outputs.current_aoutput = None
-    manager._on_volume_changed(0.5)
+    tbar.playback_container.volumeChanged.emit(0.5)
 
     # Mute changed to True: stops audio sink and invalidates audio buffer
     mock_outputs.current_aoutput = mock_aoutput
@@ -459,7 +458,7 @@ def test_playback_manager_seek_without_voutput(playback_manager_setup: PlaybackM
 def test_playback_manager_audio_output_changed(
     playback_manager_setup: PlaybackManagerSetup, mocker: MockerFixture
 ) -> None:
-    manager, _, _, _, _, _ = playback_manager_setup
+    manager, _, _, _, _, tbar = playback_manager_setup
     audio_index_received = list[int]()
     manager.audioOutputChanged.connect(audio_index_received.append)
 
@@ -467,13 +466,13 @@ def test_playback_manager_audio_output_changed(
 
     # When not playing: emits signal, does not restart
     manager.state.is_playing = False
-    manager._on_audio_output_changed(2)
+    tbar.playback_container.audio_output_combo.currentIndexChanged.emit(2)
     assert audio_index_received == [2]
     restart_mock.assert_not_called()
 
     # When playing: emits signal and restarts playback
     manager.state.is_playing = True
-    manager._on_audio_output_changed(3)
+    tbar.playback_container.audio_output_combo.currentIndexChanged.emit(3)
     assert audio_index_received == [2, 3]
     restart_mock.assert_called_once()
 
@@ -486,7 +485,7 @@ def test_playback_manager_playback_settings_changed(
 
     # Not playing: updates settings, no restart
     manager.state.is_playing = False
-    manager._on_playback_settings_changed(seek_step=10, speed=2.0, uncapped=True)
+    tbar.playback_container.settingsChanged.emit(10, 2.0, True)
     assert tbar.playback_container.settings.seek_step == 10
     assert tbar.playback_container.settings.speed == 2.0
     assert tbar.playback_container.settings.uncapped is True
@@ -494,7 +493,7 @@ def test_playback_manager_playback_settings_changed(
 
     # Playing: updates settings and restarts playback
     manager.state.is_playing = True
-    manager._on_playback_settings_changed(seek_step=5, speed=1.0, uncapped=False)
+    tbar.playback_container.settingsChanged.emit(5, 1.0, False)
     assert tbar.playback_container.settings.seek_step == 5
     assert tbar.playback_container.settings.speed == 1.0
     assert tbar.playback_container.settings.uncapped is False

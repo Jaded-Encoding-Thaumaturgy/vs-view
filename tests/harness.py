@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Generator, Iterable, MutableMapping
+from collections.abc import Callable, Generator, Iterable, MutableMapping, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
 from fractions import Fraction
@@ -28,10 +28,21 @@ from vsview.app.settings import SettingsManager
 from vsview.types import Frame, Time
 
 
+class HarnessTesting[T]:
+    def __init__(self, harness: T, allowed_properties: Sequence[str]) -> None:
+        self.harness = harness
+        self.properties = allowed_properties
+
+    def __getattr__(self, name: str) -> Any:
+        assert name in self.properties
+        return getattr(self.harness, name)
+
+
 class HarnessViewportProxy:
     def __init__(self) -> None:
         self._cursor_pos = QPoint(0, 0)
         self._cursor: QCursor | Qt.CursorShape = Qt.CursorShape.OpenHandCursor
+        self.testing = HarnessTesting(self, ["_cursor"])
 
     @property
     def cursor_pos(self) -> QPoint:
@@ -98,6 +109,7 @@ class HarnessGraphicsViewProxy:
 
 class HarnessTimelineProxy:
     def __init__(self) -> None:
+        self.testing = HarnessTesting(self, ["_notches"])
         self._frame_count = 100
         self._mode: Literal["frame", "time"] = "frame"
         self._notches = dict[str, list[tuple[Any, ...]]]()
@@ -141,6 +153,7 @@ class HarnessPlaybackProxy:
     def __init__(self, harness: HarnessPluginController | None = None) -> None:
         self._harness = harness
         self.fps = Fraction(24, 1)
+        self.testing = HarnessTesting(self, ["_state"])
         self._state = _HarnessPlaybackState()
 
     def seek(self, frame_or_time: int | timedelta, /) -> bool:

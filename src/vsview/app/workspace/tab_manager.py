@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Sequence
 from enum import IntEnum
-from functools import partial
 from itertools import cycle
 from logging import getLogger
 from typing import TYPE_CHECKING, Self, overload, override
@@ -194,7 +193,7 @@ class TabManager(QWidget, IconReloadMixin):
             icon_states=self.DEFAULT_ICON_STATES,
         )
         self.sync_zoom_btn.toggled.connect(self._on_sync_zoom_changed)
-        self.autofit_btn.toggled.connect(self._on_global_autofit_changed)
+        self.autofit_btn.toggled.connect(self.set_global_autofit)
 
         self.sync_layout.addWidget(self.toggle_tooldock_btn)
         self.sync_layout.addWidget(self.sync_playhead_btn)
@@ -257,7 +256,7 @@ class TabManager(QWidget, IconReloadMixin):
         for voutput in video_outputs:
             view = GraphicsView(self)
             view.zoomChanged.connect(self._on_zoom_changed)
-            view.autofitChanged.connect(partial(self._on_autofit_changed, view))
+            view.autofitChanged.connect(self._on_autofit_changed)
             view.contextMenuRequested.connect(self.controller.on_view_context_menu)
             view.mouseMoved.connect(self.controller.on_view_mouse_moved)
             view.mousePressed.connect(self.controller.on_view_mouse_pressed)
@@ -289,6 +288,7 @@ class TabManager(QWidget, IconReloadMixin):
             self.autofit_btn.setEnabled(True)
 
         self.set_tab_visiblity(new_tabs)
+        new_tabs.setEnabled(enabled)
 
         return new_tabs
 
@@ -366,6 +366,17 @@ class TabManager(QWidget, IconReloadMixin):
             if backing_frame:
                 backing_frame.close()
 
+    @Slot(bool)
+    def set_global_autofit(self, enabled: bool, under_reload: bool = False) -> None:
+        for i, view in enumerate(self.tabs.views()):
+            with QSignalBlocker(view):
+                if under_reload and not enabled and view.autofit:
+                    self.tabs.get_tab_label(i).zoom = 0
+                    continue
+                view.set_autofit(enabled)
+
+            self.tabs.get_tab_label(i).zoom = 0 if enabled else view.current_zoom
+
     # SIGNALS
     @Slot(int)
     def _on_tab_changed(self, index: int) -> None:
@@ -416,17 +427,6 @@ class TabManager(QWidget, IconReloadMixin):
     def _on_sync_zoom_changed(self, checked: bool) -> None:
         if checked:
             self._on_zoom_changed(self.current_view.current_zoom)
-
-    @Slot(bool)
-    def _on_global_autofit_changed(self, enabled: bool, under_reload: bool = False) -> None:
-        for i, view in enumerate(self.tabs.views()):
-            with QSignalBlocker(view):
-                if under_reload and not enabled and view.autofit:
-                    self.tabs.get_tab_label(i).zoom = 0
-                    continue
-                view.set_autofit(enabled)
-
-            self.tabs.get_tab_label(i).zoom = 0 if enabled else view.current_zoom
 
     @Slot(bool)
     def _on_autofit_changed(self, enabled: bool) -> None:

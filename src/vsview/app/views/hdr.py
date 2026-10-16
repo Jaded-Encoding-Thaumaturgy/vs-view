@@ -82,6 +82,16 @@ class HDRViewport(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._container)
 
+    @property
+    def image(self) -> QImage:
+        """The current HDR image held by the image provider."""
+        return self._provider.image
+
+    @property
+    def quick_view(self) -> QQuickView:
+        """The underlying QQuickView instance."""
+        return self._view
+
     @override
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)

@@ -329,7 +329,7 @@ class TimelineHoverPopup(QWidget):
 
         # Sort and stagger
         all_labels = sorted(all_labels, key=lambda lbl: lbl.x)
-        staggered_labels = self._apply_staggering(all_labels, fm)
+        staggered_labels = self.apply_staggering(all_labels, fm)
 
         # Draw labels with leader lines and pills
         for lbl in staggered_labels:
@@ -363,7 +363,7 @@ class TimelineHoverPopup(QWidget):
             case _:
                 return str(data)
 
-    def _apply_staggering(self, labels: list[HoverLabel], fm: QFontMetrics) -> list[HoverLabel]:
+    def apply_staggering(self, labels: list[HoverLabel], fm: QFontMetrics) -> list[HoverLabel]:
         if not labels:
             return []
 
@@ -610,9 +610,9 @@ class Timeline(QWidget):
         self.rect_f = QRectF(self.rect())
 
         with QPainter(self) as painter:
-            self._draw_widget(painter)
+            self.draw_widget(painter)
 
-    def _draw_widget(self, painter: QPainter) -> None:
+    def draw_widget(self, painter: QPainter) -> None:
         setup_key = Notch.CacheKey(self.rect_f, self.total_frames)
 
         # Current cache entry for the current mode (Frame or Time)

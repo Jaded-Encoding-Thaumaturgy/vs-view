@@ -181,7 +181,7 @@ def test_workspace_clear_action(main_window: MainWindow) -> None:
     assert main_window.nav_container.buttons == [btn1, btn2]
 
     # Clear workspace at index 0 (btn1)
-    main_window._on_clear_action(btn1)
+    main_window.clear_workspace(btn1)
 
     # Nav container should still have 2 buttons, with index 0 holding a new PythonScriptWorkspace
     assert len(main_window.nav_container.buttons) == 2

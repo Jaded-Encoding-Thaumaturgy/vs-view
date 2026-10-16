@@ -97,7 +97,7 @@ def test_hdr_viewport_set_image_formats_and_colorspaces(qtbot: QtBot) -> None:
 
     viewport.set_image(sdr_image)
 
-    provider_image = viewport._provider.image
+    provider_image = viewport.image
     assert not provider_image.isNull()
     assert provider_image.width() == 320
     assert provider_image.height() == 240
@@ -118,7 +118,7 @@ def test_hdr_viewport_set_image_preserves_fp32_format(qtbot: QtBot) -> None:
 
     viewport.set_image(fp32_image)
 
-    provider_image = viewport._provider.image
+    provider_image = viewport.image
     assert provider_image.format() == QImage.Format.Format_RGBA32FPx4
     assert provider_image.colorSpace() == QColorSpace(QColorSpace.NamedColorSpace.SRgbLinear)
     assert viewport.image_width == 160
@@ -169,4 +169,4 @@ def test_hdr_viewport_resize_event(qtbot: QtBot) -> None:
     event = QResizeEvent(QSize(500, 400), QSize(300, 200))
     viewport.resizeEvent(event)
 
-    assert viewport._view.size() == QSize(500, 400)
+    assert viewport.quick_view.size() == QSize(500, 400)

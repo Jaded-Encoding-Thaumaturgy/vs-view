@@ -151,6 +151,18 @@ class ShortcutManager(Singleton):
         return shortcut
 
     @inject_self
+    def get_shortcuts(self, action_id: str | ActionID) -> frozenset[QShortcut]:
+        """Get registered QShortcut objects for the given action ID."""
+        key = action_id.value if isinstance(action_id, ActionID) else action_id
+        return frozenset(self._shortcuts.get(key, ()))
+
+    @inject_self
+    def get_actions(self, action_id: str | ActionID) -> frozenset[QAction]:
+        """Get registered QAction objects for the given action ID."""
+        key = action_id.value if isinstance(action_id, ActionID) else action_id
+        return frozenset(self._actions.get(key, ()))
+
+    @inject_self
     def unregister_shortcut(self, action_id: str, shortcut: QShortcut) -> None:
         """Unregister a previously registered shortcut."""
         if action_id in self._shortcuts:

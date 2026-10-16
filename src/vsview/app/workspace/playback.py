@@ -215,8 +215,32 @@ class PlaybackManager(QObject):
         return self._pending_frame is not None
 
     @property
+    def is_rendering(self) -> bool:
+        """Check whether a timeline frame render request is currently in-flight."""
+        return self._timeline_rendering
+
+    @property
     def _env(self) -> ManagedEnvironment:
         return self._get_env()
+
+    def render_pending_frame(self) -> None:
+        """Dispatch rendering for the current pending coalesced frame, if one exists."""
+        if self._pending_frame is None:
+            self._timeline_rendering = False
+            self._tab_manager.disable_switch = False
+            return
+
+        frame = self._pending_frame
+
+        self._pending_frame = None
+        self._timeline_rendering = True
+        self._tab_manager.disable_switch = True
+
+        @run_in_loop(return_future=False)
+        def on_render_complete(f: Future[int]) -> None:
+            self.render_pending_frame()
+
+        self.request_frame(frame, cb_render=on_render_complete)
 
     @run_in_loop(return_future=False)
     def request_frame(
@@ -345,7 +369,7 @@ class PlaybackManager(QObject):
         self._pending_frame = frame
 
         if not self._timeline_rendering:
-            self._render_pending_frame()
+            self.render_pending_frame()
 
     @Slot()
     def toggle_playback(self) -> None:
@@ -809,24 +833,6 @@ class PlaybackManager(QObject):
     def _on_timeline_clicked(self, frame: Frame, time: Time) -> None:
         logger.debug("Timeline clicked: frame=%d, time=%s", frame, time)
         self.seek_to_frame_coalesced(frame)
-
-    def _render_pending_frame(self) -> None:
-        if self._pending_frame is None:
-            self._timeline_rendering = False
-            self._tab_manager.disable_switch = False
-            return
-
-        frame = self._pending_frame
-
-        self._pending_frame = None
-        self._timeline_rendering = True
-        self._tab_manager.disable_switch = True
-
-        @run_in_loop(return_future=False)
-        def on_render_complete(f: Future[int]) -> None:
-            self._render_pending_frame()
-
-        self.request_frame(frame, cb_render=on_render_complete)
 
 
 def create_failed_image(text: str, width: int, height: int) -> QImage:

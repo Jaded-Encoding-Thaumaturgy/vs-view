@@ -249,14 +249,14 @@ def test_hover_popup_label_staggering(timeline_control_bar: TimelineControlBar) 
     popup = timeline_control_bar.timeline.hover_popup
     fm = QFontMetrics(popup.font())
 
-    assert popup._apply_staggering([], fm) == []
+    assert popup.apply_staggering([], fm) == []
 
     # Two labels far apart: both offset 0
     labels = [
         HoverLabel(text="A", x=10.0, color=QColor("red")),
         HoverLabel(text="B", x=300.0, color=QColor("blue")),
     ]
-    staggered = popup._apply_staggering(labels, fm)
+    staggered = popup.apply_staggering(labels, fm)
     assert len(staggered) == 2
     assert staggered[0].y_offset == 0
     assert staggered[1].y_offset == 0
@@ -268,7 +268,7 @@ def test_hover_popup_label_staggering(timeline_control_bar: TimelineControlBar) 
         HoverLabel(text="C", x=14.0, color=QColor("green")),
         HoverLabel(text="D", x=16.0, color=QColor("yellow")),
     ]
-    staggered_crowded = popup._apply_staggering(crowded, fm)
+    staggered_crowded = popup.apply_staggering(crowded, fm)
     offsets = [lbl.y_offset for lbl in staggered_crowded]
     assert offsets == [0, -20, -40, 0]
 
@@ -338,7 +338,7 @@ def test_timeline_mouse_press_and_click_emission(timeline_control_bar: TimelineC
     # Paint once to set up notches_cache
     image = QImage(1000, 33, QImage.Format.Format_ARGB32_Premultiplied)
     with QPainter(image) as painter:
-        timeline._draw_widget(painter)
+        timeline.draw_widget(painter)
 
     emitted: list[tuple[Frame, Time]] = []
     timeline.clicked.connect(lambda f, t: emitted.append((f, t)))
@@ -914,13 +914,13 @@ def test_timeline_draw_widget_time_mode_and_hover(timeline_control_bar: Timeline
     image = QImage(1000, 33, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.black)
     with QPainter(image) as painter:
-        timeline._draw_widget(painter)
+        timeline.draw_widget(painter)
 
     # In frame mode with hover
     timeline.mode = "frame"
     timeline.hover_x = 500
     with QPainter(image) as painter:
-        timeline._draw_widget(painter)
+        timeline.draw_widget(painter)
 
 
 def test_timeline_calculate_notch_intervals(timeline_control_bar: TimelineControlBar) -> None:
@@ -1074,7 +1074,7 @@ def test_timeline_click_bounds_clamping(timeline_control_bar: TimelineControlBar
 
     image = QImage(1000, 33, QImage.Format.Format_ARGB32_Premultiplied)
     with QPainter(image) as painter:
-        timeline._draw_widget(painter)
+        timeline.draw_widget(painter)
 
     emitted_frames = list[Frame]()
     timeline.clicked.connect(lambda f, _t: emitted_frames.append(f))
@@ -1134,7 +1134,7 @@ def test_timeline_custom_notches_line_coordinates_updated_on_scroll_rect_recalcu
 
     image1 = QImage(500, 33, QImage.Format.Format_ARGB32_Premultiplied)
     with QPainter(image1) as painter:
-        timeline._draw_widget(painter)
+        timeline.draw_widget(painter)
 
     timeline.add_notch("bookmarks", Frame(50), label="Midpoint")
     timeline.add_notch("ranges", Frame(20), end_data=Frame(80), label="Range")
@@ -1154,7 +1154,7 @@ def test_timeline_custom_notches_line_coordinates_updated_on_scroll_rect_recalcu
     timeline.rect_f = QRectF(0, 0, 1000, 33)
     image2 = QImage(1000, 33, QImage.Format.Format_ARGB32_Premultiplied)
     with QPainter(image2) as painter:
-        timeline._draw_widget(painter)
+        timeline.draw_widget(painter)
 
     new_scroll_rect = QRectF(timeline.scroll_rect)
     assert new_scroll_rect.width() == 1000

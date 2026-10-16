@@ -312,7 +312,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     def on_content_loaded(self) -> None:
         """Lifecycle hook called when initial content loading and rendering completes."""
-        self.tab_manager._on_global_autofit_changed(self.tab_manager.autofit_btn.isChecked())
+        self.tab_manager.set_global_autofit(self.tab_manager.autofit_btn.isChecked())
         self.on_content_ready(is_reload=False)
 
     def on_content_reloaded(self) -> None:
@@ -515,7 +515,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         with QSignalBlocker(self.tab_manager):
             self.tab_manager.swap_tabs(tabs, resolved_index)
 
-        self.tab_manager._on_global_autofit_changed(autofit_enabled, under_reload=True)
+        self.tab_manager.set_global_autofit(autofit_enabled, under_reload=True)
 
         return resolved_index
 
@@ -616,6 +616,52 @@ class LoaderWorkspace[T](BaseWorkspace):
     def set_error_page(self) -> None:
         self.stack.setCurrentWidget(self.error_page)
 
+    def calculate_target_frame(self, state: PlayHeadToolButton.State | None = None) -> int:
+        if not (voutput := self.outputs_manager.current_voutput):
+            raise NotImplementedError
+
+        match s := fallback(state, self.tab_manager.sync_playhead_state):
+            case PlayHeadToolButton.State.UNLINK:
+                target_frame = voutput.last_frame
+                logger.debug("Sync playhead %r, using last frame %d", s, target_frame)
+                return target_frame
+            case PlayHeadToolButton.State.LINK_TIME:
+                target_frame = clamp(
+                    self.outputs_manager.current_voutput.time_to_frame(self.playback.state.current_time),
+                    0,
+                    self.outputs_manager.current_voutput.vs_output.clip.num_frames - 1,
+                )
+
+                logger.debug(
+                    "Sync playhead %r, targeting frame %d (from time %.3fs)",
+                    s,
+                    target_frame,
+                    self.playback.state.current_time.total_seconds(),
+                )
+                return target_frame
+            case PlayHeadToolButton.State.LINK_FRAME:
+                target_frame = clamp(
+                    self.playback.state.current_frame,
+                    0,
+                    self.outputs_manager.current_voutput.vs_output.clip.num_frames - 1,
+                )
+                logger.debug(
+                    "Sync playhead %r, targeting frame %d (from frame %d)",
+                    s,
+                    target_frame,
+                    self.playback.state.current_frame,
+                )
+                return target_frame
+            case PlayHeadToolButton.State.LINK_ADAPT as s:
+                logger.debug("Sync playhead %r", s)
+                resolved_state = {
+                    "frame": PlayHeadToolButton.State.LINK_FRAME,
+                    "time": PlayHeadToolButton.State.LINK_TIME,
+                }[self.tbar.timeline.mode]
+                return self.calculate_target_frame(resolved_state)
+            case _:
+                assert_never(s)
+
     def _get_outputs(self) -> tuple[list[VideoOutput], list[AudioOutput]] | None:
         try:
             with self.env.use():
@@ -662,7 +708,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         logger.debug("Switching to video output: clip=%r", self.outputs_manager.current_voutput.vs_output.clip)
 
-        target_frame = self._calculate_target_frame()
+        target_frame = self.calculate_target_frame()
         self.init_timeline()
         self.update_timeline_cursor(target_frame)
         self._emit_output_info()
@@ -715,52 +761,6 @@ class LoaderWorkspace[T](BaseWorkspace):
             cb_render(f)
 
         return True
-
-    def _calculate_target_frame(self, state: PlayHeadToolButton.State | None = None) -> int:
-        if not (voutput := self.outputs_manager.current_voutput):
-            raise NotImplementedError
-
-        match s := fallback(state, self.tab_manager.sync_playhead_state):
-            case PlayHeadToolButton.State.UNLINK:
-                target_frame = voutput.last_frame
-                logger.debug("Sync playhead %r, using last frame %d", s, target_frame)
-                return target_frame
-            case PlayHeadToolButton.State.LINK_TIME:
-                target_frame = clamp(
-                    self.outputs_manager.current_voutput.time_to_frame(self.playback.state.current_time),
-                    0,
-                    self.outputs_manager.current_voutput.vs_output.clip.num_frames - 1,
-                )
-
-                logger.debug(
-                    "Sync playhead %r, targeting frame %d (from time %.3fs)",
-                    s,
-                    target_frame,
-                    self.playback.state.current_time.total_seconds(),
-                )
-                return target_frame
-            case PlayHeadToolButton.State.LINK_FRAME:
-                target_frame = clamp(
-                    self.playback.state.current_frame,
-                    0,
-                    self.outputs_manager.current_voutput.vs_output.clip.num_frames - 1,
-                )
-                logger.debug(
-                    "Sync playhead %r, targeting frame %d (from frame %d)",
-                    s,
-                    target_frame,
-                    self.playback.state.current_frame,
-                )
-                return target_frame
-            case PlayHeadToolButton.State.LINK_ADAPT as s:
-                logger.debug("Sync playhead %r", s)
-                resolved_state = {
-                    "frame": PlayHeadToolButton.State.LINK_FRAME,
-                    "time": PlayHeadToolButton.State.LINK_TIME,
-                }[self.tbar.timeline.mode]
-                return self._calculate_target_frame(resolved_state)
-            case _:
-                assert_never(s)
 
     def _emit_output_info(self) -> None:
         if not (voutput := self.outputs_manager.current_voutput):

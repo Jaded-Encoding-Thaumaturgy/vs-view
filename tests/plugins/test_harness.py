@@ -131,7 +131,7 @@ def test_plugin_harness_frame_and_image_updates(
     # Step to frame 5
     harness.set_current_frame(5)
     assert harness.current_frame == Frame(5)
-    assert harness.playback_proxy._state.current_frame == Frame(5)
+    assert harness.playback_proxy.testing._state.current_frame == Frame(5)
     assert 5 in harness.current_voutput.props
     assert harness.api.current_view.image.isNull() is False
     assert harness.current_time.total_seconds() == pytest.approx(5 / 24, abs=1e-5)
@@ -168,15 +168,15 @@ def test_plugin_harness_extended_capabilities(
     # Timeline notch tracking
     assert harness.api.timeline.mode == "frame"
     harness.api.timeline.add_notch("test_group", Frame(10), label="Test Notch")
-    assert len(harness.timeline_proxy._notches["test_group"]) == 1
+    assert len(harness.timeline_proxy.testing._notches["test_group"]) == 1
     harness.api.timeline.clear_notches("test_group")
-    assert "test_group" not in harness.timeline_proxy._notches
+    assert "test_group" not in harness.timeline_proxy.testing._notches
 
     # Playback synchronization and seeking
     assert harness.api.is_playing is False
-    assert harness.playback_proxy._state.is_playing is False
+    assert harness.playback_proxy.testing._state.is_playing is False
 
-    harness.playback_proxy._state.is_playing = True
+    harness.playback_proxy.testing._state.is_playing = True
     assert harness.api.is_playing is True
 
     # Seeking via frame and timedelta

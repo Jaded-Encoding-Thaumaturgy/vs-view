@@ -471,6 +471,24 @@ class MainWindow(QMainWindow):
 
         return True
 
+    def clear_workspace[WorkspaceT: BaseWorkspace](self, btn: WorkspaceToolButton[WorkspaceT]) -> None:
+        old_index = self.nav_container.buttons.index(btn)
+        workspace_type = type(btn.workspace)
+
+        self.setUpdatesEnabled(False)
+        self.button_group.blockSignals(True)
+
+        try:
+            if not self.delete_workspace(btn):
+                return
+            new_btn = self.add_workspace(workspace_type)
+
+            self.nav_container.move_button(new_btn, old_index)
+        finally:
+            self.button_group.blockSignals(False)
+            self.setUpdatesEnabled(True)
+            self.update()
+
     def connect_workspace(self, workspace: BaseWorkspace) -> None:
         if isinstance(workspace, LoaderWorkspace):
             self.status_widget.connect_workspace(workspace)
@@ -622,31 +640,13 @@ class MainWindow(QMainWindow):
     def _on_clear_action_triggered(self) -> None:
         action = self.sender()
         if isinstance(action, QAction) and (btn := action.property("btn")):
-            self._on_clear_action(btn)
+            self.clear_workspace(btn)
 
     @Slot()
     def _on_delete_workspace_triggered(self) -> None:
         action = self.sender()
         if isinstance(action, QAction) and (btn := action.property("btn")):
             self.delete_workspace(btn)
-
-    def _on_clear_action[WorkspaceT: BaseWorkspace](self, btn: WorkspaceToolButton[WorkspaceT]) -> None:
-        old_index = self.nav_container.buttons.index(btn)
-        workspace_type = type(btn.workspace)
-
-        self.setUpdatesEnabled(False)
-        self.button_group.blockSignals(True)
-
-        try:
-            if not self.delete_workspace(btn):
-                return
-            new_btn = self.add_workspace(workspace_type)
-
-            self.nav_container.move_button(new_btn, old_index)
-        finally:
-            self.button_group.blockSignals(False)
-            self.setUpdatesEnabled(True)
-            self.update()
 
     @Slot()
     def _populate_workspace_menu(self) -> None:
@@ -686,6 +686,7 @@ class MainWindow(QMainWindow):
                 checked=settings.get(plugin.identifier, True),
             )
 
+            @Slot(bool)
             def on_toggled(
                 checked: bool,
                 idx: int = i,
