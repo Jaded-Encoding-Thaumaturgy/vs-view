@@ -5,7 +5,7 @@ from typing import Any, Self, overload, override
 
 from jetpytools import SPath
 from PySide6.QtCore import QMetaObject, QSize, Qt, QUrl
-from PySide6.QtGui import QColorSpace, QImage, QResizeEvent, QTransform
+from PySide6.QtGui import QImage, QResizeEvent, QTransform
 from PySide6.QtQuick import QQuickImageProvider, QQuickView
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
@@ -32,8 +32,7 @@ class HDRImageProvider(QQuickImageProvider):
 
     def __init__(self) -> None:
         super().__init__(QQuickImageProvider.ImageType.Image)
-        self.image = QImage(1, 1, QImage.Format.Format_RGBA16FPx4)
-        self.image.fill(Qt.GlobalColor.transparent)
+        self.image = QImage(1, 1, QImage.Format.Format_RGBX16FPx4)
 
     @override
     def requestImage(self, id: str, size: QSize, requestedSize: QSize) -> QImage:
@@ -56,7 +55,6 @@ class HDRViewport(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
 
         self._provider = HDRImageProvider()
@@ -65,7 +63,7 @@ class HDRViewport(QWidget):
         self._view.setFlags(self._view.flags() | Qt.WindowType.WindowTransparentForInput)
         self._view.setResizeMode(QQuickView.ResizeMode.SizeRootObjectToView)
         self._view.engine().addImageProvider("hdr", self._provider)
-        self._view.setColor(Qt.GlobalColor.transparent)
+        self._view.setColor(Qt.GlobalColor.black)
         self._view.setSource(QUrl.fromLocalFile(self.QML_PATH.resolve().to_str()))
 
         if (status := self._view.status()) != QQuickView.Status.Ready:
@@ -101,17 +99,7 @@ class HDRViewport(QWidget):
         if frame.isNull():
             return
 
-        frame.setColorSpace(QColorSpace.NamedColorSpace.Bt2100Pq)
-
-        if (target_format := frame.format()) not in (QImage.Format.Format_RGBA16FPx4, QImage.Format.Format_RGBA32FPx4):
-            target_format = QImage.Format.Format_RGBA16FPx4
-            logger.debug("Target format is %s. Implicit conversion to RGBA16FPx4 will be performed", target_format)
-
-        sc_rgb_cs = QColorSpace(QColorSpace.NamedColorSpace.SRgbLinear)
-        hdr_image = frame.convertToFormat(target_format)
-        hdr_image = hdr_image.convertedToColorSpace(sc_rgb_cs)
-
-        self._provider.image = hdr_image
+        self._provider.image = frame
 
         # Sync metadata to QML (dimensions and transform)
         self.image_width = frame.width()

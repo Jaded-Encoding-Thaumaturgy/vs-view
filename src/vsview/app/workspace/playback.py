@@ -311,7 +311,7 @@ class PlaybackManager(QObject):
             try:
                 with voutput.prepared_clip.get_frame(n) as frame:
                     logger.debug("Frame %d rendered", n)
-                    image = voutput.packer.frame_to_qimage(frame).copy()
+                    image = voutput.packer.frame_to_qimage(frame).owned(frame.get_read_ptr(0))
             except Exception as e:
                 if (
                     isinstance(e, (TimeoutError, ConnectionError))  # no fmt

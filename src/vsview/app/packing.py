@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import ctypes
 from abc import ABC
 from enum import Enum, IntEnum
 from logging import Filter, LogRecord, getLogger
-from typing import Any, Literal, assert_never, override
+from typing import Any, Literal, Self, assert_never, override
 
 import vapoursynth
 import vapoursynth as vs
@@ -100,11 +101,11 @@ class Packer(ABC):
                 case 10, _:
                     return QImage.Format.Format_RGB30
                 case 16, vs.INTEGER:
-                    return QImage.Format.Format_RGBA64
+                    return QImage.Format.Format_RGBX64
                 case 16, vs.FLOAT:
-                    return QImage.Format.Format_RGBA16FPx4
+                    return QImage.Format.Format_RGBX16FPx4
                 case 32, _:
-                    return QImage.Format.Format_RGBA32FPx4
+                    return QImage.Format.Format_RGBX32FPx4
                 case _:
                     assert_never(self.value)
 
@@ -116,8 +117,14 @@ class Packer(ABC):
                     return QImage.Format.Format_ARGB32
                 case 10, _:
                     return QImage.Format.Format_A2RGB30_Premultiplied
+                case 16, vs.INTEGER:
+                    return QImage.Format.Format_RGBA64
+                case 16, vs.FLOAT:
+                    return QImage.Format.Format_RGBA16FPx4
+                case 32, _:
+                    return QImage.Format.Format_RGBA32FPx4
                 case _:
-                    return self.qt
+                    assert_never(self.value)
 
         @property
         def formats(
@@ -153,10 +160,9 @@ class Packer(ABC):
         )
 
         if self.hdr:
-            # For HDR, we must use BT.2020 PQ (ST2084)
-            params["transfer"] = vs.TRANSFER_ST2084
-            params["primaries"] = vs.PRIMARIES_BT2020
-            return clip.resize.Point(**params | kwargs)
+            kwargs["transfer"] = vs.TRANSFER_LINEAR
+            kwargs["primaries"] = vs.PRIMARIES_BT709
+            params["nominal_luminance"] = 80.0
 
         # Returns directly the clip without checking anything.
         # If color specs are set, this will work.
@@ -198,7 +204,7 @@ class Packer(ABC):
 
         return packed.std.SetFrameProp("VSViewHasAlpha", True) if alpha else packed
 
-    def frame_to_qimage(self, frame: vs.VideoFrame, **kwargs: Any) -> QImage:
+    def frame_to_qimage(self, frame: vs.VideoFrame, **kwargs: Any) -> SafeImage:
         """
         Wraps a packed VapourSynth VideoFrame into a QImage.
 
@@ -222,7 +228,7 @@ class Packer(ABC):
             width //= 4
 
         # QImage supports Buffer inputs
-        img = QImage(
+        img = SafeImage(
             get_plane_buffer(frame, 0),  # type: ignore[call-overload]
             width,
             frame.height,
@@ -249,6 +255,18 @@ class Packer(ABC):
 
         # If we are in HDR/(16/32)-bit mode, we must copy the image
         if self.format.bitdepth >= 16 or SettingsManager.global_settings.view.copy_qimage:
-            return img.copy()
+            return img.owned(force=True)
 
         return img
+
+
+class SafeImage(QImage):
+    def is_borrowed(self, frame_addr: ctypes.c_void_p | None) -> bool:
+        if (bits := self.bits()) is None or self.isNull() or frame_addr is None or frame_addr.value is None:
+            return False
+        return ctypes.addressof(ctypes.c_char.from_buffer(bits)) == frame_addr.value
+
+    def owned(self, frame_addr: ctypes.c_void_p | None = None, force: bool = False) -> Self:
+        if force or frame_addr is None or self.is_borrowed(frame_addr):
+            self.swap(self.copy())
+        return self

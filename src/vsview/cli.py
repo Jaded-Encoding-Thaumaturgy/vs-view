@@ -233,6 +233,7 @@ def main(
         os.environ.setdefault("QSG_RHI_LEAK_CHECK", "1")
         os.environ.setdefault("QSG_RHI_PROFILE", "1")
         if sys.platform == "linux":
+            os.environ.setdefault("QSG_RHI_BACKEND", "vulkan")
             os.environ.setdefault("QSG_RENDER_LOOP", "basic")
 
     if settings_roaming:
