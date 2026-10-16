@@ -658,3 +658,17 @@ def test_playback_manager_buffered_audio_buffer_exhaustion(
         manager.state.reset_audio()
         aoutput.clear()
         mock_outputs.current_aoutput = None
+
+
+def test_playback_manager_rapid_stop_cancels_startup(playback_manager_setup: PlaybackManagerSetup) -> None:
+    manager, *_ = playback_manager_setup
+
+    manager.toggle_playback()
+    assert manager.state.is_playing is True
+
+    manager.stop()
+    assert manager.state.is_playing is False
+
+    assert manager.state.is_playing is False
+    assert manager.state.video_timer.isActive() is False
+    assert manager.state.audio_timer.isActive() is False

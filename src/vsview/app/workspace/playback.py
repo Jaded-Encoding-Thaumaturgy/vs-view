@@ -364,6 +364,10 @@ class PlaybackManager(QObject):
 
     @run_in_background(name="StartPlayback")
     def _start_playback(self, play_range: range | None = None, loop: bool = False) -> None:
+        """Must set the state is_playing before calling this function"""
+        if not self.state.is_playing:
+            return
+
         logger.debug("Starting playback")
 
         if not (voutput := self._outputs_manager.current_voutput):
@@ -387,8 +391,10 @@ class PlaybackManager(QObject):
                 stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
             )
 
+            if not self.state.is_playing:
+                return  # type: ignore[unreachable]
+
             self.state.reset()
-            self.state.is_playing = True
 
             if not play_range:
                 play_range = range(self.state.current_frame, voutput.vs_output.clip.num_frames)
@@ -410,7 +416,7 @@ class PlaybackManager(QObject):
 
             # Check if user cancelled
             if not self.state.is_playing:
-                return
+                return  # type: ignore[unreachable]
 
             self._controller.on_playback_started()
 
@@ -418,9 +424,11 @@ class PlaybackManager(QObject):
             self.state.next_frame_time_ns = self.state.next_audio_frame_time_ns = perf_counter_ns()
             self.statusLoadingStarted.emit("Playing...")
 
-            # Start the render chain. Each frame will chain to the next
+            # Start the render chain.
+            # Frame 0 is already on screen, so start audio immediately
+            # and schedule the next video frame after 1 interval.
             self._play_next_audio_frame()
-            self._play_next_frame()
+            self._schedule_or_continue()
         except Exception:
             self._stop_playback()
             raise
@@ -455,6 +463,7 @@ class PlaybackManager(QObject):
 
     def _restart_playback(self) -> None:
         self._stop_playback()
+        self.state.is_playing = True
         self._start_playback()
 
     @Slot()
@@ -745,6 +754,7 @@ class PlaybackManager(QObject):
 
         play_range = range(self.state.current_frame, end_frame + direction, step)
 
+        self.state.is_playing = True
         self._tbar.playback_container.play_pause_btn.setChecked(True)
         self._start_playback(play_range=play_range, loop=loop)
 
