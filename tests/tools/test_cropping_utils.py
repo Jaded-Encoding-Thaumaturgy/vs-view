@@ -4,11 +4,11 @@ import pytest
 import vapoursynth as vs
 from pydantic import ValidationError
 from PySide6.QtCore import QRect, QSize
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QToolButton, QWidget
 from pytestqt.qtbot import QtBot
 
 from vsview.app.tools.cropping.settings import GlobalSettings
-from vsview.app.tools.cropping.utils import CommandLabel, CropValues, CustomRect, CustomSize
+from vsview.app.tools.cropping.utils import CommandLabel, CommandRow, CropValues, CustomRect, CustomSize
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
 
@@ -308,3 +308,26 @@ def test_command_label_format_suppression(
 
     # Assert: error suppressed without raising, text remains reset to original template
     assert label.text() == template
+
+
+def test_command_row(qtbot: QtBot) -> None:
+    parent = QWidget()
+    qtbot.addWidget(parent)
+
+    btn = QToolButton(parent)
+    row = CommandRow("std.Crop(left={left})", btn, parent)
+    qtbot.addWidget(row)
+
+    assert row.label.text() == "std.Crop(left={left})"
+    assert row.cmd_label is row.label
+    assert row.copy_btn is btn
+    assert btn.parent() is row
+
+    row.label.format(left=42)
+    assert row.label.text() == "std.Crop(left=42)"
+
+    with qtbot.waitSignal(row.copied) as blocker:
+        btn.click()
+
+    assert blocker.args == ["std.Crop(left=42)"]
+    assert QApplication.clipboard().text() == "std.Crop(left=42)"

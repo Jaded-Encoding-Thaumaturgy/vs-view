@@ -5,19 +5,7 @@ from typing import override
 
 from jetpytools import clamp
 from PySide6.QtCore import QRect, QSignalBlocker, QSize, Qt, Slot
-from PySide6.QtGui import QCursor
-from PySide6.QtWidgets import (
-    QApplication,
-    QGridLayout,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QSpinBox,
-    QToolButton,
-    QToolTip,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QGridLayout, QGroupBox, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
 
 from vsview.api import (
     ActionDefinition,
@@ -30,7 +18,7 @@ from vsview.api import (
 )
 
 from .settings import GlobalSettings
-from .utils import CommandLabel, CropValues, CustomRect, CustomSize
+from .utils import CommandLabel, CommandRow, CropValues, CustomRect, CustomSize
 
 logger = getLogger(__name__)
 
@@ -160,32 +148,23 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         return spin
 
     def _setup_cmd_labels(self) -> None:
-        for btn in self.cmd_group.findChildren(QToolButton):
-            btn.deleteLater()
-
-        for lbl in self.cmd_group.findChildren(CommandLabel):
-            lbl.deleteLater()
+        while item := self.cmd_group_layout.takeAt(0):
+            if w := item.widget():
+                w.deleteLater()
 
         self.cmd_labels.clear()
 
         for code_fmt in self.settings.global_.code_format:
-            cmd_label = CommandLabel(code_fmt, self.cmd_group)
-            self.cmd_labels.append(cmd_label)
-
             copy_btn = self.make_tool_button(
                 IconName.CLIPBOARD,
                 "Copy command to clipboard",
-                self.cmd_group,
                 icon_states=self.DEFAULT_ICON_STATES,
             )
-            copy_btn.clicked.connect(
-                lambda checked, label=cmd_label, btn=copy_btn: self.copy_to_clipboard(checked, label, btn)
-            )
+            row = CommandRow(code_fmt, copy_btn, self.cmd_group)
+            row.copied.connect(self._on_command_copied)
 
-            cmd_layout = QHBoxLayout()
-            cmd_layout.addWidget(cmd_label)
-            cmd_layout.addWidget(copy_btn)
-            self.cmd_group_layout.addLayout(cmd_layout)
+            self.cmd_labels.append(row.cmd_label)
+            self.cmd_group_layout.addWidget(row)
 
     # Plugin API Hooks
     @override
@@ -225,10 +204,9 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         if checked:
             self._apply_view_selection(self.api.current_view.rect_selection)
 
-    def copy_to_clipboard(self, checked: bool, label: QLabel, btn: QToolButton) -> None:
-        QApplication.clipboard().setText(label.text())
-        QToolTip.showText(QCursor.pos(), "Copied!", btn)
-        self.api.statusMessage.emit(f"Copied to clipboard: {label.text()}")
+    @Slot(str)
+    def _on_command_copied(self, text: str) -> None:
+        self.api.statusMessage.emit(f"Copied to clipboard: {text}")
 
     @Slot()
     def _on_global_settings_changed(self) -> None:

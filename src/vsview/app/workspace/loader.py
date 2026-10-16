@@ -811,7 +811,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             plugin_obj = plugin_type(dock, self.plugin_controller.api)
 
             dock.setWidget(plugin_obj)
-            dock.visibilityChanged.connect(lambda visible, d=dock: self._on_dock_visibility_changed(visible, d))
+            dock.visibilityChanged.connect(self._on_dock_visibility_changed)
 
             self.plugins.append(plugin_obj)
             self.docks.append(dock)
@@ -846,7 +846,12 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.dock_toggle_btn.setChecked(checked)
             self.tab_manager.toggle_tooldock_btn.setChecked(checked)
 
-    def _on_dock_visibility_changed(self, visible: bool, dock: PluginDock) -> None:
+    @Slot(bool)
+    def _on_dock_visibility_changed(self, visible: bool) -> None:
+        if not isinstance(dock := self.sender(), PluginDock):
+            logger.warning("Calling '_on_dock_visibility_changed' but the sender isn't a PluginDock")
+            return
+
         if not isinstance(w := dock.widget(), WidgetPluginBase):
             return
 

@@ -428,6 +428,10 @@ class TabManager(QWidget, IconReloadMixin):
 
             self.tabs.get_tab_label(i).zoom = 0 if enabled else view.current_zoom
 
-    def _on_autofit_changed(self, view: GraphicsView, enabled: bool) -> None:
+    @Slot(bool)
+    def _on_autofit_changed(self, enabled: bool) -> None:
+        if not (isinstance(view := self.sender(), GraphicsView)):
+            logger.warning("Calling autofit changed but the sender isn't a GraphicsView")
+            return
         if (idx := self.tabs.indexOf(view)) >= 0:
             self.tabs.get_tab_label(idx).zoom = 0 if enabled else view.current_zoom

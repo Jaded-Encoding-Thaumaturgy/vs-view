@@ -749,10 +749,10 @@ def test_on_autofit_changed_single_view(tab_manager: TabManager, make_video_outp
     mgr.swap_tabs(tabs, 0)
 
     view1 = mgr.tabs.view(1)
-    mgr._on_autofit_changed(view1, True)
+    mgr.tabs.view(1).autofitChanged.emit(True)
     assert mgr.tabs.get_tab_label(1).zoom == 0
 
-    mgr._on_autofit_changed(view1, False)
+    mgr.tabs.view(1).autofitChanged.emit(False)
     assert mgr.tabs.get_tab_label(1).zoom == view1.current_zoom
 
 

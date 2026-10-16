@@ -4,8 +4,9 @@ import contextlib
 from typing import NamedTuple, Self
 
 from jetpytools import clamp
-from PySide6.QtCore import QRect, QSize, Qt
-from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtCore import QRect, QSize, Qt, Signal, Slot
+from PySide6.QtGui import QCursor
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QToolButton, QToolTip, QWidget
 from vapoursynth import VideoNode
 
 from vsview.assets.utils import get_monospace_font
@@ -51,6 +52,33 @@ class CommandLabel(QLabel):
 
     def reset_text(self) -> None:
         self.setText(self.original_text)
+
+
+class CommandRow(QWidget):
+    copied = Signal(str)
+
+    def __init__(self, code_fmt: str, copy_btn: QToolButton, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.cmd_label = CommandLabel(code_fmt, self)
+        self.copy_btn = copy_btn
+        self.copy_btn.setParent(self)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.cmd_label)
+        layout.addWidget(self.copy_btn)
+
+        self.copy_btn.clicked.connect(self._on_copy_clicked)
+
+    @property
+    def label(self) -> CommandLabel:
+        return self.cmd_label
+
+    @Slot()
+    def _on_copy_clicked(self) -> None:
+        QApplication.clipboard().setText(self.cmd_label.text())
+        QToolTip.showText(QCursor.pos(), "Copied!", self.copy_btn)
+        self.copied.emit(self.cmd_label.text())
 
 
 class CustomSize(QSize):
