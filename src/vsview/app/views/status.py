@@ -300,7 +300,6 @@ class StatusWidget(IconReloadMixin, QWidget):
 
     @Slot(str)
     def _on_settings_changed(self, path: str = "", message: str = "Settings saved") -> None:
-        self._reload_icons()  # Hot-reload icons on settings change
         self._show_settings_saved(path, message)
 
     def _show_settings_saved(self, path: str, message: str) -> None:
