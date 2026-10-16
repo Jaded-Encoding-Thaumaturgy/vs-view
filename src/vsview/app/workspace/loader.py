@@ -553,6 +553,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.statusLoadingErrored.emit("Error while loading content")
         self.set_error_page()
         self.tbar.enable()
+        self.playback.can_reload = True
         gc.collect()
 
         self._is_failed = True
