@@ -275,12 +275,30 @@ class PluginWorkspaceController(QObject):
             view.on_current_voutput_changed(self.current_voutput, tab_index)
 
         if view.pixmap_item.pixmap().isNull() or image_changed or refresh:
-            with self.__workspace.env.use(), view.outputs[tab_index].get_frame(current_frame) as frame:
-                logger.debug("Rendering initial frame %d for view", current_frame)
-                view.on_current_frame_changed(current_frame, frame)
+            target_tab = tab_index
+            target_frame = current_frame
 
-        view.update_scene_rect()
-        view.set_autofit(view.autofit)
+            def on_frame_ready(f: Future[vs.VideoFrame]) -> None:
+                if exc := f.exception():
+                    logger.error("Failed to render initial frame %d for view %s", target_frame, view, exc_info=exc)
+                    return
+
+                with (frame := f.result()):
+                    if view.current_tab == target_tab and view.last_frame == target_frame:
+                        logger.debug("Rendering initial frame %d for view", target_frame)
+                        try:
+                            view.on_current_frame_changed(target_frame, frame)
+                        except Exception:
+                            logger.exception("Failed in on_current_frame_changed for view %s", view)
+                        view.update_scene_rect()
+                        view.set_autofit(view.autofit)
+
+            with self.__workspace.env.use():
+                fut = view.outputs[tab_index].get_frame_async(current_frame)
+            UnifiedFuture.from_future(fut).add_loop_callback(on_frame_ready)
+        else:
+            view.update_scene_rect()
+            view.set_autofit(view.autofit)
 
     def on_current_voutput_changed(self, refresh: bool = False) -> None:
         for plugin in self.__workspace.plugins:
