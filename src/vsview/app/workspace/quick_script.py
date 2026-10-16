@@ -474,6 +474,7 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
 
     @override
     def reload_content(self) -> UnifiedFuture[int]:
+        output_metadata.pop(self.filename, None)
         self.content = CodeContent(self.code_dock.editor.toPlainText(), self.filename)
 
         if not self.loaded_once:
