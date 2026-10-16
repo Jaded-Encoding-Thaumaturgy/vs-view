@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Generator
+from concurrent.futures import Future
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
@@ -13,6 +14,7 @@ from pydantic import BaseModel
 from PySide6.QtCore import QObject, QRect, Signal, Slot
 from PySide6.QtGui import QContextMenuEvent, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
+from vsengine import UnifiedFuture
 
 from vsview.app.settings import SettingsManager
 from vsview.app.utils import QObjectCounter
@@ -310,32 +312,46 @@ class PluginWorkspaceController(QObject):
             if not self._is_truly_visible(plugin):
                 continue
 
-            plugin.on_current_frame_changed(n)
+            try:
+                plugin.on_current_frame_changed(n)
+            except Exception:
+                logger.exception("Plugin %r raised an exception in on_current_frame_changed", plugin.identifier)
 
             for view in self._visible_views(plugin):
                 if view.current_tab == -1 or view.current_tab not in view.outputs:
                     continue
 
                 view_key = f"{plugin.identifier}:{id(view)}"
-                if plugin_frames and view_key in plugin_frames:
-                    view.on_current_frame_changed(n, plugin_frames[view_key])
-                elif plugin_frames and plugin.identifier in plugin_frames:
-                    view.on_current_frame_changed(n, plugin_frames[plugin.identifier])
-                else:
-                    with self.__workspace.env.use(), view.outputs[view.current_tab].get_frame(n) as frame:
-                        view.on_current_frame_changed(n, frame)
+                try:
+                    if plugin_frames and view_key in plugin_frames:
+                        view.on_current_frame_changed(n, plugin_frames[view_key])
+                    else:
+                        logger.debug("Synchronous get_frame for %s", view_key)
+                        with self.__workspace.env.use(), view.outputs[view.current_tab].get_frame(n) as frame:
+                            view.on_current_frame_changed(n, frame)
+                except Exception:
+                    logger.exception(
+                        "Plugin view %r raised an exception in on_current_frame_changed",
+                        plugin.identifier,
+                    )
 
     @run_in_loop(return_future=False)
     def on_playback_started(self) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                plugin.on_playback_started()
+                try:
+                    plugin.on_playback_started()
+                except Exception:
+                    logger.exception("Plugin %r raised an exception in on_playback_started", plugin.identifier)
 
     @run_in_loop(return_future=False)
     def on_playback_stopped(self) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                plugin.on_playback_stopped()
+                try:
+                    plugin.on_playback_stopped()
+                except Exception:
+                    logger.exception("Plugin %r raised an exception in on_playback_stopped", plugin.identifier)
 
     # Settings Access & Updates
     def get_cached_proxy_settings(self, plugin: _PluginLike, scope: str) -> _SettingsProxy[BaseModel] | None:
@@ -349,49 +365,77 @@ class PluginWorkspaceController(QObject):
     def on_view_context_menu(self, event: QContextMenuEvent) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                plugin.on_view_context_menu(event)
+                try:
+                    plugin.on_view_context_menu(event)
+                except Exception:
+                    logger.exception("Plugin %r raised an exception in on_view_context_menu", plugin.identifier)
 
     @Slot(QMouseEvent)
     def on_view_mouse_moved(self, event: QMouseEvent) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                plugin.on_view_mouse_moved(event)
+                try:
+                    plugin.on_view_mouse_moved(event)
+                except Exception:
+                    logger.exception("Plugin %r raised an exception in on_view_mouse_moved", plugin.identifier)
 
     @Slot(QMouseEvent)
     def on_view_mouse_pressed(self, event: QMouseEvent) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                plugin.on_view_mouse_pressed(event)
+                try:
+                    plugin.on_view_mouse_pressed(event)
+                except Exception:
+                    logger.exception("Plugin %r raised an exception in on_view_mouse_pressed", plugin.identifier)
 
     @Slot(QMouseEvent)
     def on_view_mouse_released(self, event: QMouseEvent) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                plugin.on_view_mouse_released(event)
+                try:
+                    plugin.on_view_mouse_released(event)
+                except Exception:
+                    logger.exception("Plugin %r raised an exception in on_view_mouse_released", plugin.identifier)
 
     @Slot(QRect)
     def on_view_rect_selection_changed(self, rect: QRect) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                plugin.on_view_rect_selection_changed(rect)
+                try:
+                    plugin.on_view_rect_selection_changed(rect)
+                except Exception:
+                    logger.exception(
+                        "Plugin %r raised an exception in on_view_rect_selection_changed", plugin.identifier
+                    )
 
     @Slot(QRect)
     def on_view_rect_selection_finished(self, rect: QRect) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                plugin.on_view_rect_selection_finished(rect)
+                try:
+                    plugin.on_view_rect_selection_finished(rect)
+                except Exception:
+                    logger.exception(
+                        "Plugin %r raised an exception in on_view_rect_selection_finished", plugin.identifier
+                    )
 
     @Slot(QKeyEvent)
     def on_view_key_press(self, event: QKeyEvent) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                plugin.on_view_key_press(event)
+                try:
+                    plugin.on_view_key_press(event)
+                except Exception:
+                    logger.exception("Plugin %r raised an exception in on_view_key_press", plugin.identifier)
 
     @Slot(QKeyEvent)
     def on_view_key_release(self, event: QKeyEvent) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):
-                plugin.on_view_key_release(event)
+                try:
+                    plugin.on_view_key_release(event)
+                except Exception:
+                    logger.exception("Plugin %r raised an exception in on_view_key_release", plugin.identifier)
 
     # Internal helperss
     @run_in_loop(return_future=False)
