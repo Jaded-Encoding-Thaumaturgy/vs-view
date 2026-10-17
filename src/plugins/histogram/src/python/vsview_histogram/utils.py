@@ -90,7 +90,8 @@ class CustomContextMenu(QMenu):
         self.api.statusMessage.emit("Saving image...")
 
         try:
-            image.convertToFormat(QImage.Format.Format_RGB32).save(file_path, fmt)  # type: ignore[call-overload]
+            if not image.convertToFormat(QImage.Format.Format_RGB32).save(file_path, fmt):  # type: ignore[call-overload]
+                raise OSError(f"Failed to save image to {file_path!r}")
         except Exception:
             logger.exception("Error saving image:")
             self.api.statusMessage.emit("Error saving image")
