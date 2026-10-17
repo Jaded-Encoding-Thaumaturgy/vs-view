@@ -177,17 +177,6 @@ export class EditorService implements vscode.Disposable {
     });
   }
 
-  public setFontSize(size: number): void {
-    this.editor.updateOptions({ fontSize: size });
-  }
-
-  public setLanguage(lang: string): void {
-    const activeTab = this.activeUri ? this.tabs.get(this.activeUri) : null;
-    if (activeTab) {
-      monaco.editor.setModelLanguage(activeTab.model, lang);
-    }
-  }
-
   public focus(): void {
     this.editor.focus();
   }

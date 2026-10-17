@@ -58,13 +58,9 @@ interface MockEditorServiceFixture {
   getMainValue: ReturnType<typeof vi.fn>;
   setValue: ReturnType<typeof vi.fn>;
   setTheme: ReturnType<typeof vi.fn>;
-  setFontSize: ReturnType<typeof vi.fn>;
-  setLanguage: ReturnType<typeof vi.fn>;
   toggleWordWrap: ReturnType<typeof vi.fn>;
   openTab: ReturnType<typeof vi.fn>;
-  closeTab: ReturnType<typeof vi.fn>;
   selectTab: ReturnType<typeof vi.fn>;
-  setMainTab: ReturnType<typeof vi.fn>;
   markTabSaved: ReturnType<typeof vi.fn>;
   requestSave: ReturnType<typeof vi.fn>;
   requestSaveAs: ReturnType<typeof vi.fn>;
@@ -95,13 +91,9 @@ function createMockEditorService(): MockEditorServiceFixture {
   const getMainValue = vi.fn().mockReturnValue("main content");
   const setValue = vi.fn();
   const setTheme = vi.fn();
-  const setFontSize = vi.fn();
-  const setLanguage = vi.fn();
   const toggleWordWrap = vi.fn();
   const openTab = vi.fn();
-  const closeTab = vi.fn();
   const selectTab = vi.fn();
-  const setMainTab = vi.fn();
   const markTabSaved = vi.fn();
   const requestSave = vi.fn();
   const requestSaveAs = vi.fn();
@@ -114,13 +106,9 @@ function createMockEditorService(): MockEditorServiceFixture {
     getMainValue,
     setValue,
     setTheme,
-    setFontSize,
-    setLanguage,
     toggleWordWrap,
     openTab,
-    closeTab,
     selectTab,
-    setMainTab,
     markTabSaved,
     requestSave,
     requestSaveAs,
@@ -148,13 +136,9 @@ function createMockEditorService(): MockEditorServiceFixture {
     getMainValue,
     setValue,
     setTheme,
-    setFontSize,
-    setLanguage,
     toggleWordWrap,
     openTab,
-    closeTab,
     selectTab,
-    setMainTab,
     markTabSaved,
     requestSave,
     requestSaveAs,
@@ -176,7 +160,6 @@ interface MockConsoleServiceFixture {
   service: ConsolePanelService;
   append: ReturnType<typeof vi.fn>;
   toggle: ReturnType<typeof vi.fn>;
-  clear: ReturnType<typeof vi.fn>;
   setTheme: ReturnType<typeof vi.fn>;
   emitToggle: (visible: boolean) => void;
   emitResize: (cols: number) => void;
@@ -188,13 +171,11 @@ function createMockConsoleService(): MockConsoleServiceFixture {
 
   const append = vi.fn();
   const toggle = vi.fn();
-  const clear = vi.fn();
   const setTheme = vi.fn();
 
   const service = {
     append,
     toggle,
-    clear,
     setTheme,
     onDidToggle: vi.fn((cb: (visible: boolean) => void) => toggleEmitter.event(cb)),
     onDidResize: vi.fn((cb: (cols: number) => void) => resizeEmitter.event(cb)),
@@ -205,7 +186,6 @@ function createMockConsoleService(): MockConsoleServiceFixture {
     service,
     append,
     toggle,
-    clear,
     setTheme,
     emitToggle: (visible: boolean) => toggleEmitter.fire(visible),
     emitResize: (cols: number) => resizeEmitter.fire(cols),
@@ -375,32 +355,6 @@ describe("BridgeService", () => {
       expect(mockConsole.setTheme).not.toHaveBeenCalled();
     });
 
-    it("dispatches editor.setFontSize", () => {
-      using fixture = setupInitializedBridgeService().bridgeService;
-      void fixture;
-
-      mockBridgeFixture.emitCommand("editor.setFontSize", JSON.stringify({ size: 16 }));
-      expect(mockEditor.setFontSize).toHaveBeenCalledWith(16);
-
-      // Non-number size ignored
-      mockEditor.setFontSize.mockClear();
-      mockBridgeFixture.emitCommand("editor.setFontSize", JSON.stringify({ size: "16" }));
-      expect(mockEditor.setFontSize).not.toHaveBeenCalled();
-    });
-
-    it("dispatches editor.setLanguage", () => {
-      using fixture = setupInitializedBridgeService().bridgeService;
-      void fixture;
-
-      mockBridgeFixture.emitCommand("editor.setLanguage", JSON.stringify({ lang: "python" }));
-      expect(mockEditor.setLanguage).toHaveBeenCalledWith("python");
-
-      // Non-string language ignored
-      mockEditor.setLanguage.mockClear();
-      mockBridgeFixture.emitCommand("editor.setLanguage", JSON.stringify({ lang: true }));
-      expect(mockEditor.setLanguage).not.toHaveBeenCalled();
-    });
-
     it("dispatches editor.toggleWordWrap", () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
@@ -447,45 +401,6 @@ describe("BridgeService", () => {
         JSON.stringify({ uri: "file:///script.py" }), // missing content
       );
       expect(mockEditor.openTab).not.toHaveBeenCalled();
-    });
-
-    it("dispatches editor.closeTab and editor.selectTab", () => {
-      using fixture = setupInitializedBridgeService().bridgeService;
-      void fixture;
-
-      mockBridgeFixture.emitCommand(
-        "editor.closeTab",
-        JSON.stringify({ uri: "file:///script.py" }),
-      );
-      expect(mockEditor.closeTab).toHaveBeenCalledWith("file:///script.py");
-
-      mockBridgeFixture.emitCommand(
-        "editor.selectTab",
-        JSON.stringify({ uri: "file:///script.py" }),
-      );
-      expect(mockEditor.selectTab).toHaveBeenCalledWith("file:///script.py");
-
-      // Non-string uri ignored
-      mockEditor.closeTab.mockClear();
-      mockEditor.selectTab.mockClear();
-      mockBridgeFixture.emitCommand("editor.closeTab", JSON.stringify({ uri: 123 }));
-      mockBridgeFixture.emitCommand("editor.selectTab", JSON.stringify({}));
-      expect(mockEditor.closeTab).not.toHaveBeenCalled();
-      expect(mockEditor.selectTab).not.toHaveBeenCalled();
-    });
-
-    it("dispatches editor.setMainTab and immediately flushes content", () => {
-      const { bridgeService, bridge } = setupInitializedBridgeService();
-      using fixture = bridgeService;
-      void fixture;
-
-      mockBridgeFixture.emitCommand(
-        "editor.setMainTab",
-        JSON.stringify({ uri: "file:///main.py" }),
-      );
-      expect(mockEditor.setMainTab).toHaveBeenCalledWith("file:///main.py");
-      expect(bridge.onContentChanged).toHaveBeenCalledWith("active content");
-      expect(bridge.onMainContentChanged).toHaveBeenCalledWith("main content");
     });
 
     it("dispatches editor.tabSaved with and without oldUri", () => {
@@ -600,9 +515,6 @@ describe("BridgeService", () => {
 
       mockBridgeFixture.emitCommand("console.toggle", "{}");
       expect(mockConsole.toggle).toHaveBeenCalledWith(undefined);
-
-      mockBridgeFixture.emitCommand("console.clear", "{}");
-      expect(mockConsole.clear).toHaveBeenCalledOnce();
     });
 
     it("dispatches lsp.connect with complete and partial configs", () => {
@@ -705,16 +617,6 @@ describe("BridgeService", () => {
       expect(mockEditor.setValue).not.toHaveBeenCalled();
     });
 
-    it("safely handles empty string or undefined JSON payload", () => {
-      using fixture = setupInitializedBridgeService().bridgeService;
-      void fixture;
-
-      expect(() => {
-        mockBridgeFixture.emitCommand("console.clear", "");
-      }).not.toThrow();
-      expect(mockConsole.clear).toHaveBeenCalledOnce();
-    });
-
     it("safely handles non-object JSON payloads (e.g. primitives)", () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
@@ -739,12 +641,10 @@ describe("BridgeService", () => {
           JSON.stringify({ uri: 123, content: ["not", "a", "string"] }),
         );
         mockBridgeFixture.emitCommand("console.append", JSON.stringify({ text: { object: true } }));
-        mockBridgeFixture.emitCommand("editor.setFontSize", JSON.stringify({ size: null }));
       }).not.toThrow();
 
       expect(mockEditor.openTab).not.toHaveBeenCalled();
       expect(mockConsole.append).not.toHaveBeenCalled();
-      expect(mockEditor.setFontSize).not.toHaveBeenCalled();
     });
   });
 

@@ -221,13 +221,6 @@ export class BridgeService implements vscode.Disposable {
         const forceState = typeof p.state === "boolean" ? p.state : undefined;
         this.consoleService.toggle(forceState);
       },
-      "console.clear": () => this.consoleService.clear(),
-      "editor.setFontSize": (p) => {
-        if (typeof p.size === "number") this.editorService.setFontSize(p.size);
-      },
-      "editor.setLanguage": (p) => {
-        if (typeof p.lang === "string") this.editorService.setLanguage(p.lang);
-      },
       "editor.toggleWordWrap": () => this.editorService.toggleWordWrap(),
       "lsp.connect": (p) => {
         if (
@@ -290,17 +283,8 @@ export class BridgeService implements vscode.Disposable {
           this.editorService.openTab(p.uri, p.content, language, isMain);
         }
       },
-      "editor.closeTab": (p) => {
-        if (typeof p.uri === "string") this.editorService.closeTab(p.uri);
-      },
       "editor.selectTab": (p) => {
         if (typeof p.uri === "string") this.editorService.selectTab(p.uri);
-      },
-      "editor.setMainTab": (p) => {
-        if (typeof p.uri === "string") {
-          this.editorService.setMainTab(p.uri);
-          this.flushContentChanged();
-        }
       },
       "editor.tabSaved": (p) => {
         if (typeof p.uri === "string") {

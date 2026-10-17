@@ -90,14 +90,6 @@ class MonacoBridge(QObject):
         """Change the Monaco editor theme."""
         self.dispatch("editor.setTheme", {"theme": theme})
 
-    def set_font_size(self, size: int) -> None:
-        """Change the Monaco editor font size."""
-        self.dispatch("editor.setFontSize", {"size": size})
-
-    def set_language(self, language: str) -> None:
-        """Change the Monaco editor language mode."""
-        self.dispatch("editor.setLanguage", {"lang": language})
-
     def connect_lsp(self, port: int, config: LSPConfig) -> None:
         """Notify JS to connect to LSP WebSocket port for a specified LSP configuration."""
         payload: dict[str, Any] = {
@@ -128,10 +120,6 @@ class MonacoBridge(QObject):
         """Toggle the output console panel in frontend."""
         self.dispatch("console.toggle")
 
-    def clear_console(self) -> None:
-        """Clear the output console panel buffer in frontend."""
-        self.dispatch("console.clear")
-
     def update_lsp_settings(self, section: str, settings_json: str) -> None:
         """Push updated LSP settings JSON to Monaco for specified configuration section."""
         self.dispatch("editor.updateLspSettings", {"section": section, "settingsJson": settings_json})
@@ -159,17 +147,9 @@ class MonacoBridge(QObject):
         """Open or focus a tab in Monaco."""
         self.dispatch("editor.openTab", {"uri": uri, "content": content, "language": language, "isMain": is_main})
 
-    def close_tab(self, uri: str) -> None:
-        """Close a tab in Monaco."""
-        self.dispatch("editor.closeTab", {"uri": uri})
-
     def select_tab(self, uri: str) -> None:
         """Select active tab in Monaco."""
         self.dispatch("editor.selectTab", {"uri": uri})
-
-    def set_main_tab(self, uri: str) -> None:
-        """Set designated tab as Main script in Monaco."""
-        self.dispatch("editor.setMainTab", {"uri": uri})
 
     def tab_saved(self, uri: str, old_uri: str = "") -> None:
         """Notify JS that the tab has been saved."""

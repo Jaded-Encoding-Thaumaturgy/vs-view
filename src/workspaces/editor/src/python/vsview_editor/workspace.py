@@ -61,7 +61,6 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     ICON_COLOR = QPalette.ColorRole.ToolTipText
 
     runClicked = Signal()
-    activeFileChanged = Signal(object)  # Unused
     mainFileChanged = Signal(object)
     statusSavingScriptStarted = Signal(str)
     statusSavingScriptFinished = Signal(str)
@@ -322,7 +321,9 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
                 setattr(self, f"_{kind}_filepath", local_path)
             else:
                 setattr(self, f"_{kind}_filepath", None)
-        getattr(self, f"{kind}FileChanged").emit(getattr(self, f"_{kind}_filepath"))
+
+        if kind == "main":
+            self.mainFileChanged.emit(self._main_filepath)
 
     @Slot()
     def _on_save_clicked(self) -> None:

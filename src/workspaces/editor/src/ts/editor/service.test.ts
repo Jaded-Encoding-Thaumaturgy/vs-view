@@ -677,13 +677,7 @@ describe("EditorService", () => {
   });
 
   describe("General Editor Methods & Actions", () => {
-    it("setFontSize, setLanguage, toggleWordWrap, focus, and layout", () => {
-      service.setFontSize(20);
-      expect(editorState.lastCreatedEditor?.options.fontSize).toBe(20);
-
-      service.setLanguage("json");
-      expect(editorState.lastCreatedEditor?.currentModel?.getLanguageId()).toBe("json");
-
+    it("toggleWordWrap, focus, and layout", () => {
       expect(editorState.lastCreatedEditor?.options.wordWrap).toBe("off");
       service.toggleWordWrap();
       expect(editorState.lastCreatedEditor?.options.wordWrap).toBe("on");
