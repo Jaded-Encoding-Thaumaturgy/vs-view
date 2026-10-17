@@ -407,8 +407,11 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         if not self.isVisible() or self.api.is_playing or not self.isEnabled():
             return
 
+        if (active_tab := self.tab_widget.currentIndex()) == 1:
+            # This tab is managed automatically
+            return
+
         n = fallback(n, self.api.current_frame)
-        active_tab = self.tab_widget.currentIndex()
         voutput = self.api.current_voutput
 
         with (
@@ -418,8 +421,6 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         ):
             if active_tab == 0:
                 self.levels_container.update_histogram(frame)
-            elif active_tab == 1:
-                self.luma_container.view.refresh()
             elif active_tab == 2:
                 self.vectorscope_container.update_histogram(frame)
             elif active_tab == 3:
@@ -454,6 +455,8 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
     @Slot(int)
     def on_tab_changed(self, index: int) -> None:
         self.settings.global_.selected_tab = index
+        if index == 1 and self.luma_container.view.current_tab == -1:
+            self.luma_container.view.refresh()
         self.update_histogram()
 
     @Slot(int)
