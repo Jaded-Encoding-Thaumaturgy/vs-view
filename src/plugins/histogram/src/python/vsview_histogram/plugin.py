@@ -356,6 +356,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         )
         self.cie_luma_spin.setToolTip("Luma / brightness scaling factor for the colored points cloud.")
         self.cie_luma_spin.valueChanged.connect(self.on_cie_luma_changed)
+        self.cie_luma_spin.setEnabled(self.settings.global_.cie.render_mode != RenderMode.DENSITY)
         controls_toolbar.addWidget(self.cie_luma_spin)
 
         gammut_toolbar = DiagramToolBar(container, movable=False, floatable=False)
@@ -535,6 +536,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
     @Slot(int)
     def on_cie_render_mode_changed(self, index: int) -> None:
         self.settings.global_.cie.render_mode = self.cie_render_mode_combo.currentData()
+        self.cie_luma_spin.setEnabled(self.settings.global_.cie.render_mode != RenderMode.DENSITY)
         self.update_histogram()
 
     @Slot(int)
