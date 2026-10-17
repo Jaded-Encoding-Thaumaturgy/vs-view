@@ -12,7 +12,8 @@ async function main(): Promise<void> {
     console.error("VS Code standalone services failed to initialize.", serviceResult.error);
     return;
   }
-  new MonacoManager();
+  const manager = new MonacoManager();
+  window.addEventListener("unload", () => manager.dispose(), { once: true });
 }
 
 void main().catch(console.error);
