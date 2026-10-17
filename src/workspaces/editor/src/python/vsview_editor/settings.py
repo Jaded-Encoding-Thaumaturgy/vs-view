@@ -35,7 +35,6 @@ class Theme(StrEnum):
     GITHUB_LIGHT_DEFAULT = "GitHub Light Default", "light"
     GITHUB_LIGHT = "GitHub Light", "light"
     GITHUB_LIGHT_COLORBLIND = "GitHub Light Colorblind", "light"
-    GITHUB_LIGHT_DIMMED = "GitHub Light Dimmed", "light"
     GITHUB_LIGHT_HIGH_CONTRAST = "GitHub Light High Contrast", "hc-light"
 
     kind: str
