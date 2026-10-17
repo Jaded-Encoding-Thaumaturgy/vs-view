@@ -63,7 +63,7 @@ from vsengine import UnifiedFuture
 from vsengine.loops import set_loop
 
 from ..assets import app_icon, load_fonts
-from ..vsenv import QtEventLoop, get_policy, run_in_background, unregister_policy
+from ..vsenv import QtEventLoop, get_policy, unregister_policy
 from .icon import IconReloadMixin
 from .plugins.manager import PluginManager
 from .settings import ActionID, SecretsManager, SettingsManager, ShortcutManager
@@ -103,7 +103,8 @@ class Application(QApplication):
             self.setDesktopFileName("vsview.desktop")
 
         SettingsManager(noop=no_settings)
-        set_loop(QtEventLoop(self))
+        loop = QtEventLoop(self)
+        set_loop(loop)
         ShortcutManager()
         SecretsManager()
 
@@ -130,7 +131,7 @@ class Application(QApplication):
         SettingsManager.signals.globalChanged.connect(self._on_global_settings_changed)
 
         if sys.platform == "win32":
-            self._warmup_cjk_fallback(self.font())
+            loop.to_thread_scoped(self, "WarmupCJK", self._warmup_cjk_fallback, self.font())
 
     @Slot()
     def _on_global_settings_changed(self) -> None:
@@ -179,7 +180,6 @@ class Application(QApplication):
         return ""
 
     @staticmethod
-    @run_in_background(name="WarmupCJK")
     def _warmup_cjk_fallback(font: QFont) -> None:
         logger.log(DEBUG - 1, "Trigger DirectWrite to resolve Hiragana, Katakana, Kanji, and CJK punctuation")
         QFontMetrics(font).boundingRect(
