@@ -212,6 +212,10 @@ class CIEDiagramWidget(QWidget):
 
         self._error_reason: str | None = None
 
+    @property
+    def error_reason(self) -> str | None:
+        return self._error_reason
+
     @cachedproperty
     def color_table(self) -> list[int]:
         """Neon cyan/blue phosphor color table"""
