@@ -49,10 +49,12 @@ class EditorConsoleHandler(RichHandler):
 class ConsoleStreamRedirector:
     def __init__(self, name: Literal["stdout", "stderr"]) -> None:
         self.name = name
-        self._original_stream: TextIO = getattr(sys, self.name)
+        self._original_stream: TextIO | None = getattr(sys, self.name, None)
         self._installed = False
 
     def __getattr__(self, name: str) -> object:
+        if self._original_stream is None:
+            raise AttributeError(f"Original stream {self.name} is None, cannot access attribute {name!r}")
         return getattr(self._original_stream, name)
 
     def install(self) -> None:
@@ -70,14 +72,23 @@ class ConsoleStreamRedirector:
         self._installed = False
 
     def write(self, text: str) -> int:
-        res = self._original_stream.write(text)
+        res = self._original_stream.write(text) if self._original_stream is not None else len(text)
         # Suppress dispatching when text comes from an active logging emit() call
         if text and getattr(IN_LOGGING, "depth", 0) == 0:
             GlobalConsoleHub.dispatch({"stream": self.name, "text": text})
         return res
 
+    def flush(self) -> None:
+        if self._original_stream is not None and hasattr(self._original_stream, "flush"):
+            self._original_stream.flush()
+
+    def writable(self) -> bool:
+        return True
+
     def isatty(self) -> bool:
-        return getattr(self._original_stream, "isatty", lambda: False)()
+        if self._original_stream is not None and hasattr(self._original_stream, "isatty"):
+            return self._original_stream.isatty()
+        return False
 
 
 class GlobalConsoleHub(Singleton):
