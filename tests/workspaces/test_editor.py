@@ -215,3 +215,19 @@ class TestGlobalConsoleHub:
             mock_dispatch.assert_not_called()
         finally:
             setattr(IN_LOGGING, "depth", 0)
+
+    def test_thread_safe_dispatch(self) -> None:
+        bridge = MonacoBridge()
+        GlobalConsoleHub.register(bridge)
+
+        def worker() -> None:
+            for _ in range(50):
+                GlobalConsoleHub.dispatch({"stream": "stdout", "text": "chunk\n"})
+
+        threads = [threading.Thread(target=worker) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        GlobalConsoleHub.unregister(bridge)

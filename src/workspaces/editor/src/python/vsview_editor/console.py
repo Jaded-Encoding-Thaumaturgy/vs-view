@@ -6,7 +6,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from io import StringIO
-from logging import Handler, Logger, LogRecord
+from logging import Handler, Logger, LogRecord, getLogger
 from typing import Literal, TextIO, override
 
 from jetpytools import CustomRuntimeError, Singleton, inject_self
@@ -18,11 +18,15 @@ from vsview.api import QObjectSet, get_console_level
 
 from .web import MonacoBridge
 
+logger = getLogger(__name__)
+
 IN_LOGGING = threading.local()
 EXECUTION_BRIDGE = ContextVar[MonacoBridge | None]("EXECUTION_BRIDGE", default=None)
 
 
 class EditorConsoleHandler(RichHandler):
+    lock: threading.RLock  # pyright: ignore[reportIncompatibleVariableOverride]
+
     def __init__(self, dispatch: Callable[[Literal["stderr", "stdout"], str], None]) -> None:
         self.dispatch = dispatch
         super().__init__(
@@ -78,6 +82,7 @@ class ConsoleStreamRedirector:
 
 class GlobalConsoleHub(Singleton):
     def __init__(self) -> None:
+        self._lock = threading.RLock()
         self._bridges = QObjectSet[MonacoBridge]()
         self._bridge_widths = dict[MonacoBridge, int]()
         self._stdout_redirector = ConsoleStreamRedirector("stdout")
@@ -88,37 +93,42 @@ class GlobalConsoleHub(Singleton):
 
     @inject_self.property
     def target_width(self) -> int:
-        if (target_bridge := EXECUTION_BRIDGE.get()) in self._bridge_widths:
-            return self._bridge_widths[target_bridge]
+        with self._lock:
+            if (target_bridge := EXECUTION_BRIDGE.get()) in self._bridge_widths:
+                return self._bridge_widths[target_bridge]
 
-        for bridge in self._bridges:
-            if bridge in self._bridge_widths:
-                return self._bridge_widths[bridge]
+            for bridge in self._bridges:
+                if bridge in self._bridge_widths:
+                    return self._bridge_widths[bridge]
 
-        if self._log_handler:
-            return self._log_handler.console.width
+            if self._log_handler:
+                return self._log_handler.console.width
 
-        return 80
+            return 80
 
     @inject_self
     def register(self, bridge: MonacoBridge) -> None:
-        self._bridges.add(bridge)
-        if not self._installed:
-            self._install_global_hooks()
+        with self._lock:
+            self._bridges.add(bridge)
+            if not self._installed:
+                self._install_global_hooks()
 
     @inject_self
     def unregister(self, bridge: MonacoBridge) -> None:
-        self._bridges.discard(bridge)
-        self._bridge_widths.pop(bridge, None)
-        if not self._bridges and self._installed:
-            self._uninstall_global_hooks()
+        with self._lock:
+            self._bridges.discard(bridge)
+            self._bridge_widths.pop(bridge, None)
+            if not self._bridges and self._installed:
+                self._uninstall_global_hooks()
 
     @inject_self
     def set_width(self, bridge: MonacoBridge, width: int) -> None:
-        self._bridge_widths[bridge] = width
-        target_bridge = EXECUTION_BRIDGE.get()
-        if self._log_handler and (target_bridge == bridge or (target_bridge is None and bridge in self._bridges)):
-            self._log_handler.console.width = width
+        with self._lock:
+            self._bridge_widths[bridge] = width
+            target_bridge = EXECUTION_BRIDGE.get()
+            if self._log_handler and (target_bridge == bridge or (target_bridge is None and bridge in self._bridges)):
+                with self._log_handler.lock:
+                    self._log_handler.console.width = width
 
     @inject_self
     @contextmanager
@@ -135,7 +145,9 @@ class GlobalConsoleHub(Singleton):
         if dest_bridge is not None:
             dest_bridge.dispatch("console.append", payload)
         else:
-            for bridge in self._bridges:
+            with self._lock:
+                bridges = list(self._bridges)
+            for bridge in bridges:
                 bridge.dispatch("console.append", payload)
 
     def _install_global_hooks(self) -> None:
