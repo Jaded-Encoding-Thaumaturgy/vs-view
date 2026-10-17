@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from functools import cache
 from typing import override
 
 import numpy as np
@@ -120,6 +121,8 @@ class LevelsChartView(QChartView):
 
         self.chart().plotAreaChanged.connect(self.update_brush_transform)
 
+        self.api.register_on_destroy(create_dithered_brush.cache_clear)
+
     @override
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
@@ -142,37 +145,37 @@ class LevelsChartView(QChartView):
     def set_gradient_background(self, color_family: vs.ColorFamily, plane_idx: int) -> None:
         match color_family, plane_idx:
             case vs.RGB, 0:  # R: Black -> Red
-                stops = [
-                    (0.0, QColor(64, 0, 0, 128)),
-                    (1.0, QColor(255, 0, 0, 192)),
-                ]
+                stops = (
+                    (0.0, HashableQColor(64, 0, 0, 128)),
+                    (1.0, HashableQColor(255, 0, 0, 192)),
+                )
             case vs.RGB, 1:  # G: Black -> Green
-                stops = [
-                    (0.0, QColor(0, 64, 0, 128)),
-                    (1.0, QColor(0, 255, 0, 192)),
-                ]
+                stops = (
+                    (0.0, HashableQColor(0, 64, 0, 128)),
+                    (1.0, HashableQColor(0, 255, 0, 192)),
+                )
             case vs.RGB, 2:  # B: Black -> Blue
-                stops = [
-                    (0.0, QColor(0, 0, 64, 128)),
-                    (1.0, QColor(0, 0, 255, 192)),
-                ]
+                stops = (
+                    (0.0, HashableQColor(0, 0, 64, 128)),
+                    (1.0, HashableQColor(0, 0, 255, 192)),
+                )
             case (vs.YUV, 0) | (vs.GRAY, _):  # Y (Luma): Black -> White
-                stops = [
-                    (0.0, QColor(16, 16, 16, 64)),
-                    (1.0, QColor(255, 255, 255, 128)),
-                ]
+                stops = (
+                    (0.0, HashableQColor(16, 16, 16, 64)),
+                    (1.0, HashableQColor(255, 255, 255, 128)),
+                )
             case vs.YUV, 1:  # U (Chroma)
-                stops = [
-                    (0.0, QColor(128, 152, 0, 128)),
-                    (0.5, QColor(128, 128, 128, 128)),
-                    (1.0, QColor(128, 104, 255, 128)),
-                ]
+                stops = (
+                    (0.0, HashableQColor(128, 152, 0, 128)),
+                    (0.5, HashableQColor(128, 128, 128, 128)),
+                    (1.0, HashableQColor(128, 104, 255, 128)),
+                )
             case vs.YUV, 2:  # V (Chroma)
-                stops = [
-                    (0.0, QColor(0, 188, 128, 128)),
-                    (0.5, QColor(128, 128, 128, 128)),
-                    (1.0, QColor(255, 68, 128, 128)),
-                ]
+                stops = (
+                    (0.0, HashableQColor(0, 188, 128, 128)),
+                    (0.5, HashableQColor(128, 128, 128, 128)),
+                    (1.0, HashableQColor(255, 68, 128, 128)),
+                )
             case _:
                 raise NotImplementedError
 
@@ -301,6 +304,13 @@ class LevelsChartView(QChartView):
             self.line_series.setPen(QPen(self.SERIES_COLOR, 1))
 
 
+class HashableQColor(QColor):
+    @override
+    def __hash__(self) -> int:
+        return hash((self.red(), self.green(), self.blue(), self.alpha()))
+
+
+@cache
 def create_dithered_brush(stops: Sequence[tuple[float, QColor]], width: int, height: int) -> QBrush:
     t = np.linspace(0.0, 1.0, width, dtype=np.float32)
     xp = [stop[0] for stop in stops]
