@@ -72,12 +72,13 @@ distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.dirty"
 [tool.uv]
 cache-keys = [
     { file = "pyproject.toml" },
+    { file = "package.json" },
     { file = "vite.config.ts" },
-    { file = "ts/**/*.ts" },
-    { file = "ts/**/*.json" },
-    { file = "ts/**/*.js" },
-    { file = "ts/index.css" },
-    { file = "ts/index.html" },
+    { file = "src/ts/**/*.ts" },
+    { file = "src/ts/**/*.json" },
+    { file = "src/ts/**/*.js" },
+    { file = "src/ts/index.css" },
+    { file = "src/ts/index.html" },
 ]
 
 [tool.uv.sources]
