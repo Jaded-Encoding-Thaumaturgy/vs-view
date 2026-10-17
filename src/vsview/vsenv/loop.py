@@ -171,6 +171,7 @@ class QtEventLoop(QObject, EventLoop):
                     self._active_tasks[name] -= 1
                     self._tracked_tasks.pop(fut, None)
 
+        _logger.log(DEBUG - 1, "QtEventLoop: Running task %r; owner %r; func %r", info.name, info.owner, func)
         QThreadPool.globalInstance().start(QRunnable.create(wrapper))
         return fut
 
