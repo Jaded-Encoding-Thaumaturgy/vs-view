@@ -46,6 +46,10 @@ LSP_BASEDPYRIGHT_CONFIG = LSPConfig(
     progress_notifications=[{"begin": "pyright/beginAnalysis", "end": "pyright/endAnalysis"}],
 )
 
+CLIENT_VIRTUAL_PATTERN = re.compile(
+    r"file:///workspace(?:/(script\.py|untitled_[a-zA-Z0-9_-]+\.py|workspace\.code-workspace)|(?=[\"']))"
+)
+
 
 class LSPProcessServer(QObject):
     """Manages a single LSP subprocess and its associated WebSocket bridge server."""
@@ -173,7 +177,11 @@ class LSPProcessServer(QObject):
             return
 
         if self.real_uri and "file:///workspace" in message:
-            message = message.replace("file:///workspace", self.real_uri)
+            real_uri = self.real_uri
+            message = CLIENT_VIRTUAL_PATTERN.sub(
+                lambda m: f"{real_uri}/{m.group(1)}" if m.group(1) else real_uri,
+                message,
+            )
 
         body = message.encode("utf-8")
         header = f"Content-Length: {len(body)}\r\n\r\n".encode()

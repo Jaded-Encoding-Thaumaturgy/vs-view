@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import sys
+import threading
 from pathlib import Path
 
 import pytest
 from jetpytools import CustomValueError
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QProcess
 from pytest_mock import MockerFixture
 from vsview_editor.console import IN_LOGGING, ConsoleStreamRedirector, GlobalConsoleHub
 from vsview_editor.lsp import LSPConfig, LSPProcessManager, LSPProcessServer
@@ -149,6 +150,38 @@ class TestLSPConfigAndServer:
         new_port = manager.restart_server(config)
         assert new_port == 54321
         assert mock_server.stop.call_count >= 1
+
+    def test_client_virtual_uri_translation(self, mocker: MockerFixture) -> None:
+        config = LSPConfig(
+            id="test_lsp",
+            name="Test Server",
+            command=["test-lsp", "--stdio"],
+            language="python",
+            file_events_pattern="**/*.py",
+        )
+        server = LSPProcessServer(config)
+        server.real_uri = "file:///C:/Users/test/workspace"
+        mock_proc = mocker.MagicMock()
+        mock_proc.state.return_value = QProcess.ProcessState.Running
+        server.process = mock_proc
+
+        written_data: list[bytes] = []
+        mock_proc.write.side_effect = lambda data: written_data.append(bytes(data))
+
+        # Virtual files should be translated
+        msg1 = '{"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///workspace/script.py"}}}'
+        server._on_ws_message(msg1)
+        assert b"file:///C:/Users/test/workspace/script.py" in written_data[-1]
+
+        # Non-virtual file under workspace (e.g. Linux path) should NOT be translated
+        msg2 = '{"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///workspace/my_project/filter.vpy"}}}'
+        server._on_ws_message(msg2)
+        assert b"file:///workspace/my_project/filter.vpy" in written_data[-1]
+
+        # String literals in code should NOT be corrupted
+        msg3 = '{"params":{"content":"val = \\"file:///workspace_custom\\""}}'
+        server._on_ws_message(msg3)
+        assert b"file:///workspace_custom" in written_data[-1]
 
 
 class TestEditorShortcuts:
