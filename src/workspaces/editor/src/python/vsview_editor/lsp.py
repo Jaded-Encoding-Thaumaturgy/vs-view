@@ -75,7 +75,8 @@ class LSPProcessServer(QObject):
         self.uri_variations = self._build_uri_variations(workspace_dir)
         escaped_vars = "|".join(re.escape(v.rstrip("/")) for v in self.uri_variations)
         self._virtual_tab_pattern = re.compile(
-            rf"(?:{escaped_vars})/(script\.py|untitled_[a-zA-Z0-9_-]+\.py|workspace\.code-workspace)"
+            rf"(?:{escaped_vars})/(script\.py|untitled_[a-zA-Z0-9_-]+\.py|workspace\.code-workspace)",
+            re.IGNORECASE if sys.platform == "win32" else 0,
         )
         logger.log(DEBUG - 1, "URI Variations: %s", self.uri_variations)
 
@@ -100,6 +101,7 @@ class LSPProcessServer(QObject):
         self.process.readyReadStandardOutput.connect(self._on_stdout_ready)
         self.process.readyReadStandardError.connect(self._on_stderr_ready)
         self.process.errorOccurred.connect(self._on_process_error)
+        self.process.finished.connect(self._on_process_finished)
 
         try:
             self.process.start(str(binary), self.config.command[1:])
@@ -129,6 +131,7 @@ class LSPProcessServer(QObject):
             proc.readyReadStandardOutput.disconnect(self._on_stdout_ready)
             proc.readyReadStandardError.disconnect(self._on_stderr_ready)
             proc.errorOccurred.disconnect(self._on_process_error)
+            proc.finished.disconnect(self._on_process_finished)
 
             if proc.state() != QProcess.ProcessState.NotRunning:
                 if sys.platform == "win32":
@@ -203,7 +206,10 @@ class LSPProcessServer(QObject):
             content_length = None
             for line in header_bytes.split(b"\r\n"):
                 if line.startswith(b"Content-Length:"):
-                    content_length = int(line.split(b":")[1].strip())
+                    try:
+                        content_length = int(line.split(b":")[1].strip())
+                    except ValueError:
+                        content_length = None
                     break
 
             if content_length is None:
@@ -238,6 +244,20 @@ class LSPProcessServer(QObject):
     def _on_process_error(self, error: QProcess.ProcessError) -> None:
         if self.process:
             logger.error("LSP QProcess error for %r (%s): %s", self.config.id, error, self.process.errorString())
+
+    @Slot(int, QProcess.ExitStatus)
+    def _on_process_finished(self, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
+        logger.debug(
+            "LSP QProcess for %r finished (exit_code=%d, exit_status=%s)",
+            self.config.id,
+            exit_code,
+            exit_status,
+        )
+        for client in list(self.clients):
+            if client.isValid():
+                client.close()
+            client.deleteLater()
+        self.clients.clear()
 
     @staticmethod
     def _build_uri_variations(workspace_dir: Path | str) -> list[str]:
