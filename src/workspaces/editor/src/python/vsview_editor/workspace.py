@@ -418,7 +418,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             except Exception:
                 logger.exception("Failed to generate VapourSynth stubs:")
 
-        self._send_pyright_settings()
+        self.loop.from_thread(self._send_pyright_settings)
 
     def _send_pyright_settings(self) -> None:
         settings = self.settings.global_.basedpyright
