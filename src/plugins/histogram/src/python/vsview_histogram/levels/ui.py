@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from logging import getLogger
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -13,6 +14,8 @@ from vsview.api import PluginAPI, PluginSettings
 if TYPE_CHECKING:
     from .charts import LevelsChartView
 from ..settings import GlobalSettings
+
+logger = getLogger(__name__)
 
 
 class HistogramContainerWidget(QFrame):
@@ -67,6 +70,12 @@ def compute_histogram(frame: vs.VideoFrame, plane: int, clamp_factor: float) -> 
     if frame.format.sample_type is vs.FLOAT:
         bins_count = 65536
         data_int = scale_array_float(arr.astype(np.float32), frame, frame.format.color_family is vs.YUV and plane > 0)
+    elif frame.format.bits_per_sample > 16:
+        logger.warning(
+            "Integer formats with >16 bits (%d bits) are not supported by Levels",
+            frame.format.bits_per_sample,
+        )
+        return np.zeros(256, dtype=np.intp)
     else:
         bins_count = 1 << frame.format.bits_per_sample
         data_int = arr.astype(np.int32).clip(0, bins_count - 1)
