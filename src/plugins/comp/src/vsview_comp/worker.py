@@ -21,7 +21,7 @@ import niquests
 import niquests.cookies
 from jetpytools import cachedproperty, clamp, ndigits
 from pathvalidate import sanitize_filepath
-from PySide6.QtCore import QThreadPool
+from PySide6.QtCore import QObject, QThreadPool
 from PySide6.QtGui import QImage
 from vapoursynth import GRAY8, VideoNode
 from vstools import clip_data_gather, core, depth, get_prop, remap_frames, vs
@@ -68,8 +68,11 @@ class ProgressCallback(Protocol):
     ) -> None: ...
 
 
-class ExtractFramesWorker:
-    def __init__(self, api: PluginAPI, cfg: ExtractFramesConfig, progress_cb: ProgressCallback) -> None:
+class ExtractFramesWorker(QObject):
+    def __init__(
+        self, api: PluginAPI, cfg: ExtractFramesConfig, progress_cb: ProgressCallback, parent: QObject
+    ) -> None:
+        super().__init__(parent, objectName=self.__class__.__name__)
         self.api = api
         self.cfg = cfg
         self.progress_cb = progress_cb
@@ -174,12 +177,13 @@ class _SourceInfo(NamedTuple):
     time_to_frame: Callable[[Time], int]
 
 
-class SelectFrameWorker:
+class SelectFrameWorker(QObject):
     # Asymmetric Gaussian curve parameters: (mu, sigma_left, sigma_right)
     DARK_CURVE_PARAMS = (0.065, 0.015, 0.15)
     LIGHT_CURVE_PARAMS = (0.75, 0.45, 0.90)
 
-    def __init__(self, api: PluginAPI, cfg: SelectFrameConfig, progress_cb: ProgressCallback) -> None:
+    def __init__(self, api: PluginAPI, cfg: SelectFrameConfig, progress_cb: ProgressCallback, parent: QObject) -> None:
+        super().__init__(parent, objectName=self.__class__.__name__)
         self.api = api
         self.cfg = cfg
         self.progress_cb = progress_cb
@@ -433,12 +437,13 @@ class SelectFrameWorker:
         )
 
 
-class TMDBWorker:
+class TMDBWorker(QObject):
     BASE_URL = "https://api.themoviedb.org/3"
     BASE_PARAMS: Mapping[str, str] = {"include_adult": "false", "language": "en-US"}
     API_KEY_PATH = Path(__file__).parent / "tmdb_api_key.txt"
 
-    def __init__(self) -> None:
+    def __init__(self, parent: QObject) -> None:
+        super().__init__(parent, objectName=self.__class__.__name__)
         self._movie_genres = dict[int, str]()
         self._tv_genres = dict[int, str]()
 
@@ -525,12 +530,15 @@ class Tag(NamedTuple):
     label: str
 
 
-class SlowPicsWorker:
+class SlowPicsWorker(QObject):
     BASE_URL = "https://slow.pics"
     MAX_CONCURRENT_REQUESTS = 6
     _cooldown_until = 0.0
 
-    def __init__(self, api: PluginAPI, settings: PluginSettings[GlobalSettings, None], secrets: PluginSecrets) -> None:
+    def __init__(
+        self, api: PluginAPI, settings: PluginSettings[GlobalSettings, None], secrets: PluginSecrets, parent: QObject
+    ) -> None:
+        super().__init__(parent, objectName=self.__class__.__name__)
         self.api = api
         self.settings = settings
         self.secrets = secrets
@@ -603,7 +611,7 @@ class SlowPicsWorker:
 
             resp.raise_for_status()
 
-            return self._cookies_jar(client.cookies) if await self._login_async(client) else {}
+            return self._cookies_jar(client.cookies) if await self._login(client) else {}
 
     @run_in_background(name="SlowPicsUpload")
     async def upload(self, *, src: SlowPicsSources, cookies: dict[str, str], progress_cb: ProgressCallback) -> str:
@@ -707,13 +715,13 @@ class SlowPicsWorker:
                 logger.info("Cookies have expired (or Logout button not found), attempting re-login...")
                 self.secrets.delete_json(COOKIE_KEY, COOKIE_KEY)
 
-                if await self._login_async(client):
+                if await self._login(client):
                     logger.info("Re-login successful.")
                     client.headers.update({"X-XSRF-TOKEN": self._get_cookie(client.cookies, "XSRF-TOKEN")})
                 else:
                     logger.warning("Re-login failed, uploading as anonymous")
 
-    async def _login_async(self, client: niquests.AsyncSession) -> bool:
+    async def _login(self, client: niquests.AsyncSession) -> bool:
         if not (credentials := self.secrets.get_credential(LOGIN_CONTEXT)):
             return False
 

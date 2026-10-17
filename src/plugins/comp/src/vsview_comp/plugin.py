@@ -244,7 +244,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         main_layout.addWidget(self.progress_stack)
 
-        self.slowpics_worker = SlowPicsWorker(self.api, self.settings, self.secrets)
+        self.slowpics_worker = SlowPicsWorker(self.api, self.settings, self.secrets, self)
 
         self.api.register_action(
             f"{PLUGIN_ID}.add_current_frame",
@@ -497,7 +497,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         # Network stuff
         self.tmdb_title: TMDBTitle | None = None
-        self.tmdb_worker = TMDBWorker()
+        self.tmdb_worker = TMDBWorker(self)
 
         self.tmdb_name = QLineEdit(section, placeholderText="Search for a movie or TV show...")
         self.tmdb_name.setToolTip("Movie or TV show name to fetch metadata from TMDB")
@@ -844,7 +844,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             else:
                 logger.error("Error during frame selection: %s", exc)
 
-        worker = SelectFrameWorker(self.api, cfg, self.progress_bar.update_progress)
+        worker = SelectFrameWorker(self.api, cfg, self.progress_bar.update_progress, self)
         self._select_frames_worker = worker
         self._pending_select_frames = (
             worker.run()
@@ -876,7 +876,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                     logger.error("Error during frame extraction: %s", exc)
                 return []
 
-            worker = ExtractFramesWorker(self.api, self._extract_frames_config, self.progress_bar.update_progress)
+            worker = ExtractFramesWorker(self.api, self._extract_frames_config, self.progress_bar.update_progress, self)
             self._extract_frames_worker = worker
             self._pending_extract_frames = (
                 worker.run()
