@@ -173,6 +173,7 @@ export class BridgeService implements vscode.Disposable {
     }
     this.bridge?.onContentChanged(this.editorService.getValue());
     this.bridge?.onMainContentChanged(this.editorService.getMainValue());
+    this.editorService.updateTabBar?.();
   }
 
   private bindSignal<T extends (...args: never[]) => void>(

@@ -102,6 +102,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self.editor.bridge.generateStubsRequested.connect(lambda: self._generate_stubs(force=True))
         self.editor.bridge.restartLspRequested.connect(self.restart_lsp)
         self.editor.bridge.consoleResized.connect(self._on_console_resized)
+        self.editor.bridge.contentChanged.connect(self._on_content_changed)
 
         query = QUrlQuery()
         query.addQueryItem("initialTheme", QUrl.toPercentEncoding(self.settings.global_.options.theme).toStdString())
@@ -302,6 +303,16 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     def _on_tab_state_changed(self, tabs: list[TabInfo]) -> None:
         self._open_tabs = tabs
 
+    @Slot(str)
+    def _on_content_changed(self, content: str) -> None:
+        if not (uri := self._active_tab_uri):
+            return
+
+        for tab in self._open_tabs:
+            if tab.get("uri") == uri:
+                tab["content"] = content
+                break
+
     def _on_tab_changed(self, uri: str, kind: Literal["active", "main"]) -> None:
         setattr(self, f"_{kind}_tab_uri", uri or None)
         if not uri:
@@ -382,12 +393,13 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
                 logger.exception("Error opening script:")
 
     @run_in_background(name="SaveScript")
-    def save_script(self, filepath: Path, content: str) -> None:
+    def save_script(self, filepath: Path, content: str, tab_uri: str | None = None) -> None:
         self.statusSavingScriptStarted.emit("Saving script...")
         try:
             filepath.write_text(content, encoding="utf-8")
             self.statusSavingScriptFinished.emit("Saved")
-            self.loop.from_thread(self.editor.bridge.tab_saved, filepath.as_uri(), self._active_tab_uri or "")
+            target_uri = tab_uri or self._active_tab_uri or filepath.as_uri()
+            self.loop.from_thread(self.editor.bridge.tab_saved, filepath.as_uri(), target_uri).result()
         except Exception:
             logger.exception("Error saving script:")
 
@@ -609,9 +621,13 @@ class EditorWorkspace(
                 return False
 
             if reply == QMessageBox.StandardButton.Save:
-                content = tab.get("content") or self.code_dock.editor.bridge.content
+                if uri == self.code_dock._active_tab_uri and self.code_dock.editor.bridge.content:
+                    content = self.code_dock.editor.bridge.content
+                else:
+                    content = tab.get("content") or self.code_dock.editor.bridge.content
+
                 if local_path := WorkspaceUri(uri).local_path:
-                    self.code_dock.save_script(local_path, content).result()
+                    self.code_dock.save_script(local_path, content, tab_uri=uri).result()
                 else:
                     filepath, _ = QFileDialog.getSaveFileName(
                         self,
@@ -622,7 +638,7 @@ class EditorWorkspace(
                     if not filepath:
                         return False
 
-                    self.code_dock.save_script(Path(filepath), content).result()
+                    self.code_dock.save_script(Path(filepath), content, tab_uri=uri).result()
 
         return True
 

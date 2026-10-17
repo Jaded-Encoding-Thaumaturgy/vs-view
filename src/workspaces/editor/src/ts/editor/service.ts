@@ -478,6 +478,24 @@ export class EditorService implements vscode.Disposable {
     });
   }
 
+  public updateTabBar(): void {
+    const tabInfos: TabInfo[] = Array.from(this.tabs.values()).map((t) => ({
+      uri: t.uriString,
+      title: t.title,
+      isMain: t.isMain,
+      isDirty: t.isDirty,
+      language: t.model.getLanguageId(),
+      content: t.isDirty ? t.model.getValue() : undefined,
+    }));
+
+    // Ensure Main tab is rendered first
+    tabInfos.sort((a, b) => (a.isMain ? -1 : b.isMain ? 1 : 0));
+
+    this.tabBarView.render(tabInfos, this.activeUri);
+
+    BridgeService.active.unwrapOr(undefined)?.onTabStateChanged(tabInfos);
+  }
+
   public requestSave(): void {
     this.saveRequestEmitter.fire();
   }
@@ -654,24 +672,6 @@ export class EditorService implements vscode.Disposable {
     this.updateTabBar();
     this.contentChangeEmitter.fire();
     this.activeTabChangeEmitter.fire(this.activeUri);
-  }
-
-  private updateTabBar(): void {
-    const tabInfos: TabInfo[] = Array.from(this.tabs.values()).map((t) => ({
-      uri: t.uriString,
-      title: t.title,
-      isMain: t.isMain,
-      isDirty: t.isDirty,
-      language: t.model.getLanguageId(),
-      content: t.isDirty ? t.model.getValue() : undefined,
-    }));
-
-    // Ensure Main tab is rendered first
-    tabInfos.sort((a, b) => (a.isMain ? -1 : b.isMain ? 1 : 0));
-
-    this.tabBarView.render(tabInfos, this.activeUri);
-
-    BridgeService.active.unwrapOr(undefined)?.onTabStateChanged(tabInfos);
   }
 
   private normalizeUri(uriInput: string): monaco.Uri {
