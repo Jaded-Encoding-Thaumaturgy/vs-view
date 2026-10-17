@@ -517,6 +517,7 @@ class EditorWorkspace(
         EditorShortcut.TOGGLE_WORD_WRAP.definition,
         EditorShortcut.TOGGLE_CONSOLE.definition,
         EditorShortcut.RUN_SCRIPT.definition,
+        EditorShortcut.GENERATE_STUBS.definition,
         EditorShortcut.RESTART_LSP.definition,
         EditorShortcut.FOCUS_CODE_EDITOR.definition,
         EditorShortcut.FOCUS_PREVIEW.definition,
