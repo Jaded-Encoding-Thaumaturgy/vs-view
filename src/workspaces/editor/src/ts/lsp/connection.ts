@@ -137,7 +137,7 @@ export class WebSocketMessageWriter
     }
 
     // WebSocket is CONNECTING, queue sending once open
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const onOpen = () => {
         cleanup();
         Result.fromThrowable(() => this.socket.send(JSON.stringify(msg))).mapErr((err) =>
@@ -147,7 +147,8 @@ export class WebSocketMessageWriter
       };
       const onError = (e: Event) => {
         cleanup();
-        reject(e);
+        this.fireError(new Error(`WebSocket error during send: ${e.type}`));
+        resolve();
       };
       const onClose = () => {
         cleanup();
