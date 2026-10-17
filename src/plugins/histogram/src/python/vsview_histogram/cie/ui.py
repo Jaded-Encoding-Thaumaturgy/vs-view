@@ -347,7 +347,7 @@ class CIEDiagramWidget(QWidget):
             case _:
                 assert_never(render_mode)
 
-        size = xyz_frame.height if (res := self.settings.global_.cie.res) == 0 else res
+        size = min(1024, xyz_frame.height) if (res := self.settings.global_.cie.res) == 0 else res
 
         if (
             self.scope_image.width() != size
