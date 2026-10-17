@@ -417,40 +417,47 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         with (
             self.api.blocker(self),
             self.api.vs_context(),
-            voutput.vs_output.clip.get_frame(n) as frame,
+            voutput.vs_output.clip.get_frame(n) as fram,
         ):
             if active_tab == 0:
-                self.levels_container.update_histogram(frame)
+                self.levels_container.update_histogram(fram)
             elif active_tab == 2:
-                self.vectorscope_container.update_histogram(frame)
+                self.vectorscope_container.update_histogram(fram)
             elif active_tab == 3:
-                self.waveform_container.update_histogram(frame)
+                self.waveform_container.update_histogram(fram)
             elif active_tab == 4:
                 if (clip := voutput.vs_output.clip).format.color_family != vs.RGB:
                     self.cie_container.cie_diagram.paint_error("CIE Chromaticity Diagram requires RGB input.")
                     return
 
-                # fmt: off
                 if (
-                    (prims := frame.props.get("_Primaries", vs.PRIMARIES_UNSPECIFIED)) not in vs.ColorPrimaries
+                    (prims := fram.props.get("_Primaries", vs.PRIMARIES_UNSPECIFIED)) not in vs.ColorPrimaries
+                    or (trans := fram.props.get("_Transfer", vs.TRANSFER_UNSPECIFIED)) not in vs.TransferCharacteristics
                     or prims == vs.PRIMARIES_UNSPECIFIED
+                    or trans == vs.TRANSFER_UNSPECIFIED
                 ):
-                    # fmt: on
                     self.cie_container.cie_diagram.paint_error(
-                        "CIE Chromaticity Diagram requires a valid primaries frame property."
+                        "CIE Chromaticity Diagram requires valid primaries and transfer frame properties."
                     )
                     return
 
-                if voutput not in self.cie_nodes:
-                    linear = core.resize.Point(clip, format=vs.RGBS, transfer=vs.TRANSFER_LINEAR)
-                    xyz = core.resize.Point(linear, primaries=vs.PRIMARIES_ST428, chromatic_adaptation=True)
-                    self.cie_nodes[voutput] = (linear, xyz)
+                try:
+                    if voutput not in self.cie_nodes:
+                        linear = core.resize.Point(clip, format=vs.RGBS, transfer=vs.TRANSFER_LINEAR)
+                        xyz = core.resize.Point(linear, primaries=vs.PRIMARIES_ST428, chromatic_adaptation=True)
+                        self.cie_nodes[voutput] = (linear, xyz)
 
-                with (
-                    self.cie_nodes[voutput][0].get_frame(n) as linear_frame,
-                    self.cie_nodes[voutput][1].get_frame(n) as xyz_frame,
-                ):
-                    self.cie_container.update_histogram(linear_frame, xyz_frame)
+                    if self.settings.global_.cie.render_mode == RenderMode.PIXEL_COLOR:
+                        with (
+                            self.cie_nodes[voutput][0].get_frame(n) as linear_frame,
+                            self.cie_nodes[voutput][1].get_frame(n) as xyz_frame,
+                        ):
+                            self.cie_container.update_histogram(linear_frame, xyz_frame)
+                    else:
+                        with self.cie_nodes[voutput][1].get_frame(n) as xyz_frame:
+                            self.cie_container.update_histogram(None, xyz_frame)
+                except vs.Error as e:
+                    self.cie_container.cie_diagram.paint_error(str(e))
 
     @Slot(int)
     def on_tab_changed(self, index: int) -> None:

@@ -334,7 +334,7 @@ class CIEDiagramWidget(QWidget):
 
         painter.restore()
 
-    def update_frame(self, linear_frame: vs.VideoFrame, xyz_frame: vs.VideoFrame) -> None:
+    def update_frame(self, linear_frame: vs.VideoFrame | None, xyz_frame: vs.VideoFrame) -> None:
         self._error_reason = None
 
         match render_mode := self.settings.global_.cie.render_mode:
@@ -363,6 +363,8 @@ class CIEDiagramWidget(QWidget):
         z_ptr = xyz_frame.get_read_ptr(2).value or 0
 
         if render_mode == RenderMode.PIXEL_COLOR:
+            if not linear_frame:
+                raise NotImplementedError
             lr_ptr = linear_frame.get_read_ptr(0).value or 0
             lg_ptr = linear_frame.get_read_ptr(1).value or 0
             lb_ptr = linear_frame.get_read_ptr(2).value or 0
@@ -408,7 +410,7 @@ class CIEDiagramContainerWidget(QFrame):
         self.cie_diagram = CIEDiagramWidget(self, api, settings)
         self.current_layout.addWidget(self.cie_diagram)
 
-    def update_histogram(self, linear_frame: vs.VideoFrame, xyz_frame: vs.VideoFrame) -> None:
+    def update_histogram(self, linear_frame: vs.VideoFrame | None, xyz_frame: vs.VideoFrame) -> None:
         self.cie_diagram.update_frame(linear_frame, xyz_frame)
 
 
