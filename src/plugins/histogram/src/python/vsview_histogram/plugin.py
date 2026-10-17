@@ -2,7 +2,7 @@ from logging import getLogger
 from typing import override
 
 from jetpytools import fallback
-from PySide6.QtCore import Slot
+from PySide6.QtCore import QTimer, Slot
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -53,6 +53,9 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
 
         self.cie_nodes = dict[VideoOutputProxy, tuple[vs.VideoNode, vs.VideoNode]]()
         self.api.register_on_destroy(self.cie_nodes.clear)
+
+        self._resize_timer = QTimer(self, singleShot=True, interval=60)
+        self._resize_timer.timeout.connect(self.update_histogram)
 
     def setup_levels(self) -> None:
         container = QWidget(self)
@@ -392,17 +395,19 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
     @override
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
-        self.update_histogram()
+        if not self.api.is_playing:
+            self._resize_timer.start()
 
     @override
     def on_current_frame_changed(self, n: int) -> None:
-        self.update_histogram(n)
+        if not self.api.is_playing:
+            self.update_histogram(n)
 
     @override
     def on_playback_stopped(self) -> None:
         self.update_histogram()
 
-    @run_in_loop(return_future=False)
+    @run_in_loop
     def update_histogram(self, n: int | None = None) -> None:
         if not self.isVisible() or self.api.is_playing or not self.isEnabled():
             return
