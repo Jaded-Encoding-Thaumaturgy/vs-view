@@ -340,7 +340,7 @@ export class EditorService implements vscode.Disposable {
 
         this.tabs.set(uriString, tab);
       } else {
-        if (content && tab.model.getValue() !== content) {
+        if (!tab.isDirty && content !== undefined && tab.model.getValue() !== content) {
           tab.model.setValue(content);
           tab.savedVersionId = tab.model.getAlternativeVersionId();
           tab.isDirty = false;

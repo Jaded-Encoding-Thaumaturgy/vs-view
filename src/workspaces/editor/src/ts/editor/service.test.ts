@@ -432,6 +432,19 @@ describe("EditorService", () => {
       expect(service.getValue()).toBe("version 2");
     });
 
+    it("openTab() does not overwrite unsaved content when tab is dirty", () => {
+      service.openTab("file:///workspace/dirty.py", "original", "python", false);
+      expect(service.getValue()).toBe("original");
+
+      // Mutate content to make it dirty
+      service.setValue("user edited content");
+      expect(service.getValue()).toBe("user edited content");
+
+      // Re-opening dirty tab with disk content should NOT overwrite user edits
+      service.openTab("file:///workspace/dirty.py", "disk content", "python", false);
+      expect(service.getValue()).toBe("user edited content");
+    });
+
     it("selectTab() switches active tab and saves/restores viewState", () => {
       service.openTab("file:///workspace/file1.py", "content 1", "python", false);
       service.openTab("file:///workspace/file2.py", "content 2", "python", false);
