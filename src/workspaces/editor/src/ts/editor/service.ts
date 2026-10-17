@@ -69,25 +69,31 @@ export class EditorService implements vscode.Disposable {
 
     this.setTheme(def.id);
 
-    this.editor.addAction({
-      id: "vsview.save",
-      label: "Save Script",
-      run: () => {
-        this.saveRequestEmitter.fire();
-      },
-    });
+    this.disposables.add(
+      this.editor.addAction({
+        id: "vsview.save",
+        label: "Save Script",
+        run: () => {
+          this.saveRequestEmitter.fire();
+        },
+      }),
+    );
 
-    this.editor.addAction({
-      id: "vsview.generateStubs",
-      label: "VapourSynth: Generate Stubs",
-      run: () => BridgeService.active.unwrapOr(undefined)?.requestGenerateStubs(),
-    });
+    this.disposables.add(
+      this.editor.addAction({
+        id: "vsview.generateStubs",
+        label: "VapourSynth: Generate Stubs",
+        run: () => BridgeService.active.unwrapOr(undefined)?.requestGenerateStubs(),
+      }),
+    );
 
-    this.editor.addAction({
-      id: "basedpyright.restartserver",
-      label: "Basedpyright: Restart Language Server",
-      run: () => BridgeService.active.unwrapOr(undefined)?.requestRestartLsp(),
-    });
+    this.disposables.add(
+      this.editor.addAction({
+        id: "basedpyright.restartserver",
+        label: "Basedpyright: Restart Language Server",
+        run: () => BridgeService.active.unwrapOr(undefined)?.requestRestartLsp(),
+      }),
+    );
 
     this.disposables.add(
       monaco.editor.registerEditorOpener({
@@ -405,7 +411,7 @@ export class EditorService implements vscode.Disposable {
 
       // Safely dispose tab listeners and model after editor unbinding
       tab.disposables.dispose();
-      if (tab.ownsModel && !tab.model.isDisposed() && tab.uri.scheme !== "file") {
+      if (tab.ownsModel && !tab.model.isDisposed()) {
         tab.model.dispose();
       }
 
@@ -573,12 +579,7 @@ export class EditorService implements vscode.Disposable {
       }
     }
 
-    if (
-      tab.ownsModel &&
-      tab.model !== newModel &&
-      !tab.model.isDisposed() &&
-      tab.uri.scheme !== "file"
-    ) {
+    if (tab.ownsModel && tab.model !== newModel && !tab.model.isDisposed()) {
       tab.model.dispose();
     }
 
