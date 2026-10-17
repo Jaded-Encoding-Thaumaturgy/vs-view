@@ -85,6 +85,8 @@ interface LspClientSession {
  */
 export class LspService implements vscode.Disposable {
   private sessions = new Map<string, LspClientSession>();
+  private pendingSockets = new Map<string, WebSocket>();
+  private connectionGenerations = new Map<string, number>();
 
   /** Connect to an LSP WebSocket bridge on specified port using given configuration. */
   public async connect(config: LspServerConfig): Promise<void> {
@@ -93,6 +95,15 @@ export class LspService implements vscode.Disposable {
         `LSP Client '${config.id}' already connected. Disconnecting existing client...`,
       );
       await this.disconnect(config.id);
+    }
+
+    const generation = (this.connectionGenerations.get(config.id) ?? 0) + 1;
+    this.connectionGenerations.set(config.id, generation);
+
+    const pendingSocket = this.pendingSockets.get(config.id);
+    if (pendingSocket) {
+      this.pendingSockets.delete(config.id);
+      pendingSocket.close();
     }
 
     const url = `ws://127.0.0.1:${config.port}`;
@@ -108,18 +119,29 @@ export class LspService implements vscode.Disposable {
     }
 
     const webSocket = wsResult.value;
+    this.pendingSockets.set(config.id, webSocket);
 
     webSocket.onopen = () => {
+      if (
+        this.connectionGenerations.get(config.id) !== generation ||
+        this.pendingSockets.get(config.id) !== webSocket
+      ) {
+        webSocket.close();
+        return;
+      }
+      this.pendingSockets.delete(config.id);
+
       console.debug(`LSP WebSocket connection established for '${config.id}'`);
 
       const reader = new WebSocketMessageReader(webSocket);
       const writer = new WebSocketMessageWriter(webSocket);
+      const sessionDisposables = new DisposableStore();
 
       const synchronizeOptions: NonNullable<LanguageClientOptions["synchronize"]> = {};
       if (config.fileEventsPattern) {
-        synchronizeOptions.fileEvents = vscode.workspace.createFileSystemWatcher(
-          config.fileEventsPattern,
-        );
+        const watcher = vscode.workspace.createFileSystemWatcher(config.fileEventsPattern);
+        sessionDisposables.add(watcher);
+        synchronizeOptions.fileEvents = watcher;
       }
 
       const syncedUris = new Set<string>();
@@ -214,7 +236,6 @@ export class LspService implements vscode.Disposable {
         webSocket,
       );
 
-      const sessionDisposables = new DisposableStore();
       sessionDisposables.add(progressTracker);
       sessionDisposables.add({ dispose: () => syncedUris.clear() });
 
@@ -288,6 +309,9 @@ export class LspService implements vscode.Disposable {
     webSocket.onerror = (err: Event) =>
       console.error(`LSP WebSocket error for '${config.id}':`, err);
     webSocket.onclose = () => {
+      if (this.pendingSockets.get(config.id) === webSocket) {
+        this.pendingSockets.delete(config.id);
+      }
       const session = this.sessions.get(config.id);
       if (session && session.socket === webSocket) {
         this.sessions.delete(config.id);
@@ -301,6 +325,15 @@ export class LspService implements vscode.Disposable {
   /** Gracefully disconnect an active LSP language client by ID, or all clients if omitted. */
   public async disconnect(id?: string): Promise<void> {
     if (id !== undefined) {
+      const nextGen = (this.connectionGenerations.get(id) ?? 0) + 1;
+      this.connectionGenerations.set(id, nextGen);
+
+      const pendingSocket = this.pendingSockets.get(id);
+      if (pendingSocket) {
+        this.pendingSockets.delete(id);
+        pendingSocket.close();
+      }
+
       const session = this.sessions.get(id);
       if (session) {
         this.sessions.delete(id);
@@ -314,6 +347,12 @@ export class LspService implements vscode.Disposable {
         await session.client.dispose();
       }
     } else {
+      for (const [pendingId, socket] of this.pendingSockets.entries()) {
+        const nextGen = (this.connectionGenerations.get(pendingId) ?? 0) + 1;
+        this.connectionGenerations.set(pendingId, nextGen);
+        socket.close();
+      }
+      this.pendingSockets.clear();
       await Promise.all(
         Array.from(this.sessions.keys()).map((sessionId) => this.disconnect(sessionId)),
       );
