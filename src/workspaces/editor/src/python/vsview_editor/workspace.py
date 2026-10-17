@@ -345,12 +345,16 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
     @Slot()
     def _on_format_clicked(self) -> None:
+        self.format_btn.setDisabled(True)
+
         if not (ruff_binary := shutil.which("ruff")):
             logger.error("ruff executable not found")
             return
 
         code = self.editor.bridge.content
-        try:
+
+        @run_in_background(name="RuffFormat", owner=self)
+        def run_ruff() -> None:
             res = subprocess.run(
                 [ruff_binary, "format", "-"],
                 input=code,
@@ -359,11 +363,16 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
                 check=True,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
+
             if res.stdout and res.stdout != code:
-                self.editor.bridge.content = res.stdout
+                self.loop.from_thread(lambda: setattr(self.editor.bridge, "content", res.stdout)).result(timeout=1.0)
                 logger.debug("Formatted with Ruff")
-        except Exception:
-            logger.exception("Error formatting code with ruff:")
+
+        (
+            run_ruff()
+            .catch(lambda e: logger.error("Error formatting code with ruff:", exc_info=e))
+            .add_loop_callback(lambda _: self.format_btn.setEnabled(True))
+        )
 
     @Slot()
     def _on_new_clicked(self) -> None:
