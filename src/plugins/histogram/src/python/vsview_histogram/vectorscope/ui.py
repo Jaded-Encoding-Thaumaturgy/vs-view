@@ -150,6 +150,8 @@ class VectorscopeWidget(QWidget):
         self.context_menu = CustomContextMenu(self, self.api)
         self.current_matrix = Matrix.UNSPECIFIED
 
+        self.api.register_on_destroy(background_image.cache_clear)
+
     @cachedproperty
     def color_table(self) -> Sequence[int]:
         """Neon cyan/blue phosphor color table"""

@@ -3,7 +3,7 @@ from typing import override
 
 from jetpytools import fallback
 from PySide6.QtCore import QTimer, Slot
-from PySide6.QtGui import QResizeEvent
+from PySide6.QtGui import QCloseEvent, QHideEvent, QResizeEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -52,10 +52,12 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         main_layout.addWidget(self.tab_widget)
 
         self.cie_nodes = dict[VideoOutputProxy, tuple[vs.VideoNode, vs.VideoNode]]()
-        self.api.register_on_destroy(self.cie_nodes.clear)
 
         self._resize_timer = QTimer(self, singleShot=True, interval=60)
         self._resize_timer.timeout.connect(self.update_histogram)
+
+        self.api.register_on_destroy(self.cie_nodes.clear)
+        self.api.register_on_destroy(self._resize_timer.stop)
 
     def setup_levels(self) -> None:
         container = QWidget(self)
@@ -391,6 +393,16 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
         layout.addWidget(self.cie_container)
 
         self.tab_widget.addTab(container, "CIE Chromaticity")
+
+    @override
+    def hideEvent(self, event: QHideEvent) -> None:
+        self._resize_timer.stop()
+        super().hideEvent(event)
+
+    @override
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self._resize_timer.stop()
+        super().closeEvent(event)
 
     @override
     def resizeEvent(self, event: QResizeEvent) -> None:
