@@ -35,7 +35,6 @@ def load_svg(svg_data: bytes, size: QSize, color: QColor | None = None, dpr: flo
     return pixmap
 
 
-@cache
 def load_fonts() -> None:
     """Load bundled fonts into Qt's font database."""
     fonts = resources.files("vsview.assets.fonts")
