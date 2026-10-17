@@ -554,7 +554,11 @@ class EditorWorkspace(
     @property
     @override
     def current_file_path(self) -> ContentPath | None:
-        return ContentPath(p.read_text(), str(p)) if (p := self.code_dock.main_filepath) and p.is_file() else None
+        return (
+            ContentPath(p.read_text(encoding="utf-8"), str(p))
+            if (p := self.code_dock.main_filepath) and p.is_file()
+            else None
+        )
 
     @override
     def showEvent(self, event: QShowEvent) -> None:
@@ -576,6 +580,8 @@ class EditorWorkspace(
         self.code_dock.editor.bridge.disconnect_lsp()
         self.code_dock.lsp_manager.stop()
         self.code_dock.deleteLater()
+        linecache.cache.pop(self.content.filename, None)
+        output_metadata.pop(self.content.filename, None)
         super().deleteLater()
 
     @property
@@ -662,6 +668,8 @@ class EditorWorkspace(
     @override
     def reload_content(self, code: str | None = None) -> UnifiedFuture[int]:
         self._save_current_dock_sizes()
+        linecache.cache.pop(self.content.filename, None)
+        output_metadata.pop(self.content.filename, None)
         self.content = ContentPath(fallback(code, self.code_dock.editor.bridge.content), self.content.filename)
 
         if not self.loaded_once:
@@ -726,12 +734,19 @@ class EditorWorkspace(
 
     @Slot(object)
     def _on_main_file_changed(self, new_path: Path | None) -> None:
+        linecache.cache.pop(self.content.filename, None)
+        output_metadata.pop(self.content.filename, None)
         if new_path:
-            self.content = ContentPath(new_path.read_text(), str(new_path))
+            self.content = ContentPath(new_path.read_text(encoding="utf-8"), str(new_path))
 
             if new_path.is_file():
                 self.init_load()
                 self.api.localSettingsChanged.emit(str(SettingsManager.local_settings_path(new_path)))
+        else:
+            self.content = ContentPath(
+                self.code_dock.editor.bridge.main_content,
+                f"<vsview editor {uuid4().hex[:4]}>",
+            )
         self._restore_dock_sizes()
 
     @Slot()
