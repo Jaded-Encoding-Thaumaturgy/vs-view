@@ -563,6 +563,7 @@ class EditorWorkspace(
         GlobalConsoleHub.unregister(self.code_dock.editor.bridge)
         self.code_dock.editor.bridge.disconnect_lsp()
         self.code_dock.lsp_manager.stop()
+        self.code_dock.deleteLater()
         super().deleteLater()
 
     @property
