@@ -12,7 +12,7 @@ from vsview_editor.console import IN_LOGGING, ConsoleStreamRedirector, GlobalCon
 from vsview_editor.lsp import LSPConfig, LSPProcessManager, LSPProcessServer
 from vsview_editor.utils import ContentPath, SafeSlot, WorkspaceUri
 from vsview_editor.web import MonacoBridge
-from vsview_editor.workspace import EditorShortcut
+from vsview_editor.workspace import EditorShortcut, EditorWorkspace
 
 pytestmark = [pytest.mark.integration, pytest.mark.qt]
 
@@ -183,6 +183,23 @@ class TestLSPConfigAndServer:
         server._on_ws_message(msg3)
         assert b"file:///workspace_custom" in written_data[-1]
 
+    def test_process_finished_closes_clients(self, mocker: MockerFixture) -> None:
+        config = LSPConfig(
+            id="test_lsp",
+            name="Test Server",
+            command=["test-lsp", "--stdio"],
+            language="python",
+            file_events_pattern="**/*.py",
+        )
+        server = LSPProcessServer(config)
+        mock_client = mocker.MagicMock()
+        mock_client.isValid.return_value = True
+        server.clients.add(mock_client)
+
+        server._on_process_finished(1, QProcess.ExitStatus.CrashExit)
+        assert mock_client.close.call_count == 1
+        assert len(server.clients) == 0
+
 
 class TestEditorShortcuts:
     def test_shortcuts_uniqueness(self) -> None:
@@ -210,6 +227,11 @@ class TestEditorShortcuts:
         bridge.restartLspRequested.connect(_on_restart)
         bridge.requestRestartLsp()
         assert called
+
+    def test_workspace_shortcuts_contain_all_definitions(self) -> None:
+        workspace_defs = {str(s) for s in EditorWorkspace.shortcuts}
+        enum_defs = {str(s.definition) for s in EditorShortcut}
+        assert workspace_defs == enum_defs
 
 
 class TestGlobalConsoleHub:
@@ -264,3 +286,14 @@ class TestGlobalConsoleHub:
             t.join()
 
         GlobalConsoleHub.unregister(bridge)
+
+    def test_console_stream_redirector_none_stream(self, mocker: MockerFixture) -> None:
+        redirector = ConsoleStreamRedirector("stdout")
+        redirector._original_stream = None
+        mock_dispatch = mocker.patch.object(GlobalConsoleHub, "dispatch")
+
+        assert redirector.write("test none stream") == len("test none stream")
+        mock_dispatch.assert_called_once()
+        assert redirector.writable() is True
+        assert redirector.isatty() is False
+        redirector.flush()  # should not throw
