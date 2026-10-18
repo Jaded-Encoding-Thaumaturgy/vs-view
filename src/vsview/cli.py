@@ -182,7 +182,7 @@ def main(
     no_settings: Annotated[bool, Parameter(group=settings_group, env_var="VSVIEW_NO_SETTINGS")] = False,
     settings_roaming: Annotated[
         bool,
-        Parameter(group=settings_group, env_var="VSVIEW_GLOBAL_SETTINGS_ROAMING"),
+        Parameter(group=settings_group, env_var="VSVIEW_GLOBAL_SETTINGS_ROAMING", show=sys.platform == "win32"),
     ] = False,
     settings_env: Annotated[
         bool,
