@@ -70,6 +70,32 @@ class CompactHelpFormatter(DefaultFormatter):
         return DefaultStyled(RichGroup(*renderables), theme=help_panel.theme)
 
 
+class CycloptsGroupError(CycloptsError):
+    def __init__(self, msg: str, exceptions: Sequence[Exception]) -> None:
+        super().__init__(msg)
+        self.message = self.msg
+        self.exceptions = tuple(exceptions)
+
+    @override
+    def __rich__(self) -> RenderableType:  # type: ignore[override]
+        from rich.text import Text
+        from rich.tree import Tree
+
+        def build_tree(e: Exception | ExceptionGroup[Any] | RenderableType) -> Tree | Text:
+            if isinstance(e, (CycloptsGroupError, ExceptionGroup)):
+                header = f"{e.message}:" if not (msg_str := str(e.message)).endswith(":") else msg_str
+
+                node = Tree(Text(header, style="bold"))
+                for sub in e.exceptions:
+                    node.add(build_tree(sub))
+
+                return node
+
+            return Text(str(e), style="white")
+
+        return build_tree(self)
+
+
 options_group = Group("Options", sort_key=10)
 app = App(
     "vsview",
@@ -98,12 +124,19 @@ def convert_log_level(type_: str, tokens: list[Token]) -> int:
 
 def convert_arg(type_: type[Mapping[str, str]], tokens: list[Token]) -> dict[str, str]:
     d = dict[str, str]()
+    errs = list[CycloptsError]()
+
     for arg in tokens:
         try:
             k, v = arg.value.split("=", 1)
         except ValueError:
-            raise CycloptsError(f"Invalid value for --arg: expected KEY=VALUE, got {arg.value!r}")
+            errs.append(CycloptsError(f"Invalid value for --arg: expected KEY=VALUE, got {arg.value!r}"))
+            continue
         d[k] = v
+
+    if errs:
+        raise CycloptsGroupError("Can't convert some --arg values", errs)
+
     return d
 
 

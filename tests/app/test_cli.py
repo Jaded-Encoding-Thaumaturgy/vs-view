@@ -17,6 +17,7 @@ from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.models import GlobalSettings
 from vsview.app.workspace import PythonScriptWorkspace
 from vsview.cli import (
+    CycloptsGroupError,
     _populate_path,
     app,
     convert_arg,
@@ -47,8 +48,20 @@ class TestTokenConverters:
 
     def test_convert_arg_malformed_token_raises_value_error(self) -> None:
         tokens = [Token(value="malformed_token_without_equal")]
-        with pytest.raises(CycloptsError, match=r"Invalid value for --arg: expected KEY=VALUE, got"):
+        with pytest.raises(CycloptsGroupError, match=r"Can't convert some --arg values") as exc_info:
             convert_arg(dict, tokens)
+        assert len(exc_info.value.exceptions) == 1
+        assert isinstance(exc_info.value.exceptions[0], CycloptsError)
+        assert "Invalid value for --arg: expected KEY=VALUE, got 'malformed_token_without_equal'" in str(
+            exc_info.value.exceptions[0]
+        )
+
+    def test_convert_arg_multiple_malformed_tokens(self) -> None:
+        tokens = [Token(value="bad1"), Token(value="k=v"), Token(value="bad2")]
+        with pytest.raises(CycloptsGroupError, match=r"Can't convert some --arg values") as exc_info:
+            convert_arg(dict, tokens)
+        assert len(exc_info.value.exceptions) == 2
+        assert all(isinstance(e, CycloptsError) for e in exc_info.value.exceptions)
 
     @pytest.mark.parametrize(
         ("level_str", "expected_int"),
