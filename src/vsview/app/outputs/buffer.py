@@ -42,15 +42,7 @@ def on_error(e: BaseException, msg: str) -> None:
 class FrameBuffer:
     """Manages async pre-fetching of video frames during playback."""
 
-    __slots__ = (
-        "_bundles",
-        "_invalidated",
-        "_play_frames",
-        "_plugin_nodes",
-        "_size",
-        "env",
-        "video_output",
-    )
+    __slots__ = ("_bundles", "_invalidated", "_play_frames", "_plugin_nodes", "_size", "env", "video_output")
 
     def __init__(self, video_output: VideoOutput, env: ManagedEnvironment) -> None:
         self.video_output = video_output
@@ -208,14 +200,7 @@ class FrameBuffer:
 class AudioBuffer:
     """Manages async pre-fetching of audio frames during playback."""
 
-    __slots__ = (
-        "_bundles",
-        "_invalidated",
-        "_play_frames",
-        "_size",
-        "audio_output",
-        "env",
-    )
+    __slots__ = ("_bundles", "_invalidated", "_play_frames", "_size", "audio_output", "env")
 
     def __init__(self, audio_output: AudioOutput, env: ManagedEnvironment) -> None:
         self.audio_output = audio_output
