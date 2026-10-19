@@ -270,9 +270,9 @@ class LoaderWorkspace[T](BaseWorkspace):
             with self._env.use():
                 done, _ = wait(self.loop.from_thread(keep_environment(cb)) for cb in self.cbs_on_destroy)
 
-            if any(excs := [f.exception() for f in done]):
-                for e in excs:
-                    logger.error(e, exc_info=e)
+            for f in done:
+                if (exc := f.exception()) is not None:
+                    logger.error(exc, exc_info=exc)
 
         if content := getattr(self, "content", None):
             output_metadata.pop(str(content), None)
