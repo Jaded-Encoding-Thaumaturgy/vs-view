@@ -204,12 +204,9 @@ def show_error(
     error_message = f"{header}\n\n{'\n'.join(context)}\n\n{detail}\n"
 
     if isinstance(error, ExecutionError):
-        e: BaseException = getattr(error, "parent_error", error)
-        logger.error("%s\n\nFull traceback:", error_message.strip(), exc_info=e)
+        logger.error("%s", error_message.strip())
     elif isinstance(error, ExceptionLike) and error.formatted_traceback:
         logger.error("%s\n\nFull traceback:\n%s", error_message.strip(), error.formatted_traceback.rstrip())
-    elif isinstance(error, BaseException):
-        logger.error("%s", error_message.strip(), exc_info=error)
     else:
         logger.error("%s", error_message.strip())
 

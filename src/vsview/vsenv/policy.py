@@ -24,21 +24,26 @@ _logger = getLogger(__name__)
 
 class CustomPolicy(Policy):
     @override
-    def new_environment(self, flags_creation: int | None = None, *, set_logger: bool = True) -> ManagedEnvironment:
+    def new_environment(
+        self,
+        flags_creation: int | None = None,
+        logger: bool | Callable[[int, str], None] | None = None,
+    ) -> ManagedEnvironment:
+        if callable(logger) or logger is None or callable(self._logger):
+            raise NotImplementedError
+
         _logger.debug("Creating new VS environment")
-
         data = self.api.create_environment(fallback(flags_creation, self.flags_creation))
-
-        if set_logger:
-            _logger.debug("Creating log handler for environment %r", data)
-            self.api.set_logger(data, get_vs_log_handler(data))
-
         _logger.debug("Wrapping VapourSynth environment %r", data)
         env = self.api.wrap_environment(data)
 
-        _logger.debug("Successfully created new environment %r", data)
+        if logger:
+            _logger.debug("Creating log handler for environment %r", data)
+            self.api.set_logger(data, get_vs_log_handler(data))
 
-        return ManagedEnvironment(env, data, self)
+        menv = ManagedEnvironment(env, data, self)
+        _logger.debug("Successfully created new environment %r", data)
+        return menv
 
 
 def get_policy(flags: CoreCreationFlags = ENABLE_GRAPH_INSPECTION | DISABLE_LIBRARY_UNLOADING) -> CustomPolicy:
@@ -62,7 +67,7 @@ def unregister_policy() -> None:
 
 
 def create_environment(*, set_logger: bool = True) -> ManagedEnvironment:
-    env = get_policy().new_environment(set_logger=set_logger)
+    env = get_policy().new_environment(logger=set_logger)
     env.core.timings.enabled = True
     return env
 

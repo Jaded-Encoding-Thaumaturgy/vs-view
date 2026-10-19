@@ -224,7 +224,7 @@ def test_script_loading_syntax_error(
     assert mock_dialog.called
     dialog_msg = mock_dialog.call_args[0][1]
     assert "SyntaxError" in dialog_msg
-    assert errored_signals == ["Execution error", "Error while loading content"]
+    assert errored_signals == ["Syntax Error", "Error while loading content"]
 
     # Workspace does not crash and remains responsive
     assert ws.isEnabled()
