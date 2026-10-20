@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import inspect
+import sys
 from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import KW_ONLY, dataclass, field
-from functools import wraps
+from functools import cache, wraps
+from itertools import chain
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Concatenate, override
+from typing import TYPE_CHECKING, Any, Concatenate, get_args, get_origin, override
 
-from jetpytools import SupportsRichComparison
+from jetpytools import CustomTypeError, SupportsRichComparison
 from pydantic import TypeAdapter, ValidationError
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtGui import QColor
@@ -23,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..utils import get_all_original_bases
 from .secrets import SecretsManager
 from .widgets import (
     ColorPickerInput,
@@ -32,6 +36,11 @@ from .widgets import (
     LoginCredentialsInput,
     PathListEditWidget,
 )
+
+if sys.version_info >= (3, 13):
+    from typing import TypeIs
+else:
+    from typing_extensions import TypeIs
 
 logger = getLogger(__name__)
 
@@ -117,6 +126,26 @@ class WidgetMetadata[W: QWidget](ABC, metaclass=WidgetMetadataMeta):
                 raise
         else:
             yield value
+
+    @classmethod
+    @cache
+    def get_widget_type(cls) -> W | None:
+        all_bases = get_all_original_bases(cls)
+
+        for arg in chain.from_iterable(get_args(b) for b in all_bases):
+            arg = get_origin(arg) or arg
+            if isinstance(arg, type) and issubclass(arg, QWidget):
+                return arg  # type: ignore[return-value]
+        return None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WidgetMetadataWithDependency[W: QWidget](WidgetMetadata[W]):
+    depends_on: str | None = None
+    """Key of the setting this widget depends on (e.g., 'appearance.theme')."""
+
+    @abstractmethod
+    def populate(self, widget: W, parent_value: Any | None = None) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -285,30 +314,76 @@ class LineEdit(WidgetMetadata[QLineEdit]):
 
 
 @dataclass(frozen=True, slots=True)
-class Dropdown(WidgetMetadata[QComboBox]):
+class Dropdown(WidgetMetadataWithDependency[QComboBox]):
     """Dropdown/ComboBox widget metadata."""
 
-    items: Sequence[tuple[str, Any]] | Callable[[], Sequence[tuple[str, Any]]]
-    """Iterable of (display_text, value) tuples or a callable that returns one."""
+    items: (
+        Sequence[tuple[str, Any]]
+        | Callable[[Any], Sequence[tuple[str, Any]]]
+        | Callable[[], Sequence[tuple[str, Any]]]  # no format
+    )
+    """
+    Iterable of (display_text, value) tuples or a callable that returns one.
+    If `default_value` is specified the items must be a Sequence or a callable that takes one parameter.
+    """
+
+    _: KW_ONLY
+    default_value: Any = None
+    """Default value to return when unselected (currentIndex == -1) or fallback."""
 
     @override
     def create_widget(self, parent: QWidget | None = None) -> QComboBox:
         widget = QComboBox(parent)
-        for display_text, value in self.items() if callable(self.items) else self.items:
+        for display_text, value in self._resolve_items():
             widget.addItem(display_text, value)
         return widget
 
     @override
     def load_value(self, widget: QComboBox, value: Any) -> None:
         with self.apply_transform(value, self.to_ui) as v:
-            index = widget.findData(v)
-            if index >= 0:
-                widget.setCurrentIndex(index)
+            widget.setCurrentIndex(widget.findData(v))
 
     @override
     def get_value(self, widget: QComboBox) -> Any:
+        if widget.currentIndex() == -1:
+            return self.default_value
         with self.apply_transform(widget.currentData(), self.from_ui) as value:
             return value
+
+    @override
+    def populate(self, widget: QComboBox, parent_value: Any | None = None) -> None:
+        widget.clear()
+
+        for display_text, value in self._resolve_items(parent_value):
+            widget.addItem(display_text, value)
+
+        if (idx := widget.findData(self.default_value)) >= 0:
+            widget.setCurrentIndex(idx)
+        else:
+            widget.setCurrentIndex(0)
+
+    def _resolve_items(self, parent_value: Any | None = None) -> Sequence[tuple[str, Any]]:
+        if not callable(self.items):
+            return self.items
+
+        sig = inspect.signature(self.items)
+
+        def is_callable_0_param[R](cb: Callable[..., R]) -> TypeIs[Callable[[], R]]:
+            return len(sig.parameters) == 0
+
+        def is_callable_1_param[R](cb: Callable[..., R]) -> TypeIs[Callable[[Any], R]]:
+            return len(sig.parameters) == 1
+
+        if self.depends_on is None and is_callable_0_param(self.items):
+            return self.items()
+
+        if self.depends_on and is_callable_1_param(self.items):
+            return self.items(parent_value)
+
+        raise CustomTypeError(
+            f"items callable accepts {len(sig.parameters)} argument(s), but 1 is required when depends_on is specified",
+            func=f"{self.__class__.__name__}.{self.label}",
+        )
 
 
 @dataclass(frozen=True, slots=True)

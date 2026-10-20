@@ -24,7 +24,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import DEBUG, getLogger
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Self, override
+from types import get_original_bases
+from typing import TYPE_CHECKING, Any, Literal, Self, get_origin, override
 
 import vapoursynth as vs
 from jetpytools import inject_self
@@ -561,3 +562,23 @@ def deepmerge(source: Mapping[Any, Any], destination: dict[Any, Any]) -> dict[An
             destination[key] = value
 
     return destination
+
+
+def get_all_original_bases(cls: type) -> list[Any]:
+    seen = set[Any]()
+    result = list[Any]()
+
+    def walk(current: Any) -> None:
+        target_cls = get_origin(current) or current
+
+        if not isinstance(target_cls, type) or target_cls is object:
+            return
+
+        for base in get_original_bases(target_cls):
+            if base not in seen and base is not object:
+                seen.add(base)
+                result.append(base)
+                walk(base)
+
+    walk(cls)
+    return result
