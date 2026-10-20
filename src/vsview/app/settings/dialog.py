@@ -360,7 +360,11 @@ class SettingsDialog(QDialog, IconReloadMixin):
                 _, form = sections[entry.section]
 
                 # Create widget from metadata
-                widget = entry.metadata.create_widget(self)
+                try:
+                    widget = entry.metadata.create_widget(self)
+                except Exception:
+                    logger.exception("Error creating the widget of the entry %s", entry)
+                    continue
                 self._global_widgets[entry.key] = widget
                 self._apply_wheel_filter(widget)
 
@@ -497,7 +501,11 @@ class SettingsDialog(QDialog, IconReloadMixin):
                 _, form = sections[entry.section]
 
                 # Create widget from metadata
-                widget = entry.metadata.create_widget(self)
+                try:
+                    widget = entry.metadata.create_widget(self)
+                except Exception:
+                    logger.exception("Error creating the widget of the entry %s", entry)
+                    continue
                 self._local_widgets[entry.key] = widget
                 self._apply_wheel_filter(widget)
                 form.addRow(f"{entry.metadata.label}:", widget)
