@@ -7,6 +7,7 @@ name = "vsview-editor"
 description = "Monaco-based code editor workspace for VSView"
 readme = "README.md"
 license = "EUPL-1.2"
+license-files = ["LICENSE", "src/ts/assets/themes/github/LICENSE.txt"]
 requires-python = ">=3.12"
 authors = [{ name = "Vardë", email = "ichunjo.le.terrible@gmail.com" }]
 maintainers = [

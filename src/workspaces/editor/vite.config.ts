@@ -51,6 +51,7 @@ export default defineConfig({
     modulePreload: false,
     assetsInlineLimit: 10240,
     reportCompressedSize: false,
+    license: { fileName: "THIRD_PARTY_LICENSES.md" },
     rolldownOptions: {
       output: { hashCharacters: "hex" },
     },
