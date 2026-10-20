@@ -5,6 +5,7 @@ Provides a unified interface for loading icons from different providers with nor
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Set  # noqa: PYI025
 from enum import StrEnum
 from importlib import resources
 from importlib.resources.abc import Traversable
@@ -90,7 +91,7 @@ class IconProvider(ABC):
 
     @property
     @abstractmethod
-    def weights(self) -> frozenset[str]:
+    def weights(self) -> Set[str]:
         """Available weight variants for this provider."""
 
     @property
@@ -149,8 +150,8 @@ class PhosphorProvider(IconProvider):
 
     @property
     @override
-    def weights(self) -> frozenset[str]:
-        return frozenset({"thin", "light", "regular", "bold", "fill", "duotone"})
+    def weights(self) -> Set[str]:
+        return dict.fromkeys(("regular", "thin", "light", "bold", "fill", "duotone")).keys()
 
     @property
     @override
@@ -246,8 +247,8 @@ class MaterialProvider(IconProvider):
 
     @property
     @override
-    def weights(self) -> frozenset[str]:
-        return frozenset({"regular", "outline"})
+    def weights(self) -> Set[str]:
+        return dict.fromkeys(("regular", "outline")).keys()
 
     @property
     @override
@@ -314,8 +315,8 @@ class LucideProvider(IconProvider):
 
     @property
     @override
-    def weights(self) -> frozenset[str]:
-        return frozenset({"regular"})
+    def weights(self) -> Set[str]:
+        return {"regular"}
 
     @property
     @override
