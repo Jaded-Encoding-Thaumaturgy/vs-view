@@ -1,0 +1,19 @@
+{
+  "id": "catppuccin_macchiato",
+  "name": "Catppuccin Macchiato",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#c6a0f6",
+    "secondary": "#8aadf4",
+    "text": "#cad3f5",
+    "overlay2": "#939ab7",
+    "overlay1": "#8087a2",
+    "overlay0": "#6e738d",
+    "surface2": "#5b6078",
+    "surface1": "#494d64",
+    "surface0": "#363a4f",
+    "base": "#24273a",
+    "mantle": "#1e2030",
+    "crust": "#181926"
+  }
+}

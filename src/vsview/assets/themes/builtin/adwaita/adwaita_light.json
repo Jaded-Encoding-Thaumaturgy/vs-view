@@ -1,0 +1,20 @@
+{
+  "id": "adwaita_light",
+  "name": "Adwaita Light",
+  "scheme": "light",
+  "palette": {
+    "primary": "#3584e4",
+    "secondary": "#1c71d8",
+    "text": "#241f31",
+    "overlay2": "#5e5c64",
+    "overlay1": "#77767b",
+    "overlay0": "#9a9996",
+    "surface2": "#c0bfbc",
+    "surface1": "#deddda",
+    "surface0": "#ebebed",
+    "base": "#f3f3f5",
+    "mantle": "#fafafb",
+    "crust": "#ffffff"
+  }
+}
+

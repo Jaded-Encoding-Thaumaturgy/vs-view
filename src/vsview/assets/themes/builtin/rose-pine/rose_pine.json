@@ -1,0 +1,20 @@
+{
+  "id": "rose_pine",
+  "name": "Rosé Pine",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#c4a7e7",
+    "secondary": "#9ccfd8",
+    "text": "#e0def4",
+    "overlay2": "#95b1ac",
+    "overlay1": "#908caa",
+    "overlay0": "#6e6a86",
+    "surface2": "#524f67",
+    "surface1": "#403d52",
+    "surface0": "#26233a",
+    "base": "#1f1d2e",
+    "mantle": "#191724",
+    "crust": "#16141f"
+  }
+}
+

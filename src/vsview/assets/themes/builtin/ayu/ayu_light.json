@@ -1,0 +1,20 @@
+{
+  "id": "ayu_light",
+  "name": "Ayu Light",
+  "scheme": "light",
+  "palette": {
+    "primary": "#f29718",
+    "secondary": "#55b4d4",
+    "text": "#5c6166",
+    "overlay2": "#6b7d8f",
+    "overlay1": "#828e9f",
+    "overlay0": "#adaeb1",
+    "surface2": "#ebeef0",
+    "surface1": "#f8f9fa",
+    "surface0": "#fafafa",
+    "base": "#fcfcfc",
+    "mantle": "#ffffff",
+    "crust": "#ffffff"
+  }
+}
+

@@ -1,0 +1,19 @@
+{
+  "id": "modern_light",
+  "name": "Modern Light",
+  "scheme": "light",
+  "palette": {
+    "primary": "#2aa5da",
+    "secondary": "#2ad7da",
+    "text": "#000000",
+    "overlay2": "#484b4d",
+    "overlay1": "#626568",
+    "overlay0": "#7d8084",
+    "surface2": "#979b9f",
+    "surface1": "#b1b6ba",
+    "surface0": "#ccd0d5",
+    "base": "#e6ebf0",
+    "mantle": "#eef2f6",
+    "crust": "#ffffff"
+  }
+}

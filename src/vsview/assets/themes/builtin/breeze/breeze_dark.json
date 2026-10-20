@@ -1,0 +1,20 @@
+{
+  "id": "breeze_dark",
+  "name": "Breeze Dark",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#3daee9",
+    "secondary": "#1d99f3",
+    "text": "#fcfcfc",
+    "overlay2": "#eff0f1",
+    "overlay1": "#a1a9b1",
+    "overlay0": "#707d8a",
+    "surface2": "#383838",
+    "surface1": "#2a2e32",
+    "surface0": "#292c30",
+    "base": "#202326",
+    "mantle": "#1d1f22",
+    "crust": "#141618"
+  }
+}
+

@@ -1,0 +1,20 @@
+{
+  "id": "everforest_dark",
+  "name": "Everforest Dark",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#a7c080",
+    "secondary": "#83c092",
+    "text": "#d3c6aa",
+    "overlay2": "#9da9a0",
+    "overlay1": "#859289",
+    "overlay0": "#7a8478",
+    "surface2": "#4f585e",
+    "surface1": "#475258",
+    "surface0": "#3d484d",
+    "base": "#343f44",
+    "mantle": "#2d353b",
+    "crust": "#232a2e"
+  }
+}
+

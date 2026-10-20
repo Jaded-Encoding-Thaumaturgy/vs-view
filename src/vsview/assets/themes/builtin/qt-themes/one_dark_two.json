@@ -1,0 +1,19 @@
+{
+  "id": "one_dark_two",
+  "name": "One Dark Two",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#62bac6",
+    "secondary": "#eac786",
+    "text": "#e6e6e6",
+    "overlay2": "#969dab",
+    "overlay1": "#818896",
+    "overlay0": "#6c7280",
+    "surface2": "#5b626d",
+    "surface1": "#4a505a",
+    "surface0": "#393e47",
+    "base": "#282c34",
+    "mantle": "#21252b",
+    "crust": "#1d1f23"
+  }
+}

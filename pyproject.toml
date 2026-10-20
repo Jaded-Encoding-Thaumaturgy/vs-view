@@ -7,13 +7,23 @@ name = "vsview"
 dynamic = ["version"]
 description = "The next-generation VapourSynth previewer"
 readme = "README.md"
-license = "EUPL-1.2 AND (MIT AND Apache-2.0 AND ISC AND OFL-1.1)"
+license = "EUPL-1.2"
 license-files = [
     "LICENSE",
     "src/vsview/assets/icons/phosphor/LICENSE",
     "src/vsview/assets/icons/material/LICENSE",
     "src/vsview/assets/icons/lucide/LICENSE",
     "src/vsview/assets/fonts/Cascadia_Mono/LICENSE.txt",
+    "src/vsview/assets/themes/builtin/adwaita/LICENSE",
+    "src/vsview/assets/themes/builtin/ayu/LICENSE",
+    "src/vsview/assets/themes/builtin/breeze/LICENSE",
+    "src/vsview/assets/themes/builtin/everforest/LICENSE",
+    "src/vsview/assets/themes/builtin/gruvbox/LICENSE",
+    "src/vsview/assets/themes/builtin/kanagawa/LICENSE",
+    "src/vsview/assets/themes/builtin/qt-themes/LICENSE",
+    "src/vsview/assets/themes/builtin/rose-pine/LICENSE",
+    "src/vsview/assets/themes/builtin/solarized/LICENSE",
+    "src/vsview/assets/themes/builtin/tokyonight/LICENSE",
 ]
 requires-python = ">=3.12"
 authors = [{ name = "Vardë", email = "ichunjo.le.terrible@gmail.com" }]

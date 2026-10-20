@@ -1,0 +1,20 @@
+{
+  "id": "gruvbox_light",
+  "name": "Gruvbox Light",
+  "scheme": "light",
+  "palette": {
+    "primary": "#d79921",
+    "secondary": "#458588",
+    "text": "#3c3836",
+    "overlay2": "#7c6f64",
+    "overlay1": "#928374",
+    "overlay0": "#a89984",
+    "surface2": "#bdae93",
+    "surface1": "#d5c4a1",
+    "surface0": "#ebdbb2",
+    "base": "#f2e5bc",
+    "mantle": "#fbf1c7",
+    "crust": "#f9f5d7"
+  }
+}
+

@@ -1,0 +1,20 @@
+{
+  "id": "ayu_mirage",
+  "name": "Ayu Mirage",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#ffcc66",
+    "secondary": "#5ccfe6",
+    "text": "#cccac2",
+    "overlay2": "#707a8c",
+    "overlay1": "#6e7c8f",
+    "overlay0": "#69758c",
+    "surface2": "#637599",
+    "surface1": "#282e3b",
+    "surface0": "#242936",
+    "base": "#1f2430",
+    "mantle": "#1c212c",
+    "crust": "#181c26"
+  }
+}
+

@@ -1,0 +1,20 @@
+{
+  "id": "adwaita_dark",
+  "name": "Adwaita Dark",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#3584e4",
+    "secondary": "#62a0ea",
+    "text": "#ffffff",
+    "overlay2": "#9a9996",
+    "overlay1": "#77767b",
+    "overlay0": "#5e5c64",
+    "surface2": "#39393d",
+    "surface1": "#36363a",
+    "surface0": "#2e2e32",
+    "base": "#28282c",
+    "mantle": "#222226",
+    "crust": "#1d1d20"
+  }
+}
+

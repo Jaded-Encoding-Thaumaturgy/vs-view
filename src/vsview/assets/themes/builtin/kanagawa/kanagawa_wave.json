@@ -1,0 +1,20 @@
+{
+  "id": "kanagawa_wave",
+  "name": "Kanagawa Wave",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#7e9cd8",
+    "secondary": "#957fb8",
+    "text": "#dcd7ba",
+    "overlay2": "#c8c093",
+    "overlay1": "#938aa9",
+    "overlay0": "#727169",
+    "surface2": "#54546d",
+    "surface1": "#363646",
+    "surface0": "#2a2a37",
+    "base": "#1f1f28",
+    "mantle": "#181820",
+    "crust": "#16161d"
+  }
+}
+

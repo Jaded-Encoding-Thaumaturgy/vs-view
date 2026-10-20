@@ -1,0 +1,20 @@
+{
+  "id": "everforest_light",
+  "name": "Everforest Light",
+  "scheme": "light",
+  "palette": {
+    "primary": "#8da101",
+    "secondary": "#35a77c",
+    "text": "#5c6a72",
+    "overlay2": "#829181",
+    "overlay1": "#939f91",
+    "overlay0": "#a6b0a0",
+    "surface2": "#bdc3af",
+    "surface1": "#e0dcc7",
+    "surface0": "#e6e2cc",
+    "base": "#efebd4",
+    "mantle": "#f4f0d9",
+    "crust": "#fdf6e3"
+  }
+}
+

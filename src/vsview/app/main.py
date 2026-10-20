@@ -69,6 +69,7 @@ from .plugins.manager import PluginManager
 from .settings import ActionID, SecretsManager, SettingsManager, ShortcutManager
 from .settings.dialog import SettingsDialog, ShortcutEditor
 from .settings.models import WindowGeometry
+from .themes import AppearanceManager
 from .utils import check_leaks
 from .views import StatusWidget
 from .workspace import (
@@ -107,6 +108,7 @@ class Application(QApplication):
         set_loop(loop)
         ShortcutManager()
         SecretsManager()
+        AppearanceManager()
 
         # Register custom plugin paths first
         for path in SettingsManager.global_settings.qt_settings.custom_plugin_paths:
@@ -114,19 +116,8 @@ class Application(QApplication):
 
         load_fonts()
 
-        # And then set the style
-        self.setStyle(SettingsManager.global_settings.appearance.style or "")
-        SettingsManager.global_settings.appearance.style = self.style().name().lower()
-
-        # Theme: Dark/Light/System Default
-        if (theme := SettingsManager.global_settings.appearance.theme) is not None:
-            self.styleHints().setColorScheme(theme)
-        else:
-            self.styleHints().unsetColorScheme()
-
-        # Custom style sheet
-        if stylesheet := self.read_custom_stylesheet():
-            self.setStyleSheet(stylesheet)
+        # Appearance & Themes
+        AppearanceManager.apply_all(SettingsManager.global_settings.appearance)
 
         SettingsManager.signals.globalChanged.connect(self._on_global_settings_changed)
 
@@ -135,49 +126,7 @@ class Application(QApplication):
 
     @Slot()
     def _on_global_settings_changed(self) -> None:
-        refresh_widgets = False
-
-        if (style_name := SettingsManager.global_settings.appearance.style) and style_name != self.style().name():
-            self.setStyle(style_name)
-            refresh_widgets = True
-
-        if (theme := SettingsManager.global_settings.appearance.theme) is None:
-            old_theme = self.styleHints().colorScheme()
-            self.styleHints().unsetColorScheme()
-            if old_theme != self.styleHints().colorScheme():
-                refresh_widgets = True
-        elif theme != self.styleHints().colorScheme():
-            self.styleHints().setColorScheme(theme)
-            refresh_widgets = True
-
-        if (stylesheet := self.read_custom_stylesheet()) != self.styleSheet():
-            self.setStyleSheet(stylesheet)
-            refresh_widgets = True
-        elif not stylesheet and self.styleSheet() != "":
-            self.setStyleSheet("")
-            refresh_widgets = True
-
-        if refresh_widgets:
-            style = self.style()
-
-            for widget in self.allWidgets():
-                style.unpolish(widget)
-                style.polish(widget)
-                widget.ensurePolished()
-                widget.update()
-
-    def read_custom_stylesheet(self) -> str:
-        if ss := SettingsManager.global_settings.appearance.custom_stylesheet:
-            if not (sheet := Path(ss)).is_file():
-                logger.warning("The custom stylesheet path isn't a valid file.")
-            else:
-                try:
-                    stylesheet = sheet.read_text(encoding="utf-8")
-                except OSError as e:
-                    logger.warning("Failed to open the custom stylesheet with the error message: %s", e)
-                else:
-                    return stylesheet
-        return ""
+        AppearanceManager.apply_all(SettingsManager.global_settings.appearance)
 
     @staticmethod
     def _warmup_cjk_fallback(font: QFont) -> None:

@@ -1,0 +1,20 @@
+{
+  "id": "kanagawa_dragon",
+  "name": "Kanagawa Dragon",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#8ba4b0",
+    "secondary": "#8ea4a2",
+    "text": "#c5c9c5",
+    "overlay2": "#9e9b93",
+    "overlay1": "#7a8382",
+    "overlay0": "#625e5a",
+    "surface2": "#393836",
+    "surface1": "#282727",
+    "surface0": "#1d1c19",
+    "base": "#181616",
+    "mantle": "#12120f",
+    "crust": "#0d0c0c"
+  }
+}
+

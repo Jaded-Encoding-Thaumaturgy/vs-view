@@ -32,6 +32,7 @@ from PySide6.QtGui import QColor, QKeySequence
 from PySide6.QtWidgets import QColorDialog, QStyleFactory, QWidget
 
 from ...assets import ICON_PROVIDERS
+from ...assets.themes import ThemeRegistry
 from ...env import getenv_bool
 from .action import ActionID
 from .enums import Resizer
@@ -129,6 +130,23 @@ class ShortcutConfig(BaseModel):
     is_custom: bool = False
 
 
+def _get_qt_themes_items(color_scheme: Qt.ColorScheme | None = None) -> list[tuple[str, str | None]]:
+    items: list[tuple[str, str | None]] = [("None (Default)", None)]
+    items.extend((theme.name, theme.id) for theme in ThemeRegistry.get_for_scheme(color_scheme))
+    return items
+
+
+def _get_icon_weights(provider_id: str | None = None) -> list[tuple[str, str]]:
+    if not provider_id or provider_id not in ICON_PROVIDERS:
+        return []
+    provider = ICON_PROVIDERS[provider_id]
+    return [(weight.title(), weight) for weight in provider.weights]
+
+
+def _get_style() -> list[tuple[str, str]]:
+    return [(k.title(), k.lower()) for k in QStyleFactory.keys()]  # noqa: SIM118
+
+
 class AppearanceSettings(BaseModel):
     """Settings for the application appearance."""
 
@@ -137,14 +155,11 @@ class AppearanceSettings(BaseModel):
     theme: Annotated[
         Qt.ColorScheme | None,
         Dropdown(
-            label="Theme",
-            items=[
-                ("System Default", None),
-                ("Light", Qt.ColorScheme.Light),
-                ("Dark", Qt.ColorScheme.Dark),
-            ],
+            label="Color Scheme",
+            items=[("System Default", None), ("Light", Qt.ColorScheme.Light), ("Dark", Qt.ColorScheme.Dark)],
             tooltip=(
-                "Application theme.\n"  # no fmt
+                "Operating system color scheme preference.\n"
+                "Controls window title bars, standard dialogs, and platform menus.\n"
                 "You may have to restart the application for the changes to fully take effect."
             ),
         ),
@@ -153,21 +168,40 @@ class AppearanceSettings(BaseModel):
     style: Annotated[
         str | None,
         Dropdown(
-            label="Style",
-            items=lambda QStyleFactory=QStyleFactory: [(k.title(), k.lower()) for k in QStyleFactory.keys()],  # noqa: N803, SIM118
+            label="Widget Style",
+            items=_get_style,
             tooltip=(
-                "Application style.\n"  # no fmt
+                "Qt widget rendering style.\n"
+                "Controls primitive shapes, buttons, scrollbars. "
+                'Select "Fusion" for full compatibility with Palette Themes\n'
                 "You may have to restart the application for the changes to fully take effect."
             ),
         ),
     ] = None
+
+    palette_theme: Annotated[
+        str | None,
+        Dropdown(
+            label="Palette Theme",
+            depends_on="appearance.theme",
+            items=_get_qt_themes_items,
+            default_value=None,
+            tooltip=(
+                "Color palette theme. "
+                "Sets all UI color roles (buttons, backgrounds, highlights, and text).\n"
+                'It is also recommended to use the "Fusion" widget style,'
+                "as it provides the most consistent appearance across all controls."
+            ),
+        ),
+    ] = None
+
     custom_stylesheet: Annotated[
         str | None,
         FilePicker(
             label="Custom Stylesheet",
             file_filter="Stylesheets (*.qss)",
             dialog_title="Select QSS File",
-            tooltip="Path to a custom .qss stylesheet to apply.",
+            tooltip="Path to a custom .qss stylesheet file to apply on top of the active style.",
         ),
     ] = None
 
@@ -184,7 +218,9 @@ class AppearanceSettings(BaseModel):
         str,
         Dropdown(
             label="Icon Weight",
-            items=[],  # Populated dynamically based on selected provider
+            depends_on="appearance.icon_provider",
+            items=_get_icon_weights,
+            default_value="regular",
             tooltip="Weight of icons",
         ),
     ] = "regular"

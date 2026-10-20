@@ -1,0 +1,20 @@
+{
+  "id": "rose_pine_dawn",
+  "name": "Rosé Pine Dawn",
+  "scheme": "light",
+  "palette": {
+    "primary": "#907aa9",
+    "secondary": "#56949f",
+    "text": "#464261",
+    "overlay2": "#6d8f89",
+    "overlay1": "#797593",
+    "overlay0": "#9893a5",
+    "surface2": "#cecacd",
+    "surface1": "#dfdad9",
+    "surface0": "#f2e9e1",
+    "base": "#f8f0e7",
+    "mantle": "#faf4ed",
+    "crust": "#fffaf3"
+  }
+}
+

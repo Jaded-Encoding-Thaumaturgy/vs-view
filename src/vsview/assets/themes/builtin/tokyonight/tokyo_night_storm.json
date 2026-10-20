@@ -1,0 +1,20 @@
+{
+  "id": "tokyo_night_storm",
+  "name": "Tokyo Night Storm",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#7aa2f7",
+    "secondary": "#7dcfff",
+    "text": "#c0caf5",
+    "overlay2": "#737aa2",
+    "overlay1": "#565f89",
+    "overlay0": "#545c7e",
+    "surface2": "#414868",
+    "surface1": "#3b4261",
+    "surface0": "#292e42",
+    "base": "#24283b",
+    "mantle": "#1f2335",
+    "crust": "#1b1e2d"
+  }
+}
+

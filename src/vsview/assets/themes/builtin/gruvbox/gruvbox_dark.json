@@ -1,0 +1,20 @@
+{
+  "id": "gruvbox_dark",
+  "name": "Gruvbox Dark",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#fabd2f",
+    "secondary": "#83a598",
+    "text": "#ebdbb2",
+    "overlay2": "#a89984",
+    "overlay1": "#928374",
+    "overlay0": "#7c6f64",
+    "surface2": "#665c54",
+    "surface1": "#504945",
+    "surface0": "#3c3836",
+    "base": "#32302f",
+    "mantle": "#282828",
+    "crust": "#1d2021"
+  }
+}
+

@@ -1,0 +1,19 @@
+{
+  "id": "atom_one",
+  "name": "Atom One Dark",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#c678dd",
+    "secondary": "#61afef",
+    "text": "#abb2bf",
+    "overlay2": "#5c6370",
+    "overlay1": "#5c6370",
+    "overlay0": "#5c6370",
+    "surface2": "#4b5263",
+    "surface1": "#4b5263",
+    "surface0": "#4b5263",
+    "base": "#282c34",
+    "mantle": "#282c34",
+    "crust": "#282c34"
+  }
+}

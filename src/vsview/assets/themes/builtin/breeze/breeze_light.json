@@ -1,0 +1,20 @@
+{
+  "id": "breeze_light",
+  "name": "Breeze Light",
+  "scheme": "light",
+  "palette": {
+    "primary": "#3daee9",
+    "secondary": "#2980b9",
+    "text": "#232629",
+    "overlay2": "#2a2e32",
+    "overlay1": "#707d8a",
+    "overlay0": "#a1a9b1",
+    "surface2": "#dee0e2",
+    "surface1": "#e3e5e7",
+    "surface0": "#eff0f1",
+    "base": "#f7f7f7",
+    "mantle": "#fcfcfc",
+    "crust": "#ffffff"
+  }
+}
+

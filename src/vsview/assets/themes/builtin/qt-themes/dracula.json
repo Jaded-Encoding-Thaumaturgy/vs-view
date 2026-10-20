@@ -1,0 +1,19 @@
+{
+  "id": "dracula",
+  "name": "Dracula",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#bd93f9",
+    "secondary": "#ff79c6",
+    "text": "#f8f8f2",
+    "overlay2": "#9EA0A6",
+    "overlay1": "#80828D",
+    "overlay0": "#626573",
+    "surface2": "#44475a",
+    "surface1": "#3B3D4E",
+    "surface0": "#313442",
+    "base": "#2D2F3C",
+    "mantle": "#282a36",
+    "crust": "#1d1b22"
+  }
+}

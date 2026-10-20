@@ -1,0 +1,19 @@
+{
+  "id": "nord",
+  "name": "Nord",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#81a1c1",
+    "secondary": "#88c0d0",
+    "text": "#eceff4",
+    "overlay2": "#d8dee9",
+    "overlay1": "#d8dee9",
+    "overlay0": "#4c566a",
+    "surface2": "#4c566a",
+    "surface1": "#434c5e",
+    "surface0": "#3b4252",
+    "base": "#3b4252",
+    "mantle": "#2e3440",
+    "crust": "#2e3440"
+  }
+}

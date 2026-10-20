@@ -1,0 +1,20 @@
+{
+  "id": "tokyo_night_day",
+  "name": "Tokyo Night Day",
+  "scheme": "light",
+  "palette": {
+    "primary": "#2e7de9",
+    "secondary": "#007197",
+    "text": "#3760bf",
+    "overlay2": "#68709a",
+    "overlay1": "#848cb5",
+    "overlay0": "#8990b3",
+    "surface2": "#a8aecb",
+    "surface1": "#b7c1e3",
+    "surface0": "#c1c9df",
+    "base": "#c4c8da",
+    "mantle": "#d0d5e3",
+    "crust": "#e1e2e7"
+  }
+}
+

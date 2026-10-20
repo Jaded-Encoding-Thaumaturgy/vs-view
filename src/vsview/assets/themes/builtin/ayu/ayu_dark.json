@@ -1,0 +1,20 @@
+{
+  "id": "ayu_dark",
+  "name": "Ayu Dark",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#e6b450",
+    "secondary": "#39bae6",
+    "text": "#bfbdb6",
+    "overlay2": "#5a6673",
+    "overlay1": "#5a6378",
+    "overlay0": "#475266",
+    "surface2": "#1b1f29",
+    "surface1": "#161a24",
+    "surface0": "#141821",
+    "base": "#10141c",
+    "mantle": "#0f131a",
+    "crust": "#0d1017"
+  }
+}
+

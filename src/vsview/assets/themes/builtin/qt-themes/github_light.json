@@ -1,0 +1,19 @@
+{
+  "id": "github_light",
+  "name": "GitHub Light",
+  "scheme": "light",
+  "palette": {
+    "primary": "#79c0ff",
+    "secondary": "#56d364",
+    "text": "#1f2328",
+    "overlay2": "#444952",
+    "overlay1": "#61666E",
+    "overlay0": "#7F838A",
+    "surface2": "#9DA1A6",
+    "surface1": "#BBBEC2",
+    "surface0": "#D8DBDE",
+    "base": "#f6f8fa",
+    "mantle": "#FBFCFD",
+    "crust": "#ffffff"
+  }
+}

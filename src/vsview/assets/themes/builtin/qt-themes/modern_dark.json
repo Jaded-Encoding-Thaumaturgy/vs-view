@@ -1,0 +1,19 @@
+{
+  "id": "modern_dark",
+  "name": "Modern Dark",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#2aa5da",
+    "secondary": "#2ad7da",
+    "text": "#c8c8c8",
+    "overlay2": "#858585",
+    "overlay1": "#6f6f6f",
+    "overlay0": "#585858",
+    "surface2": "#424242",
+    "surface1": "#3c3c3c",
+    "surface0": "#353535",
+    "base": "#2a2a2a",
+    "mantle": "#1f1f1f",
+    "crust": "#141414"
+  }
+}

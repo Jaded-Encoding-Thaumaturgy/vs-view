@@ -1,0 +1,20 @@
+{
+  "id": "kanagawa_lotus",
+  "name": "Kanagawa Lotus",
+  "scheme": "light",
+  "palette": {
+    "primary": "#4d699b",
+    "secondary": "#5d57a3",
+    "text": "#545464",
+    "overlay2": "#716e61",
+    "overlay1": "#8a8980",
+    "overlay0": "#a09cac",
+    "surface2": "#c9cbd1",
+    "surface1": "#d5cea3",
+    "surface0": "#dcd5ac",
+    "base": "#e5ddb0",
+    "mantle": "#e7dba0",
+    "crust": "#f2ecbc"
+  }
+}
+

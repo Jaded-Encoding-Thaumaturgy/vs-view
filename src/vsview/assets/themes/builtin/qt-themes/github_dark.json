@@ -1,0 +1,19 @@
+{
+  "id": "github_dark",
+  "name": "GitHub Dark",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#79c0ff",
+    "secondary": "#56d364",
+    "text": "#d1d7e0",
+    "overlay2": "#989EA7",
+    "overlay1": "#858B94",
+    "overlay0": "#727882",
+    "surface2": "#5F656F",
+    "surface1": "#4C525C",
+    "surface0": "#3E444E",
+    "base": "#262c36",
+    "mantle": "#212830",
+    "crust": "#151b23"
+  }
+}

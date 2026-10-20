@@ -1,0 +1,19 @@
+{
+  "id": "catppuccin_frappe",
+  "name": "Catppuccin Frappé",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#ca9ee6",
+    "secondary": "#8caaee",
+    "text": "#c6d0f5",
+    "overlay2": "#949cbb",
+    "overlay1": "#838ba7",
+    "overlay0": "#737994",
+    "surface2": "#626880",
+    "surface1": "#51576d",
+    "surface0": "#414559",
+    "base": "#303446",
+    "mantle": "#292c3c",
+    "crust": "#232634"
+  }
+}

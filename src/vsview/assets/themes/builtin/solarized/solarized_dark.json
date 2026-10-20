@@ -1,0 +1,20 @@
+{
+  "id": "solarized_dark",
+  "name": "Solarized Dark",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#268bd2",
+    "secondary": "#2aa198",
+    "text": "#93a1a1",
+    "overlay2": "#839496",
+    "overlay1": "#657b83",
+    "overlay0": "#586e75",
+    "surface2": "#586e75",
+    "surface1": "#073642",
+    "surface0": "#073642",
+    "base": "#073642",
+    "mantle": "#002b36",
+    "crust": "#002b36"
+  }
+}
+

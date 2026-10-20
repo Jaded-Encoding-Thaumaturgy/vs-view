@@ -97,6 +97,8 @@ def test_settings_manager_load_default(fresh_settings_manager: Callable[[], Sett
     assert sm.global_settings.timeline.seek_step == defaults.timeline.seek_step
     assert sm.global_settings.playback.default_volume == defaults.playback.default_volume
     assert sm.global_settings.appearance.theme == defaults.appearance.theme
+    assert sm.global_settings.appearance.palette_theme == defaults.appearance.palette_theme
+    assert sm.global_settings.appearance.palette_theme is None
     assert sm.global_settings.status_message_timeout == defaults.status_message_timeout
 
     # Class-level property accessor via inject_self

@@ -1,0 +1,20 @@
+{
+  "id": "rose_pine_moon",
+  "name": "Rosé Pine Moon",
+  "scheme": "dark",
+  "palette": {
+    "primary": "#c4a7e7",
+    "secondary": "#9ccfd8",
+    "text": "#e0def4",
+    "overlay2": "#95b1ac",
+    "overlay1": "#908caa",
+    "overlay0": "#6e6a86",
+    "surface2": "#56526e",
+    "surface1": "#44415a",
+    "surface0": "#393552",
+    "base": "#2a273f",
+    "mantle": "#232136",
+    "crust": "#1f1d30"
+  }
+}
+

@@ -1,8 +1,9 @@
 import os
 from dataclasses import dataclass, field
+from functools import partial
 from logging import getLogger
 from pathlib import Path
-from typing import Self, override
+from typing import Any, Self, override
 
 from jetpytools import cachedproperty, classproperty
 from PySide6.QtCore import QAbstractAnimation, QCoreApplication, QEvent, QObject, QPoint, Qt, Slot
@@ -29,10 +30,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ...assets import ICON_PROVIDERS, IconName
+from ...assets import IconName
 from ..icon import IconReloadMixin
 from ..views.components import Accordion
 from .manager import SettingsManager
+from .metadata import Dropdown, WidgetMetadataWithDependency
 from .models import GlobalSettings, LocalSettings, SettingEntry, ShortcutConfig, extract_settings
 from .shortcuts import KeyboardLayoutMapper, ShortcutManager
 
@@ -269,6 +271,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         self._setup_ui()
         self._load_settings_to_ui()
+        self._wire_setting_dependencies()
 
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
@@ -368,42 +371,9 @@ class SettingsDialog(QDialog, IconReloadMixin):
                 self._global_widgets[entry.key] = widget
                 self._apply_wheel_filter(widget)
 
-                # Special handling for icon_provider and icon_weight dropdowns
-                if entry.key == "appearance.icon_provider" and isinstance(widget, QComboBox):
-                    widget.currentIndexChanged.connect(self._on_provider_changed)
-
                 form.addRow(f"{entry.metadata.label}:", widget)
 
         return tab
-
-    @Slot()
-    def _on_provider_changed(self) -> None:
-        provider_combo = self._global_widgets.get("appearance.icon_provider")
-        weight_combo = self._global_widgets.get("appearance.icon_weight")
-
-        if not isinstance(provider_combo, QComboBox) or not isinstance(weight_combo, QComboBox):
-            logger.warning("Icon provider or weight combo not found")
-            return
-
-        if not (provider_id := provider_combo.currentData()):
-            logger.warning("Icon provider not selected")
-            return
-
-        # Store current weight if valid for new provider
-        current_weight = weight_combo.currentData()
-        provider = ICON_PROVIDERS[provider_id]
-
-        # Repopulate weight dropdown
-        weight_combo.clear()
-        for weight in provider.weights:
-            weight_combo.addItem(weight.title(), weight)
-
-        # Try to restore previous weight, otherwise use provider default
-        index = weight_combo.findData(current_weight)
-        if index >= 0:
-            weight_combo.setCurrentIndex(index)
-        else:
-            weight_combo.setCurrentIndex(weight_combo.findData(provider.default_weight))
 
     def _create_shortcuts_tab(self) -> SettingsTab:
         self._shortcut_widgets = ShortcutWidgets()
@@ -515,34 +485,66 @@ class SettingsDialog(QDialog, IconReloadMixin):
     def _load_settings_to_ui(self) -> None:
         global_settings = SettingsManager.global_settings
 
+        def populate_if_supported(entry: SettingEntry[Any], widget: QWidget) -> None:
+            if not (widget_type := entry.metadata.get_widget_type()):
+                logger.warning("The entry %s doesn't expose its widget type", entry)
+                return
+            if isinstance(entry.metadata, WidgetMetadataWithDependency) and entry.metadata.depends_on is not None:
+                if not isinstance(widget, widget_type):
+                    logger.warning(
+                        "The entry %s didn't resolve to a %s widget (%s)", entry, widget_type.__name__, type(widget)
+                    )
+                elif not entry.metadata.depends_on:
+                    logger.warning("The entry %s specifies an empty string", entry)
+                else:
+                    entry.metadata.populate(widget, global_settings.get_nested_value(entry.metadata.depends_on))
+
         # Load registry-driven global settings
         for entry in self.global_settings_registry:
             widget = self._global_widgets[entry.key]
+            populate_if_supported(entry, widget)
+
             value = global_settings.get_nested_value(entry.key)
             try:
                 entry.metadata.load_value(widget, value)
             except Exception:
                 logger.exception("The entry %s couldn't be load with the error:", entry)
 
-        # Populate weight dropdown based on selected provider, then reload weight value
-        self._on_provider_changed()
-
-        if weight_widget := self._global_widgets.get("appearance.icon_weight"):
-            for entry in self.global_settings_registry:
-                if entry.key == "appearance.icon_weight":
-                    entry.metadata.load_value(weight_widget, global_settings.appearance.icon_weight)
-                    break
-
         # Load local settings if available
         if self._script_path:
             local_settings = SettingsManager.get_local_settings(self._script_path)
             for entry in self.local_settings_registry:
                 widget = self._local_widgets[entry.key]
+                populate_if_supported(entry, widget)
+
                 value = local_settings.get_nested_value(entry.key)
                 try:
                     entry.metadata.load_value(widget, value)
                 except Exception:
                     logger.exception("The entry %s couldn't be load with the error:", entry)
+
+    def _wire_setting_dependencies(self) -> None:
+        def on_parent_combobox_changed(meta: Dropdown, target: QComboBox, parent: QComboBox, index: int) -> None:
+            meta.populate(target, parent.currentData())
+
+        for registry, widgets in (
+            (self.global_settings_registry, self._global_widgets),
+            (self.local_settings_registry, self._local_widgets),
+        ):
+            for entry in registry:
+                if isinstance(entry.metadata, Dropdown) and (dep_key := entry.metadata.depends_on) is not None:
+                    if not dep_key:
+                        logger.warning("The entry %s specifies an empty string", entry)
+                        continue
+
+                    parent_widget = widgets.get(dep_key)
+                    target_widget = widgets.get(entry.key)
+                    if isinstance(parent_widget, QComboBox) and isinstance(target_widget, QComboBox):
+                        parent_widget.currentIndexChanged.connect(
+                            partial(on_parent_combobox_changed, entry.metadata, target_widget, parent_widget)
+                        )
+                    else:
+                        logger.warning("Unsupported combo of dependencies between %s and %s dependency", entry, dep_key)
 
     def _get_global_settings_from_ui(self) -> GlobalSettings:
         # Build shortcuts from UI editors
