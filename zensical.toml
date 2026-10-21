@@ -64,6 +64,7 @@ nav = [
         { "Editor" = "usage/workspaces/editor.md" },
         { "Remote" = "usage/workspaces/remote.md" },
         { "Color Management" = "usage/color-management.md" },
+        { "Appearance" = "usage/appearance.md" },
         { "Configuration & CLI" = "usage/configuration.md" },
         { "Visual Studio Code Integration" = "usage/vscode.md" },
     ] },
@@ -299,13 +300,6 @@ features = [
 # - https://zensical.org/docs/setup/colors/
 # ----------------------------------------------------------------------------
 
-# Palette toggle for dark mode
-[[project.theme.palette]]
-media = "(prefers-color-scheme: dark)"
-scheme = "slate"
-toggle.icon = "lucide/moon"
-toggle.name = "Switch to system preference"
-
 # Palette toggle for automatic mode
 [[project.theme.palette]]
 media = "(prefers-color-scheme)"
@@ -318,6 +312,13 @@ media = "(prefers-color-scheme: light)"
 scheme = "default"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to dark mode"
+
+# Palette toggle for dark mode
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
 
 # ----------------------------------------------------------------------------
 # In the "font" subsection you can configure the fonts used. By default, fonts
