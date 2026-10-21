@@ -1,8 +1,7 @@
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import suppress
 from logging import DEBUG, getLogger
 from typing import Any, ClassVar, override
-from weakref import WeakKeyDictionary, WeakMethod, ref
+from weakref import WeakKeyDictionary
 
 from jetpytools import CustomNotImplementedError
 from PySide6.QtCore import QObject, QSize, Qt, QTimer
@@ -76,11 +75,16 @@ class IconReloadMixin:
         self._action_reloaders = WeakKeyDictionary[QAction, Callable[[QAction], None]]()
         self._custom_callbacks = list[Callable[[], None]]()
 
-        self._connect_reload()
-        self._connect_destroy()
+        from ..app.settings import SettingsManager
+        from ..app.themes import AppearanceManager
+
+        SettingsManager.signals.connect_global_weak(self._trigger_reload)
+        AppearanceManager.signals.connect_appearance_weak(self._trigger_reload)
 
     def deleteLater(self) -> None:
-        self._cleanup_icon_reload()
+        self._button_reloaders.clear()
+        self._action_reloaders.clear()
+        self._custom_callbacks.clear()
         getattr(super(), "deleteLater", lambda: None)()
 
     def register_icon_button(
@@ -382,70 +386,10 @@ class IconReloadMixin:
 
         return q_icon
 
-    def _connect_reload(self) -> None:
-        from ..app.settings import SettingsManager
-
-        reload_all_weak = WeakMethod(self._reload_all_icons)
-        cleanup_weak = WeakMethod(self._cleanup_icon_reload)
-        sig = SettingsManager.signals.globalChanged
-
-        def on_global_changed() -> None:
-            if (reload_all := reload_all_weak()) is not None:
-                receiver = getattr(reload_all, "__self__", None)
-                if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
-                    if (cleanup := cleanup_weak()) is not None:
-                        cleanup()
-                    return
-                QTimer.singleShot(0, reload_all)
-            else:
-                sig.disconnect(on_global_changed)
-
-        self._on_global_changed_slot = on_global_changed
-        sig.connect(self._on_global_changed_slot)
-        self._connected_signal = sig
-
-    def _connect_destroy(self) -> None:
-        self_weak = ref(self)
-        cleanup_weak = WeakMethod(self._cleanup_icon_reload)
-        sig = getattr(self, "_connected_signal", None)
-        slot = getattr(self, "_on_global_changed_slot", None)
-
-        def on_destroyed() -> None:
-            if (cleanup := cleanup_weak()) is not None:
-                cleanup()
-            elif sig is not None and slot is not None:
-                sig.disconnect(slot)
-
-        # Automatically clean up when Qt destroys the C++ object
-        if isinstance(self, QObject):
-            with suppress(RuntimeError, ValueError):
-                self.destroyed.connect(on_destroyed)
-        else:
-            # Use singleShot to defer connection until after C++ constructors finish
-            QTimer.singleShot(
-                0,
-                lambda: (
-                    (obj := self_weak()) is not None
-                    and Shiboken.isValid(obj)
-                    and hasattr(obj, "destroyed")
-                    and getattr(obj, "destroyed").connect(on_destroyed)
-                ),
-            )
-
-    def _cleanup_icon_reload(self) -> None:
-        if hasattr(self, "_on_global_changed_slot"):
-            slot = self._on_global_changed_slot
-            del self._on_global_changed_slot
-
-            if hasattr(self, "_connected_signal"):
-                sig = self._connected_signal
-                del self._connected_signal
-                with suppress(RuntimeError, ValueError):
-                    sig.disconnect(slot)
-
-        self._button_reloaders.clear()
-        self._action_reloaders.clear()
-        self._custom_callbacks.clear()
+    def _trigger_reload(self) -> None:
+        if isinstance(self, QObject) and not Shiboken.isValid(self):
+            return
+        QTimer.singleShot(0, self._reload_all_icons)
 
 
 def load_icon(
