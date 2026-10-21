@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFontMetrics, QPalette
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QTabWidget, QWidget
 
+from ..themes import AppearanceManager
 from .video import GraphicsView
 
 logger = getLogger(__name__)
@@ -29,6 +30,8 @@ class BaseTabLabel(QWidget):
         self._layout.setContentsMargins(4, 4, 4, 4)
         self._layout.setSpacing(2)
 
+        AppearanceManager.signals.connect_appearance_weak(self._force_selected)
+
     @override
     def layout(self) -> QHBoxLayout:
         return self._layout
@@ -38,13 +41,13 @@ class BaseTabLabel(QWidget):
         """Whether the tab is currently selected."""
         return self._selected
 
-    def set_selected(self, selected: bool) -> None:
+    def set_selected(self, selected: bool, force: bool = False) -> None:
         """
         Update the selection state of the tab label.
 
         Applies the semantic palette role and updates the dynamic 'selected' property for Qt Style Sheets.
         """
-        if self._selected == selected and self.property("selected") is not None:
+        if not force and self._selected == selected and self.property("selected") is not None:
             return
 
         self._selected = selected
@@ -59,6 +62,10 @@ class BaseTabLabel(QWidget):
         for child in self.findChildren(QWidget):
             style.unpolish(child)
             style.polish(child)
+            child.ensurePolished()
+
+    def _force_selected(self) -> None:
+        self.set_selected(self._selected, force=True)
 
     def _on_selected_changed(self, selected: bool) -> None:
         """Hook for subclasses to update child widget foreground roles."""
@@ -85,7 +92,9 @@ class SimpleTabLabel(BaseTabLabel):
     @override
     def _on_selected_changed(self, selected: bool) -> None:
         self._title_label.setForegroundRole(
-            QPalette.ColorRole.WindowText if selected else QPalette.ColorRole.PlaceholderText
+            QPalette.ColorRole.Text
+            if selected
+            else (QPalette.ColorRole.ToolTipText if AppearanceManager.is_dark else QPalette.ColorRole.PlaceholderText)
         )
 
 
@@ -108,7 +117,6 @@ class TabLabel(BaseTabLabel):
         self._zoom_label = QLabel(self)
         self._zoom_label.setObjectName("tabZoomLabel")
         self._zoom_label.setMinimumWidth(50)
-        self._zoom_label.setForegroundRole(QPalette.ColorRole.PlaceholderText)
         self._layout.addWidget(self._zoom_label)
 
         self._update_text()
@@ -116,8 +124,14 @@ class TabLabel(BaseTabLabel):
 
     @override
     def _on_selected_changed(self, selected: bool) -> None:
-        role = QPalette.ColorRole.WindowText if selected else QPalette.ColorRole.PlaceholderText
+        is_dark = AppearanceManager.is_dark
+        role = (
+            QPalette.ColorRole.Text
+            if selected
+            else (QPalette.ColorRole.ToolTipText if is_dark else QPalette.ColorRole.PlaceholderText)
+        )
         self._name_label.setForegroundRole(role)
+        self._zoom_label.setForegroundRole(role)
 
     @property
     def name(self) -> str:
@@ -178,7 +192,10 @@ class BaseTabWidget(QTabWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setDocumentMode(True)
+        self.tabBar().setStyleSheet("QTabBar::tab:selected { background: palette(button); }")
         self.currentChanged.connect(self._sync_tab_labels)
+
+        AppearanceManager.signals.connect_appearance_weak(self._on_appearance_changed)
 
     def set_tab_label(self, index: int, label: BaseTabLabel) -> None:
         """
@@ -208,6 +225,9 @@ class BaseTabWidget(QTabWidget):
             btn = bar.tabButton(i, bar.ButtonPosition.LeftSide)
             if isinstance(btn, BaseTabLabel):
                 btn.set_selected(i == index)
+
+    def _on_appearance_changed(self) -> None:
+        self.tabBar().setStyleSheet(self.tabBar().styleSheet())
 
 
 class TabViewWidget(BaseTabWidget):

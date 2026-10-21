@@ -67,6 +67,14 @@ class AppearanceManager(Singleton):
         """Return the active widget style name."""
         return self._active_style_name or self._app.style().name().lower()
 
+    @inject_self.property
+    def is_dark(self) -> bool:
+        return self._app.styleHints().colorScheme() == Qt.ColorScheme.Dark
+
+    @inject_self.property
+    def is_light(self) -> bool:
+        return self._app.styleHints().colorScheme() == Qt.ColorScheme.Light
+
     @inject_self
     def apply_all(self, appearance: AppearanceSettings) -> bool:
         """
@@ -193,6 +201,8 @@ class AppearanceManager(Singleton):
 
     def _repolish_all(self) -> None:
         for widget in self._app.allWidgets():
+            if not widget.testAttribute(Qt.WidgetAttribute.WA_SetPalette):
+                widget.setPalette(QPalette())
             style = widget.style()
             style.unpolish(widget)
             style.polish(widget)

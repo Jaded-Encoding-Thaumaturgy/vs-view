@@ -33,6 +33,7 @@ from PySide6.QtGui import (
     QMouseEvent,
     QNativeGestureEvent,
     QPainter,
+    QPalette,
     QPen,
     QPixmap,
     QResizeEvent,
@@ -60,6 +61,7 @@ from shiboken6 import Shiboken
 
 from ...vsenv import run_in_background, run_in_loop
 from ..settings import ActionID, SettingsManager, ShortcutManager
+from ..themes import AppearanceManager
 
 if TYPE_CHECKING:
     from .hdr import HDRViewport
@@ -368,6 +370,8 @@ class BaseGraphicsView(QGraphicsView):
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        self.setFrameShape(QGraphicsView.Shape.NoFrame)
+        self.setBackgroundRole(QPalette.ColorRole.Button)
 
         # HDR Support
         self._hdr_viewport: HDRViewport | None = None
@@ -428,6 +432,8 @@ class BaseGraphicsView(QGraphicsView):
         self.copy_image_action.triggered.connect(self._copy_image_to_clipboard)
 
         self._setup_shortcuts()
+
+        AppearanceManager.signals.connect_appearance_weak(self._update_background_role)
 
     def _setup_shortcuts(self) -> None:
         sm = ShortcutManager()
@@ -808,6 +814,11 @@ class BaseGraphicsView(QGraphicsView):
             painter.fillRect(0, 0, size, size, Qt.GlobalColor.lightGray)
             painter.fillRect(size, size, size, size, Qt.GlobalColor.lightGray)
         return pixmap
+
+    def _update_background_role(self) -> None:
+        self.viewport().setBackgroundRole(QPalette.ColorRole.Button)
+        self.viewport().setAutoFillBackground(True)
+        self.viewport().update()
 
     @Slot(bool)
     def _set_sar_applied(self, applied: bool) -> None:
