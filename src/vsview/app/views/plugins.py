@@ -4,10 +4,11 @@ from collections.abc import Sequence
 from typing import override
 
 from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtWidgets import QDockWidget, QHBoxLayout, QLabel, QSplitter, QTabBar, QTabWidget, QWidget
+from PySide6.QtWidgets import QDockWidget, QHBoxLayout, QSplitter, QTabWidget, QWidget
 
 from ...assets import IconName
 from ..icon import IconReloadMixin
+from .tab import BaseTabWidget, SimpleTabLabel
 
 __all__ = ["PluginSplitter"]
 
@@ -27,9 +28,8 @@ class PluginSplitter(QSplitter, IconReloadMixin):
         QSplitter.__init__(self, Qt.Orientation.Horizontal, parent)
         IconReloadMixin.__init__(self)
 
-        self.plugin_tabs = QTabWidget(self)
+        self.plugin_tabs = BaseTabWidget(self)
         self.plugin_tabs.setTabPosition(QTabWidget.TabPosition.North)
-        self.plugin_tabs.setDocumentMode(True)
         self.plugin_tabs.currentChanged.connect(self._on_plugin_tab_changed)
         self.old_tab_index = self.plugin_tabs.currentIndex()
 
@@ -65,7 +65,8 @@ class PluginSplitter(QSplitter, IconReloadMixin):
 
     @property
     def is_right_panel_visible(self) -> bool:
-        return self.sizes()[1] > 0
+        sizes = self.sizes()
+        return len(sizes) > 1 and sizes[1] > 0
 
     def insert_main_widget(self, widget: QWidget) -> None:
         self.insertWidget(0, widget)
@@ -73,18 +74,7 @@ class PluginSplitter(QSplitter, IconReloadMixin):
 
     def add_plugin(self, widget: QWidget, title: str) -> None:
         index = self.plugin_tabs.addTab(widget, "")
-
-        # Use a custom label widget to match TabLabel's vertical margins (4, 4, 4, 4)
-        # This ensures the tab bar height matches TabManager's tab bar.
-        label_widget = QWidget(self)
-        layout = QHBoxLayout(label_widget)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(2)
-
-        label = QLabel(title, label_widget)
-        layout.addWidget(label)
-
-        self.plugin_tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.LeftSide, label_widget)
+        self.plugin_tabs.set_tab_label(index, SimpleTabLabel(title, self))
 
     @Slot(bool)
     def toggle_right_panel(self, visible: bool) -> None:

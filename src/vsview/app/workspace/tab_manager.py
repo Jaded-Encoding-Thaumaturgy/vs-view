@@ -274,7 +274,7 @@ class TabManager(QWidget, IconReloadMixin):
 
             # Add tab with empty text (label widget replaces it)
             tab_i = new_tabs.addTab(view, "")
-            new_tabs.tabBar().setTabButton(tab_i, new_tabs.tabBar().ButtonPosition.LeftSide, tab_label)
+            new_tabs.set_tab_label(tab_i, tab_label)
 
         if new_tabs.count() <= 1:
             self.sync_playhead_btn.setDisabled(True)
@@ -301,7 +301,7 @@ class TabManager(QWidget, IconReloadMixin):
 
         new_tabs.recent_tabs[tab_index] = None
         new_tabs.setCurrentIndex(tab_index)
-        new_tabs.currentChanged.connect(new_tabs._on_current_changed)
+        new_tabs.currentChanged.emit(tab_index)
         new_tabs.currentChanged.connect(self._on_tab_changed)
 
         self.current_layout.replaceWidget(old_tabs, new_tabs)
