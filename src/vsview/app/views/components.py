@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...assets import loading_icon
+from ..icon import IconReloadMixin
 
 
 class _OverlayWidget(QWidget):
@@ -165,7 +166,7 @@ class BlockableWidget(QWidget):
         return super().event(event)
 
 
-class SegmentedControl(QWidget):
+class SegmentedControl(QWidget, IconReloadMixin):
     """
     A segmented control widget for binary choices.
 
@@ -186,8 +187,7 @@ class SegmentedControl(QWidget):
         self.current_layout.setContentsMargins(2, 2, 2, 2)
         self.current_layout.setSpacing(2)
 
-        self.button_group = QButtonGroup(self)
-        self.button_group.setExclusive(True)
+        self.button_group = QButtonGroup(self, exclusive=True)
         self.buttons = list[QPushButton]()
 
         for i, label in enumerate(labels):
@@ -205,6 +205,8 @@ class SegmentedControl(QWidget):
         self.button_group.idClicked.connect(self._on_button_clicked)
         self._update_button_colors()
 
+        self.register_icon_callback(self._update_button_colors)
+
     @property
     def index(self) -> int:
         return self.button_group.checkedId()
@@ -216,10 +218,8 @@ class SegmentedControl(QWidget):
             self._update_button_colors()
 
     def _update_button_colors(self) -> None:
-        from ...app.icon import IconReloadMixin
-
         states = {
-            True: IconReloadMixin.get_on_color_role(),
+            True: self.get_on_color_role(),
             False: QPalette.ColorRole.ButtonText,
         }
 
