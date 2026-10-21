@@ -1,9 +1,8 @@
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import suppress
-from functools import partial
 from logging import DEBUG, getLogger
 from typing import Any, ClassVar, override
-from weakref import WeakKeyDictionary, WeakMethod
+from weakref import WeakKeyDictionary, WeakMethod, ref
 
 from jetpytools import CustomNotImplementedError
 from PySide6.QtCore import QObject, QSize, Qt, QTimer
@@ -64,9 +63,7 @@ class IconReloadMixin:
     ```
     """
 
-    DEFAULT_ICON_STATES: ClassVar[
-        Mapping[tuple[QIcon.Mode, QIcon.State], tuple[QPalette.ColorGroup, QPalette.ColorRole]]
-    ] = _DefaultIconStatesMapping()
+    DEFAULT_ICON_STATES: ClassVar[_DefaultIconStatesMapping] = _DefaultIconStatesMapping()
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         if hasattr(self, "_icon_reload_initialized"):
@@ -75,8 +72,8 @@ class IconReloadMixin:
         self._icon_reload_initialized = True
 
         super().__init__(*args, **kwargs)
-        self._button_reloaders = WeakKeyDictionary[QToolButton, Callable[[], None]]()
-        self._action_reloaders = WeakKeyDictionary[QAction, Callable[[], None]]()
+        self._button_reloaders = WeakKeyDictionary[QToolButton, Callable[[QToolButton], None]]()
+        self._action_reloaders = WeakKeyDictionary[QAction, Callable[[QAction], None]]()
         self._custom_callbacks = list[Callable[[], None]]()
 
         self._connect_reload()
@@ -121,24 +118,18 @@ class IconReloadMixin:
 
         def reload(btn: QToolButton) -> None:
             palette = btn.palette()
-
             if icon_states:
-                icon = self.make_icon(
-                    {
-                        (mode, state): (
-                            icon_name,
-                            palette.color(*role) if isinstance(role, tuple) else palette.color(role),
-                        )
-                        for (mode, state), role in icon_states.items()
-                    },
-                    size=icon_size,
-                )
+                icons = {
+                    (mode, state): (icon_name, palette.color(*role) if isinstance(role, tuple) else palette.color(role))
+                    for (mode, state), role in icon_states.items()
+                }
+                icon = self.make_icon(icons, size=icon_size)
             else:
                 color = palette.color(QPalette.ColorGroup.Normal, color_role)
                 icon = self.make_icon((icon_name, color), size=icon_size)
             btn.setIcon(icon)
 
-        self._button_reloaders[button] = partial(reload, button)
+        self._button_reloaders[button] = reload
 
     def register_icon_action(
         self,
@@ -156,25 +147,20 @@ class IconReloadMixin:
 
         def reload(act: QAction) -> None:
             # Action doesn't have a palette, so we use the parent widget's palette (self)
-            palette = p.palette() if isinstance((p := action.parent()), QWidget) else getattr(self, "palette")()
+            palette = p.palette() if isinstance((p := act.parent()), QWidget) else getattr(self, "palette")()
 
             if icon_states:
-                icon = self.make_icon(
-                    {
-                        (mode, state): (
-                            icon_name,
-                            palette.color(*role) if isinstance(role, tuple) else palette.color(role),
-                        )
-                        for (mode, state), role in icon_states.items()
-                    },
-                    size=icon_size,
-                )
+                icons = {
+                    (mode, state): (icon_name, palette.color(*role) if isinstance(role, tuple) else palette.color(role))
+                    for (mode, state), role in icon_states.items()
+                }
+                icon = self.make_icon(icons, size=icon_size)
             else:
                 color = palette.color(QPalette.ColorGroup.Normal, color_role)
                 icon = self.make_icon((icon_name, color), size=icon_size)
             act.setIcon(icon)
 
-        self._action_reloaders[action] = partial(reload, action)
+        self._action_reloaders[action] = reload
 
     def register_icon_callback(self, callback: Callable[[], None]) -> None:
         """
@@ -189,15 +175,17 @@ class IconReloadMixin:
         self._custom_callbacks.append(callback)
 
     def _reload_all_icons(self) -> None:
-        for qobj, reload in (self._button_reloaders | self._action_reloaders).items():
-            if Shiboken.isValid(qobj):
-                reload()
+        for btn, reload_btn in list(self._button_reloaders.items()):
+            if Shiboken.isValid(btn):
+                reload_btn(btn)
             else:
-                # Qt can delete C++ object while Python wrapper still exists
-                if isinstance(qobj, QToolButton):
-                    self._button_reloaders.pop(qobj, None)
-                if isinstance(qobj, QAction):
-                    self._action_reloaders.pop(qobj, None)
+                self._button_reloaders.pop(btn, None)
+
+        for act, reload_act in list(self._action_reloaders.items()):
+            if Shiboken.isValid(act):
+                reload_act(act)
+            else:
+                self._action_reloaders.pop(act, None)
 
         for cb in self._custom_callbacks.copy():
             try:
@@ -397,36 +385,50 @@ class IconReloadMixin:
     def _connect_reload(self) -> None:
         from ..app.settings import SettingsManager
 
-        weak = WeakMethod(self._reload_all_icons)
-
-        def _on_global_changed() -> None:
-            if (method := weak()) is not None:
-                receiver = getattr(method, "__self__", None)
-                if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
-                    self._cleanup_icon_reload()
-                    return
-                QTimer.singleShot(0, method)
-            else:
-                self._cleanup_icon_reload()
-
-        self._on_global_changed_slot = _on_global_changed
+        reload_all_weak = WeakMethod(self._reload_all_icons)
+        cleanup_weak = WeakMethod(self._cleanup_icon_reload)
         sig = SettingsManager.signals.globalChanged
+
+        def on_global_changed() -> None:
+            if (reload_all := reload_all_weak()) is not None:
+                receiver = getattr(reload_all, "__self__", None)
+                if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
+                    if (cleanup := cleanup_weak()) is not None:
+                        cleanup()
+                    return
+                QTimer.singleShot(0, reload_all)
+            else:
+                sig.disconnect(on_global_changed)
+
+        self._on_global_changed_slot = on_global_changed
         sig.connect(self._on_global_changed_slot)
         self._connected_signal = sig
 
     def _connect_destroy(self) -> None:
+        self_weak = ref(self)
+        cleanup_weak = WeakMethod(self._cleanup_icon_reload)
+        sig = getattr(self, "_connected_signal", None)
+        slot = getattr(self, "_on_global_changed_slot", None)
+
+        def on_destroyed() -> None:
+            if (cleanup := cleanup_weak()) is not None:
+                cleanup()
+            elif sig is not None and slot is not None:
+                sig.disconnect(slot)
+
         # Automatically clean up when Qt destroys the C++ object
         if isinstance(self, QObject):
             with suppress(RuntimeError, ValueError):
-                self.destroyed.connect(lambda: self._cleanup_icon_reload())
+                self.destroyed.connect(on_destroyed)
         else:
             # Use singleShot to defer connection until after C++ constructors finish
             QTimer.singleShot(
                 0,
                 lambda: (
-                    Shiboken.isValid(self)
-                    and hasattr(self, "destroyed")
-                    and getattr(self, "destroyed").connect(lambda: self._cleanup_icon_reload())
+                    (obj := self_weak()) is not None
+                    and Shiboken.isValid(obj)
+                    and hasattr(obj, "destroyed")
+                    and getattr(obj, "destroyed").connect(on_destroyed)
                 ),
             )
 
