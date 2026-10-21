@@ -314,6 +314,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
         self.tab_widget.addTab(self.global_tab, "Global")
         self.tab_widget.addTab(self.local_tab, "Local")
         self.tab_widget.addTab(self.shortcuts_tab, "Shortcuts")
+        self.global_tab.tree.setFocus()
 
         # Disable local tab if no script path
         if self._script_path is None:
