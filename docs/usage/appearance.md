@@ -42,7 +42,7 @@ Sets the Qt widget style (e.g., `Fusion`, `Windows`).
 
 !!! tip "Recommended Style"
 
-    It is recommended to use the **Fusion** widget style when a custom widget style is selected,
+    It is recommended to use the **Fusion** widget style when a custom palette theme is selected,
     as it provides the most consistent appearance across all controls.
 
 ---
