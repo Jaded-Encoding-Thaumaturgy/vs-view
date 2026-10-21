@@ -3,21 +3,20 @@
 import json
 import os
 import sys
-import weakref
 from collections.abc import Callable
-from inspect import Signature, ismethod
+from inspect import Signature
 from logging import DEBUG, getLogger
 from pathlib import Path
 from typing import Any
 
 from jetpytools import CustomTypeError, Singleton, inject_self
 from pydantic import ValidationError
-from PySide6.QtCore import QObject, QSignalBlocker, Signal, SignalInstance, Slot
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import QApplication
 from rich.pretty import pretty_repr
-from shiboken6 import Shiboken
 
 from ...env import getenv_bool
+from ..utils import WeakableSignals
 from .models import GlobalSettings, LocalSettings
 
 if sys.version_info >= (3, 13):
@@ -28,7 +27,7 @@ else:
 logger = getLogger(__name__)
 
 
-class SettingsSignals(QObject):
+class SettingsSignals(WeakableSignals):
     """Qt signals for settings change notifications."""
 
     globalChanged = Signal()
@@ -36,49 +35,33 @@ class SettingsSignals(QObject):
     aboutToSaveGlobal = Signal()
     aboutToSaveLocal = Signal(str)  # Emits the script path hash
 
-    def connect_global_weak(self, slot: Callable[..., Any], *args: Any) -> None:
-        self._wrap_global_method_signal(self.globalChanged, slot, *args)
+    def connect_global_weak(
+        self,
+        slot: Callable[..., Any],
+        type: Qt.ConnectionType = Qt.ConnectionType.AutoConnection,
+    ) -> None:
+        self._wrap_method_signal(self.globalChanged, slot, type)
 
-    def connect_local_weak(self, slot: Callable[..., Any], *args: Any) -> None:
-        self._wrap_local_method_signal(self.localChanged, slot, *args)
+    def connect_local_weak(
+        self,
+        slot: Callable[..., Any],
+        type: Qt.ConnectionType = Qt.ConnectionType.AutoConnection,
+    ) -> None:
+        self._wrap_method_signal(self.localChanged, slot, type)
 
-    def connect_about_global_weak(self, slot: Callable[..., Any], *args: Any) -> None:
-        self._wrap_global_method_signal(self.aboutToSaveGlobal, slot, *args)
+    def connect_about_global_weak(
+        self,
+        slot: Callable[..., Any],
+        type: Qt.ConnectionType = Qt.ConnectionType.AutoConnection,
+    ) -> None:
+        self._wrap_method_signal(self.aboutToSaveGlobal, slot, type)
 
-    def connect_about_local_weak(self, slot: Callable[..., Any], *args: Any) -> None:
-        self._wrap_local_method_signal(self.aboutToSaveLocal, slot, *args)
-
-    def _wrap_global_method_signal(self, signal: SignalInstance, slot: Callable[..., Any], *args: Any) -> None:
-        weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
-
-        @Slot()
-        def weak_slot() -> None:
-            if (m := weak()) is not None:
-                receiver = getattr(m, "__self__", None)
-                if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
-                    signal.disconnect(weak_slot)
-                    return
-                m()
-            else:
-                signal.disconnect(weak_slot)
-
-        signal.connect(weak_slot, *args)
-
-    def _wrap_local_method_signal(self, signal: SignalInstance, slot: Callable[..., Any], *args: Any) -> None:
-        weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
-
-        @Slot(str)
-        def weak_slot(p: str) -> None:
-            if (m := weak()) is not None:
-                receiver = getattr(m, "__self__", None)
-                if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
-                    signal.disconnect(weak_slot)
-                    return
-                m(p)
-            else:
-                signal.disconnect(weak_slot)
-
-        signal.connect(weak_slot, *args)
+    def connect_about_local_weak(
+        self,
+        slot: Callable[..., Any],
+        type: Qt.ConnectionType = Qt.ConnectionType.AutoConnection,
+    ) -> None:
+        self._wrap_method_signal(self.aboutToSaveLocal, slot, type)
 
 
 class SettingsManager(Singleton):

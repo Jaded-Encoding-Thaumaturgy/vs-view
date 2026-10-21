@@ -30,7 +30,7 @@ def test_appearance_manager_apply_style(qapp: QApplication) -> None:
 def test_appearance_manager_apply_palette(qapp: QApplication) -> None:
     manager = AppearanceManager()
     received_theme = list[Theme | None]()
-    manager.signals.theme_changed.connect(received_theme.append)
+    manager.signals.themeChanged.connect(received_theme.append)
 
     # Apply dark palette theme with Dark color scheme
     changed = AppearanceManager.apply_palette("dracula", Qt.ColorScheme.Dark)
@@ -96,7 +96,7 @@ def test_appearance_manager_apply_all(qapp: QApplication) -> None:
         nonlocal appearance_signals
         appearance_signals += 1
 
-    AppearanceManager.signals.appearance_changed.connect(on_appearance_changed)
+    AppearanceManager.signals.appearanceChanged.connect(on_appearance_changed)
 
     settings = AppearanceSettings(style="Fusion", theme=Qt.ColorScheme.Dark, palette_theme="dracula")
 

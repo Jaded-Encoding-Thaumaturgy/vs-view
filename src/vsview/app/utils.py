@@ -22,6 +22,7 @@ from collections.abc import (
 )
 from contextlib import contextmanager
 from dataclasses import dataclass
+from inspect import ismethod
 from logging import DEBUG, getLogger
 from pathlib import Path
 from types import get_original_bases
@@ -29,7 +30,7 @@ from typing import TYPE_CHECKING, Any, Literal, Self, get_origin, override
 
 import vapoursynth as vs
 from jetpytools import inject_self
-from PySide6.QtCore import QObject, QThread, QTimer
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, SignalInstance, Slot
 from PySide6.QtWidgets import QApplication
 from shiboken6 import Shiboken
 
@@ -440,6 +441,32 @@ if TYPE_CHECKING:
 else:
     ObjectType = type(Shiboken.Object)
     """Metaclass type of any Shiboken.Object."""
+
+
+class WeakableSignals(QObject):
+    def _wrap_method_signal(
+        self,
+        signal: SignalInstance,
+        slot: Callable[..., Any],
+        type: Qt.ConnectionType = Qt.ConnectionType.AutoConnection,
+    ) -> None:
+        slot_weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
+
+        @Slot(str)
+        def weak_slot(*args: Any) -> None:
+            if (slot := slot_weak()) is not None:
+                receiver = getattr(slot, "__self__", None)
+                if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
+                    signal.disconnect(weak_slot)
+                    return
+                try:
+                    slot(*args)
+                except Exception:
+                    logger.exception("")
+            else:
+                signal.disconnect(weak_slot)
+
+        signal.connect(weak_slot, type)
 
 
 class QObjectSet[T: QObject](MutableSet[T]):

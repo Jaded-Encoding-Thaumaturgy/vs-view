@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from logging import getLogger
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from jetpytools import CustomRuntimeError, CustomValueError, Singleton, inject_self
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication
 
 from ...assets.themes import ColorScheme, Theme, ThemeRegistry
+from ..utils import WeakableSignals
 
 if TYPE_CHECKING:
     from ..settings.models import AppearanceSettings
@@ -19,9 +21,23 @@ __all__ = ["AppearanceManager", "AppearanceSignals"]
 logger = getLogger(__name__)
 
 
-class AppearanceSignals(QObject):
-    appearance_changed = Signal()
-    theme_changed = Signal(object)  # Emits Theme | None
+class AppearanceSignals(WeakableSignals):
+    appearanceChanged = Signal()
+    themeChanged = Signal(object)  # Emits Theme | None
+
+    def connect_appearance_weak(
+        self,
+        slot: Callable[..., Any],
+        type: Qt.ConnectionType = Qt.ConnectionType.AutoConnection,
+    ) -> None:
+        self._wrap_method_signal(self.appearanceChanged, slot, type)
+
+    def connect_theme_weak(
+        self,
+        slot: Callable[..., Any],
+        type: Qt.ConnectionType = Qt.ConnectionType.AutoConnection,
+    ) -> None:
+        self._wrap_method_signal(self.themeChanged, slot, type)
 
 
 class AppearanceManager(Singleton):
@@ -66,7 +82,7 @@ class AppearanceManager(Singleton):
 
         if any_changed:
             self._repolish_all()
-            self._signals.appearance_changed.emit()
+            self._signals.appearanceChanged.emit()
 
         return any_changed
 
@@ -113,7 +129,7 @@ class AppearanceManager(Singleton):
             if self._active_theme is not None:
                 self._active_theme = None
                 self._app.setPalette(QPalette())
-                self._signals.theme_changed.emit(None)
+                self._signals.themeChanged.emit(None)
                 palette_changed = True
             elif color_scheme_changed:
                 self._app.setPalette(QPalette())
@@ -139,7 +155,7 @@ class AppearanceManager(Singleton):
         if self._active_theme != theme:
             self._app.setPalette(theme.create_palette())
             self._active_theme = theme
-            self._signals.theme_changed.emit(theme)
+            self._signals.themeChanged.emit(theme)
             palette_changed = True
 
         return color_scheme_changed or palette_changed
