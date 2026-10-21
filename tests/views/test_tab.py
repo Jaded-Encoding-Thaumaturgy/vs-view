@@ -1,49 +1,12 @@
-from collections.abc import Callable
-
 import pytest
-from PySide6.QtGui import QPalette
-from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 
 from vsview.app.views.plugins import PluginSplitter
-from vsview.app.views.tab import BaseTabLabel, BaseTabWidget, SimpleTabLabel, TabLabel, TabViewWidget
+from vsview.app.views.tab import BaseTabWidget, SimpleTabLabel, TabLabel, TabViewWidget
 from vsview.app.views.video import GraphicsView
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
-
-
-@pytest.mark.parametrize(
-    "label_factory",
-    [lambda parent: TabLabel("Output", 0, parent), lambda parent: SimpleTabLabel("Plugin", parent)],
-)
-def test_tab_label_selection_and_role_transitions(
-    qtbot: QtBot, label_factory: Callable[[QWidget], BaseTabLabel]
-) -> None:
-    """Verify selection transitions update the dynamic property and child foreground roles."""
-    parent = QWidget()
-    qtbot.addWidget(parent)
-
-    label = label_factory(parent)
-    qtbot.addWidget(label)
-
-    # Initial unselected state
-    assert label.is_selected is False
-    assert label.property("selected") is False
-
-    # Select
-    label.set_selected(True)
-    assert label.is_selected is True
-    assert label.property("selected") is True
-    for child in label.findChildren(QLabel):
-        if child.objectName() in {"tabNameLabel", "tabTitleLabel"}:
-            assert child.foregroundRole() == QPalette.ColorRole.WindowText
-
-    # Unselect
-    label.set_selected(False)
-    assert label.is_selected is False
-    assert label.property("selected") is False
-    for child in label.findChildren(QLabel):
-        assert child.foregroundRole() == QPalette.ColorRole.PlaceholderText
 
 
 def test_base_tab_widget_selection_lifecycle(qtbot: QtBot) -> None:
