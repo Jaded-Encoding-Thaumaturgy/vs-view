@@ -3,7 +3,6 @@ from typing import Annotated, override
 
 from pydantic import BaseModel, ConfigDict, PlainSerializer, PlainValidator
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QStyle
 
 ThemeColor = Annotated[
     QColor,
@@ -55,12 +54,8 @@ class Theme(BaseModel):
     def is_dark(self) -> bool:
         return self.scheme == ColorScheme.DARK
 
-    def create_palette(self, base_style: QStyle | None = None) -> QPalette:
-        palette = base_style.standardPalette() if base_style else QPalette()
-        self.apply_to_palette(palette)
-        return palette
-
-    def apply_to_palette(self, palette: QPalette) -> None:
+    def create_palette(self) -> QPalette:
+        palette = QPalette()
         p = self.palette
         highlighted_color = p.primary
         highlighted_text_color = p.mantle if highlighted_color.valueF() > 0.5 else p.text
@@ -128,3 +123,5 @@ class Theme(BaseModel):
         palette.setColor(cr.Accent, p.secondary)
         palette.setColor(cg.Inactive, cr.Accent, p.surface1)
         palette.setColor(cg.Disabled, cr.Accent, p.surface2)
+
+        return palette

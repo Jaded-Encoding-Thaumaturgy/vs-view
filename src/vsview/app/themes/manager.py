@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from jetpytools import CustomRuntimeError, CustomValueError, Singleton, inject_self
 from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication
 
 from ...assets.themes import ColorScheme, Theme, ThemeRegistry
@@ -111,9 +112,11 @@ class AppearanceManager(Singleton):
         if not palette_theme_id:
             if self._active_theme is not None:
                 self._active_theme = None
-                self._app.setPalette(self._app.style().standardPalette())
+                self._app.setPalette(QPalette())
                 self._signals.theme_changed.emit(None)
                 palette_changed = True
+            elif color_scheme_changed:
+                self._app.setPalette(QPalette())
             return color_scheme_changed or palette_changed
 
         theme = ThemeRegistry.get(palette_theme_id)
@@ -134,7 +137,7 @@ class AppearanceManager(Singleton):
             )
 
         if self._active_theme != theme:
-            self._app.setPalette(theme.create_palette(self._app.style()))
+            self._app.setPalette(theme.create_palette())
             self._active_theme = theme
             self._signals.theme_changed.emit(theme)
             palette_changed = True

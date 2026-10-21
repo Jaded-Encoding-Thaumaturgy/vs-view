@@ -127,3 +127,23 @@ def test_appearance_manager_repolishes_local_stylesheet_widgets_on_palette_chang
     assert nord is not None
     assert tree.palette().color(QPalette.ColorRole.Base) == nord.palette.mantle
     assert tree.viewport().palette().color(QPalette.ColorRole.Base) == nord.palette.mantle
+
+
+def test_appearance_manager_switch_from_custom_to_stock_palette(qapp: QApplication) -> None:
+    # Apply Fusion + custom dark theme
+    AppearanceManager.apply_all(AppearanceSettings(style="Fusion", theme=Qt.ColorScheme.Dark, palette_theme="dracula"))
+    assert AppearanceManager.active_theme is not None
+    assert AppearanceManager.active_theme.id == "dracula"
+
+    # Switch to windows11 with stock palette (None) in Dark mode
+    AppearanceManager.apply_all(AppearanceSettings(style="windows11", theme=Qt.ColorScheme.Dark, palette_theme=None))
+
+    assert AppearanceManager.active_theme is None
+
+    # On platforms supporting OS color schemes (e.g. native Windows platform theme),
+    # verify that the stock palette honors dark mode rather than classic Windows 95 light (#d4d0c8).
+    if qapp.styleHints().colorScheme() == Qt.ColorScheme.Dark:
+        window_color = qapp.palette().color(QPalette.ColorRole.Window)
+        base_color = qapp.palette().color(QPalette.ColorRole.Base)
+        assert window_color.valueF() < 0.5, f"Expected dark Window color, got {window_color.name()}"
+        assert base_color.valueF() < 0.5, f"Expected dark Base color, got {base_color.name()}"
