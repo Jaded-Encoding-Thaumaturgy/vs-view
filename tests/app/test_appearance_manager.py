@@ -4,11 +4,13 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QPalette
+from PySide6.QtWidgets import QApplication, QTreeWidget
+from pytestqt.qtbot import QtBot
 
 from vsview.app.settings.models import AppearanceSettings
 from vsview.app.themes import AppearanceManager
-from vsview.assets.themes import Theme
+from vsview.assets.themes import Theme, ThemeRegistry
 
 pytestmark = [pytest.mark.qt]
 
@@ -103,3 +105,25 @@ def test_appearance_manager_apply_all(qapp: QApplication) -> None:
     assert AppearanceManager.active_theme.id == "dracula"
     assert AppearanceManager.active_style == "fusion"
     assert appearance_signals == 1
+
+
+def test_appearance_manager_repolishes_local_stylesheet_widgets_on_palette_change(
+    qapp: QApplication, qtbot: QtBot
+) -> None:
+    AppearanceManager.apply_all(AppearanceSettings(style="Fusion", theme=Qt.ColorScheme.Dark, palette_theme="dracula"))
+
+    tree = QTreeWidget()
+    qtbot.addWidget(tree)
+    tree.setStyleSheet("QTreeWidget { border: none; } QTreeWidget::item { padding: 4px 2px; }")
+    tree.show()
+
+    dracula = ThemeRegistry.get("dracula")
+    assert dracula is not None
+    assert tree.viewport().palette().color(QPalette.ColorRole.Base) == dracula.palette.mantle
+
+    AppearanceManager.apply_all(AppearanceSettings(style="Fusion", theme=Qt.ColorScheme.Dark, palette_theme="nord"))
+
+    nord = ThemeRegistry.get("nord")
+    assert nord is not None
+    assert tree.palette().color(QPalette.ColorRole.Base) == nord.palette.mantle
+    assert tree.viewport().palette().color(QPalette.ColorRole.Base) == nord.palette.mantle

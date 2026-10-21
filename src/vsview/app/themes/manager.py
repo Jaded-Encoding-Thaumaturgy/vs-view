@@ -63,10 +63,8 @@ class AppearanceManager(Singleton):
 
         any_changed = style_changed or palette_changed or stylesheet_changed
 
-        if style_changed or stylesheet_changed:
-            self._repolish_all()
-
         if any_changed:
+            self._repolish_all()
             self._signals.appearance_changed.emit()
 
         return any_changed
@@ -175,9 +173,8 @@ class AppearanceManager(Singleton):
             return ""
 
     def _repolish_all(self) -> None:
-        style = self._app.style()
-
         for widget in self._app.allWidgets():
+            style = widget.style()
             style.unpolish(widget)
             style.polish(widget)
             widget.ensurePolished()
