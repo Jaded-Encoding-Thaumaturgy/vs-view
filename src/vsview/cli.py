@@ -8,7 +8,7 @@ from itertools import chain
 from logging import DEBUG, getLevelNamesMapping, getLogger
 from pathlib import Path
 from signal import SIG_DFL, SIGINT, signal
-from typing import TYPE_CHECKING, Annotated, Any, cast, override
+from typing import TYPE_CHECKING, Annotated, Any, override
 
 from cyclopts import App, CycloptsError, Group, Parameter, Token, config, validators
 from cyclopts.help import DefaultFormatter, HelpPanel, InlineText
@@ -35,7 +35,8 @@ class CompactHelpFormatter(DefaultFormatter):
     def render_description(self, console: Console, options: ConsoleOptions, description: InlineText) -> None:
         from rich.markdown import Markdown
 
-        description.primary_renderable = cast(Markdown, description.primary_renderable).markup.replace("\n\n", "\n")
+        if isinstance(description.primary_renderable, Markdown):
+            description.primary_renderable = Markdown(description.primary_renderable.markup.replace("\n\n", "  \n"))
         super().render_description(console, options, description)
         super().render_usage(console, options, self._deferred_usage)
 
@@ -104,6 +105,7 @@ app = App(
     default_parameter=Parameter(negative_iterable=(), negative_bool=(), group=options_group, show_default=False),
     config=[config.Env("VSVIEW_", command=False, show=False)],
 )
+config_app = app.command(App(name="config", help="Config management", sort_key=5))
 settings_app = app.command(App(name="settings", help="Settings management", sort_key=10))
 workspace_group = Group("Workspace Options", sort_key=20)
 settings_group = Group("Settings Options", sort_key=30)
@@ -377,6 +379,40 @@ def help(*command: Annotated[str, Parameter(show=False)]) -> None:
     app.help_print(command)
 
 
+@config_app.command(name="path")
+def config_path() -> None:
+    """
+    Print to stdout the resolved configuration path and exit.
+
+    Default base directory is:
+
+    - `%LOCALAPPDATA%\\vsview\\` on Windows,
+    - `~/.config/vsview/` on Linux
+    - `~/Library/Application Support/vsview/` on macOS.
+    """
+    from .app.settings.models import GlobalSettings
+
+    console.print(GlobalSettings.config_path)
+
+
+@config_app.command(name="wipe")
+def config_wipe() -> None:
+    """Delete the configuration path directory (as shown by **vsview config path**) and exit."""
+    from .app.settings.models import GlobalSettings
+
+    if GlobalSettings.config_path.exists():
+        GlobalSettings.config_path.rmdirs(ignore_errors=True)
+        console.print("Global config path successfully deleted.")
+    else:
+        console.print("No global config path found.")
+
+
+@config_app.command(name="help")
+def config_help(*command: Annotated[str, Parameter(show=False)]) -> None:
+    """Print this message or the help of the given subcommand(s)"""
+    config_app.help_print(command)
+
+
 @settings_app.command(name="path")
 def settings_path() -> None:
     """
@@ -386,9 +422,9 @@ def settings_path() -> None:
 
     Default base directory is:
 
-    - %LOCALAPPDATA%\\vsview\\ on Windows,
-    - ~/.config/vsview/ on Linux
-    - ~/Library/Application Support/vsview/ on macOS.
+    - `%LOCALAPPDATA%\\vsview\\` on Windows,
+    - `~/.config/vsview/` on Linux
+    - `~/Library/Application Support/vsview/` on macOS.
     """
     from .app.settings.models import GlobalSettings
 
@@ -396,7 +432,7 @@ def settings_path() -> None:
 
 
 @settings_app.command(name="wipe")
-def settings_wipe(*, all: bool = False) -> None:
+def settings_wipe() -> None:
     """Delete the **global_settings.json** file (as shown by **vsview settings path**) and exit."""
     from .app.settings.models import GlobalSettings
 
@@ -405,13 +441,6 @@ def settings_wipe(*, all: bool = False) -> None:
         console.print("Global config file successfully deleted.")
     else:
         console.print("No global config file found.")
-
-    if all:
-        if GlobalSettings.config_path.exists():
-            GlobalSettings.config_path.rmdirs(ignore_errors=True)
-            console.print("Global config path successfully deleted.")
-        else:
-            console.print("No global config path found.")
 
 
 @settings_app.command(name="help")

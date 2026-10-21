@@ -17,6 +17,10 @@ VSView can be configured through **command-line arguments** and **environment va
 
 ## Usage
 
+
+Preview VapourSynth scripts, videos, images and audio in a desktop viewer.
+Open one or more input files directly, or start without files to open the default workspaces.
+
 ```bash
 vsview [OPTIONS] [FILE]...
 vsview COMMAND [OPTIONS] [ARGS...]
@@ -82,7 +86,7 @@ vsview COMMAND [OPTIONS] [ARGS...]
 #### `--verbose` / `-v`
 :   Enable verbose output. Repeat to increase verbosity (`-vv`, `-vvv`).
 
-#### `--help` / `-h`
+#### `--help`
 :   Print help.
 
 #### `--version`
@@ -193,6 +197,25 @@ These options control application log verbosity.
 
 Print help message or the help of the given subcommand(s).
 
+### `vsview config`
+
+Manage the configuration directory via the CLI.
+
+#### `vsview config help`
+:   Print this message or the help of the given config subcommand(s).
+
+#### `vsview config path`
+:   Print to stdout the resolved configuration path and exit.
+
+    Default base directory:
+
+    - `%LOCALAPPDATA%\vsview\` on Windows
+    - `~/.config/vsview/` on Linux
+    - `~/Library/Application Support/vsview/` on macOS
+
+#### `vsview config wipe`
+:   Delete the configuration path directory (as shown by `vsview config path`) and exit.
+
 ### `vsview settings`
 
 Manage application settings via the CLI.
@@ -213,10 +236,6 @@ Manage application settings via the CLI.
 
 #### `vsview settings wipe`
 :   Delete the `global_settings.json` file (as shown by `vsview settings path`) and exit.
-
-    **Options:**
-
-    - `--all`: Delete the entire settings directory (including all environment-scoped subdirectories) and exit.
 
 ### `vsview version`
 
