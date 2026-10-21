@@ -928,15 +928,14 @@ class WorkspaceToolButton[WorkspaceT: BaseWorkspace](QToolButton, IconReloadMixi
 
     def _make_icon(self, workspace: BaseWorkspace) -> QIcon:
         palette = self.palette()
+        on_role = self.get_on_color_role()
+        icons = {
+            (QIcon.Mode.Normal, QIcon.State.Off): (workspace.icon, palette.color(QPalette.ColorRole.Accent)),
+            (QIcon.Mode.Normal, QIcon.State.On): (workspace.icon, palette.color(on_role)),
+            (QIcon.Mode.Active, QIcon.State.Off): (workspace.icon, palette.color(QPalette.ColorRole.Accent)),
+            (QIcon.Mode.Active, QIcon.State.On): (workspace.icon, palette.color(on_role)),
+            (QIcon.Mode.Disabled, QIcon.State.Off): (workspace.icon, palette.color(QPalette.ColorRole.Accent)),
+            (QIcon.Mode.Disabled, QIcon.State.On): (workspace.icon, palette.color(on_role)),
+        }
 
-        return self.make_icon(
-            {
-                (QIcon.Mode.Normal, QIcon.State.Off): (workspace.icon, palette.color(QPalette.ColorRole.Accent)),
-                (QIcon.Mode.Normal, QIcon.State.On): (workspace.icon, palette.color(QPalette.ColorRole.Base)),
-                (QIcon.Mode.Active, QIcon.State.Off): (workspace.icon, palette.color(QPalette.ColorRole.Accent)),
-                (QIcon.Mode.Active, QIcon.State.On): (workspace.icon, palette.color(QPalette.ColorRole.Base)),
-                (QIcon.Mode.Disabled, QIcon.State.Off): (workspace.icon, palette.color(QPalette.ColorRole.Accent)),
-                (QIcon.Mode.Disabled, QIcon.State.On): (workspace.icon, palette.color(QPalette.ColorRole.Base)),
-            },
-            size=self.ICON_SIZE,
-        )
+        return self.make_icon(icons, size=self.ICON_SIZE)

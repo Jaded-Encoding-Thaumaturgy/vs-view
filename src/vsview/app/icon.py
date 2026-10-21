@@ -1,13 +1,14 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import suppress
 from functools import partial
 from logging import DEBUG, getLogger
-from typing import Any, ClassVar
+from typing import Any, ClassVar, override
 from weakref import WeakKeyDictionary, WeakMethod
 
+from jetpytools import CustomNotImplementedError
 from PySide6.QtCore import QObject, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QIcon, QPalette, QPixmap
-from PySide6.QtWidgets import QToolButton, QWidget
+from PySide6.QtWidgets import QApplication, QToolButton, QWidget
 from shiboken6 import Shiboken
 
 from ..assets import ICON_PROVIDERS, IconName, load_svg
@@ -15,6 +16,35 @@ from ..assets import ICON_PROVIDERS, IconName, load_svg
 logger = getLogger(__name__)
 
 __all__ = ["ICON_PROVIDERS", "IconName", "IconReloadMixin", "load_icon", "load_svg"]
+
+
+class _DefaultIconStatesMapping(
+    Mapping[tuple[QIcon.Mode, QIcon.State], tuple[QPalette.ColorGroup, QPalette.ColorRole]]
+):
+    """Dynamic mapping for default icon states that adapts to the active widget style."""
+
+    @override
+    def __getitem__(self, key: tuple[QIcon.Mode, QIcon.State]) -> tuple[QPalette.ColorGroup, QPalette.ColorRole]:
+        mode, state = key
+        group = QPalette.ColorGroup.Disabled if mode == QIcon.Mode.Disabled else QPalette.ColorGroup.Normal
+        return group, IconReloadMixin.get_on_color_role() if state == QIcon.State.On else QPalette.ColorRole.ButtonText
+
+    @override
+    def __iter__(self) -> Iterator[tuple[QIcon.Mode, QIcon.State]]:
+        for mode in (QIcon.Mode.Normal, QIcon.Mode.Active, QIcon.Mode.Disabled):
+            for state in (QIcon.State.Off, QIcon.State.On):
+                yield mode, state
+
+    @override
+    def __len__(self) -> int:
+        return 6
+
+    @override
+    def __repr__(self) -> str:
+        return repr(dict(self))
+
+    def copy(self) -> dict[tuple[QIcon.Mode, QIcon.State], tuple[QPalette.ColorGroup, QPalette.ColorRole]]:
+        return dict(self)
 
 
 class IconReloadMixin:
@@ -35,18 +65,8 @@ class IconReloadMixin:
     """
 
     DEFAULT_ICON_STATES: ClassVar[
-        Mapping[
-            tuple[QIcon.Mode, QIcon.State],
-            tuple[QPalette.ColorGroup, QPalette.ColorRole],
-        ]
-    ] = {
-        (QIcon.Mode.Normal, QIcon.State.Off): (QPalette.ColorGroup.Normal, QPalette.ColorRole.ButtonText),
-        (QIcon.Mode.Normal, QIcon.State.On): (QPalette.ColorGroup.Normal, QPalette.ColorRole.Base),
-        (QIcon.Mode.Active, QIcon.State.Off): (QPalette.ColorGroup.Normal, QPalette.ColorRole.ButtonText),
-        (QIcon.Mode.Active, QIcon.State.On): (QPalette.ColorGroup.Normal, QPalette.ColorRole.Base),
-        (QIcon.Mode.Disabled, QIcon.State.Off): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText),
-        (QIcon.Mode.Disabled, QIcon.State.On): (QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base),
-    }
+        Mapping[tuple[QIcon.Mode, QIcon.State], tuple[QPalette.ColorGroup, QPalette.ColorRole]]
+    ] = _DefaultIconStatesMapping()
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         if hasattr(self, "_icon_reload_initialized"):
@@ -336,6 +356,17 @@ class IconReloadMixin:
                 self.register_icon_action(act, icon, icon_size, color_role, icon_states)
 
         return act
+
+    @staticmethod
+    def get_on_color_role() -> QPalette.ColorRole:
+        if not isinstance(app := QApplication.instance(), QApplication):
+            raise CustomNotImplementedError
+
+        return (
+            QPalette.ColorRole.HighlightedText
+            if app.style().name().lower() == "windows11"
+            else QPalette.ColorRole.ButtonText
+        )
 
     def _make_icon_from_iconname(
         self,

@@ -1137,7 +1137,7 @@ class PlaybackSettings:
 
 class PlaybackContainer(QWidget, IconReloadMixin):
     ICON_SIZE = QSize(24, 24)
-    ICON_COLOR = QPalette.ColorRole.ToolTipText
+    ICON_COLOR = QPalette.ColorRole.ButtonText
 
     settingsChanged = Signal(int, float, bool)  # seek_step, speed, uncapped
     playZone = Signal(int, bool, int)  # zone_frames, loop, int
@@ -1221,14 +1221,8 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         palette = self.palette()
         return self.make_icon(
             {
-                (QIcon.Mode.Normal, QIcon.State.Off): (
-                    IconName.PLAY,
-                    palette.color(self.ICON_COLOR),
-                ),
-                (QIcon.Mode.Normal, QIcon.State.On): (
-                    IconName.PAUSE,
-                    palette.color(QPalette.ColorRole.Mid),
-                ),
+                (QIcon.Mode.Normal, QIcon.State.Off): (IconName.PLAY, palette.color(self.ICON_COLOR)),
+                (QIcon.Mode.Normal, QIcon.State.On): (IconName.PAUSE, palette.color(self.get_on_color_role())),
             },
             size=self.ICON_SIZE,
         )
@@ -1249,6 +1243,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
             icon_size=self.ICON_SIZE,
             color=color,
             color_role=self.ICON_COLOR,
+            icon_states=self.DEFAULT_ICON_STATES,
         )
         self.current_layout.addWidget(btn)
         return btn
@@ -1418,12 +1413,11 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
     def _update_mute_icon(self) -> None:
         if self._is_muted:
-            self.mute_btn.setIcon(
-                self.make_icon(
-                    (IconName.VOLUME_MUTE, self.palette().color(QPalette.ColorRole.Mid)),
-                    size=self.ICON_SIZE,
-                )
+            icon = self.make_icon(
+                (IconName.VOLUME_MUTE, self.palette().color(self.get_on_color_role())),
+                self.ICON_SIZE,
             )
+            self.mute_btn.setIcon(icon)
             return
 
         if self._volume == 0:

@@ -216,8 +216,10 @@ class SegmentedControl(QWidget):
             self._update_button_colors()
 
     def _update_button_colors(self) -> None:
+        from ...app.icon import IconReloadMixin
+
         states = {
-            True: QPalette.ColorRole.Base,
+            True: IconReloadMixin.get_on_color_role(),
             False: QPalette.ColorRole.ButtonText,
         }
 
