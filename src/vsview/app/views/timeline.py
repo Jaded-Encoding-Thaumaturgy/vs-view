@@ -311,7 +311,7 @@ class TimelineHoverPopup(QWidget):
             painter.restore()
 
     def _draw_scroll_bar(self, painter: QPainter) -> None:
-        painter.fillRect(self._timeline.scroll_rect, self._timeline.palette().color(self._timeline.SCROLL_BAR_COLOR))
+        self._timeline.draw_scroll_bar(painter)
 
     def _draw_custom_notches(self, painter: QPainter, popup_rect: QRectF, y_offset: float) -> None:
         # Draw provider notches (bookmarks, keyframes) with staggered labels.
@@ -432,7 +432,7 @@ class TimelineHoverPopup(QWidget):
     def _draw_indicators(self, painter: QPainter) -> None:
         # Draw hover dash and playback cursor.
         hover_pen = QPen(
-            self._timeline.palette().color(self._timeline.BACKGROUND_COLOR),
+            self._timeline.hover_indicator_color,
             1,
             Qt.PenStyle.DashLine,
         )
@@ -447,7 +447,7 @@ class TimelineHoverPopup(QWidget):
             )
         )
 
-        cursor_pen = QPen(Qt.GlobalColor.black, 2)
+        cursor_pen = QPen(self._timeline.cursor_color, 2)
         cursor_pen.setCosmetic(True)
         painter.setPen(cursor_pen)
         painter.drawLine(
@@ -478,6 +478,8 @@ class Timeline(QWidget):
     BACKGROUND_COLOR = QPalette.ColorRole.Window
     TEXT_COLOR = QPalette.ColorRole.WindowText
     SCROLL_BAR_COLOR = QPalette.ColorRole.WindowText
+    TRACK_FILL_COLOR = QPalette.ColorRole.Base
+    TRACK_BORDER_COLOR = QPalette.ColorRole.Dark
 
     HOVER_TIME_FORMAT = "{H:02d}:{M:02d}:{S:02d}.{ms:03d}"
     HOVER_PADDING_H = 6
@@ -590,6 +592,18 @@ class Timeline(QWidget):
         self.mode_selector.index = self.MODES.index(new_mode)
 
         self.update()
+
+    @property
+    def is_dark(self) -> bool:
+        return self.palette().color(self.BACKGROUND_COLOR).valueF() < 0.5
+
+    @property
+    def cursor_color(self) -> QColor:
+        return self.palette().color(self.BACKGROUND_COLOR if self.is_dark else self.TEXT_COLOR)
+
+    @property
+    def hover_indicator_color(self) -> QColor:
+        return self.cursor_color
 
     @override
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
@@ -775,7 +789,7 @@ class Timeline(QWidget):
             painter.drawLine(notch.line)
 
         # Draw scroll bar area
-        painter.fillRect(self.scroll_rect, self.palette().color(self.SCROLL_BAR_COLOR))
+        self.draw_scroll_bar(painter)
 
         # Draw custom notches from providers (e.g. bookmarks, keyframes)
         for provider_notches in self.custom_notches.values():
@@ -783,7 +797,7 @@ class Timeline(QWidget):
                 p_notch.draw(painter, self.scroll_rect)
 
         # Draw current frame cursor
-        cursor_pen = QPen(self.palette().color(self.BACKGROUND_COLOR), 2)
+        cursor_pen = QPen(self.cursor_color, 2)
         cursor_pen.setCosmetic(True)
         painter.setPen(cursor_pen)
         painter.drawLine(cursor_line)
@@ -795,7 +809,9 @@ class Timeline(QWidget):
             else:
                 text = self.x_to_time(self.hover_x).to_ts(self.HOVER_TIME_FORMAT)
 
-            painter.setPen(QPen(self.palette().color(self.BACKGROUND_COLOR), 1, Qt.PenStyle.DashLine))
+            hover_pen = QPen(self.hover_indicator_color, 1, Qt.PenStyle.DashLine)
+            hover_pen.setCosmetic(True)
+            painter.setPen(hover_pen)
             painter.drawLine(QLineF(self.hover_x, self.scroll_rect.top(), self.hover_x, self.scroll_rect.bottom()))
 
             fm = painter.fontMetrics()
@@ -814,6 +830,25 @@ class Timeline(QWidget):
             painter.fillRect(bg_rect, self.palette().color(self.BACKGROUND_COLOR))
             painter.setPen(self.palette().color(self.TEXT_COLOR))
             painter.drawText(bg_rect, Qt.AlignmentFlag.AlignCenter, text)
+
+    def draw_scroll_bar(self, painter: QPainter) -> None:
+        if self.is_dark:
+            painter.fillRect(self.scroll_rect, self.palette().color(self.SCROLL_BAR_COLOR))
+        else:
+            painter.fillRect(self.scroll_rect, self.palette().color(self.TRACK_FILL_COLOR))
+
+            if self.scroll_rect.width() > 1 and self.scroll_rect.height() > 1:
+                border_pen = QPen(self.palette().color(self.TRACK_BORDER_COLOR), 1)
+                border_pen.setCosmetic(True)
+                painter.setPen(border_pen)
+
+                border_rect = QRectF(
+                    self.scroll_rect.left(),
+                    self.scroll_rect.top(),
+                    self.scroll_rect.width() - 1,
+                    self.scroll_rect.height() - 1,
+                )
+                painter.drawRect(border_rect)
 
     @override
     def moveEvent(self, event: QMoveEvent) -> None:
