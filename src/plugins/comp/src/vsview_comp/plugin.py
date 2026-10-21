@@ -299,7 +299,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         toolbar.addAction(self.add_frame_act)
         if isinstance(add_btn := toolbar.widgetForAction(self.add_frame_act), QToolButton):
             add_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
-            add_btn.setStyleSheet("QToolButton::menu-button:hover {background-color: rgba(255, 255, 255, 0.1)}")
+            add_btn.setStyleSheet("QToolButton::menu-button:hover { background-color: palette(midlight); }")
 
         self.remove_frame_act = self.make_action(IconName.MINUS, "Remove selected frame(s) from the list", frame_widget)
         self.remove_frame_act.setIconText("Remove selected frame(s)")
@@ -315,7 +315,16 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self.frames_count_label = QLabel("0 frames", self.frames_status_stack)
         self.frames_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.frames_count_label.setStyleSheet("padding-right: 6px; color: palette(placeholder-text); font-weight: 500;")
+        self.frames_count_label.setStyleSheet("""
+            QLabel {
+                padding-right: 6px;
+                color: palette(placeholder-text);
+                font-weight: 500;
+            }
+            QLabel[overLimit="true"] {
+                color: #e74c3c;
+            }
+        """)
 
         self.thumbnail_progress_label = QLabel("Loading thumbnails...", self.frames_status_stack)
         self.thumbnail_progress_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -758,14 +767,14 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         count = self.frames_list.count()
         self.frames_count_label.setText(f"{count} {'frame' if count == 1 else 'frames'}")
 
-        if count > 50:
-            color = "red"
-            self.frames_count_label.setToolTip("Too many frames selected! Uploading may not be supported.")
-        else:
-            color = "palette(placeholder-text)"
-            self.frames_count_label.setToolTip("")
-
-        self.frames_count_label.setStyleSheet(f"padding-right: 6px; color: {color}; font-weight: 500;")
+        is_over = count > 50
+        self.frames_count_label.setToolTip(
+            "Too many frames selected! Uploading may not be supported." if is_over else ""
+        )
+        if bool(self.frames_count_label.property("overLimit")) != is_over:
+            self.frames_count_label.setProperty("overLimit", is_over)
+            self.frames_count_label.style().unpolish(self.frames_count_label)
+            self.frames_count_label.style().polish(self.frames_count_label)
 
     @Slot(object, object)
     def on_random_frame_count_changed(self, new: Frame, old: Frame) -> None:

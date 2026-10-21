@@ -225,7 +225,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         status_layout.addStretch()
 
         self.cursor_label = QLabel("Ln 1, Col 1", status_bar)
-        self.cursor_label.setStyleSheet("color: gray; font-size: 11px;")
+        self.cursor_label.setStyleSheet("color: palette(placeholder-text); font-size: 11px;")
         status_layout.addWidget(self.cursor_label)
 
         layout.addWidget(status_bar, 0)

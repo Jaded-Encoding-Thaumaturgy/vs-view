@@ -43,7 +43,7 @@ class CommandLabel(QLabel):
         super().__init__(text, parent, wordWrap=True, textInteractionFlags=Qt.TextInteractionFlag.TextSelectableByMouse)
         self.original_text = text
         self.setFont(get_monospace_font(10))
-        self.setStyleSheet("background-color: rgba(0, 0, 0, 0.1); padding: 4px;")
+        self.setStyleSheet("background-color: palette(alternate-base); border-radius: 4px; padding: 4px;")
 
     def format(self, *args: object, **kwargs: object) -> None:
         self.reset_text()

@@ -185,9 +185,12 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self.groups_layout.setSpacing(8)
         self.main_layout.addLayout(self.groups_layout)
 
+        group_font = self.font()
+        group_font.setPointSize(10)
+
         # Source section
         self.src_group = QGroupBox("Source", self)
-        self.src_group.setStyleSheet("font: 10pt;")
+        self.src_group.setFont(group_font)
         self.src_grid = QGridLayout(self.src_group)
         self.src_grid.setContentsMargins(4, 4, 4, 4)
         self.src_grid.setSpacing(2)
@@ -195,7 +198,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
         # Rendered section
         self.rgb_group = QGroupBox("Rendered (RGB)", self)
-        self.rgb_group.setStyleSheet("font: 10pt;")
+        self.rgb_group.setFont(group_font)
         self.rgb_grid = QGridLayout(self.rgb_group)
         self.rgb_grid.setContentsMargins(4, 4, 4, 4)
         self.rgb_grid.setSpacing(2)
@@ -301,7 +304,6 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             # Row label
             lbl = QLabel(f"{name}:", self)
             lbl.setFixedWidth(45)
-            lbl.setStyleSheet("font: 10pt;")
             grid.addWidget(lbl, row_idx, self.COL_LABEL)
 
             # Value labels
@@ -467,7 +469,8 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
         preview_r, preview_g, preview_b = round(r_f * 255), round(g_f * 255), round(b_f * 255)
         self.color_preview.setStyleSheet(
-            f"background-color: rgb({preview_r},{preview_g},{preview_b}); border: 1px solid gray; border-radius: 4px;"
+            f"background-color: rgb({preview_r},{preview_g},{preview_b}); "
+            "border: 1px solid palette(mid); border-radius: 4px;"
         )
 
     def _set_row_values(self, labels_dict: dict[str, list[QLabel]], row_name: str, values: list[str]) -> None:

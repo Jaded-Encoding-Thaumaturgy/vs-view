@@ -431,6 +431,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
                     conflict_label = QLabel(self)
                     conflict_label.setFixedWidth(20)
+                    conflict_label.setStyleSheet("color: #e74c3c; font-weight: bold;")
                     conflict_label.setToolTip("This shortcut conflicts with another action")
                     row_layout.addWidget(conflict_label)
 
@@ -650,8 +651,9 @@ class SettingsDialog(QDialog, IconReloadMixin):
             conflict_label = self._shortcut_widgets.conflict_labels[aid]
 
             conflict_label.setText("⚠" if has_conflict else "")
-            conflict_label.setStyleSheet("color: #E74C3C; font-weight: bold;" if has_conflict else "")
-            editor.setStyleSheet(CONFLICT_STYLE if has_conflict else NORMAL_STYLE)
+            target_style = CONFLICT_STYLE if has_conflict else NORMAL_STYLE
+            if editor.styleSheet() != target_style:
+                editor.setStyleSheet(target_style)
 
             # Update tooltip to show what it conflicts with
             if has_conflict:

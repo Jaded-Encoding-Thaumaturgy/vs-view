@@ -243,6 +243,7 @@ class DockButton(QToolButton):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("dockButton")
         self.setCheckable(True)
         self.setChecked(False)  # Dock is hidden by default
         self.setFixedWidth(6)
@@ -250,18 +251,18 @@ class DockButton(QToolButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip("Toggle dock panel")
         self.setStyleSheet("""
-            QToolButton {
+            QToolButton#dockButton {
                 background-color: palette(mid);
                 border: none;
                 border-radius: 0px;
             }
-            QToolButton:hover {
+            QToolButton#dockButton:hover {
                 background-color: palette(highlight);
             }
-            QToolButton:checked {
+            QToolButton#dockButton:checked {
                 background-color: palette(mid);
             }
-            QToolButton:checked:hover {
+            QToolButton#dockButton:checked:hover {
                 background-color: palette(highlight);
             }
         """)
