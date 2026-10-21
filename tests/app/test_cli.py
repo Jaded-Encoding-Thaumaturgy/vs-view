@@ -20,6 +20,9 @@ from vsview.cli import (
     CycloptsGroupError,
     _populate_path,
     app,
+    config_app,
+    config_path,
+    config_wipe,
     convert_arg,
     convert_log_level,
     convert_qt_args,
@@ -157,6 +160,59 @@ class TestPopulatePath:
         assert path_parts.count(resolved_bin) == 1
 
 
+# Config Subcommands
+class TestConfigCommands:
+    def test_config_path_command_prints_path(self, capfd: pytest.CaptureFixture[str]) -> None:
+        config_path()
+        out, err = capfd.readouterr()
+        combined = (out + err).replace("\n", "")
+        assert str(GlobalSettings.config_path).replace("\n", "") in combined
+
+    def test_config_path_cli_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
+        app(["config", "path"], exit_on_error=False, result_action="return_value")
+        out, err = capfd.readouterr()
+        combined = (out + err).replace("\n", "")
+        assert str(GlobalSettings.config_path).replace("\n", "") in combined
+
+    def test_config_wipe_removes_directory(self, capfd: pytest.CaptureFixture[str]) -> None:
+        GlobalSettings.config_path.mkdir(parents=True, exist_ok=True)
+        (GlobalSettings.config_path / "extra.json").write_text("{}", encoding="utf-8")
+        assert GlobalSettings.config_path.exists() is True
+
+        config_wipe()
+
+        assert GlobalSettings.config_path.exists() is False
+        out, err = capfd.readouterr()
+        assert "Global config path successfully deleted." in (out + err)
+
+    def test_config_wipe_cli_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
+        GlobalSettings.config_path.mkdir(parents=True, exist_ok=True)
+        (GlobalSettings.config_path / "extra.json").write_text("{}", encoding="utf-8")
+        assert GlobalSettings.config_path.exists() is True
+
+        app(["config", "wipe"], exit_on_error=False, result_action="return_value")
+
+        assert GlobalSettings.config_path.exists() is False
+        out, err = capfd.readouterr()
+        assert "Global config path successfully deleted." in (out + err)
+
+    def test_config_wipe_handles_missing_directory_gracefully(self, capfd: pytest.CaptureFixture[str]) -> None:
+        if GlobalSettings.config_path.exists():
+            GlobalSettings.config_path.rmdirs(ignore_errors=True)
+
+        config_wipe()
+
+        out, err = capfd.readouterr()
+        assert "No global config path found." in (out + err)
+
+    def test_config_help_subcommand(self, capfd: pytest.CaptureFixture[str]) -> None:
+        config_app(["help"], exit_on_error=False, result_action="return_value")
+        out, err = capfd.readouterr()
+        combined = out + err
+        assert "path" in combined
+        assert "wipe" in combined
+
+
 # Settings Subcommands
 class TestSettingsCommands:
     def test_settings_path_command_prints_path(self, capfd: pytest.CaptureFixture[str]) -> None:
@@ -202,26 +258,6 @@ class TestSettingsCommands:
         out, err = capfd.readouterr()
         assert "No global config file found." in (out + err)
 
-    def test_settings_wipe_all_removes_directory(self, capfd: pytest.CaptureFixture[str]) -> None:
-        GlobalSettings.config_path.mkdir(parents=True, exist_ok=True)
-        (GlobalSettings.config_path / "extra.json").write_text("{}", encoding="utf-8")
-
-        settings_wipe(all=True)
-
-        assert GlobalSettings.config_path.exists() is False
-        out, err = capfd.readouterr()
-        assert "Global config path successfully deleted." in (out + err)
-
-    def test_settings_wipe_all_cli_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
-        GlobalSettings.config_path.mkdir(parents=True, exist_ok=True)
-        (GlobalSettings.config_path / "extra.json").write_text("{}", encoding="utf-8")
-
-        app(["settings", "wipe", "--all"], exit_on_error=False, result_action="return_value")
-
-        assert GlobalSettings.config_path.exists() is False
-        out, err = capfd.readouterr()
-        assert "Global config path successfully deleted." in (out + err)
-
     def test_settings_help_subcommand(self, capfd: pytest.CaptureFixture[str]) -> None:
         settings_app(["help"], exit_on_error=False, result_action="return_value")
         out, err = capfd.readouterr()
@@ -258,6 +294,11 @@ class TestVersionAndHelpCommands:
         out, err = capfd.readouterr()
         output = out + err
         assert "Settings management" in output or "path" in output
+
+        cli_help("config")
+        out, err = capfd.readouterr()
+        output = out + err
+        assert "Config management" in output or "path" in output
 
     def test_help_meta_flag_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
         app.meta(["--help"], exit_on_error=False, result_action="return_value")
