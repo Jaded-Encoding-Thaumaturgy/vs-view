@@ -6,6 +6,8 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
 [![Lint](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/actions/workflows/ci-lint.yml/badge.svg)](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/actions/workflows/ci-lint.yml)
+[![Tests](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/actions/workflows/ci-test.yml/badge.svg)](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/actions/workflows/ci-test.yml)
+[![PyApp Build](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/actions/workflows/cd-build-pyapp.yml/badge.svg)](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/actions/workflows/cd-build-pyapp.yml)
 [![Discord](https://img.shields.io/discord/856381934052704266?label=Discord&logo=discord&logoColor=7F71FF)](https://discord.gg/XTpc6Fa9eB)
 
 **The next-generation VapourSynth previewer**
