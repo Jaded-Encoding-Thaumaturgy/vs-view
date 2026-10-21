@@ -262,8 +262,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
             if layout.plugin_splitter_sizes:
                 self.plugin_splitter.setSizes(layout.plugin_splitter_sizes)
 
-            if layout.plugin_tab_index is not None:
-                self.plugin_splitter.plugin_tabs.setCurrentIndex(layout.plugin_tab_index)
+        self.plugin_splitter.plugin_tabs.setCurrentIndex(layout.plugin_tab_index)
 
         # Sync toolpanel button state manually since signals were blocked
         self._sync_toolpanel_btn(self.plugin_splitter.is_right_panel_visible)

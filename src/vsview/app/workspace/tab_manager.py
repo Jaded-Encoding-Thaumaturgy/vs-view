@@ -301,7 +301,6 @@ class TabManager(QWidget, IconReloadMixin):
 
         new_tabs.recent_tabs[tab_index] = None
         new_tabs.setCurrentIndex(tab_index)
-        new_tabs.currentChanged.emit(tab_index)
         new_tabs.currentChanged.connect(self._on_tab_changed)
 
         self.current_layout.replaceWidget(old_tabs, new_tabs)
