@@ -189,6 +189,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._reported_url = ""
         self._collection_name_tmdb: str | None = None
         self._current_data: list[tuple[Time, FrameSourceProvider]] | None = None
+        self._pending_restore_data: list[tuple[Time, FrameSourceProvider]] | None = None
         self.curve_points: Sequence[QPointF] = [QPointF(0.0, 1.0), QPointF(1.0, 1.0)]
 
         # Build UI
@@ -676,6 +677,10 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self.outputs_dropdown.shortest_dur_text = f" - {max_total_duration.to_ts()} ({max_total_frames})"
         self.outputs_dropdown.populate(voutputs)
+        if self.settings.global_.auto_load_frames and self._current_data:
+            self._pending_restore_data = list(self._current_data)
+        else:
+            self._pending_restore_data = None
         self.frames_list.clear()
         self.frames_list.included_outputs = voutputs
         self._update_frames_count()
@@ -712,9 +717,10 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         if self.pict_types_supported and not any("_PictType" in props for props in voutput.props.values()):
             self.pict_types_supported = False
 
-        if self._current_data:
+        if self._pending_restore_data:
+            pending, self._pending_restore_data = self._pending_restore_data, None
             v = self.api.current_voutput
-            for t, provider in self._current_data:
+            for t, provider in pending:
                 self.frames_list.add_item(frame=v.time_to_frame(t), src_provider=provider)
 
         self.frames_list.update_thumbnails(voutput.vs_index)
@@ -760,6 +766,8 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         if self.settings.global_.auto_load_frames:
             self._current_data = [(d[0], d[2]) for d in self.frames_list.get_data()]
+        else:
+            self._current_data = None
 
     @Slot(int, int)
     def on_thumbnail_progress(self, pending: int, total: int) -> None:
