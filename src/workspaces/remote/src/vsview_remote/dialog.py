@@ -55,30 +55,25 @@ class RemoteConnectionDialog(QDialog):
         form_layout.setSpacing(8)
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        self.address_edit = QLineEdit(form_frame, text=self.settings.global_.address)
+        self.address_edit = QLineEdit(form_frame)
         self.token_edit = QLineEdit(
             form_frame,
             echoMode=QLineEdit.EchoMode.PasswordEchoOnEdit,
             placeholderText="Optional authentication token",
         )
-        self.token_edit.setText(self.auth_token or "")
 
         self.compression_combo = QComboBox(form_frame)
         self.compression_combo.addItems(["zstd", "none"])
-        self.compression_combo.setCurrentText(self.settings.global_.compression)
 
-        self.prefetch_spin = QSpinBox(form_frame, minimum=0, maximum=64, value=self.settings.global_.prefetch)
+        self.prefetch_spin = QSpinBox(form_frame, minimum=0, maximum=64)
         self.prefetch_spin.setToolTip("Number of frames to prefetch ahead of time (0 to disable)")
 
         self.backlog_spin = CustomSpinBox(form_frame, min_text="Default")
         self.backlog_spin.setRange(0, 128)
-        self.backlog_spin.setValue(self.settings.global_.backlog or 0)
         self.backlog_spin.setToolTip("Maximum buffer of in-flight and prefetched frames")
 
         self.forward_logs_cb = QCheckBox(form_frame)
-        self.forward_logs_cb.setChecked(self.settings.global_.forward_logs)
         self.subscribe_streams_cb = QCheckBox(form_frame)
-        self.subscribe_streams_cb.setChecked(self.settings.global_.subscribe_streams)
 
         form_layout.addRow("Host", self.address_edit)
         form_layout.addRow("Auth Token", self.token_edit)
@@ -97,25 +92,18 @@ class RemoteConnectionDialog(QDialog):
         form_layout2.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         self.use_curve_cb = QCheckBox(form_frame2)
-        self.use_curve_cb.setChecked(
-            bool(
-                self.settings.global_.curve_server_key
-                or self.settings.global_.curve_public_key
-                or self.curve_secret_key
-            )
-        )
         self.use_curve_cb.toggled.connect(self._on_curve_toggled)
 
-        self.curve_server_key_edit = QLineEdit(form_frame2, text=self.settings.global_.curve_server_key)
+        self.curve_server_key_edit = QLineEdit(form_frame2)
         self.curve_server_key_edit.setPlaceholderText("Server public key (Z85 encoded)")
 
-        self.curve_public_key_edit = QLineEdit(form_frame2, text=self.settings.global_.curve_public_key)
+        self.curve_public_key_edit = QLineEdit(form_frame2)
         self.curve_public_key_edit.setPlaceholderText("Client public key (optional)")
 
         self.curve_secret_key_edit = QLineEdit(form_frame2, echoMode=QLineEdit.EchoMode.PasswordEchoOnEdit)
         self.curve_secret_key_edit.setPlaceholderText("Client secret key (optional)")
-        self.curve_secret_key_edit.setText(self.curve_secret_key)
-        self._on_curve_toggled(self.use_curve_cb.isChecked())
+
+        self.refresh_from_settings()
 
         form_layout2.addRow("Enable CurveZMQ end-to-end encryption", self.use_curve_cb)
         form_layout2.addRow("Server key", self.curve_server_key_edit)
@@ -147,6 +135,22 @@ class RemoteConnectionDialog(QDialog):
         self.button_box.rejected.connect(self.reject)
         main_layout.addWidget(self.button_box)
 
+    def refresh_from_settings(self) -> None:
+        sett = self.settings.global_
+        self.address_edit.setText(sett.address)
+        self.token_edit.setText(self.auth_token or "")
+        self.compression_combo.setCurrentText(sett.compression)
+        self.prefetch_spin.setValue(sett.prefetch)
+        self.backlog_spin.setValue(sett.backlog or 0)
+        self.forward_logs_cb.setChecked(sett.forward_logs)
+        self.subscribe_streams_cb.setChecked(sett.subscribe_streams)
+        use_curve = bool(sett.curve_server_key or sett.curve_public_key or self.curve_secret_key)
+        self.use_curve_cb.setChecked(use_curve)
+        self.curve_server_key_edit.setText(sett.curve_server_key or "")
+        self.curve_public_key_edit.setText(sett.curve_public_key or "")
+        self.curve_secret_key_edit.setText(self.curve_secret_key or "")
+        self._on_curve_toggled(use_curve)
+
     @property
     def config(self) -> ConnectionConfig:
         return ConnectionConfig(
@@ -173,6 +177,7 @@ class RemoteConnectionDialog(QDialog):
 
     @override
     def exec(self) -> int:
+        self.refresh_from_settings()
         self.set_status()
         res = super().exec()
         if self._ping_worker:
