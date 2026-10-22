@@ -257,7 +257,7 @@ class MockWebSocket extends EventTarget {
 }
 
 // Import LspService and Types
-import { LspService, type LspServerConfig, WebSocketLanguageClient } from "./service";
+import { type LspServerConfig, LspService, WebSocketLanguageClient } from "./service";
 
 type MockClientInstance = InstanceType<typeof MockBaseLanguageClient>;
 
