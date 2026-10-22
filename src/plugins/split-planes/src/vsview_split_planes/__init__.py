@@ -180,11 +180,11 @@ class SplitPlanesView(PluginGraphicsView):
 
     @override
     def get_node(self, clip: VideoNode) -> VideoNode:
-        if (offset_chroma := self.settings.local_.offset_chroma) is None:
-            offset = False
+        if not (offset_chroma := self.settings.local_.offset_chroma):
+            offset: Literal["min", "max", False] | float = False
         elif isinstance(offset_chroma, (float, int)):
-            offset = scale_mask(abs(offset_chroma), 32, clip)
-            offset = copysign(offset, offset_chroma)
+            scaled = scale_mask(abs(offset_chroma), 32, clip)
+            offset = copysign(scaled, offset_chroma)
         else:
             offset = offset_chroma
 
