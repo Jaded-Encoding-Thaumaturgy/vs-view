@@ -51,6 +51,41 @@ class GlobalSettings(BaseModel):
             from_ui=lambda v: None if v == 0 else v,
         ),
     ] = None
+    frame_timeout: Annotated[
+        float | None,
+        Spin(
+            label="Frame Timeout",
+            min=0,
+            max=120,
+            suffix=" s",
+            tooltip=(
+                "Maximum seconds to wait for remote frame rendering before timing out "
+                "(0 or Default to use server timeout)"
+            ),
+            to_ui=lambda v: 0 if v is None else v,
+            from_ui=lambda v: None if v == 0 else v,
+        ),
+    ] = None
+    hwm: Annotated[
+        int | None,
+        Spin(
+            label="High Water Mark",
+            min=0,
+            max=512,
+            tooltip="ZeroMQ socket message queue depth (0 or Auto to scale dynamically with backlog)",
+            min_text="Auto",
+            to_ui=lambda v: 0 if v is None else v,
+            from_ui=lambda v: None if v == 0 else v,
+        ),
+    ] = None
+    tcp_keepalive: Annotated[
+        bool,
+        Checkbox(
+            label="TCP Keepalive",
+            text="Enable TCP keepalive and heartbeats",
+            tooltip="Send periodic TCP keepalive probes and ZeroMQ heartbeats to detect disconnected servers",
+        ),
+    ] = True
     forward_logs: Annotated[
         bool,
         Checkbox(

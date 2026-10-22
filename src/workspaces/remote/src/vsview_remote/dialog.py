@@ -72,6 +72,10 @@ class RemoteConnectionDialog(QDialog):
         self.backlog_spin.setRange(0, 128)
         self.backlog_spin.setToolTip("Maximum buffer of in-flight and prefetched frames")
 
+        self.frame_timeout_spin = CustomSpinBox(form_frame, min_text="Default", custom_suffix=" s")
+        self.frame_timeout_spin.setRange(0, 120)
+        self.frame_timeout_spin.setToolTip("Maximum seconds to wait for a frame before timing out (0 for default 30s)")
+
         self.forward_logs_cb = QCheckBox(form_frame)
         self.subscribe_streams_cb = QCheckBox(form_frame)
 
@@ -80,6 +84,7 @@ class RemoteConnectionDialog(QDialog):
         form_layout.addRow("Compression", self.compression_combo)
         form_layout.addRow("Prefetch Frames", self.prefetch_spin)
         form_layout.addRow("Backlog Buffer", self.backlog_spin)
+        form_layout.addRow("Frame Timeout", self.frame_timeout_spin)
         form_layout.addRow("Forward remote server log records", self.forward_logs_cb)
         form_layout.addRow("Subscribe remote stdout / stderr streams", self.subscribe_streams_cb)
         main_layout.addWidget(form_frame)
@@ -142,6 +147,7 @@ class RemoteConnectionDialog(QDialog):
         self.compression_combo.setCurrentText(sett.compression)
         self.prefetch_spin.setValue(sett.prefetch)
         self.backlog_spin.setValue(sett.backlog or 0)
+        self.frame_timeout_spin.setValue(int(sett.frame_timeout) if sett.frame_timeout is not None else 0)
         self.forward_logs_cb.setChecked(sett.forward_logs)
         self.subscribe_streams_cb.setChecked(sett.subscribe_streams)
         use_curve = bool(sett.curve_server_key or sett.curve_public_key or self.curve_secret_key)
@@ -165,6 +171,9 @@ class RemoteConnectionDialog(QDialog):
             curve_server_key=self.curve_server_key_edit.text().strip() or None if use_curve else None,
             curve_public_key=self.curve_public_key_edit.text().strip() or None if use_curve else None,
             curve_secret_key=self.curve_secret_key_edit.text().strip() or None if use_curve else None,
+            frame_timeout=v if (v := self.frame_timeout_spin.value()) > 0 else None,
+            hwm=self.settings.global_.hwm or (max((self.backlog_spin.value() or 12) * 2, 16)),
+            tcp_keepalive=self.settings.global_.tcp_keepalive,
         )
 
     @property
@@ -248,6 +257,8 @@ class RemoteConnectionDialog(QDialog):
             curve_secret_key=cfg.curve_secret_key,
             subscribe_streams=False,
             forward_logs=False,
+            hwm=cfg.hwm if cfg.hwm is not None else 64,
+            tcp_keepalive=cfg.tcp_keepalive,
         ) as client:
             return client.ping().result(timeout=5.0)
 
@@ -264,3 +275,6 @@ class ConnectionConfig(NamedTuple):
     curve_server_key: str | None
     curve_public_key: str | None
     curve_secret_key: str | None
+    frame_timeout: float | None = None
+    hwm: int | None = None
+    tcp_keepalive: bool = True

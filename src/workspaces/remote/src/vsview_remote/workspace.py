@@ -95,6 +95,8 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
             forward_logs=self._config.forward_logs,
             subscribe_streams=self._config.subscribe_streams,
             replay_history=False,
+            hwm=self._config.hwm if self._config.hwm is not None else 64,
+            tcp_keepalive=self._config.tcp_keepalive,
         )
         return self._client.start()
 
@@ -128,7 +130,11 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
             output_items = self.client.load_code(code, filename=str(self.content)).result(timeout=30.0)
             logger.info("Remote script execution completed successfully (%d outputs)", len(output_items))
 
-            for idx, clip in self.client.get_outputs(self._config.prefetch, self._config.backlog).items():
+            for idx, clip in self.client.get_outputs(
+                self._config.prefetch,
+                self._config.backlog,
+                frame_timeout=self._config.frame_timeout,
+            ).items():
                 clip.set_output(idx)
 
             self._output_metadata = {item.index: VideoMetadata(item.name) for item in output_items if item.name}
@@ -152,6 +158,9 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         self.settings.global_.compression = res.compression
         self.settings.global_.prefetch = res.prefetch
         self.settings.global_.backlog = res.backlog if res.backlog is not None else max(res.prefetch * 3, 12)
+        self.settings.global_.frame_timeout = res.frame_timeout
+        self.settings.global_.hwm = res.hwm
+        self.settings.global_.tcp_keepalive = res.tcp_keepalive
         self.settings.global_.forward_logs = res.forward_logs
         self.settings.global_.subscribe_streams = res.subscribe_streams
         self.settings.global_.use_curve = res.use_curve
