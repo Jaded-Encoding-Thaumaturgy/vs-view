@@ -85,7 +85,7 @@ class ExtractFramesWorker(QObject):
 
     @run_in_background(name="ExtractFrames")
     def run(self) -> list[tuple[int, Path]]:
-        with self.api.vs_context():
+        with self.api.vs_context(), self.api.blocker():
             return self._extract()
 
     def cancel(self) -> None:
