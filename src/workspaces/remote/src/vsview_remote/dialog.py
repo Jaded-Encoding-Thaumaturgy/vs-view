@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from vsengine import UnifiedFuture
 from vsremote import RemoteAuthenticationError, RemoteClient, RemoteTimeoutError, TransportError, VSRemoteError
 
-from vsview.api import CustomSpinBox, PluginSecrets, PluginSettings, run_in_background, run_in_loop
+from vsview.api import CustomSpinBox, PluginSecrets, PluginSettings, run_in_background
 
 from ._metadata import AUTH_CONTEXT, AUTH_KEY, CURVE_CONTEXT, CURVE_KEY
 from .settings import GlobalSettings
@@ -148,7 +148,6 @@ class RemoteConnectionDialog(QDialog):
         main_layout.addWidget(self.button_box)
 
     @property
-    @run_in_loop(return_future=False)
     def config(self) -> ConnectionConfig:
         return ConnectionConfig(
             address=self.address_edit.text().strip(),
@@ -225,16 +224,16 @@ class RemoteConnectionDialog(QDialog):
             self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(True)
             self._ping_worker = None
 
+        cfg = self.config
+
         self._ping_worker = (
-            self.ping()
+            self.ping(cfg)
             .then(on_success, on_error, cancel_cb=restore_state, on_loop=True)
             .add_loop_callback(restore_state)
         )
 
     @run_in_background(name="PingServer")
-    def ping(self) -> bool:
-        cfg = self.config
-
+    def ping(self, cfg: ConnectionConfig) -> bool:
         with RemoteClient(
             cfg.address,
             compression=cfg.compression,
