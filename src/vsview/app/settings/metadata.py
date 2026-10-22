@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Concatenate, get_args, get_origin, overri
 
 from jetpytools import CustomTypeError, SupportsRichComparison
 from pydantic import TypeAdapter, ValidationError
-from PySide6.QtCore import Qt, QTime
+from PySide6.QtCore import QAbstractItemModel, Qt, QTime
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -319,8 +319,9 @@ class Dropdown(WidgetMetadataWithDependency[QComboBox]):
 
     items: (
         Sequence[tuple[str, Any]]
-        | Callable[[Any], Sequence[tuple[str, Any]]]
-        | Callable[[], Sequence[tuple[str, Any]]]  # no format
+        | QAbstractItemModel
+        | Callable[[Any], Sequence[tuple[str, Any]] | QAbstractItemModel]
+        | Callable[[], Sequence[tuple[str, Any]] | QAbstractItemModel]  # no format
     )
     """
     Iterable of (display_text, value) tuples or a callable that returns one.
@@ -334,8 +335,12 @@ class Dropdown(WidgetMetadataWithDependency[QComboBox]):
     @override
     def create_widget(self, parent: QWidget | None = None) -> QComboBox:
         widget = QComboBox(parent)
-        for display_text, value in self._resolve_items():
-            widget.addItem(display_text, value)
+        items = self._resolve_items()
+        if isinstance(items, QAbstractItemModel):
+            widget.setModel(items)
+        else:
+            for display_text, value in items:
+                widget.addItem(display_text, value)
         return widget
 
     @override
@@ -352,17 +357,20 @@ class Dropdown(WidgetMetadataWithDependency[QComboBox]):
 
     @override
     def populate(self, widget: QComboBox, parent_value: Any | None = None) -> None:
-        widget.clear()
-
-        for display_text, value in self._resolve_items(parent_value):
-            widget.addItem(display_text, value)
+        items = self._resolve_items(parent_value)
+        if isinstance(items, QAbstractItemModel):
+            widget.setModel(items)
+        else:
+            widget.clear()
+            for display_text, value in items:
+                widget.addItem(display_text, value)
 
         if (idx := widget.findData(self.default_value)) >= 0:
             widget.setCurrentIndex(idx)
         else:
             widget.setCurrentIndex(0)
 
-    def _resolve_items(self, parent_value: Any | None = None) -> Sequence[tuple[str, Any]]:
+    def _resolve_items(self, parent_value: Any | None = None) -> Sequence[tuple[str, Any]] | QAbstractItemModel:
         if not callable(self.items):
             return self.items
 

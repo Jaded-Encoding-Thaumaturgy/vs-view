@@ -42,8 +42,10 @@ class ThemeRegistry(Singleton):
         If color_scheme is None, resolves the target from the application style hints.
         """
         if color_scheme is None or color_scheme == Qt.ColorScheme.Unknown:
-            app = QApplication.instance()
-            target_scheme = app.styleHints().colorScheme() if isinstance(app, QApplication) else Qt.ColorScheme.Dark
+            if not isinstance(app := QApplication.instance(), QApplication):
+                logger.error("No QApplication instance")
+                return []
+            target_scheme = app.styleHints().colorScheme()
         else:
             target_scheme = color_scheme
 

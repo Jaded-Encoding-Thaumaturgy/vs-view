@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from base64 import b64decode, b64encode
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import time, timedelta
 from logging import getLogger
 from operator import attrgetter
@@ -28,12 +28,13 @@ from pydantic import (
 )
 from pygments.styles import get_all_styles as get_pygments_styles
 from PySide6.QtCore import QPointF, Qt, QTime
-from PySide6.QtGui import QColor, QKeySequence
+from PySide6.QtGui import QColor, QKeySequence, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QColorDialog, QStyleFactory, QWidget
 
 from ...assets import ICON_PROVIDERS
 from ...assets.themes import ThemeRegistry
 from ...env import getenv_bool
+from ..themes import AppearanceManager
 from .action import ActionID
 from .enums import Resizer
 from .metadata import (
@@ -130,10 +131,33 @@ class ShortcutConfig(BaseModel):
     is_custom: bool = False
 
 
-def _get_qt_themes_items(color_scheme: Qt.ColorScheme | None = None) -> list[tuple[str, str | None]]:
-    items: list[tuple[str, str | None]] = [("None (Default)", None)]
-    items.extend((theme.name, theme.id) for theme in ThemeRegistry.get_for_scheme(color_scheme))
-    return items
+def _get_qt_themes_items(
+    color_scheme: Qt.ColorScheme | None = None,
+) -> Sequence[tuple[str, str | None]] | QStandardItemModel:
+    if color_scheme is not None:
+        items: list[tuple[str, str | None]] = [("None (Default)", None)]
+        items.extend((theme.name, theme.id) for theme in ThemeRegistry.get_for_scheme(color_scheme))
+        return items
+
+    all_themes = sorted(
+        [*ThemeRegistry.get_for_scheme(Qt.ColorScheme.Dark), *ThemeRegistry.get_for_scheme(Qt.ColorScheme.Light)],
+        key=lambda t: t.name,
+    )
+
+    model = QStandardItemModel()
+    item = QStandardItem("None (Default)")
+    item.setData(None, Qt.ItemDataRole.UserRole)
+    model.appendRow(item)
+
+    is_dark = AppearanceManager.is_dark
+
+    for theme in all_themes:
+        item = QStandardItem(theme.name)
+        item.setData(theme.id, Qt.ItemDataRole.UserRole)
+        item.setEnabled(theme.is_dark == is_dark)
+        model.appendRow(item)
+
+    return model
 
 
 def _get_icon_weights(provider_id: str | None = None) -> list[tuple[str, str]]:
