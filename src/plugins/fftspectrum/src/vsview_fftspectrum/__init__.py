@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QHBoxLayout, QWidget
 from vapoursynth import VideoNode
-from vstools import ColorRange, DitherType, depth, initialize_input, join, split, stack_planes
+from vstools import ColorRange, DitherType, finalize_output, initialize_input, join, split, stack_planes
 
 from vsview.api import (
     Checkbox,
@@ -90,6 +90,7 @@ class FFTSpectrumView(PluginGraphicsView):
         self.settings = settings
         self.autofit = self.settings.global_.autofit
 
+    @finalize_output(bits=8, range_in=ColorRange.FULL, range_out=ColorRange.FULL, dither_type=DitherType.NONE)
     @initialize_input(bits=32)
     @override
     def get_node(self, clip: VideoNode) -> VideoNode:
@@ -109,11 +110,8 @@ class FFTSpectrumView(PluginGraphicsView):
         planes = [fft(p, k) for k, p in zip(clip.format.name, planes)]
 
         # TODO: Add grid frequencies
-
         clip_fft = join(planes, clip.format.color_family)
-        stacked = stack_planes(clip_fft, False, False, self.settings.global_.mode)
-
-        return depth(stacked, 8, range_out=ColorRange.FULL, dither_type=DitherType.NONE)
+        return stack_planes(clip_fft, False, False, self.settings.global_.mode)
 
 
 @hookimpl
