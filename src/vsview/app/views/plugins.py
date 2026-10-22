@@ -10,8 +10,6 @@ from ...assets import IconName
 from ..icon import IconReloadMixin
 from .tab import BaseTabWidget, SimpleTabLabel
 
-__all__ = ["PluginSplitter"]
-
 
 class PluginSplitter(QSplitter, IconReloadMixin):
     """

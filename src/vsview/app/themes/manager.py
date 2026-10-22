@@ -16,8 +16,6 @@ from ..utils import WeakableSignals
 if TYPE_CHECKING:
     from ..settings.models import AppearanceSettings
 
-__all__ = ["AppearanceManager", "AppearanceSignals"]
-
 logger = getLogger(__name__)
 
 
