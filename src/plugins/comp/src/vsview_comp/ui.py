@@ -502,7 +502,7 @@ class FrameThumbnailList(QListWidget):
                 self.takeItem(row)
             logger.warning("Failed to fetch thumbnail for output %d at frame %d: %s", idx, item.frame, e)
 
-        with self._sema, self.api.vs_context():
+        with self.api.blocker(), self.api.vs_context(), self._sema:
             for i, tclip in self.thumbnail_clips.items():
                 s = partial(on_success, idx=i)
                 e = partial(on_error, idx=i)
