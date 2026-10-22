@@ -47,6 +47,7 @@ VIDEO_CATEGORY = CategoryMatcher(
         "_Transfer",
         "_Primaries",
         "_FieldBased",
+        "_Field",
     },
 )
 
