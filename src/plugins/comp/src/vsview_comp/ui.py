@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from functools import partial
 from logging import getLogger
 from pathlib import Path
-from threading import Semaphore
+from threading import Lock, Semaphore
 from typing import Any, NamedTuple, Self, overload, override
 from uuid import uuid4
 
@@ -326,6 +326,7 @@ class FrameThumbnailList(QListWidget):
         self.api = api
         self.included_outputs = list[VideoOutputProxy]()
         self._sema = Semaphore(QThreadPool.globalInstance().maxThreadCount() // 2)
+        self._futures_lock = Lock()
         self._active_thumbnail_futures = set[UnifiedFuture[None]]()
         self._total_thumbnail_batch = 0
 
@@ -354,8 +355,9 @@ class FrameThumbnailList(QListWidget):
 
     @override
     def clear(self) -> None:
-        self._active_thumbnail_futures.clear()
-        self._total_thumbnail_batch = 0
+        with self._futures_lock:
+            self._active_thumbnail_futures.clear()
+            self._total_thumbnail_batch = 0
         self.thumbnailProgress.emit(0, 0)
         super().clear()
 
@@ -537,21 +539,25 @@ class FrameThumbnailList(QListWidget):
         menu.deleteLater()
 
     def has_pending_thumbnails(self) -> bool:
-        return bool(self._active_thumbnail_futures)
+        with self._futures_lock:
+            return bool(self._active_thumbnail_futures)
 
     def wait_for_pending_thumbnails(self) -> UnifiedFuture[None]:
         done_fut = UnifiedFuture[None]()
-        if not self._active_thumbnail_futures:
-            done_fut.set_result(None)
-            return done_fut
+        with self._futures_lock:
+            if not self._active_thumbnail_futures:
+                done_fut.set_result(None)
+                return done_fut
 
-        pending = list(self._active_thumbnail_futures)
-        remaining = len(pending)
+            pending = list(self._active_thumbnail_futures)
+            remaining = len(pending)
 
         def check(_: Any) -> None:
             nonlocal remaining
-            remaining -= 1
-            if remaining <= 0 and not done_fut.done():
+            with self._futures_lock:
+                remaining -= 1
+                is_last = remaining <= 0
+            if is_last and not done_fut.done():
                 done_fut.set_result(None)
 
         for f in pending:
@@ -563,22 +569,28 @@ class FrameThumbnailList(QListWidget):
         if fut.done():
             return
 
-        if not self._active_thumbnail_futures:
-            self._total_thumbnail_batch = 0
-
-        self._total_thumbnail_batch += 1
-        self._active_thumbnail_futures.add(fut)
-
-        def on_done(_: Any) -> None:
-            self._active_thumbnail_futures.discard(fut)
+        with self._futures_lock:
             if not self._active_thumbnail_futures:
                 self._total_thumbnail_batch = 0
-                self.thumbnailProgress.emit(0, 0)
-            else:
-                self.thumbnailProgress.emit(len(self._active_thumbnail_futures), self._total_thumbnail_batch)
+
+            self._total_thumbnail_batch += 1
+            self._active_thumbnail_futures.add(fut)
+            pending_count = len(self._active_thumbnail_futures)
+            total_batch = self._total_thumbnail_batch
+
+        def on_done(_: Any) -> None:
+            with self._futures_lock:
+                self._active_thumbnail_futures.discard(fut)
+                if not self._active_thumbnail_futures:
+                    self._total_thumbnail_batch = 0
+                    pending_now, total_now = 0, 0
+                else:
+                    pending_now = len(self._active_thumbnail_futures)
+                    total_now = self._total_thumbnail_batch
+            self.thumbnailProgress.emit(pending_now, total_now)
 
         fut.add_done_callback(on_done)
-        self.thumbnailProgress.emit(len(self._active_thumbnail_futures), self._total_thumbnail_batch)
+        self.thumbnailProgress.emit(pending_count, total_batch)
 
 
 class ProgressBar(QProgressBar):
