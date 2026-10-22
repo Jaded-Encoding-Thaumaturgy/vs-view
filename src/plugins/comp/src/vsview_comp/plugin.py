@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated, Any, override
 from uuid import uuid4
 
+import vsengine
 from jetpytools import SupportsString
 from pydantic import BaseModel, Field
 from PySide6.QtCore import QEvent, QObject, QPointF, QSignalBlocker, Qt, QTime, QTimer, Slot
@@ -251,6 +252,8 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             self.add_frame_act,
             context=Qt.ShortcutContext.WindowShortcut,
         )
+
+        self.api.register_on_destroy(self._on_environment_clear)
 
         # Disable the whole plugin if we don't have a local storage
         self.setEnabled(has_file := bool(self.api.file_path))
@@ -699,6 +702,10 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             self.time_edit_end.setMaximumTime(qtime_e)
 
         self._update_buttons_state()
+
+    @override
+    def on_workspace_destroy(self) -> None:
+        self._on_environment_clear()
 
     @override
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
@@ -1194,9 +1201,17 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self._current_outputs = current_outputs
 
+    def _on_environment_clear(self) -> None:
+        vsengine.from_thread(self.on_cancel_clicked, None, manual=True).result()
+        self.tmdb_debounce_timer.stop()
+
+        if self.frames_list.has_pending_thumbnails():
+            self.frames_list.wait_for_pending_thumbnails().result()
+
     @Slot()
-    def on_cancel_clicked(self) -> None:
-        logger.info("Cancel button clicked, aborting active tasks...")
+    def on_cancel_clicked(self, clicked: bool | None = None, manual: bool = False) -> None:
+        if not manual:
+            logger.info("Cancel button clicked, aborting active tasks...")
         if self._select_frames_worker:
             self._select_frames_worker.cancel()
         if self._extract_frames_worker:
