@@ -327,7 +327,7 @@ def run_in_loop(func: Any = None, *, return_future: bool = True) -> Any:
     ```
     """
 
-    def _log_task(f: Future[Any]) -> None:
+    def log_task(f: UnifiedFuture[Any]) -> None:
         if (e := f.exception()) is None:
             return
 
@@ -345,8 +345,8 @@ def run_in_loop(func: Any = None, *, return_future: bool = True) -> Any:
             if iscoroutinefunction(fn):
                 if QThread.currentThread() == loop.thread() and (async_loop := _get_asyncio_running_loop()):
                     task = async_loop.create_task(fn(*args, **kwargs))
-                    fut = UnifiedFuture.from_future(task)
-                    fut.add_done_callback(_log_task)
+                    fut = UnifiedFuture[Any].from_future(task)
+                    fut.add_done_callback(log_task)
                 else:
                     fut = loop.from_thread(asyncio.run, fn(*args, **kwargs))
             else:
