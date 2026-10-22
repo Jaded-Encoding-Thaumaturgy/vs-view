@@ -41,11 +41,17 @@ VIDEO_CATEGORY = CategoryMatcher(
     priority=150 + 1,
     order=10,
     exact_matches={
+        # Colorimetry
         "_ChromaLocation",
         Range.prop_key,
         "_Matrix",
         "_Transfer",
         "_Primaries",
+        # Others
+        "_Alpha",
+        "_PictType",
+        "_SARNum",
+        "_SARDen",
         "_FieldBased",
         "_Field",
     },
@@ -87,6 +93,10 @@ FIELD_CATEGORY = CategoryMatcher(
     name="Field",
     priority=50 + 1,
     order=30,
+    exact_matches={
+        "_Combed",
+        "_Field",
+    },
     prefixes={
         # VIVTC
         "VFM",
@@ -141,6 +151,9 @@ METRICS_CATEGORY = CategoryMatcher(
     priority=100 + 1,
     order=20,
     exact_matches={
+        # Scene detection
+        "_SceneChangeNext",
+        "_SceneChangePrev",
         "SceneChange",
         # DMetrics
         "MMetrics",
@@ -148,6 +161,8 @@ METRICS_CATEGORY = CategoryMatcher(
         "SSIMULACRA2",
     },
     prefixes={
+        # PlaneStats
+        "PlaneStats",
         "psm",
         "VFMPlaneStats",
         # DGIndex (via vssource)
