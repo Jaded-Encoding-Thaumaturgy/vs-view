@@ -23,7 +23,7 @@ from vsview.vsenv.loop import run_in_loop
 
 from ._interface import _PluginLike, _PluginSettingsStore, _SettingsProxy
 from .contracts import AudioOutputProxy, VideoOutputProxy
-from .exceptions import NoCurrentVideoOutputError
+from .exceptions import NoCurrentVideoOutputError, NoCurrentViewError
 
 if TYPE_CHECKING:
     from vsview.app.outputs import FrameBuffer
@@ -157,7 +157,12 @@ class PluginWorkspaceController(QObject):
     def current_view_proxy(self) -> GraphicsViewProxy:
         from .api import GraphicsViewProxy
 
-        return GraphicsViewProxy(self.__workspace.tab_manager.tabChanged, self.__workspace.tab_manager.current_view)
+        try:
+            current_view = self.__workspace.tab_manager.current_view
+        except TypeError as e:
+            logger.debug("Error %s", e, exc_info=e)
+            raise NoCurrentViewError("No current view is currently available in the active workspace") from None
+        return GraphicsViewProxy(self.__workspace.tab_manager.tabChanged, current_view)
 
     @property
     def timeline_proxy(self) -> TimelineProxy:

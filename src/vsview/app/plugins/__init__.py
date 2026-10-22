@@ -11,7 +11,7 @@ from .api import (
     WorkspaceBlocker,
 )
 from .contracts import AudioOutputProxy, LocalSettingsModel, VideoOutputProxy
-from .exceptions import NoCurrentVideoOutputError, PluginError
+from .exceptions import NoCurrentVideoOutputError, NoCurrentViewError, PluginError
 from .specs import hookimpl
 
 __all__ = [
@@ -19,6 +19,7 @@ __all__ = [
     "GraphicsViewProxy",
     "LocalSettingsModel",
     "NoCurrentVideoOutputError",
+    "NoCurrentViewError",
     "NodeProcessor",
     "PlaybackProxy",
     "PluginAPI",

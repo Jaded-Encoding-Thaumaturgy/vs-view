@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from logging import getLogger
 from typing import override
 
@@ -11,6 +12,7 @@ from vsview.api import (
     ActionDefinition,
     IconName,
     IconReloadMixin,
+    NoCurrentViewError,
     PluginAPI,
     VideoOutputProxy,
     WidgetPluginBase,
@@ -43,7 +45,7 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self.setup_shortcuts()
 
         self.api.globalSettingsChanged.connect(self._on_global_settings_changed)
-        self.api.register_on_destroy(lambda: setattr(self.api.current_view, "rect_selection_enabled", False))
+        self.api.register_on_destroy(self._on_environment_clear)
 
     def setup_ui(self) -> None:
         self.enable_btn = self.make_tool_button(
@@ -191,6 +193,10 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
     @override
     def on_view_rect_selection_finished(self, rect: QRect) -> None:
         self._apply_view_selection(rect)
+
+    def _on_environment_clear(self) -> None:
+        with suppress(NoCurrentViewError):
+            self.api.current_view.rect_selection_enabled = False
 
     # Hook
     @Slot()
