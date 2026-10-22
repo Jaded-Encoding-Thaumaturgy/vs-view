@@ -3,7 +3,7 @@ from typing import Annotated, Any, Literal, assert_never, override
 
 from jetpytools import fallback
 from pydantic import BaseModel
-from PySide6.QtCore import Slot
+from PySide6.QtCore import QSignalBlocker, Slot
 from PySide6.QtWidgets import QBoxLayout, QDoubleSpinBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QWidgetAction
 from vapoursynth import VideoNode
 from vstools import scale_mask, stack_planes
@@ -203,7 +203,8 @@ class SplitPlanesView(PluginGraphicsView):
             case int() | float() | None:
                 self.offset_segment.index = 0
                 self.fixed_spinbox_container.setEnabled(True)
-                self.offset_spinbox.setValue(float(offset or 0))
+                with QSignalBlocker(self.offset_spinbox):
+                    self.offset_spinbox.setValue(offset or 0)
             case "min":
                 self.offset_segment.index = 1
                 self.fixed_spinbox_container.setEnabled(False)
