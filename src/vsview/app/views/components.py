@@ -29,6 +29,7 @@ from PySide6.QtGui import (
     QPainter,
     QPaintEvent,
     QPalette,
+    QPen,
     QResizeEvent,
     QShowEvent,
 )
@@ -323,18 +324,6 @@ class AnimatedToggle(QCheckBox):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        palette = self.palette()
-
-        self.bar = palette.color(QPalette.ColorRole.Light)
-        self.bar_disabled = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Light).darker()
-        self.bar_checked = palette.color(QPalette.ColorRole.Accent)
-        self.bar_checked_disabled = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Accent)
-
-        self.handle = palette.color(QPalette.ColorRole.Midlight)
-        self.handle_disabled = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Midlight).darker(225)
-        self.handle_checked = palette.color(QPalette.ColorRole.Highlight)
-        self.handle_checked_disabled = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Accent).darker()
-
         self.setContentsMargins(8, 0, 8, 0)
         self.handle_position = 0.0
 
@@ -344,6 +333,54 @@ class AnimatedToggle(QCheckBox):
         self.animation.valueChanged.connect(self._on_value_changed)
 
         self.stateChanged.connect(self._setup_animation)
+        self._setup_colors()
+
+    @property
+    def is_dark(self) -> bool:
+        return self.palette().color(QPalette.ColorRole.Window).valueF() < 0.5
+
+    def _setup_colors(self) -> None:
+        palette = self.palette()
+        cg = QPalette.ColorGroup.Disabled
+        cr = QPalette.ColorRole
+
+        self.bar_checked = palette.color(cr.Accent)
+        self.bar_checked_disabled = palette.color(cg, cr.Accent)
+
+        if self.is_dark:
+            self.bar = palette.color(cr.Light)
+            self.bar_disabled = palette.color(cg, cr.Light).darker()
+            self.handle = palette.color(cr.Midlight)
+            self.handle_disabled = palette.color(cg, cr.Midlight).darker(225)
+            self.handle_checked = palette.color(cr.Highlight)
+            self.handle_checked_disabled = self.bar_checked_disabled.darker()
+
+            # Contrast fallback if a dark theme sets Accent == Highlight
+            if abs(self.bar_checked.lightnessF() - self.handle_checked.lightnessF()) < 0.15:
+                self.handle_checked = palette.color(cr.HighlightedText)
+
+            self.border = self.border_checked = self.border_disabled = self.border_checked_disabled = None
+            self.handle_border = self.handle_border_checked = self.handle_border_disabled = (
+                self.handle_border_checked_disabled
+            ) = None
+        else:
+            self.bar = palette.color(cr.Base)
+            self.bar_disabled = palette.color(cg, cr.Base)
+
+            self.border = self.handle = self.handle_border = self.handle_border_checked = palette.color(cr.Dark)
+            self.border_disabled = self.handle_disabled = self.handle_border_disabled = (
+                self.handle_border_checked_disabled
+            ) = palette.color(cg, cr.Mid)
+            self.border_checked = self.bar_checked
+            self.border_checked_disabled = self.bar_checked_disabled
+
+            handle_checked = palette.color(cr.HighlightedText)
+            if abs(self.bar_checked.lightnessF() - handle_checked.lightnessF()) < 0.35:
+                handle_checked = QColor(
+                    Qt.GlobalColor.white if self.bar_checked.lightnessF() < 0.55 else Qt.GlobalColor.black
+                )
+            self.handle_checked = handle_checked
+            self.handle_checked_disabled = palette.color(cg, cr.HighlightedText)
 
     @override
     def sizeHint(self) -> QSize:
@@ -361,39 +398,56 @@ class AnimatedToggle(QCheckBox):
 
     @override
     def paintEvent(self, e: QPaintEvent) -> None:
+        self._setup_colors()
         cont_rect = self.contentsRect()
         handle_radius = round(0.40 * cont_rect.height())
         t = self.handle_position
 
-        if self.isEnabled():
-            bar = self._interpolate_color(self.bar, self.bar_checked, t)
-            handle = self._interpolate_color(self.handle, self.handle_checked, t)
-        else:
-            bar = self._interpolate_color(self.bar_disabled, self.bar_checked_disabled, t)
-            handle = self._interpolate_color(self.handle_disabled, self.handle_checked_disabled, t)
+        bar = self._active_color(self.bar, self.bar_checked, self.bar_disabled, self.bar_checked_disabled, t)
+        handle = self._active_color(
+            self.handle, self.handle_checked, self.handle_disabled, self.handle_checked_disabled, t
+        )
 
         # Subtle pulse effect: handle stretches slightly mid-animation
         pulse = 1.0 + 0.15 * (1.0 - abs(2.0 * t - 1.0))  # peaks at t=0.5
         handle_width = handle_radius * pulse
-        handle_height = handle_radius
 
         with QPainter(self) as p:
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
-            p.setPen(Qt.PenStyle.NoPen)
 
             bar_rect = QRectF(0, 0, cont_rect.width() - handle_radius, 0.60 * cont_rect.height())
             bar_rect.moveCenter(cont_rect.center())
             rounding = bar_rect.height() / 2
 
+            bar_pen = self._border_pen(
+                self.border,
+                self.border_checked,
+                self.border_disabled,
+                self.border_checked_disabled,
+                t,
+            )
+            p.setPen(bar_pen)
             p.setBrush(QBrush(bar))
-            p.drawRoundedRect(bar_rect, rounding, rounding)
+            p.drawRoundedRect(
+                bar_rect.adjusted(0.5, 0.5, -0.5, -0.5) if bar_pen != Qt.PenStyle.NoPen else bar_rect,
+                rounding,
+                rounding,
+            )
 
-            # Draw handle
             trail_length = cont_rect.width() - 2 * handle_radius
             x_pos = cont_rect.x() + handle_radius + trail_length * t
 
+            p.setPen(
+                self._border_pen(
+                    self.handle_border,
+                    self.handle_border_checked,
+                    self.handle_border_disabled,
+                    self.handle_border_checked_disabled,
+                    t,
+                )
+            )
             p.setBrush(QBrush(handle))
-            p.drawEllipse(QPointF(x_pos, bar_rect.center().y()), handle_width, handle_height)
+            p.drawEllipse(QPointF(x_pos, bar_rect.center().y()), handle_width, handle_radius)
 
     @Slot(int)
     def _setup_animation(self, value: int) -> None:
@@ -406,6 +460,34 @@ class AnimatedToggle(QCheckBox):
     def _on_value_changed(self, value: float) -> None:
         self.handle_position = value
         self.update()
+
+    def _active_color(
+        self,
+        normal: QColor,
+        checked: QColor,
+        disabled: QColor,
+        disabled_checked: QColor,
+        t: float,
+    ) -> QColor:
+        c1 = normal if self.isEnabled() else disabled
+        c2 = checked if self.isEnabled() else disabled_checked
+        return self._interpolate_color(c1, c2, t)
+
+    def _border_pen(
+        self,
+        normal: QColor | None,
+        checked: QColor | None,
+        disabled: QColor | None,
+        disabled_checked: QColor | None,
+        t: float,
+    ) -> QPen | Qt.PenStyle:
+        c1 = normal if self.isEnabled() else disabled
+        c2 = checked if self.isEnabled() else disabled_checked
+        if c1 is not None and c2 is not None:
+            pen = QPen(self._interpolate_color(c1, c2, t), 1)
+            pen.setCosmetic(True)
+            return pen
+        return Qt.PenStyle.NoPen
 
     def _interpolate_color(self, c1: QColor, c2: QColor, t: float) -> QColor:
         return QColor(
