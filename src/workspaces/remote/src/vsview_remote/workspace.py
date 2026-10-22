@@ -47,13 +47,7 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         self.dialog = RemoteConnectionDialog(self, self.settings, self.secrets)
 
         self.api.register_shortcut(self.CONFIGURE_CONNECTION, self._on_configure_connection, self)
-
-    @override
-    def deleteLater(self) -> None:
-        if self._client:
-            self._client.close()
-            self._client = None
-        super().deleteLater()
+        self.api.register_on_destroy(self._output_metadata.clear)
 
     @property
     def auth_token(self) -> str | None:
@@ -82,6 +76,11 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         if self._config is None:
             raise RuntimeError("This shouldn't happen")
 
+        if self._client and not self._client.is_running:
+            logger.warning("Remote client transport is not running; resetting client.")
+            self._client.close()
+            self._client = None
+
         if self._client:
             return self._client
 
@@ -98,6 +97,18 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
             replay_history=False,
         )
         return self._client.start()
+
+    @override
+    def deleteLater(self) -> None:
+        if self._client:
+            self._client.close()
+            self._client = None
+        super().deleteLater()
+
+    @override
+    def clear_environment(self) -> None:
+        self._output_metadata.clear()
+        super().clear_environment()
 
     @override
     def get_output_metadata(self) -> dict[int, VideoMetadata]:
@@ -163,5 +174,10 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
 
     @Slot()
     def _on_configure_connection(self) -> None:
-        if self.prompt_connection_dialog() and hasattr(self, "content") and self.content:
-            self.reload_content()
+        if (new_config := self.prompt_connection_dialog()) is not None:
+            self._config = new_config
+            if self._client is not None:
+                self._client.close()
+                self._client = None
+            if hasattr(self, "content") and self.content:
+                self.reload_content()
