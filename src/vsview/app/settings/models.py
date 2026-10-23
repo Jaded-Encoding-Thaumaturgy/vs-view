@@ -97,14 +97,7 @@ def extract_settings(
             # Check if it's a nested BaseModel
             inner_type = field_info.annotation
             if isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
-                result.extend(
-                    extract_settings(
-                        inner_type,
-                        prefix=f"{key}.",
-                        section=model_section,
-                        section_prefix=section_prefix,
-                    )
-                )
+                result.extend(extract_settings(inner_type, f"{key}.", model_section, section_prefix))
         else:
             if model_section is None:
                 raise ValueError(f"No section defined for setting '{key}'. Add __section__ to the model class.")
