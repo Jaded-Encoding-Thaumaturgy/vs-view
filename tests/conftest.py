@@ -1,16 +1,40 @@
 from __future__ import annotations
 
+import sys
+import threading
+import warnings
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from pathlib import Path
-from types import SimpleNamespace
+from types import CodeType, MethodType, SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 import vapoursynth as vs
 from jetpytools import SPath
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCharts import QAbstractAxis, QAbstractSeries
+from PySide6.QtCore import (
+    QAbstractAnimation,
+    QAbstractItemModel,
+    QItemSelectionModel,
+    QObject,
+    QThread,
+    QTimer,
+)
+from PySide6.QtGui import QAction, QPixmap, QShortcut, QTextDocument, QWindow
+from PySide6.QtWebEngineCore import QWebEnginePage
+from PySide6.QtWidgets import (
+    QAbstractItemDelegate,
+    QApplication,
+    QButtonGroup,
+    QCompleter,
+    QGraphicsEffect,
+    QGraphicsItem,
+    QGraphicsScene,
+    QLayout,
+    QWidget,
+)
 from pytestqt.qtbot import QtBot
 from vsengine.loops import NO_LOOP, set_loop
 from vsengine.policy import ManagedEnvironment
@@ -28,6 +52,10 @@ from vsview.app.tools.frameprops.categories import CategoryRegistry
 from vsview.app.tools.frameprops.formatters import FormatterRegistry
 from vsview.app.utils import path_to_hash
 from vsview.vsenv.loop import QtEventLoop
+
+
+class QtThreadAffinityWarning(RuntimeWarning):
+    """Warning emitted when a Qt UI object is accessed from a non-affinity background thread."""
 
 
 class _KeyringError(Exception):
@@ -146,6 +174,123 @@ def fresh_settings_manager() -> Generator[Callable[[], SettingsManager], None, N
 
 
 # Qt Event Loop & Lifecycle
+@pytest.fixture(autouse=True)
+def warn_qt_thread_affinity() -> Generator[None]:
+    """
+    Warn whenever a Qt UI method or constructor is called from a background thread.
+
+    - PEP 669: https://peps.python.org/pep-0669/
+    - Python docs: https://docs.python.org/3/library/sys.monitoring.html
+    """
+
+    # Top-level Qt base classes and widgets that must only live on the GUI thread.
+    # Subclasses are covered via issubclass/isinstance.
+    ui_types = (
+        QAbstractAxis,
+        QAbstractSeries,
+        QWebEnginePage,
+        QWidget,
+        QGraphicsItem,
+        QGraphicsScene,
+        QLayout,
+        QAbstractItemModel,
+        QItemSelectionModel,
+        QAction,
+        QShortcut,
+        QTimer,
+        QPixmap,
+        QWindow,
+        QAbstractAnimation,
+        QAbstractItemDelegate,
+        QGraphicsEffect,
+        QTextDocument,
+        QButtonGroup,
+        QCompleter,
+    )
+    repo_root = str(Path(__file__).resolve().parent.parent)
+    loop_file = QtEventLoop.to_thread_scoped.__code__.co_filename
+    main_thread = threading.main_thread()
+
+    # PEP 669 tool ID allocation:
+    # https://docs.python.org/3/library/sys.monitoring.html#sys.monitoring.get_tool
+    # Dynamically select an available slot (3 or 4) to prevent conflicts.
+    tool_id = next(i for i in (3, 4) if sys.monitoring.get_tool(i) is None)
+
+    # Qt C++ methods documented as thread-safe to call from any thread.
+    safe_cross_thread_methods = {"deleteLater"}
+
+    def on_call(code: CodeType, offset: int, call_obj: object, arg0: object) -> object | None:
+        # Exclude .venv, third-party libraries, stdlib, and loop marshal code
+        if (
+            not code.co_filename.startswith(repo_root)
+            or "\\.venv\\" in code.co_filename
+            or "/.venv/" in code.co_filename
+            or code.co_filename == loop_file
+        ):
+            return sys.monitoring.DISABLE
+
+        # Running on main Python thread with an active QApplication.
+        if (app := QApplication.instance()) is None or threading.current_thread() is main_thread:
+            return None
+
+        # Running on Qt's main GUI QThread (handles foreign threads wrapped by Qt).
+        if (current_qt_thread := QThread.currentThread()) == app.thread():
+            return None
+
+        # Ignore known thread-safe Qt methods.
+        if (func_name := getattr(call_obj, "__name__", "")) in safe_cross_thread_methods:
+            return None
+
+        # Bound method call on an existing UI instance.
+        # In PySide6, bound C++ Qt methods have __self__ set to the C++ instance
+        # and their type is builtin_function_or_method (NOT Python MethodType).
+        # By excluding MethodType, pure-Python helper methods on QWidget subclasses (e.g. self.loader())
+        # do not trigger false positives.
+        # Warnings only fire when code actually invokes a C++ Qt method.
+        target = getattr(call_obj, "__self__", None)
+        if isinstance(target, ui_types) and not isinstance(call_obj, MethodType):
+            expected_thread = target.thread() if isinstance(target, QObject) else app.thread()
+            if current_qt_thread != expected_thread:
+                lineno = next(
+                    (line for start, end, line in code.co_lines() if start <= offset < end),
+                    code.co_firstlineno,
+                )
+                name = func_name or repr(call_obj)
+                warnings.warn_explicit(
+                    f"Qt UI thread affinity violation: {type(target).__name__}.{name}() "
+                    f"called from background thread {threading.current_thread().name!r}",
+                    QtThreadAffinityWarning,
+                    code.co_filename,
+                    lineno or -1,
+                )
+        # Instantiation of a UI class (QPixmap() or MyWidget() on a background thread).
+        elif isinstance(call_obj, type) and issubclass(call_obj, ui_types):
+            lineno = next(
+                (line for start, end, line in code.co_lines() if start <= offset < end),
+                code.co_firstlineno,
+            )
+            warnings.warn_explicit(
+                f"Qt UI thread affinity violation: {call_obj.__name__}() instantiated "
+                f"from background thread {threading.current_thread().name!r}",
+                QtThreadAffinityWarning,
+                code.co_filename,
+                lineno or -1,
+            )
+
+        return None
+
+    sys.monitoring.use_tool_id(tool_id, "qt_thread_guard")
+    sys.monitoring.register_callback(tool_id, sys.monitoring.events.CALL, on_call)
+    sys.monitoring.set_events(tool_id, sys.monitoring.events.CALL)
+    try:
+        yield
+    finally:
+        # Guarantee full cleanup so test state never leaks into other runs.
+        sys.monitoring.set_events(tool_id, 0)
+        sys.monitoring.register_callback(tool_id, sys.monitoring.events.CALL, None)
+        sys.monitoring.free_tool_id(tool_id)
+
+
 @pytest.fixture
 def qt_event_loop(qapp: QApplication) -> Generator[QtEventLoop, None, None]:
     """Provide a QtEventLoop bound to qapp and set in vsengine, resetting on teardown."""
