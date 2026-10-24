@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, override
 
 import pluggy
+import vsengine
 from jetpytools import cachedproperty, classproperty, flatten, to_arr
 from pathvalidate import sanitize_filename
 from pydantic import BaseModel, ConfigDict, Field
@@ -546,7 +547,9 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
     @run_in_background(name="SerializeExportedCcene")
     def serialize_exported_scene(self, file: str, serializer: Serializer) -> None:
-        scene: SceneRow = self.scenes_view.selectionModel().selectedRows()[0].data(self.scenes_model.SceneRowRole)
+        scene: SceneRow = vsengine.from_thread(
+            lambda: self.scenes_view.selectionModel().selectedRows()[0].data(self.scenes_model.SceneRowRole)
+        ).result()
 
         v = self.api.current_voutput
 

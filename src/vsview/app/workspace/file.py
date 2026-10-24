@@ -91,7 +91,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         self.tbar.playback_container.settingsChanged.connect(self._on_playback_settings_changed)
 
         SettingsManager.signals.connect_about_local_weak(self.snapshot_settings)
-        SettingsManager.signals.connect_local_weak(self._on_local_settings_changed)
+        SettingsManager.signals.connect_local_weak(self._sync_sync_container)
 
     @override
     def deleteLater(self) -> None:
@@ -166,10 +166,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
     def init_load(self, frame: int | None = None, time: float | None = None, tab_index: int | None = None) -> None:
         from ..plugins.manager import PluginManager
 
-        self.tab_manager.sync_playhead_btn.set_state(state=self.local_settings.synchronization.sync_playhead)
-        self.tab_manager.sync_zoom_btn.setChecked(self.local_settings.synchronization.sync_zoom)
-        self.tab_manager.sync_scroll_btn.setChecked(self.local_settings.synchronization.sync_scroll)
-        self.tab_manager.autofit_btn.setChecked(self.local_settings.synchronization.autofit_all_views)
+        self._sync_sync_container()
 
         self.tbar.playback_container.settings.seek_step = self.local_settings.playback.seek_step
         self.tbar.playback_container.settings.speed = self.local_settings.playback.speed
@@ -180,9 +177,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
 
         self.tbar.timeline.mode = self.local_settings.timeline.mode
 
-        self.tbar.playback_container.volume = self.local_settings.playback.current_volume
-        self.tbar.playback_container.is_muted = self.local_settings.playback.muted
-        self.tbar.playback_container.audio_delay = self.local_settings.playback.audio_delay
+        self._sync_audio_controls()
 
         self.outputs_manager.current_audio_index = self.local_settings.playback.last_audio_index
 
@@ -292,11 +287,18 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         self.local_settings.playback.uncapped = uncapped
 
     @requires_content
-    def _on_local_settings_changed(self, _: Any) -> None:
+    @run_in_loop(return_future=False)
+    def _sync_sync_container(self, *_: Any) -> None:
         self.tab_manager.sync_playhead_btn.set_state(state=self.local_settings.synchronization.sync_playhead)
         self.tab_manager.sync_zoom_btn.setChecked(self.local_settings.synchronization.sync_zoom)
         self.tab_manager.sync_scroll_btn.setChecked(self.local_settings.synchronization.sync_scroll)
         self.tab_manager.autofit_btn.setChecked(self.local_settings.synchronization.autofit_all_views)
+
+    @run_in_loop(return_future=False)
+    def _sync_audio_controls(self) -> None:
+        self.tbar.playback_container.volume = self.local_settings.playback.current_volume
+        self.tbar.playback_container.is_muted = self.local_settings.playback.muted
+        self.tbar.playback_container.audio_delay = self.local_settings.playback.audio_delay
 
     @Slot()
     @requires_content

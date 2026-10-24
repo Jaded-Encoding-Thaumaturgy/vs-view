@@ -39,7 +39,7 @@ from ..outputs import AudioOutput, OutputsManager, VideoOutput
 from ..plugins._controller import PluginWorkspaceController
 from ..plugins.api import WidgetPluginBase
 from ..settings import ActionID, ShortcutManager
-from ..utils import ProcessMemorySnapshot, measure_memory
+from ..utils import ProcessMemorySnapshot, has_overriding_method, measure_memory
 from ..views import PluginDock, PluginSplitter
 from ..views.components import BlockableWidget, CustomLoadingPage, DockButton
 from ..views.tab import TabViewWidget
@@ -351,7 +351,8 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         self.outputs_manager.current_video_index = clamp(self.outputs_manager.current_video_index, 0, len(voutputs) - 1)
         tabs = self.tab_manager.create_tabs(voutputs)
-        self.on_views_created(list(tabs.views()))
+        if has_overriding_method(LoaderWorkspace, self, "on_views_created"):
+            self.on_views_created(list(self.loop.from_thread(lambda: tabs.views()).result()))
 
         with QSignalBlocker(self.tab_manager):
             self.tab_manager.swap_tabs(tabs, self.outputs_manager.current_video_index)
@@ -379,7 +380,10 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.info("Content loaded successfully: %r", self.content)
             self.statusLoadingFinished.emit("Completed")
 
-        self._on_tab_changed(self.tab_manager.tabs.currentIndex(), cb_render=on_complete)
+        self._on_tab_changed(
+            self.loop.from_thread(lambda: self.tab_manager.tabs.currentIndex()).result(),
+            cb_render=on_complete,
+        )
 
         return 0
 
@@ -451,7 +455,8 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             # 4. Reconstruct UI
             tabs = self.tab_manager.create_tabs(voutputs, enabled=False)
-            self.on_views_created(list(tabs.views()))
+            if has_overriding_method(LoaderWorkspace, self, "on_views_created"):
+                self.on_views_created(list(self.loop.from_thread(lambda: tabs.views()).result()))
             current_tab_i = self._restore_reload_tabs(tabs, voutputs, saved_state, current_tab_i, autofit_enabled)
 
             self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
@@ -692,6 +697,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             return None
 
     @Slot(int)
+    @run_in_loop(return_future=False)
     def _on_tab_changed(
         self,
         index: int,
