@@ -38,7 +38,7 @@ class MockQObject(QObject):
 
     def __init__(self, parent: QObject | None = None, **kwargs: Any) -> None:
         super().__init__(parent)
-        object.__setattr__(self, "_mock", MagicMock(**kwargs))
+        super().__setattr__("_mock", MagicMock(**kwargs))
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
