@@ -15,7 +15,7 @@ from pytestqt.qtbot import QtBot
 from vsengine.loops import NO_LOOP, set_loop
 from vsengine.policy import ManagedEnvironment
 
-from tests.harness import HarnessPluginController
+from tests.harness import HarnessPluginController, MockQObject
 from vsview.app.outputs.audio import AudioOutput
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.packing import Packer
@@ -180,6 +180,18 @@ def mock_api() -> MagicMock:
     api.blocker.return_value.__enter__.return_value = None
     api.vs_context.return_value.__enter__.return_value = None
     return api
+
+
+@pytest.fixture
+def mock_qobject() -> MockQObject:
+    """Dynamic MockQObject adapter satisfying PySide6 C++ QObject checks."""
+    return MockQObject()
+
+
+@pytest.fixture
+def mock_qobject_factory() -> Callable[..., MockQObject]:
+    """Factory creating dynamic MockQObject adapters."""
+    return MockQObject
 
 
 @pytest.fixture

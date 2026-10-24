@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
+from tests.harness import MockQObject
 from vsview.app.plugins import specs
 from vsview.app.plugins._controller import PluginWorkspaceController
 from vsview.app.plugins.api import NodeProcessor, PluginGraphicsView, WidgetPluginBase
@@ -814,10 +815,9 @@ def test_plugin_manager_call_when_loaded_delegates_to_notifier(
 
 
 def test_plugin_workspace_controller_multiple_graphics_views_distinct_buffer_keys(
-    qt_event_loop: QtEventLoop, qtbot: QtBot, mocker: MockerFixture
+    qt_event_loop: QtEventLoop, qtbot: QtBot, mock_qobject: MockQObject, mocker: MockerFixture
 ) -> None:
-    mock_workspace = mocker.MagicMock()
-    controller = PluginWorkspaceController(mock_workspace)
+    controller = PluginWorkspaceController(mock_qobject)  # pyright: ignore[reportArgumentType]
 
     class MultiViewPlugin(QWidget):
         identifier = "test_multi_view_plugin"
@@ -841,7 +841,7 @@ def test_plugin_workspace_controller_multiple_graphics_views_distinct_buffer_key
     view1.outputs = {0: node1}
     view2.outputs = {0: node2}
 
-    mock_workspace.plugins = [plugin_widget]
+    mock_qobject.plugins = [plugin_widget]
 
     mock_buffer = mocker.MagicMock()
 

@@ -6,7 +6,7 @@ from datetime import timedelta
 from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Literal
+from typing import Any, Literal, override
 from unittest.mock import MagicMock
 
 from jetpytools import to_arr
@@ -26,6 +26,35 @@ from vsview.app.plugins.contracts import AudioOutputProxy, VideoOutputProxy
 from vsview.app.plugins.exceptions import NoCurrentVideoOutputError
 from vsview.app.settings import SettingsManager
 from vsview.types import Frame, Time
+
+
+class MockQObject(QObject):
+    """
+    Dynamic mock adapter satisfying PySide6 C++ QObject pointer checks.
+
+    Delegates non-Qt attribute lookups, assignments, and method invocations
+    to an internal MagicMock while presenting a real QObject identity to PySide6.
+    """
+
+    def __init__(self, parent: QObject | None = None, **kwargs: Any) -> None:
+        super().__init__(parent)
+        object.__setattr__(self, "_mock", MagicMock(**kwargs))
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self._mock, name)
+
+    @override
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name.startswith("_"):
+            super().__setattr__(name, value)
+        else:
+            setattr(self._mock, name, value)
+            super().__setattr__(name, value)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self._mock(*args, **kwargs)
 
 
 class HarnessTesting[T]:

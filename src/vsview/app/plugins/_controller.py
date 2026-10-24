@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from contextlib import contextmanager
@@ -52,7 +53,7 @@ class PluginWorkspaceController(QObject):
     aboutToSaveLocal = Signal(str)
 
     def __init__(self, workspace: LoaderWorkspace[Any]) -> None:
-        super().__init__()
+        super().__init__(workspace)
         self.__workspace = workspace
         self.__busy_callers = QObjectCounter[QObject]()
         self.__settings_store = _PluginSettingsStore(self._get_file_path)
@@ -570,19 +571,23 @@ class WorkspaceBlocker:
 def _controller_factory() -> tuple[
     Callable[[PluginAPI], PluginWorkspaceController],
     Callable[[PluginAPI, PluginWorkspaceController], None],
+    Callable[[PluginAPI], None],
 ]:
     # In-process private mapping: PluginAPI -> PluginWorkspaceController
-    controllers: WeakKeyDictionary[PluginAPI, PluginWorkspaceController] = WeakKeyDictionary()
+    controllers: WeakKeyDictionary[PluginAPI, weakref.ReferenceType[PluginWorkspaceController]] = WeakKeyDictionary()
 
     def get_controller(api: PluginAPI) -> PluginWorkspaceController:
-        if ctrl := controllers.get(api):
+        if (ref_ctrl := controllers.get(api)) and (ctrl := ref_ctrl()):
             return ctrl
         raise RuntimeError("Workspace controller is no longer alive or API is unassociated.")
 
     def register_controller(api: PluginAPI, controller: PluginWorkspaceController) -> None:
-        controllers[api] = controller
+        controllers[api] = weakref.ref(controller)
 
-    return get_controller, register_controller
+    def unregister_controller(api: PluginAPI) -> None:
+        controllers.pop(api, None)
+
+    return get_controller, register_controller, unregister_controller
 
 
-get_controller, register_controller = _controller_factory()
+get_controller, register_controller, _ = _controller_factory()

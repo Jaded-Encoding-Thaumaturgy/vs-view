@@ -4,22 +4,21 @@ import threading
 
 import pytest
 from PySide6.QtCore import QObject
-from pytest_mock import MockerFixture
 
+from tests.harness import MockQObject
 from vsview.app.plugins._controller import PluginWorkspaceController
 from vsview.app.plugins.api import PluginAPI, WorkspaceBlocker
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
 
 
-def create_api(mocker: MockerFixture) -> PluginAPI:
-    mock_workspace = mocker.MagicMock()
-    controller = PluginWorkspaceController(mock_workspace)
+@pytest.fixture
+def api(mock_qobject: MockQObject) -> PluginAPI:
+    controller = PluginWorkspaceController(mock_qobject)  # pyright: ignore[reportArgumentType]
     return controller.api
 
 
-def test_workspace_blocker_init(mocker: MockerFixture) -> None:
-    api = create_api(mocker)
+def test_workspace_blocker_init(api: PluginAPI) -> None:
     caller = QObject()
 
     # Create blocker with caller
@@ -33,8 +32,7 @@ def test_workspace_blocker_init(mocker: MockerFixture) -> None:
     assert blocker2.locked is False
 
 
-def test_workspace_blocker_acquire_release(mocker: MockerFixture) -> None:
-    api = create_api(mocker)
+def test_workspace_blocker_acquire_release(api: PluginAPI) -> None:
     caller = QObject()
     blocker = api.blocker(caller)  # pyright: ignore[reportArgumentType]
 
@@ -51,8 +49,7 @@ def test_workspace_blocker_acquire_release(mocker: MockerFixture) -> None:
     assert api.busy is False
 
 
-def test_workspace_blocker_acquire_nonblocking(mocker: MockerFixture) -> None:
-    api = create_api(mocker)
+def test_workspace_blocker_acquire_nonblocking(api: PluginAPI) -> None:
     blocker = api.blocker()
 
     assert blocker.acquire() is True
@@ -73,8 +70,7 @@ def test_workspace_blocker_acquire_nonblocking(mocker: MockerFixture) -> None:
     blocker.release()
 
 
-def test_workspace_blocker_context_manager(mocker: MockerFixture) -> None:
-    api = create_api(mocker)
+def test_workspace_blocker_context_manager(api: PluginAPI) -> None:
     caller = QObject()
     blocker = api.blocker(caller)  # pyright: ignore[reportArgumentType]
 
@@ -88,8 +84,7 @@ def test_workspace_blocker_context_manager(mocker: MockerFixture) -> None:
     assert api.busy is False
 
 
-def test_workspace_blocker_threads(mocker: MockerFixture) -> None:
-    api = create_api(mocker)
+def test_workspace_blocker_threads(api: PluginAPI) -> None:
     blocker = api.blocker()
 
     # Acquire in main thread
