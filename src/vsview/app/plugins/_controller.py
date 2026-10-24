@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
 from vsengine import UnifiedFuture
 
 from vsview.app.settings import SettingsManager
-from vsview.app.utils import QObjectCounter
+from vsview.app.utils import QObjectCounter, QObjectSet, has_overriding_method
 from vsview.types import Frame, Time
 from vsview.vsenv.loop import run_in_loop
 
@@ -66,6 +66,15 @@ class PluginWorkspaceController(QObject):
 
         self.api = PluginAPI(self)
         register_controller(self.api, self)
+
+        self.context_menu_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
+        self.mouse_move_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
+        self.mouse_pressed_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
+        self.mouse_released_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
+        self.rect_selection_changed_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
+        self.rect_selection_finished_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
+        self.key_press_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
+        self.key_release_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
 
         self.globalSettingsChanged.connect(self.api.globalSettingsChanged)
         self.localSettingsChanged.connect(self.api.localSettingsChanged)
@@ -234,6 +243,26 @@ class PluginWorkspaceController(QObject):
                 if view.current_tab in view.outputs:
                     buffer.register_plugin_node(f"{plugin.identifier}:{id(view)}", view.outputs[view.current_tab])
 
+    def update_subscribers(self) -> None:
+        from .api import WidgetPluginBase
+
+        subscriber_method_map = (
+            ("on_view_context_menu", self.context_menu_subscribers),
+            ("on_view_mouse_moved", self.mouse_move_subscribers),
+            ("on_view_mouse_pressed", self.mouse_pressed_subscribers),
+            ("on_view_mouse_released", self.mouse_released_subscribers),
+            ("on_view_rect_selection_changed", self.rect_selection_changed_subscribers),
+            ("on_view_rect_selection_finished", self.rect_selection_finished_subscribers),
+            ("on_view_key_press", self.key_press_subscribers),
+            ("on_view_key_release", self.key_release_subscribers),
+        )
+
+        for plugin in self.__workspace.plugins:
+            for method_name, subscriber_set in subscriber_method_map:
+                if has_overriding_method(WidgetPluginBase, plugin, method_name):
+                    print(plugin, method_name)
+                    subscriber_set.add(plugin)
+
     def on_workspace_loaded(self) -> None:
         for plugin in self.__workspace.plugins:
             try:
@@ -368,7 +397,7 @@ class PluginWorkspaceController(QObject):
     # Qt View Event Forwarding
     @Slot(QContextMenuEvent)
     def on_view_context_menu(self, event: QContextMenuEvent) -> None:
-        for plugin in self.__workspace.plugins:
+        for plugin in self.context_menu_subscribers:
             if self._is_truly_visible(plugin):
                 try:
                     plugin.on_view_context_menu(event)
@@ -377,7 +406,7 @@ class PluginWorkspaceController(QObject):
 
     @Slot(QMouseEvent)
     def on_view_mouse_moved(self, event: QMouseEvent) -> None:
-        for plugin in self.__workspace.plugins:
+        for plugin in self.mouse_move_subscribers:
             if self._is_truly_visible(plugin):
                 try:
                     plugin.on_view_mouse_moved(event)
@@ -386,7 +415,7 @@ class PluginWorkspaceController(QObject):
 
     @Slot(QMouseEvent)
     def on_view_mouse_pressed(self, event: QMouseEvent) -> None:
-        for plugin in self.__workspace.plugins:
+        for plugin in self.mouse_pressed_subscribers:
             if self._is_truly_visible(plugin):
                 try:
                     plugin.on_view_mouse_pressed(event)
@@ -395,7 +424,7 @@ class PluginWorkspaceController(QObject):
 
     @Slot(QMouseEvent)
     def on_view_mouse_released(self, event: QMouseEvent) -> None:
-        for plugin in self.__workspace.plugins:
+        for plugin in self.mouse_released_subscribers:
             if self._is_truly_visible(plugin):
                 try:
                     plugin.on_view_mouse_released(event)
@@ -404,7 +433,7 @@ class PluginWorkspaceController(QObject):
 
     @Slot(QRect)
     def on_view_rect_selection_changed(self, rect: QRect) -> None:
-        for plugin in self.__workspace.plugins:
+        for plugin in self.rect_selection_changed_subscribers:
             if self._is_truly_visible(plugin):
                 try:
                     plugin.on_view_rect_selection_changed(rect)
@@ -415,7 +444,7 @@ class PluginWorkspaceController(QObject):
 
     @Slot(QRect)
     def on_view_rect_selection_finished(self, rect: QRect) -> None:
-        for plugin in self.__workspace.plugins:
+        for plugin in self.rect_selection_finished_subscribers:
             if self._is_truly_visible(plugin):
                 try:
                     plugin.on_view_rect_selection_finished(rect)
@@ -426,7 +455,7 @@ class PluginWorkspaceController(QObject):
 
     @Slot(QKeyEvent)
     def on_view_key_press(self, event: QKeyEvent) -> None:
-        for plugin in self.__workspace.plugins:
+        for plugin in self.key_press_subscribers:
             if self._is_truly_visible(plugin):
                 try:
                     plugin.on_view_key_press(event)
@@ -435,7 +464,7 @@ class PluginWorkspaceController(QObject):
 
     @Slot(QKeyEvent)
     def on_view_key_release(self, event: QKeyEvent) -> None:
-        for plugin in self.__workspace.plugins:
+        for plugin in self.key_release_subscribers:
             if self._is_truly_visible(plugin):
                 try:
                     plugin.on_view_key_release(event)

@@ -802,6 +802,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self._setup_panels()
 
             self.plugins_loaded = True
+            self.plugin_controller.update_subscribers()
 
     def _setup_docks(self) -> None:
         from ..plugins.manager import PluginManager

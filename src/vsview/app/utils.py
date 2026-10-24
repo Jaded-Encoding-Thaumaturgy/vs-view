@@ -24,6 +24,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from inspect import ismethod
 from logging import DEBUG, getLogger
+from operator import attrgetter
 from pathlib import Path
 from types import get_original_bases
 from typing import TYPE_CHECKING, Any, Literal, Self, get_origin, override
@@ -609,3 +610,7 @@ def get_all_original_bases(cls: type) -> list[Any]:
 
     walk(cls)
     return result
+
+
+def has_overriding_method(base_class: type[Any], obj: object, method: str) -> bool:
+    return attrgetter(f"{method}.__func__")(obj) is not getattr(base_class, method)
