@@ -7,13 +7,14 @@ import pytest
 import vapoursynth as vs
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
-from PySide6.QtWidgets import QApplication, QLineEdit, QToolButton
+from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QLineEdit, QToolButton
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.tools.colorpicker.plugin import ColorPickerPlugin, TrackingState
 from vsview.app.tools.cropping.plugin import RegionSelectorPlugin
+from vsview.app.tools.frame_strip.plugin import FrameStripPlugin
 from vsview.app.tools.frameprops.plugin import FramePropPreviewGraphicsView, FramePropsModel, FramePropsPlugin
 
 if TYPE_CHECKING:
@@ -495,3 +496,228 @@ def test_frameprop_preview_graphics_view_set_frame_does_not_close_frame(
 
     # Assert: contract invariant that set_frame does not close the passed VideoFrame
     assert frame.closed is False
+
+
+# FrameStripPlugin Tests
+def test_frame_strip_settings_and_slots(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+
+    # Initial defaults
+    assert plugin.neighbor_count == 2
+    assert plugin.step == 1
+    assert plugin.show_current_frame is False
+    assert set(plugin.slots.keys()) == {-2, -1, 1, 2}
+    assert plugin.separator.isVisible() is True
+
+    # Expand neighbor count and enable current frame slot
+    plugin.update_local_settings(neighbor_count=3, show_current_frame=True)
+    assert plugin.neighbor_count == 3
+    assert plugin.show_current_frame is True
+    assert set(plugin.slots.keys()) == {-3, -2, -1, 0, 1, 2, 3}
+    assert plugin.separator.isVisible() is False
+
+    # Update step stride and verify target frames reflect offset * step
+    plugin_controller.set_current_frame(50)
+    plugin.update_local_settings(step=5)
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+
+    assert plugin.step == 5
+    assert {offset: slot.target_frame for offset, slot in plugin.slots.items()} == {
+        -3: 35,
+        -2: 40,
+        -1: 45,
+        0: 50,
+        1: 55,
+        2: 60,
+        3: 65,
+    }
+
+
+def test_frame_strip_frame_navigation_and_bounds(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+
+    # Lower boundary (frame 0): negative offsets are out of bounds
+    plugin_controller.set_current_frame(0)
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+
+    assert plugin.slots[-2].target_frame == -2
+    assert plugin.slots[-2].is_valid_frame is False
+    assert plugin.slots[-2].pixmap_item.pixmap().isNull() is True
+    assert plugin.slots[-1].target_frame == -1
+    assert plugin.slots[-1].is_valid_frame is False
+    assert plugin.slots[-1].pixmap_item.pixmap().isNull() is True
+
+    assert plugin.slots[1].target_frame == 1
+    assert plugin.slots[1].is_valid_frame is True
+    assert plugin.slots[2].target_frame == 2
+    assert plugin.slots[2].is_valid_frame is True
+
+    # Middle frame (50): all slots in bounds and rendered
+    plugin_controller.set_current_frame(50)
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+
+    assert {offset: slot.target_frame for offset, slot in plugin.slots.items()} == {-2: 48, -1: 49, 1: 51, 2: 52}
+    assert all(slot.is_valid_frame for slot in plugin.slots.values())
+
+
+def test_frame_strip_click_to_seek(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+    plugin.update_local_settings(show_current_frame=True)
+
+    plugin_controller.set_current_frame(20)
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+
+    # Clicking center slot (offset 0) does not seek
+    assert plugin.slots[0].cursor().shape() == Qt.CursorShape.ArrowCursor
+    qtbot.mouseClick(plugin.slots[0].viewport(), Qt.MouseButton.LeftButton)
+    assert plugin_controller.api.current_frame == 20
+
+    # Clicking valid neighbor slot (+1 -> frame 21) seeks
+    qtbot.mouseClick(plugin.slots[1].viewport(), Qt.MouseButton.LeftButton)
+    assert plugin_controller.api.current_frame == 21
+
+    # Clicking out-of-bounds slot (-1 at frame 0) does not seek
+    plugin_controller.set_current_frame(0)
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+    qtbot.mouseClick(plugin.slots[-1].viewport(), Qt.MouseButton.LeftButton)
+    assert plugin_controller.api.current_frame == 0
+
+
+def test_frame_strip_responsive_resize(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+
+    # Horizontal (width >= height)
+    plugin.resize(500, 150)
+    assert plugin.strip_layout.direction() == QBoxLayout.Direction.LeftToRight
+    assert plugin.separator.frameShape() == QFrame.Shape.VLine
+
+    # Vertical (height > width)
+    plugin.resize(150, 500)
+    assert plugin.strip_layout.direction() == QBoxLayout.Direction.TopToBottom
+    assert plugin.separator.frameShape() == QFrame.Shape.HLine
+
+
+def test_frame_strip_playback_guard(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+
+    plugin_controller.set_current_frame(10)
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+    assert plugin.slots[1].target_frame == 11
+
+    # Frame changes during active playback are ignored
+    plugin_controller.playback_proxy.testing._state.is_playing = True
+    plugin_controller.set_current_frame(30)
+    assert plugin.slots[1].target_frame == 11
+
+    # Stopping playback refreshes slots to current frame
+    plugin_controller.playback_proxy.testing._state.is_playing = False
+    plugin.on_playback_stopped()
+
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+    assert plugin.slots[1].target_frame == 31
+
+
+def test_frame_strip_loading_and_error_states(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+
+    plugin_controller.set_current_frame(10)
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+
+    slot = plugin.slots[1]
+    assert slot.is_loading is False
+    assert slot.is_valid_frame is True
+    assert slot.cursor().shape() == Qt.CursorShape.PointingHandCursor
+
+    # Entering loading state updates pending_frame, disables seeking, and resets cursor
+    slot.set_loading(25)
+    assert slot.is_loading is True
+    assert slot.pending_frame == 25
+    assert slot.is_valid_frame is False
+    assert slot.cursor().shape() == Qt.CursorShape.ArrowCursor
+
+    # Clicking while loading must not seek
+    qtbot.mouseClick(slot.viewport(), Qt.MouseButton.LeftButton)
+    assert plugin_controller.api.current_frame == 10
+
+    # Frame error clears loading state and blanks the slot pixmap
+    slot.set_frame_error(25)
+    assert slot.is_loading is False
+    assert slot.show_loading_overlay is False
+    assert slot.pending_frame is None
+    assert slot.target_frame == 25
+    assert slot.pixmap_item.pixmap().isNull() is True
+    assert slot.is_valid_frame is False
+
+
+def test_frame_strip_teardown_cleans_resources(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+
+    plugin_controller.set_current_frame(10)
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+
+    assert plugin.active_voutput is not None
+    assert len(plugin.outputs) > 0
+
+    # Trigger destroy: must clear active_voutput, outputs, and reset slot bounds
+    plugin_controller.destroy()
+
+    assert plugin.active_voutput is None
+    assert len(plugin.outputs) == 0
+    assert all(not slot.is_in_bounds for slot in plugin.slot_pool.values())
+    assert all(not slot.is_loading for slot in plugin.slot_pool.values())
+
+
+def test_frame_strip_neighbor_count_cache_invalidation(
+    qtbot: QtBot, plugin_controller: HarnessPluginController
+) -> None:
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+
+    plugin_controller.set_current_frame(10)
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+
+    vo = plugin_controller.api.current_voutput
+    assert vo in plugin.outputs
+    old_cached_node = plugin.outputs[vo]
+    assert plugin.neighbor_count_cached == 2
+
+    # Changing neighbor count invalidates old cache and creates a newly sized cache node
+    plugin._on_count_changed(3)
+    assert plugin.neighbor_count_cached == 3
+    assert plugin.outputs[vo] is not old_cached_node
+
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+
+
+def test_frame_strip_conversion_exception_clears_loading(
+    qtbot: QtBot, plugin_controller: HarnessPluginController, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+
+    vo = plugin_controller.api.current_voutput
+    orig_frame_to_qimage = vo.packer_sdr.frame_to_qimage
+
+    # Allow main view frame render (first call), then fail thumbnail conversions
+    calls = 0
+
+    def fail_neighbor_conversion(frame: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            raise RuntimeError("Simulated conversion crash")
+        return orig_frame_to_qimage(frame, **kwargs)
+
+    monkeypatch.setattr(vo.packer_sdr, "frame_to_qimage", fail_neighbor_conversion)
+
+    plugin_controller.set_current_frame(20)
+    # Must cleanly complete and clear loading state instead of freezing in spinner
+    qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
+    assert any(slot.pixmap_item.pixmap().isNull() for slot in plugin.slots.values())

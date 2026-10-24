@@ -49,6 +49,14 @@ First-party plugins are official components integrated directly into the **VSVie
 
     [:lucide-move-right: Explore Region Selector](#region-selector)
 
+- :lucide-film: **Frame Strip**
+
+    ---
+
+    Display previous and next frames around the current frame.
+
+    [:lucide-move-right: Explore Frame Strip](#frame-strip)
+
 
 </div>
 
@@ -238,3 +246,18 @@ The Region Selector tool defines rectangular regions within the frame, primarily
 | ++esc++  | Clear current selection     |
 
 Shortcuts, mod and code snippets are configurable in the **Settings** menu.
+
+---
+
+## Frame Strip
+
+The Frame Strip dock displays previous and next frames around the current frame of the active video output.
+
+### Features
+
+- **Adaptive Layout:** Switches between horizontal and vertical orientation based on dock dimensions.
+- **Click-to-Seek:** Left-click a neighbor frame to seek the viewport to that frame.
+- **Frame Labels:** Displays the slot offset and frame number (e.g., `-1 (1041)`, `+1 (1043)`).
+- **Context Menu:** Right-click a slot to save or copy its frame, or to configure **Neighbors** (`1`–`5`), **Step**, and **Show current frame**.
+
+Default values can also be configured in **Settings** -> **Plugin - Frame Strip**.
