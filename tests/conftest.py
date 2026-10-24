@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 import sys
 import threading
 import warnings
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
+from contextlib import suppress
 from pathlib import Path
 from types import CodeType, MethodType, SimpleNamespace
 from typing import Any
@@ -21,6 +23,7 @@ from PySide6.QtCore import (
     QObject,
     QThread,
     QTimer,
+    qInstallMessageHandler,
 )
 from PySide6.QtGui import QAction, QPixmap, QShortcut, QTextDocument, QWindow
 from PySide6.QtWebEngineCore import QWebEnginePage
@@ -94,6 +97,29 @@ class InMemoryKeyring:
                 cred.password = pwd
                 return cred
         return None
+
+
+# Logging Isolation
+@pytest.fixture(autouse=True)
+def isolate_logging() -> Generator[None]:
+    """Isolate logging configuration so tests that call setup_logging don't pollute subsequent tests."""
+    root_logger = logging.getLogger()
+    orig_handlers = root_logger.handlers[:]
+    orig_level = root_logger.level
+
+    try:
+        yield
+    finally:
+        for h in root_logger.handlers[:]:
+            if h not in orig_handlers:
+                root_logger.removeHandler(h)
+                with suppress(Exception):
+                    h.close()
+
+        root_logger.handlers = orig_handlers[:]
+        root_logger.setLevel(orig_level)
+        qInstallMessageHandler(None)
+        logging.captureWarnings(False)
 
 
 # Secrets Manager Isolation
