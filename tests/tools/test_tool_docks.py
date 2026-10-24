@@ -665,13 +665,14 @@ def test_frame_strip_teardown_cleans_resources(qtbot: QtBot, plugin_controller: 
     assert plugin.active_voutput is not None
     assert len(plugin.outputs) > 0
 
-    # Trigger destroy: must clear active_voutput, outputs, and reset slot bounds
+    # Trigger destroy: must clear active_voutput and outputs, but preserve pixmaps across reload
     plugin_controller.destroy()
 
     assert plugin.active_voutput is None
     assert len(plugin.outputs) == 0
-    assert all(not slot.is_in_bounds for slot in plugin.slot_pool.values())
     assert all(not slot.is_loading for slot in plugin.slot_pool.values())
+    # Existing pixmaps are retained so the strip doesn't blank/flicker during reload
+    assert all(not slot.pixmap_item.pixmap().isNull() for slot in plugin.slots.values())
 
 
 def test_frame_strip_neighbor_count_cache_invalidation(

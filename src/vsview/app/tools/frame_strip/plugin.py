@@ -565,6 +565,8 @@ class FrameStripPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         self.active_voutput = None
         for slot in self.slot_pool.values():
             slot.request_gen += 1
+            slot.is_loading = False
+            slot.pending_frame = None
 
     def _reload_icons(self) -> None:
         color = self.palette().color(QPalette.ColorRole.WindowText)
