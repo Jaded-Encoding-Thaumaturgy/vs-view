@@ -8,4 +8,3 @@ from .plugin import FrameStripPlugin
 @hookimpl
 def vsview_register_tooldock() -> type[WidgetPluginBase[Any, Any]]:
     return FrameStripPlugin
-
