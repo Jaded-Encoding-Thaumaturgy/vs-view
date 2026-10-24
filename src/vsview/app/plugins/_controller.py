@@ -261,7 +261,6 @@ class PluginWorkspaceController(QObject):
         for plugin in self.__workspace.plugins:
             for method_name, subscriber_set in subscriber_method_map:
                 if has_overriding_method(WidgetPluginBase, plugin, method_name):
-                    print(plugin, method_name)
                     subscriber_set.add(plugin)
 
     def on_workspace_loaded(self) -> None:
