@@ -125,7 +125,7 @@ plugins = [
     "vsview-remote",
 ]
 # Specify this one to it's properly resolved for nativeres.
-# PyPI has an outdated wheel stub version compared to vs-wheels. 
+# PyPI has an outdated wheel stub version compared to vs-wheels.
 index-nonsense = ["vapoursynth-ffms2"]
 
 [project.urls]
@@ -136,15 +136,7 @@ Plugins = "https://jaded-encoding-thaumaturgy.github.io/vs-view/plugins/"
 "Contact" = "https://discord.gg/XTpc6Fa9eB"
 
 [tool.hatch.build.targets.sdist]
-only-include = [
-    "docs",
-    "scripts",
-    "src/vsview",
-    "stubs",
-    "tests",
-    "uv.lock",
-    ".gitmodules",
-]
+only-include = ["scripts", "src/vsview", "stubs", "uv.lock", ".gitmodules"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/vsview"]
