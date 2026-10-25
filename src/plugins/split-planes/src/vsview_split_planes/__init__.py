@@ -172,13 +172,6 @@ class SplitPlanesView(PluginGraphicsView):
             self.autofit_action.trigger()
 
     @override
-    def parent(self) -> SplitPlanesPlugin:
-        if isinstance(parent := super().parent(), SplitPlanesPlugin):
-            return parent
-
-        raise NotImplementedError
-
-    @override
     def get_node(self, clip: VideoNode) -> VideoNode:
         if not (offset_chroma := self.settings.local_.offset_chroma):
             offset: Literal["min", "max", False] | float = False
@@ -217,31 +210,31 @@ class SplitPlanesView(PluginGraphicsView):
     @Slot(int)
     def on_offset_segment_changed(self, index: int) -> None:
         self.fixed_spinbox_container.setEnabled(index == 0)
-        parent = self.parent()
 
         match index:
             case 0:
-                parent.update_local_settings(offset_chroma=self.offset_spinbox.value())
+                offset = self.offset_spinbox.value()
             case 1:
-                parent.update_local_settings(offset_chroma="min")
+                offset = "min"
             case 2:
-                parent.update_local_settings(offset_chroma="max")
+                offset = "max"
             case _:
                 raise NotImplementedError
+
+        self.settings.local_.offset_chroma = offset  # type: ignore[assignment]
 
         self.refresh()
 
     @Slot(float)
     def on_offset_spinbox_changed(self, value: float) -> None:
         if self.offset_segment.index == 0:
-            self.parent().update_local_settings(offset_chroma=value)
+            self.settings.local_.offset_chroma = value
             self.refresh()
 
     @override
     def _on_autofit_action(self) -> None:
         super()._on_autofit_action()
-
-        self.parent().update_local_settings(autofit=self.autofit)
+        self.settings.local_.autofit = self.autofit
 
 
 @hookimpl
