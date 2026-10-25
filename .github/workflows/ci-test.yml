@@ -67,7 +67,7 @@ jobs:
       - name: Build Packages
         env:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-cache
-        run: uv build --all-packages --quiet
+        run: uv build --all-packages --quiet --sdist --wheel
 
       - name: Post webhook for failure
         if: failure()
