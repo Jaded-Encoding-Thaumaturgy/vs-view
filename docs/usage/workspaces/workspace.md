@@ -4,14 +4,15 @@ icon: lucide/file-stack
 
 # Workspaces
 
-**VSView** currently provides three built-in workspace types, and one plugin workspace type:
+**VSView** provides three built-in workspace types and two additional types through plugins:
 
-- [**Script Workspace**](script.md): The primary environment for VapourSynth script development and previewing.
-- [**File Workspace**](file.md): For directly previewing media files without a script.
-- [**Quick Script**](quick-script.md): A workspace for one-off testing and experiments using an integrated code editor.
-- [**Editor Workspace**](editor.md): A workspace for VapourSynth script development using an integrated code editor and Python environment.
+- [**Script**](script.md): The primary environment for VapourSynth script development and previewing.
+- [**File**](file.md): Preview media files directly, without a script.
+- [**Quick**](quick-script.md): A basic integrated code editor for one-off testing and experiments.
+- [**Editor**](editor.md): A Monaco-based editor for editing and executing VapourSynth scripts in VSView.
+- [**Remote**](remote.md): Execute scripts remotely using [vsremote](https://github.com/Ichunjo/vs-remote).
 
-These workspaces share the same core interface. The sections below describe behavior that applies to all three unless stated otherwise.
+All workspace types share the same core interface. The following sections describe behavior common to all of them, unless stated otherwise.
 
 ## Overview
 
@@ -132,7 +133,7 @@ See [Plugins](../../plugins/overview.md) for more information.
 
 ## 6. Tool Panels
 
-Tool Panels provide the same plugin tooling in a compact tabbed panel located on the right side of the workspace. 
+Tool Panels provide the same plugin tooling in a compact tabbed panel located on the right side of the workspace.
 
 The panel is part of a **horizontal splitter**, which means you can click and drag the handle between the main content and the panel to resize it.
 
