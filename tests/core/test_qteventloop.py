@@ -332,6 +332,7 @@ def test_wait_for_threads_same_name_concurrent(qt_loop: QtEventLoop) -> None:
     assert r2_called is True
 
 
+@pytest.mark.usefixtures("isolate_windows_asyncio")
 def test_run_in_loop_decorator(qt_loop: QtEventLoop, qtbot: QtBot) -> None:
     # Sync function with return_future=True (default)
     @run_in_loop
@@ -370,6 +371,7 @@ def test_run_in_loop_decorator(qt_loop: QtEventLoop, qtbot: QtBot) -> None:
     assert add_async_direct(100, 200) == 300
 
 
+@pytest.mark.usefixtures("isolate_windows_asyncio")
 def test_run_in_background_decorator(qt_loop: QtEventLoop) -> None:
     # Sync function default
     @run_in_background
@@ -402,6 +404,7 @@ def test_run_in_background_decorator(qt_loop: QtEventLoop) -> None:
     assert fut3.result(timeout=2.0) == "hello world"
 
 
+@pytest.mark.usefixtures("isolate_windows_asyncio")
 def test_run_coro_existing_event_loop(qt_loop: QtEventLoop) -> None:
     main_thread = threading.current_thread()
 
@@ -417,6 +420,7 @@ def test_run_coro_existing_event_loop(qt_loop: QtEventLoop) -> None:
     assert coro1().result(timeout=2.0) == "simple"
 
 
+@pytest.mark.usefixtures("isolate_windows_asyncio")
 def test_run_coro_existing_event_loop_exception(qt_loop: QtEventLoop) -> None:
     main_thread = threading.current_thread()
 
@@ -447,6 +451,7 @@ def test_run_coro_existing_event_loop_exception(qt_loop: QtEventLoop) -> None:
         fut.result(timeout=2.0)
 
 
+@pytest.mark.usefixtures("isolate_windows_asyncio")
 def test_run_coro_existing_event_loop_nested(qt_loop: QtEventLoop) -> None:
     main_thread = threading.current_thread()
 

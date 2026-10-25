@@ -328,6 +328,33 @@ def qt_event_loop(qapp: QApplication) -> Generator[QtEventLoop, None, None]:
         set_loop(NO_LOOP)
 
 
+@pytest.fixture
+def isolate_windows_asyncio(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
+    """Bypass TCP loopback self-pipe on Windows so asyncio can run in offline/sandboxed environments."""
+    if sys.platform != "win32":
+        yield
+        return
+
+    from asyncio.proactor_events import BaseProactorEventLoop
+
+    def dummy_init(self: Any, proactor: Any) -> None:
+        super(BaseProactorEventLoop, self).__init__()
+        self._proactor = proactor
+        self._selector = proactor
+        self._self_reading_future = None
+        self._accept_futures = {}
+        proactor.set_loop(self)
+        self._ssock = MagicMock()
+        self._csock = MagicMock()
+        self._internal_fds = 0
+
+    monkeypatch.setattr(BaseProactorEventLoop, "__init__", dummy_init)
+    monkeypatch.setattr(BaseProactorEventLoop, "_loop_self_reading", lambda self, f=None: None)
+    monkeypatch.setattr(BaseProactorEventLoop, "_write_to_self", lambda self: None)
+    monkeypatch.setattr(BaseProactorEventLoop, "_close_self_pipe", lambda self: None)
+    yield
+
+
 # Plugin Manager & Hookspecs
 @pytest.fixture
 def init_plugin_manager() -> PluginManager:
