@@ -78,5 +78,6 @@ export default defineConfig({
   },
   test: {
     projects: ['src/workspaces/editor'],
+    silent: true,
   },
 });
