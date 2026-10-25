@@ -2821,6 +2821,7 @@ full = [
     { name = "vsview-frameprops-extended" },
     { name = "vsview-histogram" },
     { name = "vsview-nativeres" },
+    { name = "vsview-remote" },
     { name = "vsview-split-planes" },
 ]
 recommended = [
@@ -2915,6 +2916,7 @@ requires-dist = [
     { name = "vsview-frameprops-extended", marker = "extra == 'recommended'", editable = "src/plugins/frameprops-extended" },
     { name = "vsview-histogram", marker = "extra == 'full'", editable = "src/plugins/histogram" },
     { name = "vsview-nativeres", marker = "extra == 'full'" },
+    { name = "vsview-remote", marker = "extra == 'full'", editable = "src/workspaces/remote" },
     { name = "vsview-split-planes", marker = "extra == 'full'", editable = "src/plugins/split-planes" },
     { name = "vsview-split-planes", marker = "extra == 'recommended'", editable = "src/plugins/split-planes" },
 ]
