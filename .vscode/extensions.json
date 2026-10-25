@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "tamasfe.even-better-toml",
+    "github.vscode-github-actions",
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "rust-lang.rust-analyzer",
+    "theqtcompany.qt-core",
+    "theqtcompany.qt-qml",
+    "typescriptteam.native-preview",
+    "vd-varde.vsstubs",
+    "voidzero.vite-plus-extension-pack"
+  ]
+}

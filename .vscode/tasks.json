@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "VSView",
+      "type": "shell",
+      "command": {
+        "value": "${command:python.interpreterPath}",
+        "quoting": "strong"
+      },
+      "args": ["-m", "vsview", { "value": "${file}", "quoting": "strong" }],
+      "group": {
+        "kind": "none",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

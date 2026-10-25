@@ -24,11 +24,7 @@ Create (or extend) `.vscode/tasks.json` in your project:
         "value": "${command:python.interpreterPath}",
         "quoting": "strong"
       },
-      "args": [
-        "-m",
-        "vsview",
-        { "value": "${file}", "quoting": "strong" }
-      ],
+      "args": ["-m", "vsview", { "value": "${file}", "quoting": "strong" }],
       "group": {
         "kind": "none",
         "isDefault": true

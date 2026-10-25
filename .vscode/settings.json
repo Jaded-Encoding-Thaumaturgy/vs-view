@@ -1,0 +1,69 @@
+{
+  "[github-actions-workflow]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.tabSize": 2
+  },
+  "[python]": {
+    "editor.codeActionsOnSave": {
+      "source.organizeImports.ruff": "explicit"
+    },
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+  "[toml]": {
+    "editor.defaultFormatter": "tamasfe.even-better-toml"
+  },
+  "editor.formatOnSave": true,
+  "files.associations": {
+    "*.vpy": "python",
+    "**/.github/actions/**/action.yml": "github-actions-workflow",
+    "**/.github/workflows/*.yml": "github-actions-workflow"
+  },
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "mypy-type-checker.ignorePatterns": ["tests/*.py"],
+  "mypy-type-checker.importStrategy": "fromEnvironment",
+  "oxc.enable.oxfmt": true,
+  "oxc.enable.oxlint": true,
+  "python.analysis.autoFormatStrings": true,
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.extraPaths": ["./src/vspackrgb/tests"],
+  "python.analysis.packageIndexDepths": [
+    {
+      "depth": 2,
+      "name": "PySide6"
+    },
+    {
+      "depth": 2,
+      "name": "rich"
+    }
+  ],
+  "python.analysis.typeCheckingMode": "standard",
+  "python.analysis.typeEvaluation.deprecateTypingAliases": true,
+  "python.analysis.typeEvaluation.enableReachabilityAnalysis": true,
+  "python.terminal.useEnvFile": true,
+  "python.testing.pytestArgs": ["."],
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "qt-core.showWelcomePageOnActivation": false,
+  "qt-qml.qmlls.additionalImportPaths": [".venv/Lib/site-packages/PySide6/qml"],
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.linkedProjects": [
+    "src/vspackrgb/Cargo.toml",
+    "src/plugins/histogram/src/rust/Cargo.toml"
+  ],
+  "search.exclude": {
+    "**/submodules": true
+  },
+  "search.searchView.semanticSearchBehavior": "manual",
+  "vitest.debugExclude": ["submodules:**", "<node_internals>/**"],
+  "vsstubs.watchPlugins": false,
+  "yaml.schemas": {
+    "https://www.schemastore.org/github-action.json": "**/.github/actions/**/*.yml"
+  }
+}
