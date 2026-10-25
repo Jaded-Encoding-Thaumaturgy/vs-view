@@ -3,11 +3,11 @@ name = "vsview-histogram-rs"
 edition = "2024"
 description = "Internal Rust module for vsview-histogram"
 publish = false
-build = "src/build.rs"
+build = "src/rust/build.rs"
 
 [lib]
 name = "funcs"
-path = "src/lib.rs"
+path = "src/rust/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [build-dependencies]

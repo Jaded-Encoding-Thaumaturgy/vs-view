@@ -53,7 +53,7 @@ target-dir = "target"
 
 [[tool.hatch.build.hooks.hatch-rs.artifacts]]
 name = "funcs"
-manifest = "src/rust/Cargo.toml"
+manifest = "Cargo.toml"
 destination = "src/python/vsview_histogram/{python_extension_name}"
 editable-debug = false
 

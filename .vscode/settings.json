@@ -53,10 +53,7 @@
   "qt-core.showWelcomePageOnActivation": false,
   "qt-qml.qmlls.additionalImportPaths": [".venv/Lib/site-packages/PySide6/qml"],
   "rust-analyzer.check.command": "clippy",
-  "rust-analyzer.linkedProjects": [
-    "src/vspackrgb/Cargo.toml",
-    "src/plugins/histogram/src/rust/Cargo.toml"
-  ],
+  "rust-analyzer.linkedProjects": ["src/vspackrgb/Cargo.toml", "src/plugins/histogram/Cargo.toml"],
   "search.exclude": {
     "**/submodules": true
   },
