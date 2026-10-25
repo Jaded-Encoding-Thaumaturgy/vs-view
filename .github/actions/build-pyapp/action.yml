@@ -27,6 +27,12 @@ runs:
         python-version: '3.14'
         enable-cache: false
 
+    - name: Set up Vite+
+      uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
+      with:
+        node-version: 24
+        cache: true
+
     - name: Sync environment
       shell: bash
       run: uv sync --locked

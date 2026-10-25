@@ -56,6 +56,12 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
+        with:
+          node-version: 24
+          cache: true
+
       - name: Install dependencies
         run: uv sync --locked --all-extras --all-groups --all-packages
 
@@ -90,7 +96,7 @@ jobs:
           fetch-tags: true
 
       - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
+        uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
         with:
           node-version: 24
           cache: true
