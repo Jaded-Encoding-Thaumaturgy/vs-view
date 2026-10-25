@@ -372,6 +372,68 @@ def test_timeline_mouse_press_and_click_emission(timeline_control_bar: TimelineC
     assert timeline.mousepressed is False
 
 
+def test_timeline_mouse_drag_vertical_deviation_continues_seeking(timeline_control_bar: TimelineControlBar) -> None:
+    timeline = timeline_control_bar.timeline
+    timeline_control_bar.set_data(100, [(i + 1) / 25.0 for i in range(100)])
+    timeline.rect_f = QRectF(0, 0, 1000, 33)
+
+    emitted: list[tuple[Frame, Time]] = []
+    timeline.clicked.connect(lambda f, t: emitted.append((f, t)))
+
+    # 1. Click at (200, 5) - top region of the timeline
+    press_event = QMouseEvent(
+        QEvent.Type.MouseButtonPress,
+        QPointF(200, 5),
+        QPointF(200, 5),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    timeline.mousePressEvent(press_event)
+    assert timeline.mousepressed is True
+    assert len(emitted) == 1
+    assert emitted[-1][0] == Frame(20)
+
+    # 2. Drag high above the timeline (y = -150)
+    drag_up = QMouseEvent(
+        QEvent.Type.MouseMove,
+        QPointF(400, -150),
+        QPointF(400, -150),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    timeline.mouseMoveEvent(drag_up)
+    assert len(emitted) == 2
+    assert emitted[-1][0] == Frame(40)
+
+    # 3. Drag deep below the timeline (y = 200)
+    drag_down = QMouseEvent(
+        QEvent.Type.MouseMove,
+        QPointF(600, 200),
+        QPointF(600, 200),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    timeline.mouseMoveEvent(drag_down)
+    assert len(emitted) == 3
+    assert emitted[-1][0] == Frame(60)
+
+    # 4. Release mouse outside the widget: hover state is cleaned up
+    release_outside = QMouseEvent(
+        QEvent.Type.MouseButtonRelease,
+        QPointF(600, 200),
+        QPointF(600, 200),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    timeline.mouseReleaseEvent(release_outside)
+    assert timeline.mousepressed is False
+    assert timeline.hover_x is None
+
+
 def test_timeline_mouse_right_click_ignored_by_scrubber(timeline_control_bar: TimelineControlBar) -> None:
     timeline = timeline_control_bar.timeline
     timeline.rect_f = QRectF(0, 0, 1000, 33)

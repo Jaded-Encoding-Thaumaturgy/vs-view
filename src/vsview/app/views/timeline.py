@@ -858,14 +858,19 @@ class Timeline(QWidget):
     @override
     def leaveEvent(self, event: QEvent) -> None:
         super().leaveEvent(event)
-        self.hover_x = None
-        self.hover_popup.hide()
-        self.update()
+        if not self.mousepressed:
+            self.hover_x = None
+            self.hover_popup.hide()
+            self.update()
 
     @override
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if not self.is_events_blocked:
             self.mousepressed = False
+            if not self.rect().contains(event.position().toPoint()):
+                self.hover_x = None
+                self.hover_popup.hide()
+                self.update()
 
     @override
     def mousePressEvent(self, event: QMouseEvent) -> None:
@@ -901,23 +906,12 @@ class Timeline(QWidget):
         if not self.mousepressed:
             return
 
-        pos = event.position()
-        # Check if within scroll area
-        scroll_rect = self.notches_cache[self.mode].value.scroll_rect
+        new_x = self.hover_x
+        self._cursor_val = new_x
+        self.update()
 
-        # Allow clicking a bit above/below for usability
-        click_zone = QRectF(scroll_rect)
-        click_zone.setTop(click_zone.top() - 10)
-        click_zone.setBottom(click_zone.bottom() + 10)
-
-        if click_zone.contains(pos):
-            new_x = int(clamp(pos.x(), 0, self.rect_f.width()))
-
-            self._cursor_val = new_x
-            self.update()
-
-            frame = clamp(self.x_to_frame(new_x), Frame(0), Frame(max(0, self.total_frames - 1)))
-            self.clicked.emit(frame, self.x_to_time(new_x))
+        frame = clamp(self.x_to_frame(new_x), Frame(0), Frame(max(0, self.total_frames - 1)))
+        self.clicked.emit(frame, self.x_to_time(new_x))
 
     @override
     def resizeEvent(self, event: QResizeEvent) -> None:
