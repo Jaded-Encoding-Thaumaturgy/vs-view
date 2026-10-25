@@ -184,13 +184,13 @@ class TimelineHoverPopup(QWidget):
     ZOOMED_NOTCH_SPACING = 75
     RANGE_FILL_ALPHA = 80
 
-    def __init__(self, parent: Timeline) -> None:
+    def __init__(self, timeline: Timeline) -> None:
         super().__init__(None, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-        self._timeline = parent
+        self._timeline = timeline
         self.radius = 50
         self.zoom_factor = 4.0
         self.hover_x = -1
@@ -509,6 +509,9 @@ class Timeline(QWidget):
         # Internal cursor state (can be Frame, Time, or raw int pixels)
         self._cursor_val: int | Frame | Time = 0
 
+        self._total_frames: int = 0
+        self._cum_durations: Sequence[Time] | None = None
+
         self.custom_notches = dict[str, set[CustomNotch[Any]]]()
 
         # Optimization attributes
@@ -540,24 +543,15 @@ class Timeline(QWidget):
 
     @property
     def total_frames(self) -> int:
-        if isinstance((parent := self.parent()), TimelineControlBar):
-            return parent.total_frames
-
-        raise NotImplementedError
+        return self._total_frames
 
     @property
     def total_time(self) -> Time:
-        if isinstance((parent := self.parent()), TimelineControlBar):
-            return parent.total_time
-
-        raise NotImplementedError
+        return self._cum_durations[-1] if self._cum_durations else Time()
 
     @property
-    def cum_durations(self) -> list[Time] | None:
-        if isinstance((parent := self.parent()), TimelineControlBar):
-            return parent.cum_durations
-
-        raise NotImplementedError
+    def cum_durations(self) -> Sequence[Time] | None:
+        return self._cum_durations
 
     @property
     def cursor_x(self) -> int:
@@ -918,6 +912,15 @@ class Timeline(QWidget):
         super().resizeEvent(event)
         self.update()
 
+    @override
+    def deleteLater(self) -> None:
+        self.hover_popup.deleteLater()
+
+    def set_data(self, total_frames: int, cum_durations: Sequence[Time] | None = None) -> None:
+        self._total_frames = total_frames
+        self._cum_durations = cum_durations
+        self.update()
+
     def set_sizes(self) -> None:
         # Reset cache as sizes have changed
         self.notches_cache = self._init_notches_cache()
@@ -1238,6 +1241,8 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self._is_muted = False
         self._volume = SettingsManager.global_settings.playback.default_volume
         self._audio_delay = SettingsManager.global_settings.playback.audio_delay
+        self._total_frames = 0
+        self._cum_durations: Sequence[Time] | None = None
         self._update_mute_icon()
 
         self._setup_context_menu()
@@ -1507,11 +1512,16 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.audioDelayChanged.emit(value)
 
     @property
-    def cum_durations(self) -> list[Time] | None:
-        if isinstance((parent := self.parent()), TimelineControlBar):
-            return parent.cum_durations
+    def total_frames(self) -> int:
+        return self._total_frames
 
-        raise NotImplementedError
+    @property
+    def total_time(self) -> Time:
+        return self._cum_durations[-1] if self._cum_durations else Time()
+
+    @property
+    def cum_durations(self) -> Sequence[Time] | None:
+        return self._cum_durations
 
     @override
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
@@ -1554,6 +1564,27 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         menu_pos = event.globalPos()
         menu_pos.setY(menu_pos.y() - self.context_menu.sizeHint().height())
         self.context_menu.exec(menu_pos)
+
+    def set_data(self, total_frames: int, cum_durations: Sequence[Time] | None = None) -> None:
+        self._total_frames = total_frames
+        self._cum_durations = cum_durations
+
+        total_time = self._cum_durations[-1] if self._cum_durations else Time()
+
+        max_zone = max(1, total_frames - 1)
+        self.settings.zone_frames = clamp(self.settings.zone_frames, 1, max_zone)
+
+        with QSignalBlocker(self.zone_frame_spinbox):
+            self.zone_frame_spinbox.setMaximum(Frame(max_zone))
+
+        with QSignalBlocker(self.zone_time_edit):
+            self.zone_time_edit.setMaximumTime(total_time.to_qtime())
+
+        with QSignalBlocker(self.frame_edit):
+            self.frame_edit.setMaximum(Frame(max(0, total_frames - 1)))
+
+        with QSignalBlocker(self.time_edit):
+            self.time_edit.setMaximumTime(total_time.to_qtime())
 
     @run_in_loop
     def set_audio_outputs(self, aoutputs: list[AudioOutput], index: int | None = None) -> None:
@@ -1756,26 +1787,12 @@ class TimelineControlBar(QWidget):
         return self._cum_durations
 
     def set_data(self, total_frames: int, cum_durations: Sequence[float] | None = None) -> None:
+        durations = [Time(seconds=cum) for cum in cum_durations] if cum_durations else None
         self._total_frames = total_frames
-        self._cum_durations = [Time(seconds=cum) for cum in cum_durations] if cum_durations else None
+        self._cum_durations = durations
 
-        self.timeline.update()
-
-        # Playback Container
-        max_zone = max(1, total_frames - 1)
-        self.playback_container.settings.zone_frames = clamp(self.playback_container.settings.zone_frames, 1, max_zone)
-
-        with QSignalBlocker(self.playback_container.zone_frame_spinbox):
-            self.playback_container.zone_frame_spinbox.setMaximum(Frame(max_zone))
-
-        with QSignalBlocker(self.playback_container.zone_time_edit):
-            self.playback_container.zone_time_edit.setMaximumTime(self.total_time.to_qtime())
-
-        with QSignalBlocker(self.playback_container.frame_edit):
-            self.playback_container.frame_edit.setMaximum(Frame(max(0, total_frames - 1)))
-
-        with QSignalBlocker(self.playback_container.time_edit):
-            self.playback_container.time_edit.setMaximumTime(self.total_time.to_qtime())
+        self.timeline.set_data(total_frames, durations)
+        self.playback_container.set_data(total_frames, durations)
 
     @run_in_loop(return_future=False)
     def set_playback_controls_enabled(self, enabled: bool) -> None:

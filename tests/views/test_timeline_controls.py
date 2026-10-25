@@ -952,18 +952,6 @@ def test_timeline_control_bar_event_synchronization(timeline_control_bar: Timeli
     assert frame_changes[0] == (Frame(75), Frame(40))
 
 
-def test_timeline_parentless_properties_raise_not_implemented(qtbot: QtBot) -> None:
-    tl = Timeline()
-    qtbot.addWidget(tl)
-    qtbot.addWidget(tl.hover_popup)
-    with pytest.raises(NotImplementedError, match=r"^$"):
-        _ = tl.total_frames
-    with pytest.raises(NotImplementedError, match=r"^$"):
-        _ = tl.total_time
-    with pytest.raises(NotImplementedError, match=r"^$"):
-        _ = tl.cum_durations
-
-
 def test_timeline_draw_widget_time_mode_and_hover(timeline_control_bar: TimelineControlBar) -> None:
     bar = timeline_control_bar
     bar.set_data(120, [(i + 1) / 24.0 for i in range(120)])
