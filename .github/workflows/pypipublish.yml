@@ -2,11 +2,11 @@ name: Publish
 on:
   push:
     tags:
-      - "*/v*"
+      - '*/v*'
   workflow_dispatch:
     inputs:
       package:
-        description: "Package or tag prefix to build"
+        description: 'Package or tag prefix to build'
         required: true
         type: choice
         options:
@@ -22,7 +22,7 @@ on:
           - split-planes
 
 env:
-  VSVIEW_PYTHON_VERSION: "3.14"
+  VSVIEW_PYTHON_VERSION: '3.14'
 
 jobs:
   prepare:

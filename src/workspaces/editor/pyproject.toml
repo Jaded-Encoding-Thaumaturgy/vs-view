@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.29.0", "hatch-js>=0.1.2", "versioningit"]
+requires = ["hatchling>=1.29.0", "hatch-js>=0.1.4", "versioningit"]
 build-backend = "hatchling.build"
 
 [project]
@@ -51,9 +51,9 @@ artifacts = ["src/python/vsview_editor/web_dist/"]
 
 [tool.hatch.build.hooks.hatch-js]
 path = "."
-tool = "npm"
-install_cmd = "install --no-save --silent"
-build_cmd = "build-quiet --silent"
+tool = "pnpm"
+install_cmd = "install --frozen-lockfile --silent"
+build_cmd = "build"
 targets = ["src/python/vsview_editor/web_dist/index.html"]
 
 [tool.hatch.version]

@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from 'vite-plus/test';
 
-import { DisposableStore, toDisposable } from "./disposables";
+import { DisposableStore, toDisposable } from './disposables';
 
-describe("Disposables utility", () => {
-  describe("toDisposable", () => {
-    it("should call the teardown function on dispose", () => {
+describe('Disposables utility', () => {
+  describe('toDisposable', () => {
+    it('should call the teardown function on dispose', () => {
       const teardown = vi.fn();
       const disposable = toDisposable(teardown);
 
@@ -13,7 +13,7 @@ describe("Disposables utility", () => {
       expect(teardown).toHaveBeenCalledOnce();
     });
 
-    it("should be idempotent (teardown called only once)", () => {
+    it('should be idempotent (teardown called only once)', () => {
       const teardown = vi.fn();
       const disposable = toDisposable(teardown);
 
@@ -25,8 +25,8 @@ describe("Disposables utility", () => {
     });
   });
 
-  describe("DisposableStore", () => {
-    it("should track and dispose all added disposables in LIFO order", () => {
+  describe('DisposableStore', () => {
+    it('should track and dispose all added disposables in LIFO order', () => {
       const store = new DisposableStore();
       const callOrder: number[] = [];
 
@@ -43,7 +43,7 @@ describe("Disposables utility", () => {
       expect(callOrder).toEqual([3, 2, 1]);
     });
 
-    it("should immediately dispose added item if store is already disposed", () => {
+    it('should immediately dispose added item if store is already disposed', () => {
       const store = new DisposableStore();
       store.dispose();
 
@@ -54,12 +54,12 @@ describe("Disposables utility", () => {
       expect(teardown).toHaveBeenCalledOnce();
     });
 
-    it("should safely handle errors during individual resource disposal", () => {
+    it('should safely handle errors during individual resource disposal', () => {
       const store = new DisposableStore();
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const throwingDisposable = toDisposable(() => {
-        throw new Error("Disposal error");
+        throw new Error('Disposal error');
       });
       const normalTeardown = vi.fn();
       const normalDisposable = toDisposable(normalTeardown);
@@ -74,7 +74,7 @@ describe("Disposables utility", () => {
       consoleSpy.mockRestore();
     });
 
-    it("should support Explicit Resource Management Symbol.dispose", () => {
+    it('should support Explicit Resource Management Symbol.dispose', () => {
       const store = new DisposableStore();
       const teardown = vi.fn();
 

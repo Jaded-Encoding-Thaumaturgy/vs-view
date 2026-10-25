@@ -5,37 +5,39 @@ on:
     branches:
       - main
     paths:
-      - "**.py"
-      - "**/pyproject.toml"
-      - "uv.lock"
-      - "**.ts"
-      - "**.tsx"
-      - "**/package.json"
-      - "**/package-lock.json"
-      - "**/tsconfig.json"
-      - ".oxfmtrc.json"
-      - "**/.oxlintrc.json"
-      - ".github/workflows/ci-lint.yml"
+      - '**.py'
+      - '**/pyproject.toml'
+      - 'uv.lock'
+      - '**.ts'
+      - '**.tsx'
+      - '**/package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '**/tsconfig.json'
+      - 'vite.config.ts'
+      - '**/vite.config.ts'
+      - '.github/workflows/ci-lint.yml'
   pull_request:
     paths:
-      - "**.py"
-      - "**/pyproject.toml"
-      - "uv.lock"
-      - "**.ts"
-      - "**.tsx"
-      - "**/package.json"
-      - "**/package-lock.json"
-      - "**/tsconfig.json"
-      - ".oxfmtrc.json"
-      - "**/.oxlintrc.json"
-      - ".github/workflows/ci-lint.yml"
+      - '**.py'
+      - '**/pyproject.toml'
+      - 'uv.lock'
+      - '**.ts'
+      - '**.tsx'
+      - '**/package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '**/tsconfig.json'
+      - 'vite.config.ts'
+      - '**/vite.config.ts'
+      - '.github/workflows/ci-lint.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
-  UV_NO_SYNC: "1"
+  UV_NO_SYNC: '1'
 
 jobs:
   lint-python:
@@ -52,7 +54,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          python-version: "3.12"
+          python-version: '3.12'
 
       - name: Install dependencies
         run: uv sync --locked --all-extras --all-groups --all-packages
@@ -80,10 +82,6 @@ jobs:
     name: Lint TypeScript
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: src/workspaces/editor
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -91,28 +89,14 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: src/workspaces/editor/package-lock.json
+          cache: true
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run oxlint
-        id: oxlint
-        run: npm run lint
-
-      - name: Run oxfmt check
-        id: oxfmt
-        if: success() || (failure() && steps.oxlint.conclusion == 'failure')
-        run: npm run fmt:check
-
-      - name: Run tsc typecheck
-        if: success() || (failure() && (steps.oxlint.conclusion == 'failure' || steps.oxfmt.conclusion == 'failure'))
-        run: npx tsc --noEmit
+      - name: Run vp check
+        run: vp check
 
       - name: Post webhook for failure
         if: failure()

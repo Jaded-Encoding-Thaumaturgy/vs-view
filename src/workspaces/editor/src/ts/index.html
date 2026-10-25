@@ -7,12 +7,12 @@
     <script>
       (function () {
         const params = new URLSearchParams(window.location.search);
-        const windowColorRoleParam = params.get("windowColorRole");
-        const windowTextRoleParam = params.get("windowTextRole");
-        const accentColorParam = params.get("accentColor");
-        document.documentElement.style.setProperty("--initial-bg", windowColorRoleParam);
-        document.documentElement.style.setProperty("--initial-fg", windowTextRoleParam);
-        document.documentElement.style.setProperty("--initial-focusBorder", accentColorParam);
+        const windowColorRoleParam = params.get('windowColorRole');
+        const windowTextRoleParam = params.get('windowTextRole');
+        const accentColorParam = params.get('accentColor');
+        document.documentElement.style.setProperty('--initial-bg', windowColorRoleParam);
+        document.documentElement.style.setProperty('--initial-fg', windowTextRoleParam);
+        document.documentElement.style.setProperty('--initial-focusBorder', accentColorParam);
       })();
     </script>
     <link rel="stylesheet" href="./index.css" />

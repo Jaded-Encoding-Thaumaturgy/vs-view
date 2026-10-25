@@ -12,14 +12,10 @@
   "author": "Vardë <ichunjo.le.terrible@gmail.com>",
   "type": "module",
   "scripts": {
-    "build": "tsc && vite build",
-    "build-quiet": "tsc && vite build --logLevel warn",
-    "watch": "vite build --watch",
-    "lint": "oxlint src/ts/",
-    "fmt": "oxfmt --write \"**/*.{ts,mts,json,yml,html,css}\"",
-    "fmt:check": "oxfmt --check \"**/*.{ts,mts,json,yml,html,css}\"",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "build": "vp build",
+    "watch": "vp build --watch",
+    "test": "vp test run",
+    "test:watch": "vp test"
   },
   "dependencies": {
     "@codingame/monaco-vscode-api": "38.0.3",
@@ -27,6 +23,7 @@
     "@codingame/monaco-vscode-editor-api": "38.0.3",
     "@codingame/monaco-vscode-extension-api": "38.0.3",
     "@codingame/monaco-vscode-extensions-service-override": "38.0.3",
+    "@codingame/monaco-vscode-files-service-override": "38.0.3",
     "@codingame/monaco-vscode-languages-service-override": "38.0.3",
     "@codingame/monaco-vscode-log-service-override": "38.0.3",
     "@codingame/monaco-vscode-model-service-override": "38.0.3",
@@ -42,17 +39,13 @@
     "vscode-languageclient": "10.1.2"
   },
   "devDependencies": {
-    "@types/node": "26.6.5",
+    "@types/node": "catalog:",
     "@types/vscode": "1.140.0",
-    "@vitest/coverage-v8": "5.0.5",
+    "@vitest/coverage-v8": "catalog:",
     "happy-dom": "21.0.4",
-    "oxfmt": "0.74.0",
-    "oxlint": "1.89.0",
-    "typescript": "7.0.2",
-    "vite": "8.3.5",
-    "vitest": "5.0.5"
-  },
-  "overrides": {
-    "dompurify": "3.4.17"
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
   }
 }

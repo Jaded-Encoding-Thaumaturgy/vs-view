@@ -16,15 +16,15 @@ on:
       package:
         required: true
         type: string
-        default: "vspackrgb"
+        default: 'vspackrgb'
       package-dir:
         required: true
         type: string
-        default: "src/vspackrgb"
+        default: 'src/vspackrgb'
       python-version:
         required: false
         type: string
-        default: "3.14"
+        default: '3.14'
 
 jobs:
   wheels:

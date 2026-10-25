@@ -275,7 +275,7 @@ export const Result = {
   ): ResultAsync<T, E> {
     const promise = (async () => {
       try {
-        const value = typeof promiseOrFn === "function" ? await promiseOrFn() : await promiseOrFn;
+        const value = typeof promiseOrFn === 'function' ? await promiseOrFn() : await promiseOrFn;
         return Result.ok<T>(value);
       } catch (e) {
         const err = errorMapper

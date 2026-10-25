@@ -1,6 +1,6 @@
-import { Event } from "@codingame/monaco-vscode-api/vscode/vs/base/common/event";
-import { type IDisposable } from "@codingame/monaco-vscode-api/vscode/vs/base/common/lifecycle";
-import { isLinux } from "@codingame/monaco-vscode-api/vscode/vs/base/common/platform";
+import { Event } from '@codingame/monaco-vscode-api/vscode/vs/base/common/event';
+import { type IDisposable } from '@codingame/monaco-vscode-api/vscode/vs/base/common/lifecycle';
+import { isLinux } from '@codingame/monaco-vscode-api/vscode/vs/base/common/platform';
 import {
   FilePermission,
   FileSystemProviderCapabilities,
@@ -13,11 +13,11 @@ import {
   type IFileWriteOptions,
   type IStat,
   type IWatchOptions,
-} from "@codingame/monaco-vscode-api/vscode/vs/platform/files/common/files";
-import type * as monaco from "monaco-editor";
+} from '@codingame/monaco-vscode-api/vscode/vs/platform/files/common/files';
+import type * as monaco from 'monaco-editor';
 
-import { BridgeService } from "../bridge/python";
-import { findExistingModel } from "./models";
+import { BridgeService } from '../bridge/python';
+import { findExistingModel } from './models';
 
 export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWriteCapability {
   public readonly capabilities =
@@ -33,28 +33,28 @@ export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWr
     _opts: IFileOverwriteOptions,
   ): Promise<void> {
     throw FileSystemProviderError.create(
-      "Readonly file system",
+      'Readonly file system',
       FileSystemProviderErrorCode.NoPermissions,
     );
   }
 
   public async createDirectory(_resource: monaco.Uri): Promise<void> {
     throw FileSystemProviderError.create(
-      "Readonly file system",
+      'Readonly file system',
       FileSystemProviderErrorCode.NoPermissions,
     );
   }
 
   public async delete(_resource: monaco.Uri, _opts: IFileDeleteOptions): Promise<void> {
     throw FileSystemProviderError.create(
-      "Readonly file system",
+      'Readonly file system',
       FileSystemProviderErrorCode.NoPermissions,
     );
   }
 
   public async mkdir(_resource: monaco.Uri): Promise<void> {
     throw FileSystemProviderError.create(
-      "Readonly file system",
+      'Readonly file system',
       FileSystemProviderErrorCode.NoPermissions,
     );
   }
@@ -64,7 +64,7 @@ export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWr
   }
 
   public async readFile(resource: monaco.Uri): Promise<Uint8Array> {
-    if (resource.scheme !== "file") {
+    if (resource.scheme !== 'file') {
       throw FileSystemProviderError.create(
         `Unsupported scheme: ${resource.scheme}`,
         FileSystemProviderErrorCode.FileNotFound,
@@ -93,13 +93,13 @@ export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWr
     _opts: IFileOverwriteOptions,
   ): Promise<void> {
     throw FileSystemProviderError.create(
-      "Readonly file system",
+      'Readonly file system',
       FileSystemProviderErrorCode.NoPermissions,
     );
   }
 
   public async stat(resource: monaco.Uri): Promise<IStat> {
-    if (resource.scheme !== "file") {
+    if (resource.scheme !== 'file') {
       throw FileSystemProviderError.create(
         `Unsupported scheme: ${resource.scheme}`,
         FileSystemProviderErrorCode.FileNotFound,
@@ -144,7 +144,7 @@ export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWr
     _opts: IFileWriteOptions,
   ): Promise<void> {
     throw FileSystemProviderError.create(
-      "Readonly file system",
+      'Readonly file system',
       FileSystemProviderErrorCode.NoPermissions,
     );
   }

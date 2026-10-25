@@ -1,0 +1,21 @@
+{
+  "name": "vsview",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.15.0",
+      "onFail": "download"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "24.22.1",
+      "onFail": "download"
+    }
+  }
+}

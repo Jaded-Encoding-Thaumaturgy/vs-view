@@ -1,6 +1,6 @@
-import { isLinux } from "@codingame/monaco-vscode-api/vscode/vs/base/common/platform";
-import type * as monaco from "monaco-editor";
-import type * as vscode from "vscode";
+import { isLinux } from '@codingame/monaco-vscode-api/vscode/vs/base/common/platform';
+import type * as monaco from 'monaco-editor';
+import type * as vscode from 'vscode';
 
 export type UriLike =
   | monaco.Uri
@@ -11,7 +11,7 @@ export function isWindowsPathOrUri(pathOrUri: string): boolean {
   if (/^[a-zA-Z]:([\\/]|$)/.test(pathOrUri) || /^(\/\/|\\\\)/.test(pathOrUri)) {
     return true;
   }
-  const normalized = pathOrUri.replace(/%3a/gi, ":");
+  const normalized = pathOrUri.replace(/%3a/gi, ':');
   return /^[a-z0-9+.-]+:\/\/[^/]*\/[a-zA-Z]:([\\/]|$)/i.test(normalized);
 }
 
@@ -24,8 +24,8 @@ export function canonicalUriKey(
   uriOrString: UriLike | string,
   isCaseSensitive: boolean = isLinux,
 ): string {
-  const str = typeof uriOrString === "string" ? uriOrString : uriOrString.toString();
-  const normalized = str.replace(/%3a/gi, ":");
+  const str = typeof uriOrString === 'string' ? uriOrString : uriOrString.toString();
+  const normalized = str.replace(/%3a/gi, ':');
 
   const isCasePreserved = isCaseSensitive && !isWindowsPathOrUri(normalized);
 
@@ -56,7 +56,7 @@ export function isSameResource(
   if (a.scheme !== b.scheme) {
     return false;
   }
-  if (a.scheme === "file") {
+  if (a.scheme === 'file') {
     const isWindowsPath = isWindowsPathOrUri(a.fsPath) || isWindowsPathOrUri(b.fsPath);
     const caseSensitive = isWindowsPath ? false : isCaseSensitive;
     return caseSensitive

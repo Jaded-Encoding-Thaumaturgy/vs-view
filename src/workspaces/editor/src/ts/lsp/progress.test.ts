@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
-import type * as vscode from "vscode";
+import { describe, expect, it } from 'vite-plus/test';
+import type * as vscode from 'vscode';
 
-import { LspProgressTracker } from "./progress";
+import { LspProgressTracker } from './progress';
 
 function createMockCancellationToken(): {
   token: vscode.CancellationToken;
@@ -34,26 +34,26 @@ function createMockCancellationToken(): {
   };
 }
 
-describe("LspProgressTracker", () => {
-  it("tracks active progress tokens correctly", () => {
+describe('LspProgressTracker', () => {
+  it('tracks active progress tokens correctly', () => {
     using tracker = new LspProgressTracker();
 
     expect(tracker.hasActiveProgress).toBe(false);
 
-    tracker.begin("token1");
+    tracker.begin('token1');
     expect(tracker.hasActiveProgress).toBe(true);
 
-    tracker.begin("token2");
+    tracker.begin('token2');
     expect(tracker.hasActiveProgress).toBe(true);
 
-    tracker.end("token1");
+    tracker.end('token1');
     expect(tracker.hasActiveProgress).toBe(true);
 
-    tracker.end("token2");
+    tracker.end('token2');
     expect(tracker.hasActiveProgress).toBe(false);
   });
 
-  it("waitForProgressOrTimeout returns immediately if no progress is active", async () => {
+  it('waitForProgressOrTimeout returns immediately if no progress is active', async () => {
     using tracker = new LspProgressTracker();
     const { token } = createMockCancellationToken();
 
@@ -62,25 +62,25 @@ describe("LspProgressTracker", () => {
     expect(Date.now() - start).toBeLessThan(100);
   });
 
-  it("waitForProgressOrTimeout returns immediately if token is already cancelled", async () => {
+  it('waitForProgressOrTimeout returns immediately if token is already cancelled', async () => {
     using tracker = new LspProgressTracker();
     const { token, cancel } = createMockCancellationToken();
     cancel();
 
-    tracker.begin("token1");
+    tracker.begin('token1');
     const start = Date.now();
     await tracker.waitForProgressOrTimeout(token, 1000);
     expect(Date.now() - start).toBeLessThan(100);
   });
 
-  it("waitForProgressOrTimeout resolves when all tokens finish before timeout", async () => {
+  it('waitForProgressOrTimeout resolves when all tokens finish before timeout', async () => {
     using tracker = new LspProgressTracker();
     const { token } = createMockCancellationToken();
 
-    tracker.begin("tokenA");
+    tracker.begin('tokenA');
 
     setTimeout(() => {
-      tracker.end("tokenA");
+      tracker.end('tokenA');
     }, 20);
 
     const start = Date.now();
@@ -88,11 +88,11 @@ describe("LspProgressTracker", () => {
     expect(Date.now() - start).toBeLessThan(200);
   });
 
-  it("waitForProgressOrTimeout resolves upon cancellation", async () => {
+  it('waitForProgressOrTimeout resolves upon cancellation', async () => {
     using tracker = new LspProgressTracker();
     const { token, cancel } = createMockCancellationToken();
 
-    tracker.begin("tokenX");
+    tracker.begin('tokenX');
 
     setTimeout(() => {
       cancel();
@@ -103,22 +103,22 @@ describe("LspProgressTracker", () => {
     expect(Date.now() - start).toBeLessThan(200);
   });
 
-  it("waitForProgressOrTimeout resolves when timeout expires", async () => {
+  it('waitForProgressOrTimeout resolves when timeout expires', async () => {
     using tracker = new LspProgressTracker();
     const { token } = createMockCancellationToken();
 
-    tracker.begin("tokenLong");
+    tracker.begin('tokenLong');
 
     const start = Date.now();
     await tracker.waitForProgressOrTimeout(token, 30);
     expect(Date.now() - start).toBeGreaterThanOrEqual(25);
   });
 
-  it("dispose clears all active tokens and notifies pending waiters", async () => {
+  it('dispose clears all active tokens and notifies pending waiters', async () => {
     const tracker = new LspProgressTracker();
     const { token } = createMockCancellationToken();
 
-    tracker.begin("tokenPending");
+    tracker.begin('tokenPending');
 
     const waitPromise = tracker.waitForProgressOrTimeout(token, 2000);
 

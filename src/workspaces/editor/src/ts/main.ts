@@ -1,6 +1,6 @@
-import { MonacoManager } from "./manager";
-import { initVscodeServices } from "./services/vscode";
-import { renderAppLayout } from "./ui/layout";
+import { MonacoManager } from './manager';
+import { initVscodeServices } from './services/vscode';
+import { renderAppLayout } from './ui/layout';
 
 /**
  * Main entry point for the Monaco editor workspace.
@@ -9,11 +9,11 @@ async function main(): Promise<void> {
   renderAppLayout();
   const serviceResult = await initVscodeServices();
   if (!serviceResult.ok) {
-    console.error("VS Code standalone services failed to initialize.", serviceResult.error);
+    console.error('VS Code standalone services failed to initialize.', serviceResult.error);
     return;
   }
   const manager = new MonacoManager();
-  window.addEventListener("unload", () => manager.dispose(), { once: true });
+  window.addEventListener('unload', () => manager.dispose(), { once: true });
 }
 
 void main().catch(console.error);

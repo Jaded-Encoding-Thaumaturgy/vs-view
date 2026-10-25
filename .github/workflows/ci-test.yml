@@ -5,32 +5,34 @@ on:
     branches:
       - main
     paths:
-      - "src/**"
-      - "tests/**"
-      - "**/pyproject.toml"
-      - "**/package.json"
-      - "**/package-lock.json"
-      - "**/Cargo.toml"
-      - "**/Cargo.lock"
-      - ".github/workflows/ci-test.yml"
+      - 'src/**'
+      - 'tests/**'
+      - '**/pyproject.toml'
+      - '**/package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '.github/workflows/ci-test.yml'
   pull_request:
     paths:
-      - "src/**"
-      - "tests/**"
-      - "**/pyproject.toml"
-      - "**/package.json"
-      - "**/package-lock.json"
-      - "**/Cargo.toml"
-      - "**/Cargo.lock"
-      - ".github/workflows/ci-test.yml"
+      - 'src/**'
+      - 'tests/**'
+      - '**/pyproject.toml'
+      - '**/package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '.github/workflows/ci-test.yml'
   workflow_dispatch:
   workflow_call:
     inputs:
       package:
-        description: "Package to test"
+        description: 'Package to test'
         required: false
         type: string
-        default: ""
+        default: ''
 
 permissions:
   contents: read
@@ -41,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: ["ubuntu-26.04", "windows-latest", "macos-latest"]
+        runner: ['ubuntu-26.04', 'windows-latest', 'macos-latest']
 
     runs-on: ${{ matrix.runner }}
     steps:
@@ -73,10 +75,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13", "3.14", "3.15"]
+        python-version: ['3.12', '3.13', '3.14', '3.15']
 
     env:
-      UV_NO_SYNC: "1"
+      UV_NO_SYNC: '1'
 
     steps:
       - name: Checkout repository
@@ -159,9 +161,12 @@ jobs:
           filters: |
             vsview-editor:
               - 'src/workspaces/editor/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'vite.config.ts'
               - '.github/workflows/ci-test.yml'
 
-      - name: Set up Node.js
+      - name: Set up Vite+
         if: ${{
           inputs.package == 'vsview' ||
           inputs.package == 'vsview-editor' ||
@@ -169,23 +174,18 @@ jobs:
           steps.filter.outputs.vsview-editor == 'true'
           }}
         id: node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        uses: voidzero-dev/setup-vp@v1.22.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: src/workspaces/editor/package-lock.json
-
-      - name: Install dependencies
-        if: ${{ steps.node.conclusion == 'success' }}
-        run: npm ci
+          cache: true
 
       - name: Run vitest
         if: ${{ steps.node.conclusion == 'success' }}
-        run: npm test
+        run: vp test
 
       - name: Build frontend bundle
         if: ${{ steps.node.conclusion == 'success' }}
-        run: npm run build
+        run: vp -C src/workspaces/editor build
 
       - name: Post webhook for failure
         if: failure()

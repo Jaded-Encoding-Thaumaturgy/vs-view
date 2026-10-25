@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import type { Message } from "vscode-jsonrpc";
+import { describe, expect, it, vi } from 'vite-plus/test';
+import type { Message } from 'vscode-jsonrpc';
 
-import { WebSocketMessageReader, WebSocketMessageWriter } from "./connection";
+import { WebSocketMessageReader, WebSocketMessageWriter } from './connection';
 
 class MockWebSocket extends EventTarget {
   public readyState: number = WebSocket.CONNECTING;
@@ -9,38 +9,38 @@ class MockWebSocket extends EventTarget {
 
   public send(data: string): void {
     if (this.readyState !== WebSocket.OPEN) {
-      throw new Error("WebSocket is not open: readyState " + this.readyState);
+      throw new Error('WebSocket is not open: readyState ' + this.readyState);
     }
     this.sentData.push(data);
   }
 
   public close(): void {
     this.readyState = WebSocket.CLOSED;
-    this.dispatchEvent(new Event("close"));
+    this.dispatchEvent(new Event('close'));
   }
 
   public simulateOpen(): void {
     this.readyState = WebSocket.OPEN;
-    this.dispatchEvent(new Event("open"));
+    this.dispatchEvent(new Event('open'));
   }
 
   public simulateMessage(data: string): void {
-    this.dispatchEvent(new MessageEvent("message", { data }));
+    this.dispatchEvent(new MessageEvent('message', { data }));
   }
 
-  public simulateError(error: unknown = new Error("Simulated WS error")): void {
-    this.dispatchEvent(new ErrorEvent("error", { error }));
+  public simulateError(error: unknown = new Error('Simulated WS error')): void {
+    this.dispatchEvent(new ErrorEvent('error', { error }));
   }
 }
 
-describe("WebSocket JSON-RPC Connection", () => {
-  describe("WebSocketMessageReader", () => {
-    it("buffers messages received before listen() and drains them once listened", () => {
+describe('WebSocket JSON-RPC Connection', () => {
+  describe('WebSocketMessageReader', () => {
+    it('buffers messages received before listen() and drains them once listened', () => {
       const socket = new MockWebSocket() as unknown as WebSocket;
       const reader = new WebSocketMessageReader(socket);
 
-      const msg1 = { jsonrpc: "2.0", method: "test1" } as Message;
-      const msg2 = { jsonrpc: "2.0", method: "test2" } as Message;
+      const msg1 = { jsonrpc: '2.0', method: 'test1' } as Message;
+      const msg2 = { jsonrpc: '2.0', method: 'test2' } as Message;
 
       // Simulate messages arriving before listen is called
       (socket as unknown as MockWebSocket).simulateMessage(JSON.stringify(msg1));
@@ -55,34 +55,34 @@ describe("WebSocket JSON-RPC Connection", () => {
       reader.dispose();
     });
 
-    it("dispatches messages directly when listen() is already registered", () => {
+    it('dispatches messages directly when listen() is already registered', () => {
       const socket = new MockWebSocket() as unknown as WebSocket;
       const reader = new WebSocketMessageReader(socket);
 
       const received: Message[] = [];
       reader.listen((msg) => received.push(msg));
 
-      const msg = { jsonrpc: "2.0", id: 1, result: "ok" } as Message;
+      const msg = { jsonrpc: '2.0', id: 1, result: 'ok' } as Message;
       (socket as unknown as MockWebSocket).simulateMessage(JSON.stringify(msg));
 
       expect(received).toEqual([msg]);
       reader.dispose();
     });
 
-    it("fires error event when receiving malformed JSON", () => {
+    it('fires error event when receiving malformed JSON', () => {
       const socket = new MockWebSocket() as unknown as WebSocket;
       const reader = new WebSocketMessageReader(socket);
 
       const errors: unknown[] = [];
       reader.onError((err) => errors.push(err));
 
-      (socket as unknown as MockWebSocket).simulateMessage("NOT_VALID_JSON{");
+      (socket as unknown as MockWebSocket).simulateMessage('NOT_VALID_JSON{');
 
       expect(errors.length).toBe(1);
       reader.dispose();
     });
 
-    it("fires close event when websocket closes", () => {
+    it('fires close event when websocket closes', () => {
       const socket = new MockWebSocket() as unknown as WebSocket;
       const reader = new WebSocketMessageReader(socket);
 
@@ -96,13 +96,13 @@ describe("WebSocket JSON-RPC Connection", () => {
     });
   });
 
-  describe("WebSocketMessageWriter", () => {
-    it("sends message immediately if WebSocket is OPEN", async () => {
+  describe('WebSocketMessageWriter', () => {
+    it('sends message immediately if WebSocket is OPEN', async () => {
       const mockWs = new MockWebSocket();
       mockWs.readyState = WebSocket.OPEN;
 
       const writer = new WebSocketMessageWriter(mockWs as unknown as WebSocket);
-      const msg = { jsonrpc: "2.0", method: "initialized" } as Message;
+      const msg = { jsonrpc: '2.0', method: 'initialized' } as Message;
 
       await writer.write(msg);
 
@@ -111,12 +111,12 @@ describe("WebSocket JSON-RPC Connection", () => {
       writer.dispose();
     });
 
-    it("queues message and sends it when WebSocket finishes CONNECTING and opens", async () => {
+    it('queues message and sends it when WebSocket finishes CONNECTING and opens', async () => {
       const mockWs = new MockWebSocket();
       mockWs.readyState = WebSocket.CONNECTING;
 
       const writer = new WebSocketMessageWriter(mockWs as unknown as WebSocket);
-      const msg = { jsonrpc: "2.0", method: "queued" } as Message;
+      const msg = { jsonrpc: '2.0', method: 'queued' } as Message;
 
       const writePromise = writer.write(msg);
       expect(mockWs.sentData).toHaveLength(0);
@@ -129,12 +129,12 @@ describe("WebSocket JSON-RPC Connection", () => {
       writer.dispose();
     });
 
-    it("ignores write if socket is already closed or closing", async () => {
+    it('ignores write if socket is already closed or closing', async () => {
       const mockWs = new MockWebSocket();
       mockWs.readyState = WebSocket.CLOSED;
 
       const writer = new WebSocketMessageWriter(mockWs as unknown as WebSocket);
-      const msg = { jsonrpc: "2.0", method: "ignored" } as Message;
+      const msg = { jsonrpc: '2.0', method: 'ignored' } as Message;
 
       await writer.write(msg);
 
@@ -142,7 +142,7 @@ describe("WebSocket JSON-RPC Connection", () => {
       writer.dispose();
     });
 
-    it("fires close event when end() or socket close is triggered", () => {
+    it('fires close event when end() or socket close is triggered', () => {
       const mockWs = new MockWebSocket();
       const writer = new WebSocketMessageWriter(mockWs as unknown as WebSocket);
 

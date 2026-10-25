@@ -87,16 +87,16 @@ export interface TabInfo {
 }
 
 export interface EditorOptionsPayload {
-  "editor.fontSize"?: number;
-  "editor.fontFamily"?: string;
-  "editor.tabSize"?: number;
-  "editor.insertSpaces"?: boolean;
-  "editor.wordWrap"?: "off" | "on" | "wordWrapColumn" | "bounded";
-  "editor.lineNumbers"?: "on" | "off" | "relative" | "interval";
-  "editor.minimap.enabled"?: boolean;
-  "editor.renderWhitespace"?: "none" | "boundary" | "selection" | "trailing" | "all";
-  "editor.cursorBlinking"?: "blink" | "smooth" | "phase" | "expand" | "solid";
-  "editor.bracketPairColorization.enabled"?: boolean;
+  'editor.fontSize'?: number;
+  'editor.fontFamily'?: string;
+  'editor.tabSize'?: number;
+  'editor.insertSpaces'?: boolean;
+  'editor.wordWrap'?: 'off' | 'on' | 'wordWrapColumn' | 'bounded';
+  'editor.lineNumbers'?: 'on' | 'off' | 'relative' | 'interval';
+  'editor.minimap.enabled'?: boolean;
+  'editor.renderWhitespace'?: 'none' | 'boundary' | 'selection' | 'trailing' | 'all';
+  'editor.cursorBlinking'?: 'blink' | 'smooth' | 'phase' | 'expand' | 'solid';
+  'editor.bracketPairColorization.enabled'?: boolean;
 }
 
 /** Global window extensions for Qt and vsview. */

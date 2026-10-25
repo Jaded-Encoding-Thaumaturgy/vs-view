@@ -1,12 +1,12 @@
-import * as vscode from "vscode";
+import * as vscode from 'vscode';
 
-import type { EditorService } from "../editor/service";
-import type { LspService } from "../lsp/service";
-import type { FileStatResponse, PythonBridge, QWebSignal } from "../types";
-import { ConsolePanelService } from "../ui/console";
-import { DOM_IDS } from "../ui/constants";
-import { DisposableStore, toDisposable } from "../utils/disposables";
-import { Result, ResultAsync } from "../utils/result";
+import type { EditorService } from '../editor/service';
+import type { LspService } from '../lsp/service';
+import type { FileStatResponse, PythonBridge, QWebSignal } from '../types';
+import { ConsolePanelService } from '../ui/console';
+import { DOM_IDS } from '../ui/constants';
+import { DisposableStore, toDisposable } from '../utils/disposables';
+import { Result, ResultAsync } from '../utils/result';
 
 export class BridgeService implements vscode.Disposable {
   private static activeInstance: BridgeService | null = null;
@@ -24,7 +24,7 @@ export class BridgeService implements vscode.Disposable {
     const bridge = BridgeService.activeInstance?.bridge;
     return bridge
       ? Result.ok(bridge)
-      : Result.err(new Error("BridgeService instance is not available"));
+      : Result.err(new Error('BridgeService instance is not available'));
   }
 
   /** Read file content from host via Python bridge. */
@@ -75,10 +75,10 @@ export class BridgeService implements vscode.Disposable {
 
   public initBridge(): void {
     new window.QWebChannel(window.qt.webChannelTransport, (channel) => {
-      const pyBridge = channel.objects["bridge"] as PythonBridge;
+      const pyBridge = channel.objects['bridge'] as PythonBridge;
 
       if (!pyBridge) {
-        console.error("Bridge object not found in channel.");
+        console.error('Bridge object not found in channel.');
         this.removeLoadingOverlayWithDelay();
         return;
       }
@@ -128,13 +128,13 @@ export class BridgeService implements vscode.Disposable {
     );
     this.disposables.add(
       this.editorService.onDidChangeActiveTab((uri) => {
-        this.bridge?.onActiveTabChanged(uri || "");
+        this.bridge?.onActiveTabChanged(uri || '');
         this.flushContentChanged();
       }),
     );
     this.disposables.add(
       this.editorService.onDidChangeMainTab((uri) => {
-        this.bridge?.onMainTabChanged(uri || "");
+        this.bridge?.onMainTabChanged(uri || '');
         this.flushContentChanged();
       }),
     );
@@ -145,8 +145,8 @@ export class BridgeService implements vscode.Disposable {
 
   private removeLoadingOverlay(): void {
     const overlay = document.getElementById(DOM_IDS.LOADING_OVERLAY)!;
-    overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
-    overlay.classList.add("fade-out");
+    overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
+    overlay.classList.add('fade-out');
   }
 
   private removeLoadingOverlayWithDelay(delay: number = 200): void {
@@ -186,14 +186,14 @@ export class BridgeService implements vscode.Disposable {
 
   private connectSignals(pyBridge: PythonBridge): void {
     this.bindSignal(pyBridge.dispatchCommandSignal, (command: string, payloadJson: string) => {
-      if (typeof command === "string") {
+      if (typeof command === 'string') {
         let payload: Record<string, unknown> = {};
         if (payloadJson) {
           payload = Result.fromThrowable(() => JSON.parse(payloadJson)).match({
             ok: (val) =>
-              typeof val === "object" && val !== null ? (val as Record<string, unknown>) : {},
+              typeof val === 'object' && val !== null ? (val as Record<string, unknown>) : {},
             err: (e) => {
-              console.error("Error parsing the JSON", e);
+              console.error('Error parsing the JSON', e);
               return {};
             },
           });
@@ -205,35 +205,35 @@ export class BridgeService implements vscode.Disposable {
 
   private handleCommand(command: string, payload: Record<string, unknown>): void {
     const handlers: Record<string, (p: Record<string, unknown>) => void> = {
-      "editor.setValue": (p) => {
-        if (typeof p.text === "string") this.editorService.setValue(p.text);
+      'editor.setValue': (p) => {
+        if (typeof p.text === 'string') this.editorService.setValue(p.text);
       },
-      "editor.setTheme": (p) => {
-        if (typeof p.theme === "string") {
+      'editor.setTheme': (p) => {
+        if (typeof p.theme === 'string') {
           this.editorService.setTheme(p.theme);
           this.consoleService.setTheme(p.theme);
         }
       },
-      "console.append": (p) => {
-        if (typeof p.text === "string") this.consoleService.append(p.text);
+      'console.append': (p) => {
+        if (typeof p.text === 'string') this.consoleService.append(p.text);
       },
-      "console.toggle": (p) => {
-        const forceState = typeof p.state === "boolean" ? p.state : undefined;
+      'console.toggle': (p) => {
+        const forceState = typeof p.state === 'boolean' ? p.state : undefined;
         this.consoleService.toggle(forceState);
       },
-      "editor.toggleWordWrap": () => this.editorService.toggleWordWrap(),
-      "lsp.connect": (p) => {
+      'editor.toggleWordWrap': () => this.editorService.toggleWordWrap(),
+      'lsp.connect': (p) => {
         if (
-          typeof p.id === "string" &&
-          typeof p.name === "string" &&
-          typeof p.port === "number" &&
-          typeof p.language === "string"
+          typeof p.id === 'string' &&
+          typeof p.name === 'string' &&
+          typeof p.port === 'number' &&
+          typeof p.language === 'string'
         ) {
           const configurationSection =
-            typeof p.configurationSection === "string"
+            typeof p.configurationSection === 'string'
               ? p.configurationSection
               : Array.isArray(p.configurationSection) &&
-                  p.configurationSection.every((item) => typeof item === "string")
+                  p.configurationSection.every((item) => typeof item === 'string')
                 ? (p.configurationSection as string[])
                 : undefined;
 
@@ -241,7 +241,7 @@ export class BridgeService implements vscode.Disposable {
             ? (p.progressNotifications as Array<{ begin?: unknown; end?: unknown }>)
                 .filter(
                   (pair): pair is { begin: string; end: string } =>
-                    typeof pair?.begin === "string" && typeof pair?.end === "string",
+                    typeof pair?.begin === 'string' && typeof pair?.end === 'string',
                 )
                 .map((pair) => ({ begin: pair.begin, end: pair.end }))
             : undefined;
@@ -252,55 +252,55 @@ export class BridgeService implements vscode.Disposable {
             port: p.port,
             language: p.language,
             fileEventsPattern:
-              typeof p.fileEventsPattern === "string" ? p.fileEventsPattern : undefined,
+              typeof p.fileEventsPattern === 'string' ? p.fileEventsPattern : undefined,
             configurationSection,
             progressNotifications,
           });
         }
       },
-      "lsp.disconnect": (p) => {
-        const id = typeof p.id === "string" ? p.id : undefined;
+      'lsp.disconnect': (p) => {
+        const id = typeof p.id === 'string' ? p.id : undefined;
         void this.lspService.disconnect(id);
       },
-      "editor.updateLspSettings": (p) => {
-        if (typeof p.section === "string" && typeof p.settingsJson === "string") {
+      'editor.updateLspSettings': (p) => {
+        if (typeof p.section === 'string' && typeof p.settingsJson === 'string') {
           void this.applyLspSettings(p.section, p.settingsJson);
         }
       },
-      "editor.updateOptions": (p) => {
-        if (typeof p.optionsJson === "string") {
+      'editor.updateOptions': (p) => {
+        if (typeof p.optionsJson === 'string') {
           void Result.fromThrowable(() => JSON.parse(p.optionsJson as string)).tap((parsed) => {
-            if (parsed && typeof parsed === "object") {
+            if (parsed && typeof parsed === 'object') {
               this.editorService.updateOptionsFromMap(parsed as Record<string, unknown>);
             }
           });
         }
       },
-      "editor.openTab": (p) => {
-        if (typeof p.uri === "string" && typeof p.content === "string") {
-          const language = typeof p.language === "string" ? p.language : "python";
-          const isMain = typeof p.isMain === "boolean" ? p.isMain : false;
+      'editor.openTab': (p) => {
+        if (typeof p.uri === 'string' && typeof p.content === 'string') {
+          const language = typeof p.language === 'string' ? p.language : 'python';
+          const isMain = typeof p.isMain === 'boolean' ? p.isMain : false;
           this.editorService.openTab(p.uri, p.content, language, isMain);
         }
       },
-      "editor.selectTab": (p) => {
-        if (typeof p.uri === "string") this.editorService.selectTab(p.uri);
+      'editor.selectTab': (p) => {
+        if (typeof p.uri === 'string') this.editorService.selectTab(p.uri);
       },
-      "editor.tabSaved": (p) => {
-        if (typeof p.uri === "string") {
-          const oldUri = typeof p.oldUri === "string" ? p.oldUri : undefined;
+      'editor.tabSaved': (p) => {
+        if (typeof p.uri === 'string') {
+          const oldUri = typeof p.oldUri === 'string' ? p.oldUri : undefined;
           this.editorService.markTabSaved(p.uri, oldUri);
         }
       },
-      "editor.triggerSave": () => {
+      'editor.triggerSave': () => {
         this.flushContentChanged();
         this.editorService.requestSave();
       },
-      "editor.triggerSaveAs": () => {
+      'editor.triggerSaveAs': () => {
         this.flushContentChanged();
         this.editorService.requestSaveAs();
       },
-      "editor.triggerFormat": () => {
+      'editor.triggerFormat': () => {
         this.flushContentChanged();
         this.editorService.requestFormat();
       },

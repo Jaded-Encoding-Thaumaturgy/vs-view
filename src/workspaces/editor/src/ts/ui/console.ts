@@ -1,16 +1,16 @@
-import { FitAddon } from "@xterm/addon-fit";
-import { type ITheme, Terminal } from "@xterm/xterm";
-import * as vscode from "vscode";
+import { FitAddon } from '@xterm/addon-fit';
+import { type ITheme, Terminal } from '@xterm/xterm';
+import * as vscode from 'vscode';
 
-import { BridgeService } from "../bridge/python";
-import { DisposableStore, toDisposable } from "../utils/disposables";
-import { Result } from "../utils/result";
-import { getInitialTheme, getThemeDefinition } from "../utils/theme";
-import { DOM_IDS } from "./constants";
+import { BridgeService } from '../bridge/python';
+import { DisposableStore, toDisposable } from '../utils/disposables';
+import { Result } from '../utils/result';
+import { getInitialTheme, getThemeDefinition } from '../utils/theme';
+import { DOM_IDS } from './constants';
 
 type MenuItem =
   | { label: string; shortcut: string; action: () => void; disabled?: boolean }
-  | "separator";
+  | 'separator';
 
 export class ConsolePanelService implements vscode.Disposable {
   public readonly onDidToggle: vscode.Event<boolean>;
@@ -58,10 +58,10 @@ export class ConsolePanelService implements vscode.Disposable {
 
     this.disposables.add(
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration("workbench.colorTheme")) {
+        if (e.affectsConfiguration('workbench.colorTheme')) {
           const currentTheme = vscode.workspace
             .getConfiguration()
-            .get<string>("workbench.colorTheme")!;
+            .get<string>('workbench.colorTheme')!;
           this.setTheme(currentTheme);
         }
       }),
@@ -75,7 +75,7 @@ export class ConsolePanelService implements vscode.Disposable {
   }
 
   public append(text: string): void {
-    const formatted = text.replace(/\r?\n/g, "\r\n");
+    const formatted = text.replace(/\r?\n/g, '\r\n');
     this.terminal.write(formatted);
   }
 
@@ -93,12 +93,12 @@ export class ConsolePanelService implements vscode.Disposable {
     this.isVisible = forceState !== undefined ? forceState : !this.isVisible;
 
     if (this.isVisible) {
-      this.panelElement.classList.remove("hidden");
-      this.resizerElement.classList.remove("hidden");
+      this.panelElement.classList.remove('hidden');
+      this.resizerElement.classList.remove('hidden');
       requestAnimationFrame(() => this.fit());
     } else {
-      this.panelElement.classList.add("hidden");
-      this.resizerElement.classList.add("hidden");
+      this.panelElement.classList.add('hidden');
+      this.resizerElement.classList.add('hidden');
     }
 
     this.onDidToggleEmitter.fire(this.isVisible);
@@ -106,18 +106,18 @@ export class ConsolePanelService implements vscode.Disposable {
 
   public fit(): void {
     if (this.isVisible) {
-      void Result.fromThrowable(() => this.fitAddon.fit()).match({
+      Result.fromThrowable(() => this.fitAddon.fit()).match({
         ok: () => BridgeService.active.unwrapOr(undefined)?.onConsoleResized(this.terminal.cols),
-        err: (e) => console.warn("Failed to fit xterm viewport:", e),
+        err: (e) => console.warn('Failed to fit xterm viewport:', e),
       });
     }
   }
 
   public setTheme(theme: string): void {
-    void getThemeDefinition(theme).match({
+    getThemeDefinition(theme).match({
       ok: (def) => {
         document.documentElement.dataset.theme = def.id;
-        document.documentElement.setAttribute("data-theme-kind", def.kind.toString());
+        document.documentElement.setAttribute('data-theme-kind', def.kind.toString());
 
         if (this.themeTimer !== null) {
           clearTimeout(this.themeTimer);
@@ -147,24 +147,24 @@ export class ConsolePanelService implements vscode.Disposable {
     };
 
     // Font Options
-    const fontFamily = getProp("--console-font-family");
-    const fontSizeStr = getProp("--console-font-size");
+    const fontFamily = getProp('--console-font-family');
+    const fontSizeStr = getProp('--console-font-size');
     const fontSize = fontSizeStr ? Number.parseFloat(fontSizeStr) : undefined;
 
     if (fontFamily) this.terminal.options.fontFamily = fontFamily;
     if (fontSize && !Number.isNaN(fontSize)) this.terminal.options.fontSize = fontSize;
 
     const bg = getProp(
-      "--vscode-terminal-background",
-      "--vscode-panel-background",
-      "--vscode-editor-background",
+      '--vscode-terminal-background',
+      '--vscode-panel-background',
+      '--vscode-editor-background',
     );
-    const fg = getProp("--vscode-terminal-foreground", "--vscode-foreground");
+    const fg = getProp('--vscode-terminal-foreground', '--vscode-foreground');
     const cursor =
-      getProp("--vscode-terminalCursor-foreground", "--vscode-editorCursor-foreground") || fg;
+      getProp('--vscode-terminalCursor-foreground', '--vscode-editorCursor-foreground') || fg;
     const selectionBackground = getProp(
-      "--vscode-terminal-selectionBackground",
-      "--vscode-editor-selectionBackground",
+      '--vscode-terminal-selectionBackground',
+      '--vscode-editor-selectionBackground',
     );
 
     const themeObj: ITheme = {};
@@ -175,22 +175,22 @@ export class ConsolePanelService implements vscode.Disposable {
 
     // 16 Standard ANSI Colors Mapping
     const colorKeys = [
-      "black",
-      "red",
-      "green",
-      "yellow",
-      "blue",
-      "magenta",
-      "cyan",
-      "white",
-      "brightBlack",
-      "brightRed",
-      "brightGreen",
-      "brightYellow",
-      "brightBlue",
-      "brightMagenta",
-      "brightCyan",
-      "brightWhite",
+      'black',
+      'red',
+      'green',
+      'yellow',
+      'blue',
+      'magenta',
+      'cyan',
+      'white',
+      'brightBlack',
+      'brightRed',
+      'brightGreen',
+      'brightYellow',
+      'brightBlue',
+      'brightMagenta',
+      'brightCyan',
+      'brightWhite',
     ] as const;
 
     for (const key of colorKeys) {
@@ -227,19 +227,19 @@ export class ConsolePanelService implements vscode.Disposable {
 
   private setupUIListeners(): void {
     this.terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-      if (event.type === "keydown") {
+      if (event.type === 'keydown') {
         const isModifier = event.ctrlKey || event.metaKey;
         const key = event.key.toLowerCase();
 
-        if (isModifier && key === "c") {
+        if (isModifier && key === 'c') {
           if (this.terminal.hasSelection()) {
             this.copySelection();
             return false;
           }
-        } else if (isModifier && key === "a") {
+        } else if (isModifier && key === 'a') {
           this.terminal.selectAll();
           return false;
-        } else if (isModifier && key === "k") {
+        } else if (isModifier && key === 'k') {
           this.clear();
           return false;
         }
@@ -251,12 +251,12 @@ export class ConsolePanelService implements vscode.Disposable {
       if (e.button === 2) e.stopPropagation();
     };
 
-    this.xtermContainer.addEventListener("mousedown", handleMouseEvents, true);
-    this.xtermContainer.addEventListener("mouseup", handleMouseEvents, true);
+    this.xtermContainer.addEventListener('mousedown', handleMouseEvents, true);
+    this.xtermContainer.addEventListener('mouseup', handleMouseEvents, true);
     this.disposables.add(
       toDisposable(() => {
-        this.xtermContainer.removeEventListener("mousedown", handleMouseEvents, true);
-        this.xtermContainer.removeEventListener("mouseup", handleMouseEvents, true);
+        this.xtermContainer.removeEventListener('mousedown', handleMouseEvents, true);
+        this.xtermContainer.removeEventListener('mouseup', handleMouseEvents, true);
       }),
     );
 
@@ -266,16 +266,16 @@ export class ConsolePanelService implements vscode.Disposable {
       this.showContextMenu(e.clientX, e.clientY);
     };
 
-    this.xtermContainer.addEventListener("contextmenu", handleContextMenu);
+    this.xtermContainer.addEventListener('contextmenu', handleContextMenu);
     this.disposables.add(
-      toDisposable(() => this.xtermContainer.removeEventListener("contextmenu", handleContextMenu)),
+      toDisposable(() => this.xtermContainer.removeEventListener('contextmenu', handleContextMenu)),
     );
 
     const clearBtn = document.getElementById(DOM_IDS.CONSOLE_CLEAR_BTN);
     if (clearBtn) {
       const handleClear = () => this.clear();
-      clearBtn.addEventListener("click", handleClear);
-      this.disposables.add(toDisposable(() => clearBtn.removeEventListener("click", handleClear)));
+      clearBtn.addEventListener('click', handleClear);
+      this.disposables.add(toDisposable(() => clearBtn.removeEventListener('click', handleClear)));
     } else {
       console.warn("Can't find clearBtn");
     }
@@ -283,8 +283,8 @@ export class ConsolePanelService implements vscode.Disposable {
     const closeBtn = document.getElementById(DOM_IDS.CONSOLE_CLOSE_BTN);
     if (closeBtn) {
       const handleClose = () => this.toggle(false);
-      closeBtn.addEventListener("click", handleClose);
-      this.disposables.add(toDisposable(() => closeBtn.removeEventListener("click", handleClose)));
+      closeBtn.addEventListener('click', handleClose);
+      this.disposables.add(toDisposable(() => closeBtn.removeEventListener('click', handleClose)));
     } else {
       console.warn("Can't find closeBtn");
     }
@@ -292,10 +292,10 @@ export class ConsolePanelService implements vscode.Disposable {
     const cleanupDrag = () => {
       if (this.isDragging) {
         this.isDragging = false;
-        this.resizerElement.classList.remove("dragging");
-        document.body.style.userSelect = "";
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
+        this.resizerElement.classList.remove('dragging');
+        document.body.style.userSelect = '';
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
       }
     };
 
@@ -305,7 +305,7 @@ export class ConsolePanelService implements vscode.Disposable {
       const deltaY = this.startY - e.clientY;
       const newHeight = Math.max(80, Math.min(600, this.startHeight + deltaY));
 
-      document.documentElement.style.setProperty("--console-height", `${newHeight}px`);
+      document.documentElement.style.setProperty('--console-height', `${newHeight}px`);
 
       this.fit();
       this.onDidResizeEmitter.fire(newHeight);
@@ -323,74 +323,74 @@ export class ConsolePanelService implements vscode.Disposable {
 
       this.startHeight = this.panelElement.getBoundingClientRect().height;
 
-      this.resizerElement.classList.add("dragging");
-      document.body.style.userSelect = "none";
+      this.resizerElement.classList.add('dragging');
+      document.body.style.userSelect = 'none';
 
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
     };
 
-    this.resizerElement.addEventListener("mousedown", onMouseDown);
+    this.resizerElement.addEventListener('mousedown', onMouseDown);
     this.disposables.add(
       toDisposable(() => {
-        this.resizerElement.removeEventListener("mousedown", onMouseDown);
+        this.resizerElement.removeEventListener('mousedown', onMouseDown);
         cleanupDrag();
       }),
     );
 
     const onWindowResize = () => this.fit();
-    window.addEventListener("resize", onWindowResize);
-    this.disposables.add(toDisposable(() => window.removeEventListener("resize", onWindowResize)));
+    window.addEventListener('resize', onWindowResize);
+    this.disposables.add(toDisposable(() => window.removeEventListener('resize', onWindowResize)));
   }
 
   private showContextMenu(x: number, y: number): void {
     this.closeContextMenu();
 
     this.contextMenuDisposables = new DisposableStore();
-    const menu = document.createElement("div");
+    const menu = document.createElement('div');
     menu.id = DOM_IDS.CONSOLE_CONTEXT_MENU;
-    menu.className = "console-context-menu";
+    menu.className = 'console-context-menu';
 
     const items: MenuItem[] = [
       {
-        label: "Copy",
-        shortcut: "Ctrl+C",
+        label: 'Copy',
+        shortcut: 'Ctrl+C',
         action: () => this.copySelection(),
         disabled: !this.terminal.hasSelection(),
       },
-      "separator",
+      'separator',
       {
-        label: "Select All",
-        shortcut: "Ctrl+A",
+        label: 'Select All',
+        shortcut: 'Ctrl+A',
         action: () => this.terminal.selectAll(),
       },
-      "separator",
+      'separator',
       {
-        label: "Clear Console",
-        shortcut: "Ctrl+K",
+        label: 'Clear Console',
+        shortcut: 'Ctrl+K',
         action: () => this.clear(),
       },
     ];
 
     for (const item of items) {
-      if (item === "separator") {
-        const separator = document.createElement("div");
-        separator.className = "console-context-menu-separator";
+      if (item === 'separator') {
+        const separator = document.createElement('div');
+        separator.className = 'console-context-menu-separator';
         menu.appendChild(separator);
         continue;
       }
 
-      const itemEl = document.createElement("div");
-      itemEl.className = "console-context-menu-item";
-      if (item.disabled) itemEl.classList.add("disabled");
+      const itemEl = document.createElement('div');
+      itemEl.className = 'console-context-menu-item';
+      if (item.disabled) itemEl.classList.add('disabled');
 
-      const labelSpan = document.createElement("span");
-      labelSpan.className = "console-context-menu-label";
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'console-context-menu-label';
       labelSpan.textContent = item.label;
       itemEl.appendChild(labelSpan);
 
-      const shortcutSpan = document.createElement("span");
-      shortcutSpan.className = "console-context-menu-shortcut";
+      const shortcutSpan = document.createElement('span');
+      shortcutSpan.className = 'console-context-menu-shortcut';
       shortcutSpan.textContent = item.shortcut;
       itemEl.appendChild(shortcutSpan);
 
@@ -401,9 +401,9 @@ export class ConsolePanelService implements vscode.Disposable {
           item.action();
         }
       };
-      itemEl.addEventListener("click", onItemClick);
+      itemEl.addEventListener('click', onItemClick);
       this.contextMenuDisposables.add(
-        toDisposable(() => itemEl.removeEventListener("click", onItemClick)),
+        toDisposable(() => itemEl.removeEventListener('click', onItemClick)),
       );
 
       menu.appendChild(itemEl);
@@ -428,18 +428,18 @@ export class ConsolePanelService implements vscode.Disposable {
 
     const onWindowClick = () => this.closeContextMenu();
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === 'Escape') {
         this.closeContextMenu();
       }
     };
 
-    window.addEventListener("click", onWindowClick, { once: true });
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener('click', onWindowClick, { once: true });
+    window.addEventListener('keydown', onKeyDown);
 
     this.contextMenuDisposables.add(
       toDisposable(() => {
-        window.removeEventListener("click", onWindowClick);
-        window.removeEventListener("keydown", onKeyDown);
+        window.removeEventListener('click', onWindowClick);
+        window.removeEventListener('keydown', onKeyDown);
       }),
     );
   }

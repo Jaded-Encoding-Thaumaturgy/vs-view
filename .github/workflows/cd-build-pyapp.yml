@@ -5,18 +5,18 @@ on:
     branches:
       - main
     tags:
-      - "vsview/v*"
+      - 'vsview/v*'
     paths:
-      - "**.py"
-      - "**/pyproject.toml"
-      - ".github/workflows/cd-build-pyapp.yml"
+      - '**.py'
+      - '**/pyproject.toml'
+      - '.github/workflows/cd-build-pyapp.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
-  VSVIEW_PYTHON_VERSION: "3.14"
+  VSVIEW_PYTHON_VERSION: '3.14'
   UV_NO_SYNC: true
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        offline: ["offline", "online"]
+        offline: ['offline', 'online']
 
     steps:
       - name: Checkout repository
@@ -68,7 +68,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        offline: ["offline", "online"]
+        offline: ['offline', 'online']
 
     name: Linux x86_64 (${{ matrix.offline }})
     runs-on: ubuntu-24.04

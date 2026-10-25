@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 const { MockEventEmitter, mockWorkspaceConfig } = vi.hoisted(() => {
   class MockEventEmitter<T> {
@@ -33,7 +33,7 @@ const { MockEventEmitter, mockWorkspaceConfig } = vi.hoisted(() => {
   return { MockEventEmitter, mockWorkspaceConfig };
 });
 
-vi.mock("vscode", () => {
+vi.mock('vscode', () => {
   return {
     EventEmitter: MockEventEmitter,
     ConfigurationTarget: {
@@ -45,12 +45,12 @@ vi.mock("vscode", () => {
   };
 });
 
-import type { EditorService } from "../editor/service";
-import type { LspService } from "../lsp/service";
-import type { FileStatResponse, PythonBridge, QWebSignal } from "../types";
-import type { ConsolePanelService } from "../ui/console";
-import { DOM_IDS } from "../ui/constants";
-import { BridgeService } from "./python";
+import type { EditorService } from '../editor/service';
+import type { LspService } from '../lsp/service';
+import type { FileStatResponse, PythonBridge, QWebSignal } from '../types';
+import type { ConsolePanelService } from '../ui/console';
+import { DOM_IDS } from '../ui/constants';
+import { BridgeService } from './python';
 
 interface MockEditorServiceFixture {
   service: EditorService;
@@ -87,8 +87,8 @@ function createMockEditorService(): MockEditorServiceFixture {
   const saveAsRequestEmitter = new MockEventEmitter<void>();
   const formatRequestEmitter = new MockEventEmitter<void>();
 
-  const getValue = vi.fn().mockReturnValue("active content");
-  const getMainValue = vi.fn().mockReturnValue("main content");
+  const getValue = vi.fn().mockReturnValue('active content');
+  const getMainValue = vi.fn().mockReturnValue('main content');
   const setValue = vi.fn();
   const setTheme = vi.fn();
   const toggleWordWrap = vi.fn();
@@ -265,7 +265,7 @@ function createMockPythonBridge(): MockPythonBridgeFixture {
   };
 }
 
-describe("BridgeService", () => {
+describe('BridgeService', () => {
   let mockEditor: MockEditorServiceFixture;
   let mockConsole: MockConsoleServiceFixture;
   let mockLsp: MockLspServiceFixture;
@@ -278,8 +278,8 @@ describe("BridgeService", () => {
     mockLsp = createMockLspService();
     mockBridgeFixture = createMockPythonBridge();
 
-    document.body.innerHTML = "";
-    overlayEl = document.createElement("div");
+    document.body.innerHTML = '';
+    overlayEl = document.createElement('div');
     overlayEl.id = DOM_IDS.LOADING_OVERLAY;
     document.body.appendChild(overlayEl);
 
@@ -325,130 +325,130 @@ describe("BridgeService", () => {
     };
   }
 
-  describe("1. Command Bus Dispatching", () => {
-    it("dispatches editor.setValue", () => {
+  describe('1. Command Bus Dispatching', () => {
+    it('dispatches editor.setValue', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
-      mockBridgeFixture.emitCommand("editor.setValue", JSON.stringify({ text: "print('hello')" }));
+      mockBridgeFixture.emitCommand('editor.setValue', JSON.stringify({ text: "print('hello')" }));
       expect(mockEditor.setValue).toHaveBeenCalledWith("print('hello')");
 
       // Non-string payload ignored
       mockEditor.setValue.mockClear();
-      mockBridgeFixture.emitCommand("editor.setValue", JSON.stringify({ text: 123 }));
+      mockBridgeFixture.emitCommand('editor.setValue', JSON.stringify({ text: 123 }));
       expect(mockEditor.setValue).not.toHaveBeenCalled();
     });
 
-    it("dispatches editor.setTheme to both editor and console services", () => {
+    it('dispatches editor.setTheme to both editor and console services', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
-      mockBridgeFixture.emitCommand("editor.setTheme", JSON.stringify({ theme: "vs-dark" }));
-      expect(mockEditor.setTheme).toHaveBeenCalledWith("vs-dark");
-      expect(mockConsole.setTheme).toHaveBeenCalledWith("vs-dark");
+      mockBridgeFixture.emitCommand('editor.setTheme', JSON.stringify({ theme: 'vs-dark' }));
+      expect(mockEditor.setTheme).toHaveBeenCalledWith('vs-dark');
+      expect(mockConsole.setTheme).toHaveBeenCalledWith('vs-dark');
 
       // Non-string theme ignored
       mockEditor.setTheme.mockClear();
       mockConsole.setTheme.mockClear();
-      mockBridgeFixture.emitCommand("editor.setTheme", JSON.stringify({ theme: null }));
+      mockBridgeFixture.emitCommand('editor.setTheme', JSON.stringify({ theme: null }));
       expect(mockEditor.setTheme).not.toHaveBeenCalled();
       expect(mockConsole.setTheme).not.toHaveBeenCalled();
     });
 
-    it("dispatches editor.toggleWordWrap", () => {
+    it('dispatches editor.toggleWordWrap', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
-      mockBridgeFixture.emitCommand("editor.toggleWordWrap", "{}");
+      mockBridgeFixture.emitCommand('editor.toggleWordWrap', '{}');
       expect(mockEditor.toggleWordWrap).toHaveBeenCalledOnce();
     });
 
-    it("dispatches editor.openTab with explicit and default arguments", () => {
+    it('dispatches editor.openTab with explicit and default arguments', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
       mockBridgeFixture.emitCommand(
-        "editor.openTab",
+        'editor.openTab',
         JSON.stringify({
-          uri: "file:///script.py",
-          content: "import vapoursynth as vs",
-          language: "python",
+          uri: 'file:///script.py',
+          content: 'import vapoursynth as vs',
+          language: 'python',
           isMain: true,
         }),
       );
       expect(mockEditor.openTab).toHaveBeenCalledWith(
-        "file:///script.py",
-        "import vapoursynth as vs",
-        "python",
+        'file:///script.py',
+        'import vapoursynth as vs',
+        'python',
         true,
       );
 
       // Default values when optional params omitted
       mockEditor.openTab.mockClear();
       mockBridgeFixture.emitCommand(
-        "editor.openTab",
+        'editor.openTab',
         JSON.stringify({
-          uri: "file:///sub.py",
-          content: "x = 1",
+          uri: 'file:///sub.py',
+          content: 'x = 1',
         }),
       );
-      expect(mockEditor.openTab).toHaveBeenCalledWith("file:///sub.py", "x = 1", "python", false);
+      expect(mockEditor.openTab).toHaveBeenCalledWith('file:///sub.py', 'x = 1', 'python', false);
 
       // Missing required params ignored
       mockEditor.openTab.mockClear();
       mockBridgeFixture.emitCommand(
-        "editor.openTab",
-        JSON.stringify({ uri: "file:///script.py" }), // missing content
+        'editor.openTab',
+        JSON.stringify({ uri: 'file:///script.py' }), // missing content
       );
       expect(mockEditor.openTab).not.toHaveBeenCalled();
     });
 
-    it("dispatches editor.tabSaved with and without oldUri", () => {
+    it('dispatches editor.tabSaved with and without oldUri', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
       mockBridgeFixture.emitCommand(
-        "editor.tabSaved",
-        JSON.stringify({ uri: "file:///new.py", oldUri: "file:///old.py" }),
+        'editor.tabSaved',
+        JSON.stringify({ uri: 'file:///new.py', oldUri: 'file:///old.py' }),
       );
-      expect(mockEditor.markTabSaved).toHaveBeenCalledWith("file:///new.py", "file:///old.py");
+      expect(mockEditor.markTabSaved).toHaveBeenCalledWith('file:///new.py', 'file:///old.py');
 
       mockEditor.markTabSaved.mockClear();
-      mockBridgeFixture.emitCommand("editor.tabSaved", JSON.stringify({ uri: "file:///saved.py" }));
-      expect(mockEditor.markTabSaved).toHaveBeenCalledWith("file:///saved.py", undefined);
+      mockBridgeFixture.emitCommand('editor.tabSaved', JSON.stringify({ uri: 'file:///saved.py' }));
+      expect(mockEditor.markTabSaved).toHaveBeenCalledWith('file:///saved.py', undefined);
 
       // Missing uri ignored
       mockEditor.markTabSaved.mockClear();
       mockBridgeFixture.emitCommand(
-        "editor.tabSaved",
-        JSON.stringify({ oldUri: "file:///old.py" }),
+        'editor.tabSaved',
+        JSON.stringify({ oldUri: 'file:///old.py' }),
       );
       expect(mockEditor.markTabSaved).not.toHaveBeenCalled();
     });
 
-    it("dispatches editor.triggerSave, editor.triggerSaveAs, editor.triggerFormat with flush", () => {
+    it('dispatches editor.triggerSave, editor.triggerSaveAs, editor.triggerFormat with flush', () => {
       const { bridgeService, bridge } = setupInitializedBridgeService();
       using fixture = bridgeService;
       void fixture;
 
-      mockBridgeFixture.emitCommand("editor.triggerSave", "{}");
+      mockBridgeFixture.emitCommand('editor.triggerSave', '{}');
       expect(mockEditor.requestSave).toHaveBeenCalledOnce();
-      expect(bridge.onContentChanged).toHaveBeenCalledWith("active content");
+      expect(bridge.onContentChanged).toHaveBeenCalledWith('active content');
 
-      mockBridgeFixture.emitCommand("editor.triggerSaveAs", "{}");
+      mockBridgeFixture.emitCommand('editor.triggerSaveAs', '{}');
       expect(mockEditor.requestSaveAs).toHaveBeenCalledOnce();
 
-      mockBridgeFixture.emitCommand("editor.triggerFormat", "{}");
+      mockBridgeFixture.emitCommand('editor.triggerFormat', '{}');
       expect(mockEditor.requestFormat).toHaveBeenCalledOnce();
     });
 
-    it("dispatches editor.updateOptions", () => {
+    it('dispatches editor.updateOptions', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
-      const validOptions = { "editor.fontSize": 18, "editor.tabSize": 2 };
+      const validOptions = { 'editor.fontSize': 18, 'editor.tabSize': 2 };
       mockBridgeFixture.emitCommand(
-        "editor.updateOptions",
+        'editor.updateOptions',
         JSON.stringify({ optionsJson: JSON.stringify(validOptions) }),
       );
       expect(mockEditor.updateOptionsFromMap).toHaveBeenCalledWith(validOptions);
@@ -456,20 +456,20 @@ describe("BridgeService", () => {
       // Malformed optionsJson inside payload does not throw or call service
       mockEditor.updateOptionsFromMap.mockClear();
       mockBridgeFixture.emitCommand(
-        "editor.updateOptions",
-        JSON.stringify({ optionsJson: "{invalid_json" }),
+        'editor.updateOptions',
+        JSON.stringify({ optionsJson: '{invalid_json' }),
       );
       expect(mockEditor.updateOptionsFromMap).not.toHaveBeenCalled();
     });
 
-    it("dispatches editor.updateLspSettings and updates workspace configuration", async () => {
+    it('dispatches editor.updateLspSettings and updates workspace configuration', async () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
-      const settings = { "basedpyright.analysis.typeCheckingMode": "strict" };
+      const settings = { 'basedpyright.analysis.typeCheckingMode': 'strict' };
       mockBridgeFixture.emitCommand(
-        "editor.updateLspSettings",
-        JSON.stringify({ section: "basedpyright", settingsJson: JSON.stringify(settings) }),
+        'editor.updateLspSettings',
+        JSON.stringify({ section: 'basedpyright', settingsJson: JSON.stringify(settings) }),
       );
 
       // Allow async promise chain to run
@@ -477,20 +477,20 @@ describe("BridgeService", () => {
       await Promise.resolve();
 
       expect(mockWorkspaceConfig.update).toHaveBeenCalledWith(
-        "basedpyright.analysis.typeCheckingMode",
-        "strict",
+        'basedpyright.analysis.typeCheckingMode',
+        'strict',
         2,
       );
     });
 
-    it("handles corrupted settingsJson in editor.updateLspSettings without throwing", async () => {
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    it('handles corrupted settingsJson in editor.updateLspSettings without throwing', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
       mockBridgeFixture.emitCommand(
-        "editor.updateLspSettings",
-        JSON.stringify({ section: "basedpyright", settingsJson: "{bad_json" }),
+        'editor.updateLspSettings',
+        JSON.stringify({ section: 'basedpyright', settingsJson: '{bad_json' }),
       );
 
       await Promise.resolve();
@@ -500,147 +500,147 @@ describe("BridgeService", () => {
       );
     });
 
-    it("dispatches console commands (append, toggle, clear)", () => {
+    it('dispatches console commands (append, toggle, clear)', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
-      mockBridgeFixture.emitCommand("console.append", JSON.stringify({ text: "Hello\n" }));
-      expect(mockConsole.append).toHaveBeenCalledWith("Hello\n");
+      mockBridgeFixture.emitCommand('console.append', JSON.stringify({ text: 'Hello\n' }));
+      expect(mockConsole.append).toHaveBeenCalledWith('Hello\n');
 
-      mockBridgeFixture.emitCommand("console.toggle", JSON.stringify({ state: true }));
+      mockBridgeFixture.emitCommand('console.toggle', JSON.stringify({ state: true }));
       expect(mockConsole.toggle).toHaveBeenCalledWith(true);
 
-      mockBridgeFixture.emitCommand("console.toggle", JSON.stringify({ state: false }));
+      mockBridgeFixture.emitCommand('console.toggle', JSON.stringify({ state: false }));
       expect(mockConsole.toggle).toHaveBeenCalledWith(false);
 
-      mockBridgeFixture.emitCommand("console.toggle", "{}");
+      mockBridgeFixture.emitCommand('console.toggle', '{}');
       expect(mockConsole.toggle).toHaveBeenCalledWith(undefined);
     });
 
-    it("dispatches lsp.connect with complete and partial configs", () => {
+    it('dispatches lsp.connect with complete and partial configs', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
       mockBridgeFixture.emitCommand(
-        "lsp.connect",
+        'lsp.connect',
         JSON.stringify({
-          id: "basedpyright",
-          name: "Basedpyright Server",
+          id: 'basedpyright',
+          name: 'Basedpyright Server',
           port: 9000,
-          language: "python",
-          fileEventsPattern: "**/*.py",
-          configurationSection: "basedpyright",
-          progressNotifications: [{ begin: "startProgress", end: "endProgress" }],
+          language: 'python',
+          fileEventsPattern: '**/*.py',
+          configurationSection: 'basedpyright',
+          progressNotifications: [{ begin: 'startProgress', end: 'endProgress' }],
         }),
       );
 
       expect(mockLsp.connect).toHaveBeenCalledWith({
-        id: "basedpyright",
-        name: "Basedpyright Server",
+        id: 'basedpyright',
+        name: 'Basedpyright Server',
         port: 9000,
-        language: "python",
-        fileEventsPattern: "**/*.py",
-        configurationSection: "basedpyright",
-        progressNotifications: [{ begin: "startProgress", end: "endProgress" }],
+        language: 'python',
+        fileEventsPattern: '**/*.py',
+        configurationSection: 'basedpyright',
+        progressNotifications: [{ begin: 'startProgress', end: 'endProgress' }],
       });
 
       // With array configurationSection and missing optional fields
       mockLsp.connect.mockClear();
       mockBridgeFixture.emitCommand(
-        "lsp.connect",
+        'lsp.connect',
         JSON.stringify({
-          id: "pylsp",
-          name: "Python LSP",
+          id: 'pylsp',
+          name: 'Python LSP',
           port: 9001,
-          language: "python",
-          configurationSection: ["pylsp", "python"],
+          language: 'python',
+          configurationSection: ['pylsp', 'python'],
         }),
       );
 
       expect(mockLsp.connect).toHaveBeenCalledWith({
-        id: "pylsp",
-        name: "Python LSP",
+        id: 'pylsp',
+        name: 'Python LSP',
         port: 9001,
-        language: "python",
+        language: 'python',
         fileEventsPattern: undefined,
-        configurationSection: ["pylsp", "python"],
+        configurationSection: ['pylsp', 'python'],
         progressNotifications: undefined,
       });
 
       // Missing required port/id ignored
       mockLsp.connect.mockClear();
       mockBridgeFixture.emitCommand(
-        "lsp.connect",
-        JSON.stringify({ id: "pylsp", name: "Python LSP" }),
+        'lsp.connect',
+        JSON.stringify({ id: 'pylsp', name: 'Python LSP' }),
       );
       expect(mockLsp.connect).not.toHaveBeenCalled();
     });
 
-    it("dispatches lsp.disconnect with and without id", () => {
+    it('dispatches lsp.disconnect with and without id', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
-      mockBridgeFixture.emitCommand("lsp.disconnect", JSON.stringify({ id: "basedpyright" }));
-      expect(mockLsp.disconnect).toHaveBeenCalledWith("basedpyright");
+      mockBridgeFixture.emitCommand('lsp.disconnect', JSON.stringify({ id: 'basedpyright' }));
+      expect(mockLsp.disconnect).toHaveBeenCalledWith('basedpyright');
 
-      mockBridgeFixture.emitCommand("lsp.disconnect", "{}");
+      mockBridgeFixture.emitCommand('lsp.disconnect', '{}');
       expect(mockLsp.disconnect).toHaveBeenCalledWith(undefined);
     });
 
-    it("logs warning on unrecognized commands without throwing", () => {
-      const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    it('logs warning on unrecognized commands without throwing', () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
       expect(() => {
-        mockBridgeFixture.emitCommand("custom.nonexistentAction", "{}");
+        mockBridgeFixture.emitCommand('custom.nonexistentAction', '{}');
       }).not.toThrow();
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        "Unknown bridge command: custom.nonexistentAction",
+        'Unknown bridge command: custom.nonexistentAction',
       );
     });
   });
 
-  describe("2. JSON Payload Resilience", () => {
-    it("safely handles corrupted/invalid JSON strings without throwing", () => {
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  describe('2. JSON Payload Resilience', () => {
+    it('safely handles corrupted/invalid JSON strings without throwing', () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
       expect(() => {
-        mockBridgeFixture.emitCommand("editor.setValue", "{malformed JSON syntax");
+        mockBridgeFixture.emitCommand('editor.setValue', '{malformed JSON syntax');
       }).not.toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith("Error parsing the JSON", expect.any(Error));
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error parsing the JSON', expect.any(Error));
       // Handlers receive empty payload {} on syntax error
       expect(mockEditor.setValue).not.toHaveBeenCalled();
     });
 
-    it("safely handles non-object JSON payloads (e.g. primitives)", () => {
+    it('safely handles non-object JSON payloads (e.g. primitives)', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
       expect(() => {
-        mockBridgeFixture.emitCommand("editor.setValue", "123");
-        mockBridgeFixture.emitCommand("editor.setValue", '"just a string"');
-        mockBridgeFixture.emitCommand("editor.setValue", "null");
-        mockBridgeFixture.emitCommand("editor.setValue", "true");
+        mockBridgeFixture.emitCommand('editor.setValue', '123');
+        mockBridgeFixture.emitCommand('editor.setValue', '"just a string"');
+        mockBridgeFixture.emitCommand('editor.setValue', 'null');
+        mockBridgeFixture.emitCommand('editor.setValue', 'true');
       }).not.toThrow();
 
       expect(mockEditor.setValue).not.toHaveBeenCalled();
     });
 
-    it("safely ignores payloads with invalid property types", () => {
+    it('safely ignores payloads with invalid property types', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
       expect(() => {
         mockBridgeFixture.emitCommand(
-          "editor.openTab",
-          JSON.stringify({ uri: 123, content: ["not", "a", "string"] }),
+          'editor.openTab',
+          JSON.stringify({ uri: 123, content: ['not', 'a', 'string'] }),
         );
-        mockBridgeFixture.emitCommand("console.append", JSON.stringify({ text: { object: true } }));
+        mockBridgeFixture.emitCommand('console.append', JSON.stringify({ text: { object: true } }));
       }).not.toThrow();
 
       expect(mockEditor.openTab).not.toHaveBeenCalled();
@@ -648,17 +648,17 @@ describe("BridgeService", () => {
     });
   });
 
-  describe("3. Static Bridge Helpers", () => {
-    describe("BridgeService.active", () => {
-      it("returns err when BridgeService is not instantiated", () => {
+  describe('3. Static Bridge Helpers', () => {
+    describe('BridgeService.active', () => {
+      it('returns err when BridgeService is not instantiated', () => {
         const result = BridgeService.active;
         expect(result.ok).toBe(false);
         if (!result.ok) {
-          expect(result.error.message).toBe("BridgeService instance is not available");
+          expect(result.error.message).toBe('BridgeService instance is not available');
         }
       });
 
-      it("returns ok when BridgeService is initialized", () => {
+      it('returns ok when BridgeService is initialized', () => {
         using service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
         service.initBridge();
 
@@ -669,7 +669,7 @@ describe("BridgeService", () => {
         }
       });
 
-      it("returns err after BridgeService is disposed", () => {
+      it('returns err after BridgeService is disposed', () => {
         const service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
         service.initBridge();
         expect(BridgeService.active.ok).toBe(true);
@@ -678,13 +678,13 @@ describe("BridgeService", () => {
         const result = BridgeService.active;
         expect(result.ok).toBe(false);
         if (!result.ok) {
-          expect(result.error.message).toBe("BridgeService instance is not available");
+          expect(result.error.message).toBe('BridgeService instance is not available');
         }
       });
     });
 
-    describe("BridgeService.readFile", () => {
-      it("returns ok with file content on success", async () => {
+    describe('BridgeService.readFile', () => {
+      it('returns ok with file content on success', async () => {
         using service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
         service.initBridge();
 
@@ -694,16 +694,16 @@ describe("BridgeService", () => {
           },
         );
 
-        const res = await BridgeService.readFile("d:/test.py");
+        const res = await BridgeService.readFile('d:/test.py');
         expect(res.ok).toBe(true);
         expect(res.unwrap()).toBe("print('hello world')");
         expect(mockBridgeFixture.bridge.readFile).toHaveBeenCalledWith(
-          "d:/test.py",
+          'd:/test.py',
           expect.any(Function),
         );
       });
 
-      it("returns err when bridge callback returns null", async () => {
+      it('returns err when bridge callback returns null', async () => {
         using service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
         service.initBridge();
 
@@ -713,24 +713,24 @@ describe("BridgeService", () => {
           },
         );
 
-        const res = await BridgeService.readFile("d:/nonexistent.py");
+        const res = await BridgeService.readFile('d:/nonexistent.py');
         expect(res.ok).toBe(false);
         if (!res.ok) {
-          expect(res.error.message).toBe("Failed to read file: d:/nonexistent.py");
+          expect(res.error.message).toBe('Failed to read file: d:/nonexistent.py');
         }
       });
 
-      it("returns err when no active bridge instance exists", async () => {
-        const res = await BridgeService.readFile("d:/test.py");
+      it('returns err when no active bridge instance exists', async () => {
+        const res = await BridgeService.readFile('d:/test.py');
         expect(res.ok).toBe(false);
         if (!res.ok) {
-          expect(res.error.message).toBe("BridgeService instance is not available");
+          expect(res.error.message).toBe('BridgeService instance is not available');
         }
       });
     });
 
-    describe("BridgeService.statFile", () => {
-      it("returns ok with file metadata on success", async () => {
+    describe('BridgeService.statFile', () => {
+      it('returns ok with file metadata on success', async () => {
         using service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
         service.initBridge();
 
@@ -747,16 +747,16 @@ describe("BridgeService", () => {
           },
         );
 
-        const res = await BridgeService.statFile("d:/test.py");
+        const res = await BridgeService.statFile('d:/test.py');
         expect(res.ok).toBe(true);
         expect(res.unwrap()).toEqual(expectedStat);
         expect(mockBridgeFixture.bridge.statFile).toHaveBeenCalledWith(
-          "d:/test.py",
+          'd:/test.py',
           expect.any(Function),
         );
       });
 
-      it("returns err when stat callback returns null", async () => {
+      it('returns err when stat callback returns null', async () => {
         using service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
         service.initBridge();
 
@@ -766,24 +766,24 @@ describe("BridgeService", () => {
           },
         );
 
-        const res = await BridgeService.statFile("d:/missing.py");
+        const res = await BridgeService.statFile('d:/missing.py');
         expect(res.ok).toBe(false);
         if (!res.ok) {
-          expect(res.error.message).toBe("File not found: d:/missing.py");
+          expect(res.error.message).toBe('File not found: d:/missing.py');
         }
       });
 
-      it("returns err when no active bridge instance exists", async () => {
-        const res = await BridgeService.statFile("d:/test.py");
+      it('returns err when no active bridge instance exists', async () => {
+        const res = await BridgeService.statFile('d:/test.py');
         expect(res.ok).toBe(false);
         if (!res.ok) {
-          expect(res.error.message).toBe("BridgeService instance is not available");
+          expect(res.error.message).toBe('BridgeService instance is not available');
         }
       });
     });
   });
 
-  describe("4. Debounced Content Synchronization", () => {
+  describe('4. Debounced Content Synchronization', () => {
     beforeEach(() => {
       vi.useFakeTimers();
     });
@@ -792,7 +792,7 @@ describe("BridgeService", () => {
       vi.useRealTimers();
     });
 
-    it("batches rapid content changes with a 300ms debounce timer", () => {
+    it('batches rapid content changes with a 300ms debounce timer', () => {
       const { bridgeService, bridge } = setupInitializedBridgeService();
       using fixture = bridgeService;
       void fixture;
@@ -817,12 +817,12 @@ describe("BridgeService", () => {
       // Complete the remaining 100ms
       vi.advanceTimersByTime(100);
       expect(bridge.onContentChanged).toHaveBeenCalledOnce();
-      expect(bridge.onContentChanged).toHaveBeenCalledWith("active content");
+      expect(bridge.onContentChanged).toHaveBeenCalledWith('active content');
       expect(bridge.onMainContentChanged).toHaveBeenCalledOnce();
-      expect(bridge.onMainContentChanged).toHaveBeenCalledWith("main content");
+      expect(bridge.onMainContentChanged).toHaveBeenCalledWith('main content');
     });
 
-    it("flushes pending content changes immediately on tab changes", () => {
+    it('flushes pending content changes immediately on tab changes', () => {
       const { bridgeService, bridge } = setupInitializedBridgeService();
       using fixture = bridgeService;
       void fixture;
@@ -832,8 +832,8 @@ describe("BridgeService", () => {
       expect(bridge.onContentChanged).not.toHaveBeenCalled();
 
       // Active tab changed triggers immediate flush
-      mockEditor.emitActiveTabChange("file:///new_tab.py");
-      expect(bridge.onActiveTabChanged).toHaveBeenCalledWith("file:///new_tab.py");
+      mockEditor.emitActiveTabChange('file:///new_tab.py');
+      expect(bridge.onActiveTabChanged).toHaveBeenCalledWith('file:///new_tab.py');
       expect(bridge.onContentChanged).toHaveBeenCalledOnce();
       expect(bridge.onMainContentChanged).toHaveBeenCalledOnce();
 
@@ -842,7 +842,7 @@ describe("BridgeService", () => {
       expect(bridge.onContentChanged).toHaveBeenCalledOnce();
     });
 
-    it("flushes pending content changes immediately on main tab changes", () => {
+    it('flushes pending content changes immediately on main tab changes', () => {
       const { bridgeService, bridge } = setupInitializedBridgeService();
       using fixture = bridgeService;
       void fixture;
@@ -850,8 +850,8 @@ describe("BridgeService", () => {
       mockEditor.emitContentChange();
       expect(bridge.onContentChanged).not.toHaveBeenCalled();
 
-      mockEditor.emitMainTabChange("file:///main_script.py");
-      expect(bridge.onMainTabChanged).toHaveBeenCalledWith("file:///main_script.py");
+      mockEditor.emitMainTabChange('file:///main_script.py');
+      expect(bridge.onMainTabChanged).toHaveBeenCalledWith('file:///main_script.py');
       expect(bridge.onContentChanged).toHaveBeenCalledOnce();
       expect(bridge.onMainContentChanged).toHaveBeenCalledOnce();
 
@@ -860,7 +860,7 @@ describe("BridgeService", () => {
     });
   });
 
-  describe("5. Lifecycle & Disposal", () => {
+  describe('5. Lifecycle & Disposal', () => {
     beforeEach(() => {
       vi.useFakeTimers();
     });
@@ -869,7 +869,7 @@ describe("BridgeService", () => {
       vi.useRealTimers();
     });
 
-    it("initializes bridge, notifies ready, and removes loading overlay with delay", () => {
+    it('initializes bridge, notifies ready, and removes loading overlay with delay', () => {
       const bridgeService = new BridgeService(
         mockEditor.service,
         mockLsp.service,
@@ -886,18 +886,18 @@ describe("BridgeService", () => {
       expect(mockBridgeFixture.bridge.dispatchCommandSignal.connect).toHaveBeenCalledOnce();
 
       // Loading overlay removal delayed by 200ms
-      expect(overlayEl.classList.contains("fade-out")).toBe(false);
+      expect(overlayEl.classList.contains('fade-out')).toBe(false);
       vi.advanceTimersByTime(200);
-      expect(overlayEl.classList.contains("fade-out")).toBe(true);
+      expect(overlayEl.classList.contains('fade-out')).toBe(true);
 
-      overlayEl.dispatchEvent(new Event("transitionend"));
+      overlayEl.dispatchEvent(new Event('transitionend'));
       expect(document.getElementById(DOM_IDS.LOADING_OVERLAY)).toBeNull();
 
       bridgeService.dispose();
     });
 
-    it("handles missing bridge object in channel gracefully", () => {
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    it('handles missing bridge object in channel gracefully', () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       class MockEmptyQWebChannel {
         constructor(
@@ -924,17 +924,17 @@ describe("BridgeService", () => {
 
       bridgeService.initBridge();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith("Bridge object not found in channel.");
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Bridge object not found in channel.');
       expect(readySpy).not.toHaveBeenCalled();
 
       // Overlay still scheduled for removal
       vi.advanceTimersByTime(200);
-      expect(overlayEl.classList.contains("fade-out")).toBe(true);
+      expect(overlayEl.classList.contains('fade-out')).toBe(true);
 
       bridgeService.dispose();
     });
 
-    it("forwards editor service events to bridge slots", () => {
+    it('forwards editor service events to bridge slots', () => {
       const { bridgeService, bridge } = setupInitializedBridgeService();
       using fixture = bridgeService;
       void fixture;
@@ -952,7 +952,7 @@ describe("BridgeService", () => {
       expect(bridge.requestFormat).toHaveBeenCalledOnce();
     });
 
-    it("forwards console service toggle and resize events to editor layout", () => {
+    it('forwards console service toggle and resize events to editor layout', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
@@ -963,7 +963,7 @@ describe("BridgeService", () => {
       expect(mockEditor.layout).toHaveBeenCalledTimes(2);
     });
 
-    it("cleans up signal listeners and active timers on dispose()", () => {
+    it('cleans up signal listeners and active timers on dispose()', () => {
       const { bridgeService, bridge } = setupInitializedBridgeService();
 
       // Start debounce timer
@@ -986,7 +986,7 @@ describe("BridgeService", () => {
       expect(bridge.onCursorPositionChanged).not.toHaveBeenCalled();
     });
 
-    it("supports Symbol.dispose", () => {
+    it('supports Symbol.dispose', () => {
       const bridgeService = new BridgeService(
         mockEditor.service,
         mockLsp.service,

@@ -1,6 +1,6 @@
-import type * as vscode from "vscode";
+import type * as vscode from 'vscode';
 
-import { Result } from "./result";
+import { Result } from './result';
 
 /**
  * Utility function to create a `vscode.Disposable` from a teardown callback.
@@ -41,7 +41,7 @@ export class DisposableStore implements vscode.Disposable {
 
     while (this.disposables.length > 0) {
       void Result.fromThrowable(() => this.disposables.pop()?.dispose()).mapErr((e) =>
-        console.error("Error during resource disposal:", e),
+        console.error('Error during resource disposal:', e),
       );
     }
   }

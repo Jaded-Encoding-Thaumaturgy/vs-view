@@ -1,14 +1,14 @@
-import { describe, expect, it, test } from "vitest";
+import { describe, expect, it, test } from 'vite-plus/test';
 
-import { DEFAULT_THEMES, GITHUB_THEMES, SUPPORTED_THEMES, getThemeDefinition } from "./theme";
+import { DEFAULT_THEMES, GITHUB_THEMES, SUPPORTED_THEMES, getThemeDefinition } from './theme';
 
-describe("Theme utilities", () => {
-  describe("ThemeKind mapping and values", () => {
+describe('Theme utilities', () => {
+  describe('ThemeKind mapping and values', () => {
     test.each([
-      { kindValue: "dark", expectedUiTheme: "vs-dark" },
-      { kindValue: "light", expectedUiTheme: "vs" },
-      { kindValue: "hc-black", expectedUiTheme: "hc-black" },
-      { kindValue: "hc-light", expectedUiTheme: "hc-light" },
+      { kindValue: 'dark', expectedUiTheme: 'vs-dark' },
+      { kindValue: 'light', expectedUiTheme: 'vs' },
+      { kindValue: 'hc-black', expectedUiTheme: 'hc-black' },
+      { kindValue: 'hc-light', expectedUiTheme: 'hc-light' },
     ] as const)(
       "asserts exact ThemeKind '$kindValue' maps to uiTheme '$expectedUiTheme'",
       ({ kindValue, expectedUiTheme }) => {
@@ -26,7 +26,7 @@ describe("Theme utilities", () => {
     );
   });
 
-  describe("getThemeDefinition with DEFAULT_THEMES", () => {
+  describe('getThemeDefinition with DEFAULT_THEMES', () => {
     test.each(Object.entries(DEFAULT_THEMES))(
       "resolves default theme '%s'",
       (themeName, expectedDef) => {
@@ -42,7 +42,7 @@ describe("Theme utilities", () => {
     );
   });
 
-  describe("getThemeDefinition with GITHUB_THEMES", () => {
+  describe('getThemeDefinition with GITHUB_THEMES', () => {
     test.each(GITHUB_THEMES)("resolves GitHub theme '$id'", (themeConfig) => {
       const result = getThemeDefinition(themeConfig.id);
       expect(result.ok).toBe(true);
@@ -55,16 +55,16 @@ describe("Theme utilities", () => {
     });
   });
 
-  describe("getThemeDefinition with invalid or unknown themes", () => {
+  describe('getThemeDefinition with invalid or unknown themes', () => {
     test.each([
-      "UnsupportedTheme",
-      "Monokai",
-      "Solarized Dark",
-      "One Dark Pro",
-      "github-dark",
-      "dark",
-      "",
-      "   ",
+      'UnsupportedTheme',
+      'Monokai',
+      'Solarized Dark',
+      'One Dark Pro',
+      'github-dark',
+      'dark',
+      '',
+      '   ',
     ])("returns Result.err for unknown theme '%s'", (themeName) => {
       const result = getThemeDefinition(themeName);
       expect(result.ok).toBe(false);
@@ -76,15 +76,15 @@ describe("Theme utilities", () => {
     });
   });
 
-  describe("SUPPORTED_THEMES integrity", () => {
-    it("contains all entries from DEFAULT_THEMES", () => {
+  describe('SUPPORTED_THEMES integrity', () => {
+    it('contains all entries from DEFAULT_THEMES', () => {
       for (const [key, def] of Object.entries(DEFAULT_THEMES)) {
         expect(SUPPORTED_THEMES).toHaveProperty(key);
         expect(SUPPORTED_THEMES[key]).toEqual(def);
       }
     });
 
-    it("contains all entries from GITHUB_THEMES", () => {
+    it('contains all entries from GITHUB_THEMES', () => {
       for (const theme of GITHUB_THEMES) {
         expect(SUPPORTED_THEMES).toHaveProperty(theme.id);
         expect(SUPPORTED_THEMES[theme.id]).toEqual({
@@ -94,7 +94,7 @@ describe("Theme utilities", () => {
       }
     });
 
-    it("has no duplicates or missing entries across DEFAULT_THEMES and GITHUB_THEMES", () => {
+    it('has no duplicates or missing entries across DEFAULT_THEMES and GITHUB_THEMES', () => {
       const defaultKeys = Object.keys(DEFAULT_THEMES);
       const githubKeys = GITHUB_THEMES.map((theme) => theme.id);
       const supportedKeys = Object.keys(SUPPORTED_THEMES);

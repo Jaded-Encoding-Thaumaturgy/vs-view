@@ -1,4 +1,4 @@
-import type * as vscode from "vscode";
+import type * as vscode from 'vscode';
 import {
   AbstractMessageReader,
   AbstractMessageWriter,
@@ -6,9 +6,9 @@ import {
   type Message,
   type MessageReader,
   type MessageWriter,
-} from "vscode-jsonrpc";
+} from 'vscode-jsonrpc';
 
-import { Result } from "../utils/result";
+import { Result } from '../utils/result';
 
 /**
  * MessageReader for WebSocket integration with VS Code LanguageClient.
@@ -26,7 +26,7 @@ export class WebSocketMessageReader
     if (this.isDisposed) return;
     const data = event.data;
 
-    if (typeof data === "string") {
+    if (typeof data === 'string') {
       Result.fromThrowable(() => JSON.parse(data) as Message).match({
         ok: (msg) => (this.callback ? this.callback(msg) : this.messageBuffer.push(msg)),
         err: (e) => this.fireError(e instanceof Error ? e : new Error(String(e))),
@@ -48,9 +48,9 @@ export class WebSocketMessageReader
 
   constructor(private socket: WebSocket) {
     super();
-    this.socket.addEventListener("message", this.handleMessage);
-    this.socket.addEventListener("close", this.handleClose);
-    this.socket.addEventListener("error", this.handleError);
+    this.socket.addEventListener('message', this.handleMessage);
+    this.socket.addEventListener('close', this.handleClose);
+    this.socket.addEventListener('error', this.handleError);
   }
 
   public override listen(callback: DataCallback): vscode.Disposable {
@@ -81,9 +81,9 @@ export class WebSocketMessageReader
     this.isDisposed = true;
     this.callback = null;
     this.messageBuffer = [];
-    this.socket.removeEventListener("message", this.handleMessage);
-    this.socket.removeEventListener("close", this.handleClose);
-    this.socket.removeEventListener("error", this.handleError);
+    this.socket.removeEventListener('message', this.handleMessage);
+    this.socket.removeEventListener('close', this.handleClose);
+    this.socket.removeEventListener('error', this.handleError);
     super.dispose();
   }
 
@@ -116,8 +116,8 @@ export class WebSocketMessageWriter
 
   constructor(private socket: WebSocket) {
     super();
-    this.socket.addEventListener("close", this.handleClose);
-    this.socket.addEventListener("error", this.handleError);
+    this.socket.addEventListener('close', this.handleClose);
+    this.socket.addEventListener('error', this.handleError);
   }
 
   public write(msg: Message): Promise<void> {
@@ -155,13 +155,13 @@ export class WebSocketMessageWriter
         resolve();
       };
       const cleanup = () => {
-        this.socket.removeEventListener("open", onOpen);
-        this.socket.removeEventListener("error", onError);
-        this.socket.removeEventListener("close", onClose);
+        this.socket.removeEventListener('open', onOpen);
+        this.socket.removeEventListener('error', onError);
+        this.socket.removeEventListener('close', onClose);
       };
-      this.socket.addEventListener("open", onOpen);
-      this.socket.addEventListener("error", onError);
-      this.socket.addEventListener("close", onClose);
+      this.socket.addEventListener('open', onOpen);
+      this.socket.addEventListener('error', onError);
+      this.socket.addEventListener('close', onClose);
     });
   }
 
@@ -175,8 +175,8 @@ export class WebSocketMessageWriter
   public override dispose(): void {
     if (this.isDisposed) return;
     this.isDisposed = true;
-    this.socket.removeEventListener("close", this.handleClose);
-    this.socket.removeEventListener("error", this.handleError);
+    this.socket.removeEventListener('close', this.handleClose);
+    this.socket.removeEventListener('error', this.handleError);
     super.dispose();
   }
 

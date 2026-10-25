@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import * as vscode from 'vscode';
 import {
   BaseLanguageClient,
   CloseAction,
@@ -6,13 +6,13 @@ import {
   type LanguageClientOptions,
   type MessageTransports,
   State,
-} from "vscode-languageclient/browser";
+} from 'vscode-languageclient/browser';
 
-import { DisposableStore } from "../utils/disposables";
-import { Result } from "../utils/result";
-import { canonicalUriKey } from "../utils/uri";
-import { WebSocketMessageReader, WebSocketMessageWriter } from "./connection";
-import { type LspProgressNotification, LspProgressTracker } from "./progress";
+import { DisposableStore } from '../utils/disposables';
+import { Result } from '../utils/result';
+import { canonicalUriKey } from '../utils/uri';
+import { WebSocketMessageReader, WebSocketMessageWriter } from './connection';
+import { type LspProgressNotification, LspProgressTracker } from './progress';
 
 export class WebSocketLanguageClient extends BaseLanguageClient {
   constructor(
@@ -137,7 +137,7 @@ export class LspService implements vscode.Disposable {
       const writer = new WebSocketMessageWriter(webSocket);
       const sessionDisposables = new DisposableStore();
 
-      const synchronizeOptions: NonNullable<LanguageClientOptions["synchronize"]> = {};
+      const synchronizeOptions: NonNullable<LanguageClientOptions['synchronize']> = {};
       if (config.fileEventsPattern) {
         const watcher = vscode.workspace.createFileSystemWatcher(config.fileEventsPattern);
         sessionDisposables.add(watcher);
@@ -194,8 +194,8 @@ export class LspService implements vscode.Disposable {
               }
               await Promise.all(
                 locs.map(async (loc) => {
-                  const targetUri = "uri" in loc ? loc.uri : loc.targetUri;
-                  if (targetUri.scheme === "file") {
+                  const targetUri = 'uri' in loc ? loc.uri : loc.targetUri;
+                  if (targetUri.scheme === 'file') {
                     const loadRes = await Result.fromPromise(
                       vscode.workspace.openTextDocument(targetUri),
                     );
@@ -248,29 +248,29 @@ export class LspService implements vscode.Disposable {
           vscode.workspace.onDidChangeConfiguration((e) => {
             const isAffected = sections.some((sec) => e.affectsConfiguration(sec));
             if (isAffected && client.state === State.Running) {
-              void client.sendNotification("workspace/didChangeConfiguration", { settings: null });
+              void client.sendNotification('workspace/didChangeConfiguration', { settings: null });
             }
           }),
         );
       }
 
       sessionDisposables.add(
-        client.onNotification("$/progress", (params: LspProgressNotification) => {
+        client.onNotification('$/progress', (params: LspProgressNotification) => {
           const kind = params?.value?.kind;
           const token = params?.token;
 
           if (token !== undefined) {
-            if (kind === "begin") {
+            if (kind === 'begin') {
               progressTracker.begin(token);
-            } else if (kind === "end") {
+            } else if (kind === 'end') {
               progressTracker.end(token);
             }
           }
 
           if (window.ENV?.VSVIEW_DEBUG) {
-            if (kind === "begin") {
-              console.debug(`[LSP ${config.id}] ${params.value?.title || "Analysis started"}`);
-            } else if (kind === "end") {
+            if (kind === 'begin') {
+              console.debug(`[LSP ${config.id}] ${params.value?.title || 'Analysis started'}`);
+            } else if (kind === 'end') {
               console.debug(`[LSP ${config.id}] Analysis complete.`);
             }
           }

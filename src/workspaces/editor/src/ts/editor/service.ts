@@ -1,17 +1,17 @@
-import { updateUserConfiguration } from "@codingame/monaco-vscode-configuration-service-override";
-import * as monaco from "monaco-editor";
-import * as vscode from "vscode";
+import { updateUserConfiguration } from '@codingame/monaco-vscode-configuration-service-override';
+import * as monaco from 'monaco-editor';
+import * as vscode from 'vscode';
 
-import { BridgeService } from "../bridge/python";
-import { findExistingModel } from "../services/models";
-import type { EditorOptionsPayload, TabInfo } from "../types";
-import { DOM_IDS } from "../ui/constants";
-import { TabBarView } from "../ui/tabbar";
-import { DisposableStore } from "../utils/disposables";
-import { Result } from "../utils/result";
-import { getInitialTheme, getThemeDefinition } from "../utils/theme";
-import { isSameResource } from "../utils/uri";
-import * as config from "./config";
+import { BridgeService } from '../bridge/python';
+import { findExistingModel } from '../services/models';
+import type { EditorOptionsPayload, TabInfo } from '../types';
+import { DOM_IDS } from '../ui/constants';
+import { TabBarView } from '../ui/tabbar';
+import { DisposableStore } from '../utils/disposables';
+import { Result } from '../utils/result';
+import { getInitialTheme, getThemeDefinition } from '../utils/theme';
+import { isSameResource } from '../utils/uri';
+import * as config from './config';
 
 interface TabRecord {
   uri: monaco.Uri;
@@ -49,11 +49,11 @@ export class EditorService implements vscode.Disposable {
     this.tabBarView = this.disposables.add(
       new TabBarView({
         onSelectTab: (uri) =>
-          this.selectTab(uri).mapErr((err) => console.error("Failed to select tab:", err)),
+          this.selectTab(uri).mapErr((err) => console.error('Failed to select tab:', err)),
         onCloseTab: (uri) =>
-          this.closeTab(uri).mapErr((err) => console.error("Failed to close tab:", err)),
+          this.closeTab(uri).mapErr((err) => console.error('Failed to close tab:', err)),
         onSetMainTab: (uri) =>
-          this.setMainTab(uri).mapErr((err) => console.error("Failed to set main tab:", err)),
+          this.setMainTab(uri).mapErr((err) => console.error('Failed to set main tab:', err)),
       }),
     );
 
@@ -71,8 +71,8 @@ export class EditorService implements vscode.Disposable {
 
     this.disposables.add(
       this.editor.addAction({
-        id: "vsview.save",
-        label: "Save Script",
+        id: 'vsview.save',
+        label: 'Save Script',
         run: () => {
           this.saveRequestEmitter.fire();
         },
@@ -81,16 +81,16 @@ export class EditorService implements vscode.Disposable {
 
     this.disposables.add(
       this.editor.addAction({
-        id: "vsview.generateStubs",
-        label: "VapourSynth: Generate Stubs",
+        id: 'vsview.generateStubs',
+        label: 'VapourSynth: Generate Stubs',
         run: () => BridgeService.active.unwrapOr(undefined)?.requestGenerateStubs(),
       }),
     );
 
     this.disposables.add(
       this.editor.addAction({
-        id: "basedpyright.restartserver",
-        label: "Basedpyright: Restart Language Server",
+        id: 'basedpyright.restartserver',
+        label: 'Basedpyright: Restart Language Server',
         run: () => BridgeService.active.unwrapOr(undefined)?.requestRestartLsp(),
       }),
     );
@@ -119,14 +119,14 @@ export class EditorService implements vscode.Disposable {
             });
           }
 
-          if (resource.scheme === "file") {
+          if (resource.scheme === 'file') {
             return (await BridgeService.readFile(resource.fsPath))
               .andThen((content) =>
                 this.openTab(
                   resourceStr,
                   content,
-                  resource.path.endsWith(".py") || resource.path.endsWith(".pyi")
-                    ? "python"
+                  resource.path.endsWith('.py') || resource.path.endsWith('.pyi')
+                    ? 'python'
                     : undefined,
                   false,
                 ),
@@ -145,8 +145,8 @@ export class EditorService implements vscode.Disposable {
     );
 
     // Initialize default main tab
-    const defaultMainUri = "file:///workspace/script.py";
-    this.openTab(defaultMainUri, "", "python", true);
+    const defaultMainUri = 'file:///workspace/script.py';
+    this.openTab(defaultMainUri, '', 'python', true);
   }
 
   /** Get the text content of the active tab. */
@@ -173,7 +173,7 @@ export class EditorService implements vscode.Disposable {
     getThemeDefinition(theme).match({
       ok: (def) => {
         document.documentElement.dataset.theme = def.id;
-        document.documentElement.setAttribute("data-theme-kind", def.kind.toString());
+        document.documentElement.setAttribute('data-theme-kind', def.kind.toString());
         monaco.editor.setTheme(def.id);
         this.persistThemeConfig(def.id).catch((err) =>
           console.error(`Failed to set theme: ${err}`),
@@ -193,7 +193,7 @@ export class EditorService implements vscode.Disposable {
 
   public toggleWordWrap(): void {
     const current = this.editor.getOption(monaco.editor.EditorOption.wordWrap);
-    const next = current === "on" ? "off" : "on";
+    const next = current === 'on' ? 'off' : 'on';
     this.editor.updateOptions({ wordWrap: next });
   }
 
@@ -203,60 +203,60 @@ export class EditorService implements vscode.Disposable {
 
     for (const [key, value] of Object.entries(rawMap)) {
       switch (key) {
-        case "editor.fontSize":
-          if (typeof value === "number") opts.fontSize = value;
+        case 'editor.fontSize':
+          if (typeof value === 'number') opts.fontSize = value;
           break;
-        case "editor.fontFamily":
-          if (typeof value === "string") opts.fontFamily = value;
+        case 'editor.fontFamily':
+          if (typeof value === 'string') opts.fontFamily = value;
           break;
-        case "editor.tabSize":
-          if (typeof value === "number") modelOpts.tabSize = value;
+        case 'editor.tabSize':
+          if (typeof value === 'number') modelOpts.tabSize = value;
           break;
-        case "editor.insertSpaces":
-          if (typeof value === "boolean") modelOpts.insertSpaces = value;
+        case 'editor.insertSpaces':
+          if (typeof value === 'boolean') modelOpts.insertSpaces = value;
           break;
-        case "editor.wordWrap":
+        case 'editor.wordWrap':
           if (
-            value === "off" ||
-            value === "on" ||
-            value === "wordWrapColumn" ||
-            value === "bounded"
+            value === 'off' ||
+            value === 'on' ||
+            value === 'wordWrapColumn' ||
+            value === 'bounded'
           ) {
             opts.wordWrap = value;
           }
           break;
-        case "editor.lineNumbers":
-          if (value === "on" || value === "off" || value === "relative" || value === "interval") {
+        case 'editor.lineNumbers':
+          if (value === 'on' || value === 'off' || value === 'relative' || value === 'interval') {
             opts.lineNumbers = value;
           }
           break;
-        case "editor.minimap.enabled":
-          if (typeof value === "boolean") opts.minimap = { enabled: value };
+        case 'editor.minimap.enabled':
+          if (typeof value === 'boolean') opts.minimap = { enabled: value };
           break;
-        case "editor.renderWhitespace":
+        case 'editor.renderWhitespace':
           if (
-            value === "none" ||
-            value === "boundary" ||
-            value === "selection" ||
-            value === "trailing" ||
-            value === "all"
+            value === 'none' ||
+            value === 'boundary' ||
+            value === 'selection' ||
+            value === 'trailing' ||
+            value === 'all'
           ) {
             opts.renderWhitespace = value;
           }
           break;
-        case "editor.cursorBlinking":
+        case 'editor.cursorBlinking':
           if (
-            value === "blink" ||
-            value === "smooth" ||
-            value === "phase" ||
-            value === "expand" ||
-            value === "solid"
+            value === 'blink' ||
+            value === 'smooth' ||
+            value === 'phase' ||
+            value === 'expand' ||
+            value === 'solid'
           ) {
             opts.cursorBlinking = value;
           }
           break;
-        case "editor.bracketPairColorization.enabled":
-          if (typeof value === "boolean") opts.bracketPairColorization = { enabled: value };
+        case 'editor.bracketPairColorization.enabled':
+          if (typeof value === 'boolean') opts.bracketPairColorization = { enabled: value };
           break;
       }
     }
@@ -276,7 +276,7 @@ export class EditorService implements vscode.Disposable {
   public openTab(
     uriInput: string,
     content: string,
-    language = "python",
+    language = 'python',
     isMain = false,
   ): Result<string> {
     return Result.fromThrowable(() => {
@@ -390,7 +390,7 @@ export class EditorService implements vscode.Disposable {
           this.activeUri = null;
           this.activeTabChangeEmitter.fire(null);
           // Re-create default main tab if all tabs are closed
-          this.openTab("file:///workspace/script.py", "", "python", true);
+          this.openTab('file:///workspace/script.py', '', 'python', true);
         }
       }
 
@@ -549,9 +549,9 @@ export class EditorService implements vscode.Disposable {
   }
 
   private async persistThemeConfig(themeId: string): Promise<void> {
-    await updateUserConfiguration(JSON.stringify({ "workbench.colorTheme": themeId }));
+    await updateUserConfiguration(JSON.stringify({ 'workbench.colorTheme': themeId }));
     const conf = vscode.workspace.getConfiguration();
-    await conf.update("workbench.colorTheme", themeId, vscode.ConfigurationTarget.Workspace);
+    await conf.update('workbench.colorTheme', themeId, vscode.ConfigurationTarget.Workspace);
   }
 
   private renameTabInternal(oldUriString: string, newUriString: string): void {
@@ -666,9 +666,9 @@ export class EditorService implements vscode.Disposable {
 
   private normalizeUri(uriInput: string): monaco.Uri {
     if (
-      uriInput.includes("://") ||
-      uriInput.startsWith("file:") ||
-      uriInput.startsWith("inmemory:")
+      uriInput.includes('://') ||
+      uriInput.startsWith('file:') ||
+      uriInput.startsWith('inmemory:')
     ) {
       return monaco.Uri.parse(uriInput);
     }
@@ -678,9 +678,9 @@ export class EditorService implements vscode.Disposable {
   private deriveTitle(uriInput: string): string {
     const uri = this.normalizeUri(uriInput);
     const path = uri.path;
-    const parts = path.split("/").filter(Boolean);
-    const filename = parts[parts.length - 1] || "script.py";
-    if ((filename === "__init__.pyi" || filename === "__init__.py") && parts.length >= 2) {
+    const parts = path.split('/').filter(Boolean);
+    const filename = parts[parts.length - 1] || 'script.py';
+    if ((filename === '__init__.pyi' || filename === '__init__.py') && parts.length >= 2) {
       return `${parts[parts.length - 2]}/${filename}`;
     }
     return filename;
@@ -688,7 +688,7 @@ export class EditorService implements vscode.Disposable {
 
   private revealSelectionOrPosition(selectionOrPosition?: monaco.IRange | monaco.IPosition): void {
     if (!selectionOrPosition) return;
-    if ("startLineNumber" in selectionOrPosition) {
+    if ('startLineNumber' in selectionOrPosition) {
       this.editor.setSelection(selectionOrPosition);
       this.editor.revealRangeInCenter(selectionOrPosition);
     } else {

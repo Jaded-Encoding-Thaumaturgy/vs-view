@@ -10,7 +10,7 @@ icon: lucide/git-pull-request
 
 - **[uv](https://github.com/astral-sh/uv)** is the default tool used for development in this repository.
 - For building [`vspackrgb`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/vspackrgb) and [`vsview-histogram`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/histogram), you will need [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html).
-- For building [`vsview-editor`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/workspaces/editor), you will need [npm](https://www.npmjs.com/).
+- For building [`vsview-editor`](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/workspaces/editor), you will need [Vite+](https://viteplus.dev/).
 ---
 
 Clone the repository and sync all packages:

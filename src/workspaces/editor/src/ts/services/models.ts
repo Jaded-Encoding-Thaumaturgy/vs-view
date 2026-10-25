@@ -1,8 +1,8 @@
-import type * as monaco from "monaco-editor";
-import * as monacoEditor from "monaco-editor";
-import type * as vscode from "vscode";
+import type * as monaco from 'monaco-editor';
+import * as monacoEditor from 'monaco-editor';
+import type * as vscode from 'vscode';
 
-import { isSameResource } from "../utils/uri";
+import { isSameResource } from '../utils/uri';
 
 /**
  * Finds an existing Monaco text model matching the given URI.

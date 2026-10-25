@@ -26,7 +26,7 @@
   border-radius: 10px;
 }
 
-[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb {
+[data-md-color-scheme='slate'] ::-webkit-scrollbar-thumb {
   background: #a888e8;
 }
 
@@ -35,7 +35,7 @@
 }
 
 /* Light Mode Adjustments - Soft lavender/cream tones */
-[data-md-color-scheme="default"] {
+[data-md-color-scheme='default'] {
   --md-default-bg-color: #f5f2fa;
   --md-default-bg-color--light: #f0ecf8;
   --md-default-bg-color--lighter: #ebe5f5;
@@ -52,7 +52,7 @@
 }
 
 /* Dark Mode Adjustments - Neutral blue-gray base with interpolated variants */
-[data-md-color-scheme="slate"] {
+[data-md-color-scheme='slate'] {
   /* Main background: neutral blue-gray as requested */
   --md-default-bg-color: hsla(230, 15%, 21%, 1);
 
@@ -92,10 +92,10 @@
   color: #7858c8 !important; /* Branded purple for light mode */
 }
 
-[data-md-color-scheme="slate"] .md-code__button,
-[data-md-color-scheme="slate"] .md-clipboard,
-[data-md-color-scheme="slate"] .md-clipboard--done,
-[data-md-color-scheme="slate"] .md-code__selection {
+[data-md-color-scheme='slate'] .md-code__button,
+[data-md-color-scheme='slate'] .md-clipboard,
+[data-md-color-scheme='slate'] .md-clipboard--done,
+[data-md-color-scheme='slate'] .md-code__selection {
   color: #a888e8 !important; /* Branded purple for dark mode */
 }
 
@@ -195,11 +195,11 @@ a {
   cursor: zoom-in !important;
 }
 
-[data-md-color-scheme="slate"] .md-typeset figure img {
+[data-md-color-scheme='slate'] .md-typeset figure img {
   box-shadow: 0 0 24px rgba(168, 136, 232, 0.3);
 }
 
-[data-md-color-scheme="slate"] .md-typeset figure img:hover {
+[data-md-color-scheme='slate'] .md-typeset figure img:hover {
   box-shadow: 0 0 32px rgba(168, 136, 232, 0.45);
 }
 

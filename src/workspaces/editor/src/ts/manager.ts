@@ -1,10 +1,10 @@
-import type * as vscode from "vscode";
+import type * as vscode from 'vscode';
 
-import { BridgeService } from "./bridge/python";
-import { EditorService } from "./editor/service";
-import { LspService } from "./lsp/service";
-import { ConsolePanelService } from "./ui/console";
-import { DisposableStore } from "./utils/disposables";
+import { BridgeService } from './bridge/python';
+import { EditorService } from './editor/service';
+import { LspService } from './lsp/service';
+import { ConsolePanelService } from './ui/console';
+import { DisposableStore } from './utils/disposables';
 
 export class MonacoManager implements vscode.Disposable {
   private readonly disposables = new DisposableStore();

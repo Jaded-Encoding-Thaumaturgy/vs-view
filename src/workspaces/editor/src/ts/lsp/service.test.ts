@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MessageReader, MessageWriter } from "vscode-jsonrpc";
-import type { MessageTransports } from "vscode-languageclient/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import type { MessageReader, MessageWriter } from 'vscode-jsonrpc';
+import type { MessageTransports } from 'vscode-languageclient/browser';
 
 // Hoisted Mocks and Shared Test State
 const {
@@ -177,18 +177,18 @@ const {
 type MockBaseLanguageClient = InstanceType<typeof MockBaseLanguageClient>;
 
 // Mock vscode
-vi.mock("vscode", () => ({
+vi.mock('vscode', () => ({
   EventEmitter: MockEventEmitter,
   workspace: vscodeWorkspaceMock,
   Uri: {
     file: (fsPath: string) => ({
-      scheme: "file",
+      scheme: 'file',
       fsPath,
       path: fsPath,
       toString: () => `file://${fsPath}`,
     }),
     parse: (uriStr: string) => ({
-      scheme: uriStr.startsWith("file:") ? "file" : "untitled",
+      scheme: uriStr.startsWith('file:') ? 'file' : 'untitled',
       fsPath: uriStr,
       path: uriStr,
       toString: () => uriStr,
@@ -197,7 +197,7 @@ vi.mock("vscode", () => ({
 }));
 
 // Mock vscode-languageclient/browser BaseLanguageClient
-vi.mock("vscode-languageclient/browser", () => ({
+vi.mock('vscode-languageclient/browser', () => ({
   BaseLanguageClient: MockBaseLanguageClient,
   CloseAction,
   ErrorAction,
@@ -234,34 +234,34 @@ class MockWebSocket extends EventTarget {
   public close(): void {
     this.closeSpy();
     this.readyState = MockWebSocket.CLOSED;
-    this.dispatchEvent(new Event("close"));
+    this.dispatchEvent(new Event('close'));
   }
 
   public simulateOpen(): void {
     this.readyState = MockWebSocket.OPEN;
-    this.dispatchEvent(new Event("open"));
+    this.dispatchEvent(new Event('open'));
   }
 
   public simulateClose(): void {
     this.readyState = MockWebSocket.CLOSED;
-    this.dispatchEvent(new Event("close"));
+    this.dispatchEvent(new Event('close'));
   }
 
   public simulateMessage(data: string): void {
-    this.dispatchEvent(new MessageEvent("message", { data }));
+    this.dispatchEvent(new MessageEvent('message', { data }));
   }
 
-  public simulateError(err: Event = new Event("error")): void {
+  public simulateError(err: Event = new Event('error')): void {
     this.dispatchEvent(err);
   }
 }
 
 // Import LspService and Types
-import { type LspServerConfig, LspService, WebSocketLanguageClient } from "./service";
+import { type LspServerConfig, LspService, WebSocketLanguageClient } from './service';
 
 type MockClientInstance = InstanceType<typeof MockBaseLanguageClient>;
 
-describe("LspService and Language Client Lifecycle", () => {
+describe('LspService and Language Client Lifecycle', () => {
   let service: LspService;
 
   beforeEach(() => {
@@ -270,8 +270,8 @@ describe("LspService and Language Client Lifecycle", () => {
     lspState.createdSockets.length = 0;
     vscodeWorkspaceMock.configChangeListeners.length = 0;
 
-    vi.stubGlobal("WebSocket", MockWebSocket);
-    vi.stubGlobal("window", {
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    vi.stubGlobal('window', {
       ENV: { VSVIEW_DEBUG: false },
     });
 
@@ -283,28 +283,28 @@ describe("LspService and Language Client Lifecycle", () => {
     vi.unstubAllGlobals();
   });
 
-  describe("LspService.connect(config)", () => {
-    it("creates WebSocket connection to ws://127.0.0.1:<port>", async () => {
+  describe('LspService.connect(config)', () => {
+    it('creates WebSocket connection to ws://127.0.0.1:<port>', async () => {
       const config: LspServerConfig = {
-        id: "basedpyright",
-        name: "BasedPyright",
+        id: 'basedpyright',
+        name: 'BasedPyright',
         port: 9005,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
 
       expect(lspState.createdSockets).toHaveLength(1);
       const ws = lspState.createdSockets[0] as MockWebSocket;
-      expect(ws.url).toBe("ws://127.0.0.1:9005");
+      expect(ws.url).toBe('ws://127.0.0.1:9005');
     });
 
-    it("creates and starts WebSocketLanguageClient on websocket open", async () => {
+    it('creates and starts WebSocketLanguageClient on websocket open', async () => {
       const config: LspServerConfig = {
-        id: "basedpyright",
-        name: "BasedPyright",
+        id: 'basedpyright',
+        name: 'BasedPyright',
         port: 9005,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -316,35 +316,35 @@ describe("LspService and Language Client Lifecycle", () => {
 
       expect(lspState.createdClients).toHaveLength(1);
       const clientRecord = lspState.createdClients[0]!;
-      expect(clientRecord.id).toBe("basedpyright");
-      expect(clientRecord.name).toBe("BasedPyright");
+      expect(clientRecord.id).toBe('basedpyright');
+      expect(clientRecord.name).toBe('BasedPyright');
 
       const client = clientRecord.instance as MockClientInstance;
       expect(client.start).toHaveBeenCalled();
     });
 
-    it("registers file events pattern in synchronize options when provided", async () => {
+    it('registers file events pattern in synchronize options when provided', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 8080,
-        language: "python",
-        fileEventsPattern: "**/*.py",
+        language: 'python',
+        fileEventsPattern: '**/*.py',
       };
 
       await service.connect(config);
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      expect(vscodeWorkspaceMock.createFileSystemWatcher).toHaveBeenCalledWith("**/*.py");
+      expect(vscodeWorkspaceMock.createFileSystemWatcher).toHaveBeenCalledWith('**/*.py');
     });
 
-    it("disconnects existing session first when connecting an already connected client ID", async () => {
+    it('disconnects existing session first when connecting an already connected client ID', async () => {
       const config1: LspServerConfig = {
-        id: "pylsp",
-        name: "Python LSP",
+        id: 'pylsp',
+        name: 'Python LSP',
         port: 9001,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config1);
@@ -356,10 +356,10 @@ describe("LspService and Language Client Lifecycle", () => {
 
       // Reconnect same client ID on different port
       const config2: LspServerConfig = {
-        id: "pylsp",
-        name: "Python LSP Reconnected",
+        id: 'pylsp',
+        name: 'Python LSP Reconnected',
         port: 9002,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config2);
@@ -371,25 +371,25 @@ describe("LspService and Language Client Lifecycle", () => {
       // Verify second session created
       expect(lspState.createdSockets).toHaveLength(2);
       const ws2 = lspState.createdSockets[1] as MockWebSocket;
-      expect(ws2.url).toBe("ws://127.0.0.1:9002");
+      expect(ws2.url).toBe('ws://127.0.0.1:9002');
     });
 
-    it("handles WebSocket constructor failure gracefully", async () => {
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    it('handles WebSocket constructor failure gracefully', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       vi.stubGlobal(
-        "WebSocket",
+        'WebSocket',
         class FailingWebSocket {
           constructor() {
-            throw new Error("Cannot construct WebSocket");
+            throw new Error('Cannot construct WebSocket');
           }
         },
       );
 
       const config: LspServerConfig = {
-        id: "failing",
-        name: "Failing",
+        id: 'failing',
+        name: 'Failing',
         port: 9999,
-        language: "python",
+        language: 'python',
       };
 
       await expect(service.connect(config)).resolves.not.toThrow();
@@ -401,13 +401,13 @@ describe("LspService and Language Client Lifecycle", () => {
     });
   });
 
-  describe("LspService.disconnect(id) / disconnect()", () => {
-    it("closes socket and disposes client session when disconnected by ID", async () => {
+  describe('LspService.disconnect(id) / disconnect()', () => {
+    it('closes socket and disposes client session when disconnected by ID', async () => {
       const config: LspServerConfig = {
-        id: "ruff",
-        name: "Ruff LSP",
+        id: 'ruff',
+        name: 'Ruff LSP',
         port: 9003,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -416,24 +416,24 @@ describe("LspService and Language Client Lifecycle", () => {
 
       const client = lspState.createdClients[0]!.instance as MockClientInstance;
 
-      await service.disconnect("ruff");
+      await service.disconnect('ruff');
 
       expect(ws.closeSpy).toHaveBeenCalled();
       expect(client.dispose).toHaveBeenCalled();
     });
 
-    it("disconnects all active sessions when disconnect() is called without argument", async () => {
+    it('disconnects all active sessions when disconnect() is called without argument', async () => {
       const configA: LspServerConfig = {
-        id: "clientA",
-        name: "Client A",
+        id: 'clientA',
+        name: 'Client A',
         port: 9010,
-        language: "python",
+        language: 'python',
       };
       const configB: LspServerConfig = {
-        id: "clientB",
-        name: "Client B",
+        id: 'clientB',
+        name: 'Client B',
         port: 9011,
-        language: "rust",
+        language: 'rust',
       };
 
       await service.connect(configA);
@@ -454,12 +454,12 @@ describe("LspService and Language Client Lifecycle", () => {
       expect(clientB.dispose).toHaveBeenCalled();
     });
 
-    it("cleans up session when WebSocket fires onclose event", async () => {
+    it('cleans up session when WebSocket fires onclose event', async () => {
       const config: LspServerConfig = {
-        id: "autoClose",
-        name: "Auto Close LSP",
+        id: 'autoClose',
+        name: 'Auto Close LSP',
         port: 9020,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -473,34 +473,34 @@ describe("LspService and Language Client Lifecycle", () => {
       expect(client.dispose).toHaveBeenCalled();
     });
 
-    it("logs error when WebSocket fires onerror event", async () => {
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    it('logs error when WebSocket fires onerror event', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const config: LspServerConfig = {
-        id: "errLsp",
-        name: "Error LSP",
+        id: 'errLsp',
+        name: 'Error LSP',
         port: 9021,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const errorEvent = new Event("error");
+      const errorEvent = new Event('error');
       ws.onerror?.(errorEvent);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith("LSP WebSocket error for 'errLsp':", errorEvent);
     });
   });
 
-  describe("Configuration Synchronization", () => {
-    it("emits workspace/didChangeConfiguration when matching single configurationSection changes", async () => {
+  describe('Configuration Synchronization', () => {
+    it('emits workspace/didChangeConfiguration when matching single configurationSection changes', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
-        configurationSection: "python",
+        language: 'python',
+        configurationSection: 'python',
       };
 
       await service.connect(config);
@@ -512,22 +512,22 @@ describe("LspService and Language Client Lifecycle", () => {
       // Trigger configuration change that affects 'python'
       for (const listener of vscodeWorkspaceMock.configChangeListeners) {
         listener({
-          affectsConfiguration: (sec) => sec === "python",
+          affectsConfiguration: (sec) => sec === 'python',
         });
       }
 
-      expect(client.sendNotification).toHaveBeenCalledWith("workspace/didChangeConfiguration", {
+      expect(client.sendNotification).toHaveBeenCalledWith('workspace/didChangeConfiguration', {
         settings: null,
       });
     });
 
-    it("emits workspace/didChangeConfiguration for any matching section in array configurationSection", async () => {
+    it('emits workspace/didChangeConfiguration for any matching section in array configurationSection', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
-        configurationSection: ["python", "basedpyright"],
+        language: 'python',
+        configurationSection: ['python', 'basedpyright'],
       };
 
       await service.connect(config);
@@ -539,22 +539,22 @@ describe("LspService and Language Client Lifecycle", () => {
       // Trigger change for 'basedpyright'
       for (const listener of vscodeWorkspaceMock.configChangeListeners) {
         listener({
-          affectsConfiguration: (sec) => sec === "basedpyright",
+          affectsConfiguration: (sec) => sec === 'basedpyright',
         });
       }
 
-      expect(client.sendNotification).toHaveBeenCalledWith("workspace/didChangeConfiguration", {
+      expect(client.sendNotification).toHaveBeenCalledWith('workspace/didChangeConfiguration', {
         settings: null,
       });
     });
 
-    it("ignores configuration changes for unrelated sections", async () => {
+    it('ignores configuration changes for unrelated sections', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
-        configurationSection: "python",
+        language: 'python',
+        configurationSection: 'python',
       };
 
       await service.connect(config);
@@ -566,20 +566,20 @@ describe("LspService and Language Client Lifecycle", () => {
       // Trigger change for unrelated 'workbench.colorTheme'
       for (const listener of vscodeWorkspaceMock.configChangeListeners) {
         listener({
-          affectsConfiguration: (sec) => sec === "workbench.colorTheme",
+          affectsConfiguration: (sec) => sec === 'workbench.colorTheme',
         });
       }
 
       expect(client.sendNotification).not.toHaveBeenCalled();
     });
 
-    it("does not send notification if client state is not Running", async () => {
+    it('does not send notification if client state is not Running', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
-        configurationSection: "python",
+        language: 'python',
+        configurationSection: 'python',
       };
 
       await service.connect(config);
@@ -591,7 +591,7 @@ describe("LspService and Language Client Lifecycle", () => {
 
       for (const listener of vscodeWorkspaceMock.configChangeListeners) {
         listener({
-          affectsConfiguration: (sec) => sec === "python",
+          affectsConfiguration: (sec) => sec === 'python',
         });
       }
 
@@ -599,13 +599,13 @@ describe("LspService and Language Client Lifecycle", () => {
     });
   });
 
-  describe("Progress Tracking Notifications", () => {
+  describe('Progress Tracking Notifications', () => {
     it("handles $/progress notifications with kind: 'begin' and 'end'", async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -614,31 +614,31 @@ describe("LspService and Language Client Lifecycle", () => {
 
       const client = lspState.createdClients[0]!.instance as MockClientInstance;
 
-      expect(client.notificationHandlers.has("$/progress")).toBe(true);
+      expect(client.notificationHandlers.has('$/progress')).toBe(true);
 
       // Simulate $/progress begin
-      client.simulateNotification("$/progress", {
-        token: "token-analysis-1",
-        value: { kind: "begin", title: "Analyzing workspace" },
+      client.simulateNotification('$/progress', {
+        token: 'token-analysis-1',
+        value: { kind: 'begin', title: 'Analyzing workspace' },
       });
 
       // Simulate $/progress end
-      client.simulateNotification("$/progress", {
-        token: "token-analysis-1",
-        value: { kind: "end" },
+      client.simulateNotification('$/progress', {
+        token: 'token-analysis-1',
+        value: { kind: 'end' },
       });
     });
 
-    it("registers and handles custom progress notification pairs", async () => {
+    it('registers and handles custom progress notification pairs', async () => {
       const config: LspServerConfig = {
-        id: "customLsp",
-        name: "Custom LSP",
+        id: 'customLsp',
+        name: 'Custom LSP',
         port: 9000,
-        language: "python",
+        language: 'python',
         progressNotifications: [
           {
-            begin: "custom/indexingStart",
-            end: "custom/indexingEnd",
+            begin: 'custom/indexingStart',
+            end: 'custom/indexingEnd',
           },
         ],
       };
@@ -649,21 +649,21 @@ describe("LspService and Language Client Lifecycle", () => {
 
       const client = lspState.createdClients[0]!.instance as MockClientInstance;
 
-      expect(client.notificationHandlers.has("custom/indexingStart")).toBe(true);
-      expect(client.notificationHandlers.has("custom/indexingEnd")).toBe(true);
+      expect(client.notificationHandlers.has('custom/indexingStart')).toBe(true);
+      expect(client.notificationHandlers.has('custom/indexingEnd')).toBe(true);
 
-      client.simulateNotification("custom/indexingStart", {});
-      client.simulateNotification("custom/indexingEnd", {});
+      client.simulateNotification('custom/indexingStart', {});
+      client.simulateNotification('custom/indexingEnd', {});
     });
   });
 
-  describe("Middleware and Document Handling", () => {
-    it("deduplicates didOpen calls for the same canonical document URI", async () => {
+  describe('Middleware and Document Handling', () => {
+    it('deduplicates didOpen calls for the same canonical document URI', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -677,9 +677,9 @@ describe("LspService and Language Client Lifecycle", () => {
       const nextSpy = vi.fn().mockResolvedValue(undefined);
       const doc = {
         uri: {
-          scheme: "file",
-          fsPath: "D:/project/main.py",
-          toString: () => "file:///D:/project/main.py",
+          scheme: 'file',
+          fsPath: 'D:/project/main.py',
+          toString: () => 'file:///D:/project/main.py',
         },
       };
 
@@ -701,12 +701,12 @@ describe("LspService and Language Client Lifecycle", () => {
       expect(nextSpy).toHaveBeenCalledTimes(2);
     });
 
-    it("provideDefinition pre-loads target document for file URI results", async () => {
+    it('provideDefinition pre-loads target document for file URI results', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -719,18 +719,18 @@ describe("LspService and Language Client Lifecycle", () => {
 
       const doc = {
         uri: {
-          scheme: "file",
-          fsPath: "D:/project/main.py",
-          toString: () => "file:///D:/project/main.py",
+          scheme: 'file',
+          fsPath: 'D:/project/main.py',
+          toString: () => 'file:///D:/project/main.py',
         },
       };
       const pos = { line: 10, character: 5 };
       const token = { isCancellationRequested: false };
 
       const targetUri = {
-        scheme: "file",
-        fsPath: "D:/project/lib.py",
-        toString: () => "file:///D:/project/lib.py",
+        scheme: 'file',
+        fsPath: 'D:/project/lib.py',
+        toString: () => 'file:///D:/project/lib.py',
       };
       const definitionResult = [{ uri: targetUri, range: {} }];
 
@@ -741,12 +741,12 @@ describe("LspService and Language Client Lifecycle", () => {
       expect(vscodeWorkspaceMock.openTextDocument).toHaveBeenCalledWith(targetUri);
     });
 
-    it("provideDefinition supports LocationLink format (targetUri)", async () => {
+    it('provideDefinition supports LocationLink format (targetUri)', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -758,18 +758,18 @@ describe("LspService and Language Client Lifecycle", () => {
 
       const doc = {
         uri: {
-          scheme: "file",
-          fsPath: "D:/project/main.py",
-          toString: () => "file:///D:/project/main.py",
+          scheme: 'file',
+          fsPath: 'D:/project/main.py',
+          toString: () => 'file:///D:/project/main.py',
         },
       };
       const pos = { line: 10, character: 5 };
       const token = { isCancellationRequested: false };
 
       const targetUri = {
-        scheme: "file",
-        fsPath: "D:/project/link.py",
-        toString: () => "file:///D:/project/link.py",
+        scheme: 'file',
+        fsPath: 'D:/project/link.py',
+        toString: () => 'file:///D:/project/link.py',
       };
       const definitionLinkResult = { targetUri, targetRange: {}, targetSelectionRange: {} };
 
@@ -780,12 +780,12 @@ describe("LspService and Language Client Lifecycle", () => {
       expect(vscodeWorkspaceMock.openTextDocument).toHaveBeenCalledWith(targetUri);
     });
 
-    it("provideDefinition waits for progress completion when query returns empty while indexing", async () => {
+    it('provideDefinition waits for progress completion when query returns empty while indexing', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -796,16 +796,16 @@ describe("LspService and Language Client Lifecycle", () => {
       const middleware = client.clientOptions.middleware;
 
       // Start progress
-      client.simulateNotification("$/progress", {
-        token: "indexing-1",
-        value: { kind: "begin" },
+      client.simulateNotification('$/progress', {
+        token: 'indexing-1',
+        value: { kind: 'begin' },
       });
 
       const doc = {
         uri: {
-          scheme: "file",
-          fsPath: "D:/project/main.py",
-          toString: () => "file:///D:/project/main.py",
+          scheme: 'file',
+          fsPath: 'D:/project/main.py',
+          toString: () => 'file:///D:/project/main.py',
         },
       };
       const pos = { line: 10, character: 5 };
@@ -815,9 +815,9 @@ describe("LspService and Language Client Lifecycle", () => {
       };
 
       const targetUri = {
-        scheme: "file",
-        fsPath: "D:/project/target.py",
-        toString: () => "file:///D:/project/target.py",
+        scheme: 'file',
+        fsPath: 'D:/project/target.py',
+        toString: () => 'file:///D:/project/target.py',
       };
 
       let callCount = 0;
@@ -826,9 +826,9 @@ describe("LspService and Language Client Lifecycle", () => {
         if (callCount === 1) {
           // End progress shortly after first query returns empty
           setTimeout(() => {
-            client.simulateNotification("$/progress", {
-              token: "indexing-1",
-              value: { kind: "end" },
+            client.simulateNotification('$/progress', {
+              token: 'indexing-1',
+              value: { kind: 'end' },
             });
           }, 10);
           return [];
@@ -841,12 +841,12 @@ describe("LspService and Language Client Lifecycle", () => {
       expect(res).toEqual([{ uri: targetUri, range: {} }]);
     });
 
-    it("handles openTextDocument failure in provideDefinition gracefully", async () => {
+    it('handles openTextDocument failure in provideDefinition gracefully', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -856,14 +856,14 @@ describe("LspService and Language Client Lifecycle", () => {
       const client = lspState.createdClients[0]!.instance as MockClientInstance;
       const middleware = client.clientOptions.middleware;
 
-      const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-      vscodeWorkspaceMock.openTextDocument.mockRejectedValueOnce(new Error("File load failed"));
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vscodeWorkspaceMock.openTextDocument.mockRejectedValueOnce(new Error('File load failed'));
 
       const doc = {
         uri: {
-          scheme: "file",
-          fsPath: "D:/project/main.py",
-          toString: () => "file:///D:/project/main.py",
+          scheme: 'file',
+          fsPath: 'D:/project/main.py',
+          toString: () => 'file:///D:/project/main.py',
         },
       };
       const pos = { line: 1, character: 1 };
@@ -872,26 +872,26 @@ describe("LspService and Language Client Lifecycle", () => {
         onCancellationRequested: vi.fn().mockReturnValue({ dispose: vi.fn() }),
       };
       const targetUri = {
-        scheme: "file",
-        fsPath: "D:/project/fail.py",
-        toString: () => "file:///D:/project/fail.py",
+        scheme: 'file',
+        fsPath: 'D:/project/fail.py',
+        toString: () => 'file:///D:/project/fail.py',
       };
 
       const nextSpy = vi.fn().mockResolvedValue([{ uri: targetUri }]);
 
       await expect(middleware!.provideDefinition!(doc, pos, token, nextSpy)).resolves.toBeDefined();
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("[LSP pyright] Failed to load model"),
+        expect.stringContaining('[LSP pyright] Failed to load model'),
         expect.any(Error),
       );
     });
 
-    it("configures errorHandler with continue on error and do not restart on closed", async () => {
+    it('configures errorHandler with continue on error and do not restart on closed', async () => {
       const config: LspServerConfig = {
-        id: "pyright",
-        name: "Pyright",
+        id: 'pyright',
+        name: 'Pyright',
         port: 9000,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -902,7 +902,7 @@ describe("LspService and Language Client Lifecycle", () => {
       const clientOptions = clientRecord.clientOptions;
       expect(clientOptions.errorHandler).toBeDefined();
 
-      const errorResult = clientOptions.errorHandler!.error(new Error("test"), undefined, 1);
+      const errorResult = clientOptions.errorHandler!.error(new Error('test'), undefined, 1);
       expect(errorResult.action).toBe(ErrorAction.Continue);
 
       const closedResult = clientOptions.errorHandler!.closed();
@@ -911,9 +911,9 @@ describe("LspService and Language Client Lifecycle", () => {
     });
   });
 
-  describe("WebSocketLanguageClient stop behavior", () => {
-    it("WebSocketLanguageClient stop() closes connection if socket is not open", async () => {
-      const ws = new MockWebSocket("ws://127.0.0.1:9000");
+  describe('WebSocketLanguageClient stop behavior', () => {
+    it('WebSocketLanguageClient stop() closes connection if socket is not open', async () => {
+      const ws = new MockWebSocket('ws://127.0.0.1:9000');
       ws.readyState = MockWebSocket.CLOSED;
 
       const dummyTransports = {
@@ -922,9 +922,9 @@ describe("LspService and Language Client Lifecycle", () => {
       };
 
       const client = new WebSocketLanguageClient(
-        "test",
-        "Test Client",
-        { documentSelector: [{ language: "python" }] },
+        'test',
+        'Test Client',
+        { documentSelector: [{ language: 'python' }] },
         dummyTransports,
         ws as unknown as WebSocket,
       );
@@ -933,17 +933,17 @@ describe("LspService and Language Client Lifecycle", () => {
       expect((client as unknown as MockBaseLanguageClient).state).toBe(State.Stopped);
     });
 
-    it("WebSocketLanguageClient stop() does nothing if already stopped", async () => {
-      const ws = new MockWebSocket("ws://127.0.0.1:9000");
+    it('WebSocketLanguageClient stop() does nothing if already stopped', async () => {
+      const ws = new MockWebSocket('ws://127.0.0.1:9000');
       const dummyTransports = {
         reader: {} as MessageReader,
         writer: {} as MessageWriter,
       };
 
       const client = new WebSocketLanguageClient(
-        "test",
-        "Test Client",
-        { documentSelector: [{ language: "python" }] },
+        'test',
+        'Test Client',
+        { documentSelector: [{ language: 'python' }] },
         dummyTransports,
         ws as unknown as WebSocket,
       );
@@ -953,16 +953,16 @@ describe("LspService and Language Client Lifecycle", () => {
       expect((client as unknown as MockBaseLanguageClient).state).toBe(State.Stopped);
     });
 
-    it("creates message transports returning provided transports", async () => {
-      const ws = new MockWebSocket("ws://127.0.0.1:9000");
+    it('creates message transports returning provided transports', async () => {
+      const ws = new MockWebSocket('ws://127.0.0.1:9000');
       const fakeTransports = {
         reader: {} as MessageReader,
         writer: {} as MessageWriter,
       };
       const client = new WebSocketLanguageClient(
-        "test",
-        "Test Client",
-        { documentSelector: [{ language: "python" }] },
+        'test',
+        'Test Client',
+        { documentSelector: [{ language: 'python' }] },
         fakeTransports,
         ws as unknown as WebSocket,
       );
@@ -974,13 +974,13 @@ describe("LspService and Language Client Lifecycle", () => {
     });
   });
 
-  describe("Disposal via dispose() and Symbol.dispose", () => {
-    it("dispose() cleans up all active LSP sessions", async () => {
+  describe('Disposal via dispose() and Symbol.dispose', () => {
+    it('dispose() cleans up all active LSP sessions', async () => {
       const config: LspServerConfig = {
-        id: "disposeTest",
-        name: "Dispose Test",
+        id: 'disposeTest',
+        name: 'Dispose Test',
         port: 9050,
-        language: "python",
+        language: 'python',
       };
 
       await service.connect(config);
@@ -997,12 +997,12 @@ describe("LspService and Language Client Lifecycle", () => {
       expect(client.dispose).toHaveBeenCalled();
     });
 
-    it("Symbol.dispose triggers dispose()", async () => {
+    it('Symbol.dispose triggers dispose()', async () => {
       const config: LspServerConfig = {
-        id: "symbolDispose",
-        name: "Symbol Dispose",
+        id: 'symbolDispose',
+        name: 'Symbol Dispose',
         port: 9051,
-        language: "python",
+        language: 'python',
       };
 
       const scopedService = new LspService();

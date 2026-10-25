@@ -1,4 +1,4 @@
-import { DOM_IDS } from "./constants";
+import { DOM_IDS } from './constants';
 
 export function renderAppLayout(): void {
   const appContainer = document.getElementById(DOM_IDS.APP);

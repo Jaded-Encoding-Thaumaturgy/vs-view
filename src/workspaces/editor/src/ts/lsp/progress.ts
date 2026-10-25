@@ -1,7 +1,7 @@
-import type * as vscode from "vscode";
+import type * as vscode from 'vscode';
 
 export interface LspProgressValue {
-  kind?: "begin" | "report" | "end";
+  kind?: 'begin' | 'report' | 'end';
   title?: string;
   message?: string;
   percentage?: number;
