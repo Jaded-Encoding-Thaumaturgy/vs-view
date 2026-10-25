@@ -84,6 +84,7 @@ secrets = ["keyring>=25.7.0"]
 full = [
     "vsview[recommended]",
     "vsview-editor",
+    "vsview-remote",
     "vsview-histogram",
     "vsview-nativeres",
 ]
