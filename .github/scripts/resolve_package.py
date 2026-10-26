@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import sys
 import tomllib
 from pathlib import Path
 from typing import Literal, TypedDict
@@ -47,13 +48,22 @@ def discover_packages() -> dict[str, PackageMetadata]:
         if match_patterns and isinstance(match_patterns, list):
             tag_prefix = match_patterns[0].split("/")[0]
         else:
-            tag_prefix = directory.name
+            tag_prefix = pkg_name if directory == REPO_ROOT else directory.name
 
         # Determine build workflow
-        hatch_hooks = tool_table.get("hatch", {}).get("build", {}).get("hooks", {})
-        if "cibuildwheel" in tool_table or "hatch-rs" in hatch_hooks:
+        build_requires = data.get("build-system", {}).get("requires", [])
+        hatch_build = tool_table.get("hatch", {}).get("build", {})
+        hatch_hooks = hatch_build.get("hooks", {})
+        target_hooks = hatch_build.get("targets", {}).get("wheel", {}).get("hooks", {})
+
+        if "cibuildwheel" in tool_table or "hatch-rs" in hatch_hooks or "hatch-rs" in target_hooks:
             build_workflow: BuildWorkflow = "wheels"
-        elif "hatch-js" in hatch_hooks or (directory / "package.json").is_file():
+        elif (
+            "hatch-js" in hatch_hooks
+            or "hatch-js" in target_hooks
+            or any("hatch-js" in req for req in build_requires)
+            or pkg_name == "vsview-editor"
+        ):
             build_workflow = "editor"
         else:
             build_workflow = "python"
@@ -75,23 +85,26 @@ def discover_packages() -> dict[str, PackageMetadata]:
 
 
 def main() -> None:
-    event = os.getenv("GITHUB_EVENT_NAME")
-    ref = os.getenv("GITHUB_REF", "")
-    dispatch_pkg = os.getenv("INPUT_PACKAGE", "")
+    target = sys.argv[1] if len(sys.argv) > 1 else ""
 
-    target = ""
-    if event == "workflow_dispatch":
-        target = dispatch_pkg
-    elif ref.startswith("refs/tags/"):
-        match = re.match(r"^refs/tags/(.+)/v", ref)
-        if match:
-            target = match.group(1)
+    if not target:
+        event = os.getenv("GITHUB_EVENT_NAME")
+        ref = os.getenv("GITHUB_REF", "")
+        dispatch_pkg = os.getenv("INPUT_PACKAGE", "")
+
+        if event == "workflow_dispatch":
+            target = dispatch_pkg
+        elif ref.startswith("refs/tags/"):
+            match = re.match(r"^refs/tags/(.+?)/v", ref)
+            if match:
+                target = match.group(1)
 
     all_packages = discover_packages()
     selected = all_packages.get(target)
 
     if not selected:
-        raise ValueError(f"Unknown package or tag target: '{target}'")
+        valid = sorted(set(all_packages.keys()))
+        raise ValueError(f"Unknown package or tag target: '{target}'. Available targets: {valid}")
 
     build_workflow = selected["build_workflow"]
     matrix = [selected] if build_workflow == "python" else []
@@ -104,7 +117,7 @@ def main() -> None:
         print(f"matrix={json.dumps(matrix)}")
         return
 
-    with open(output_file, "a") as f:
+    with open(output_file, "a", encoding="utf-8") as f:
         f.write(f"build-workflow={build_workflow}\n")
         f.write(f"package={selected['package']}\n")
         f.write(f"package-dir={selected['path']}\n")
