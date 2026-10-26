@@ -35,8 +35,8 @@
     "@xterm/xterm": "6.0.0",
     "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@38.0.4",
     "vscode": "npm:@codingame/monaco-vscode-extension-api@38.0.4",
-    "vscode-jsonrpc": "9.0.3",
-    "vscode-languageclient": "10.1.2"
+    "vscode-jsonrpc": "10.0.0",
+    "vscode-languageclient": "11.0.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
