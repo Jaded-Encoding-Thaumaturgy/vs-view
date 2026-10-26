@@ -20,7 +20,7 @@ from collections.abc import (
     Sized,
     ValuesView,
 )
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from inspect import ismethod
 from logging import DEBUG, getLogger
@@ -472,42 +472,74 @@ class WeakableSignals(QObject):
 
 class QObjectSet[T: QObject](MutableSet[T]):
     """
-    A `WeakSet` for QObjects that also hooks the `destroyed` signal for C++ deletion.
+    A thread-safe `WeakSet` for QObjects that also hooks the `destroyed` signal for C++ deletion.
 
     Entries are removed both when the Python wrapper is garbage-collected (via `WeakSet`)
     and when the C++ object is destroyed by Qt (via `destroyed`).
     """
 
-    __slots__ = ("_data",)
+    __slots__ = ("_cleanup", "_data", "_lock")
 
     def __init__(self) -> None:
         self._data = weakref.WeakSet[T]()
+        self._cleanup = weakref.WeakKeyDictionary[T, Callable[..., None]]()
+        self._lock = threading.RLock()
 
     @override
     def __contains__(self, value: object) -> bool:
-        return value in self._data
+        with self._lock:
+            return value in self._data
 
     @override
     def __iter__(self) -> Iterator[T]:
-        return iter(self._data)
+        with self._lock:
+            return iter(list(self._data))
 
     @override
     def __len__(self) -> int:
-        return len(self._data)
+        with self._lock:
+            return len(self._data)
+
+    def __bool__(self) -> bool:
+        with self._lock:
+            return bool(self._data)
 
     @override
     def __repr__(self) -> str:
-        return f"{type(self).__name__}({self._data!r})"
+        with self._lock:
+            return f"{type(self).__name__}({self._data!r})"
 
     @override
     def add(self, value: T) -> None:
-        if value not in self._data:
+        with self._lock:
+            if value in self._data:
+                return
+
+            ref = weakref.ref(value)
+
+            def cleanup(*_: object) -> None:
+                with self._lock:
+                    if obj := ref():
+                        self._data.discard(obj)
+                        self._cleanup.pop(obj, None)
+
             self._data.add(value)
-            value.destroyed.connect(lambda: self.discard(value))
+            self._cleanup[value] = cleanup
+            value.destroyed.connect(cleanup)
 
     @override
     def discard(self, value: T) -> None:
-        self._data.discard(value)
+        with self._lock:
+            self._data.discard(value)
+            if (cleanup := self._cleanup.pop(value, None)) is not None and Shiboken.isValid(value):
+                with suppress(RuntimeError, TypeError):
+                    value.destroyed.disconnect(cleanup)
+
+    @override
+    def clear(self) -> None:
+        with self._lock:
+            for value in list(self._data):
+                self.discard(value)
 
 
 class QObjectCounter[T: QObject](Container[T], Sized):
@@ -569,7 +601,9 @@ class QObjectCounter[T: QObject](Container[T], Sized):
 
             if count <= 1:
                 self._counts.pop(value, None)
-                self._cleanup.pop(value, None)
+                if (cleanup := self._cleanup.pop(value, None)) is not None and Shiboken.isValid(value):
+                    with suppress(RuntimeError, TypeError):
+                        value.destroyed.disconnect(cleanup)
                 return 0
 
             count -= 1
