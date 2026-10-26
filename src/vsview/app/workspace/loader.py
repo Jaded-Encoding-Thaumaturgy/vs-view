@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+import re
 from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable, Generator, Sequence
@@ -941,6 +942,8 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
 
     @override
     def loader(self) -> None:
+        from ...app.error import show_error
+
         ctx = Context(
             reload_count=self.reload_count,
             is_reload=self.reload_count > 0,
@@ -956,17 +959,21 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
             match self.content_type:
                 case "script":
                     chdir = Path(self._user_script_path).parent if self.global_settings.chdir else None
-                    self.script = load_script(
-                        self._script_content,
-                        self.env,
-                        module=module,
-                        chdir=chdir,
-                        **self._script_kwargs,
-                    )
+                    loader = load_script
                 case "code":
-                    self.script = load_code(self._script_content, self.env, module=module, **self._script_kwargs)
+                    chdir = None
+                    loader = load_code
                 case _:
                     assert_never(self.content_type)
+
+            try:
+                self.script = loader(self._script_content, self.env, module=module, chdir=chdir, **self._script_kwargs)
+            except (SyntaxError, OSError, ValueError) as skill_issue:
+                self.statusLoadingErrored.emit(re.sub(r"(?<=\w)([A-Z])", r" \1", skill_issue.__class__.__name__))
+                show_error(skill_issue, self, self._user_script_path)
+                raise RuntimeError("Script loading failed") from None
+            except TypeError as e:
+                raise RuntimeError("Script loading failed") from e
 
             logger.debug("Running Script...")
 
@@ -979,8 +986,6 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
                 execution_err = None
 
         if execution_err is not None:
-            from ...app.error import show_error
-
             self.statusLoadingErrored.emit("Execution error")
 
             show_error(execution_err, self, self._user_script_path)
