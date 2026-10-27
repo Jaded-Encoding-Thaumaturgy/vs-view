@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import sys
 import threading
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
 from jetpytools import CustomValueError
-from PySide6.QtCore import QObject, QProcess
+from PySide6.QtCore import QCoreApplication, QEvent, QMimeData, QObject, QPointF, QProcess, Qt, QUrl
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+from PySide6.QtWidgets import QWidget
 from pytest_mock import MockerFixture
+from pytestqt.qtbot import QtBot
 from vsview_editor.console import IN_LOGGING, ConsoleStreamRedirector, GlobalConsoleHub
 from vsview_editor.lsp import LSPConfig, LSPProcessManager, LSPProcessServer
-from vsview_editor.utils import ContentPath, SafeSlot, WorkspaceUri
-from vsview_editor.web import MonacoBridge
-from vsview_editor.workspace import EditorShortcut, EditorWorkspace
+from vsview_editor.utils import ContentPath, SafeSlot, WorkspaceUri, extract_supported_script_files
+from vsview_editor.web import MonacoBridge, MonacoEditorWidget
+from vsview_editor.workspace import EditorShortcut, EditorWorkspace, MonacoEditorDock, StackDock
 
 pytestmark = [pytest.mark.integration, pytest.mark.qt]
 
@@ -297,3 +301,218 @@ class TestGlobalConsoleHub:
         assert redirector.writable() is True
         assert redirector.isatty() is False
         redirector.flush()  # should not throw
+
+
+def _make_drag_enter_event(mime_data: QMimeData) -> QDragEnterEvent:
+    return QDragEnterEvent(
+        QPointF(10.0, 10.0),
+        Qt.DropAction.CopyAction,
+        mime_data,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+
+def _make_drag_move_event(mime_data: QMimeData) -> QDragMoveEvent:
+    return QDragMoveEvent(
+        QPointF(10.0, 10.0),
+        Qt.DropAction.CopyAction,
+        mime_data,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+
+def _make_drop_event(mime_data: QMimeData) -> QDropEvent:
+    return QDropEvent(
+        QPointF(10.0, 10.0),
+        Qt.DropAction.CopyAction,
+        mime_data,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+
+class TestEditorDragAndDrop:
+    @pytest.fixture
+    def editor_widget(self, qtbot: QtBot) -> Generator[MonacoEditorWidget, None, None]:
+        parent = QWidget()
+        qtbot.addWidget(parent)
+        widget = MonacoEditorWidget(parent)
+        try:
+            yield widget
+        finally:
+            page = widget.page()
+            page.deleteLater()
+            widget.deleteLater()
+            parent.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    @pytest.fixture
+    def editor_dock(self, qtbot: QtBot, mocker: MockerFixture) -> Generator[MonacoEditorDock, None, None]:
+        mocker.patch.object(MonacoEditorWidget, "load")
+        parent = QWidget()
+        qtbot.addWidget(parent)
+        settings = mocker.MagicMock()
+        settings.global_.options.theme = "dark"
+        dock = MonacoEditorDock(parent, mocker.MagicMock(), mocker.MagicMock(), settings)
+        try:
+            yield dock
+        finally:
+            page = dock.editor.page()
+            page.deleteLater()
+            dock.deleteLater()
+            parent.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_extract_supported_script_files_filtering(self, tmp_path: Path) -> None:
+        py_file = tmp_path / "script.py"
+        py_file.write_text("print(1)", encoding="utf-8")
+        vpy_file = tmp_path / "script.VPY"
+        vpy_file.write_text("print(2)", encoding="utf-8")
+        txt_file = tmp_path / "notes.txt"
+        txt_file.write_text("text", encoding="utf-8")
+        sub_dir = tmp_path / "folder"
+        sub_dir.mkdir()
+        non_existent = tmp_path / "missing.py"
+
+        mime = QMimeData()
+        mime.setUrls(
+            [
+                QUrl.fromLocalFile(str(py_file)),
+                QUrl.fromLocalFile(str(vpy_file)),
+                QUrl.fromLocalFile(str(txt_file)),
+                QUrl.fromLocalFile(str(sub_dir)),
+                QUrl.fromLocalFile(str(non_existent)),
+            ]
+        )
+
+        extracted = extract_supported_script_files(mime)
+        assert extracted == [py_file, vpy_file]
+
+    def test_editor_widget_drag_events_accept_valid_script(
+        self, editor_widget: MonacoEditorWidget, tmp_path: Path
+    ) -> None:
+        script = tmp_path / "filter.vpy"
+        script.touch()
+
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(script))])
+
+        enter_event = _make_drag_enter_event(mime)
+        editor_widget.dragEnterEvent(enter_event)
+        assert enter_event.isAccepted() is True
+
+        move_event = _make_drag_move_event(mime)
+        editor_widget.dragMoveEvent(move_event)
+        assert move_event.isAccepted() is True
+
+    def test_editor_widget_drag_events_reject_invalid_files(
+        self, editor_widget: MonacoEditorWidget, tmp_path: Path
+    ) -> None:
+        doc = tmp_path / "readme.md"
+        doc.touch()
+
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(doc))])
+
+        enter_event = _make_drag_enter_event(mime)
+        editor_widget.dragEnterEvent(enter_event)
+        assert enter_event.isAccepted() is False
+
+        move_event = _make_drag_move_event(mime)
+        editor_widget.dragMoveEvent(move_event)
+        assert move_event.isAccepted() is False
+
+    def test_editor_widget_drop_event_emits_signal(self, editor_widget: MonacoEditorWidget, tmp_path: Path) -> None:
+        script1 = tmp_path / "a.py"
+        script1.touch()
+        script2 = tmp_path / "b.vpy"
+        script2.touch()
+
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(script1)), QUrl.fromLocalFile(str(script2))])
+
+        received: list[list[Path]] = []
+        editor_widget.filesDropped.connect(received.append)
+
+        drop_event = _make_drop_event(mime)
+        editor_widget.dropEvent(drop_event)
+
+        assert drop_event.isAccepted() is True
+        assert received == [[script1, script2]]
+
+    def test_editor_widget_drop_event_rejects_unsupported(
+        self, editor_widget: MonacoEditorWidget, tmp_path: Path
+    ) -> None:
+        doc = tmp_path / "data.json"
+        doc.touch()
+
+        emitted: list[list[Path]] = []
+        editor_widget.filesDropped.connect(emitted.append)
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(doc))])
+
+        drop_event = _make_drop_event(mime)
+        editor_widget.dropEvent(drop_event)
+
+        assert drop_event.isAccepted() is False
+        assert len(emitted) == 0
+
+    def test_monaco_dock_open_file_success(
+        self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        script_file = tmp_path / "script.py"
+        script_file.write_text("import vapoursynth as vs\n", encoding="utf-8")
+
+        mock_open_tab = mocker.patch.object(editor_dock.editor.bridge, "open_tab")
+        assert editor_dock.open_file(script_file) is True
+        assert editor_dock._active_filepath == script_file.resolve()
+        mock_open_tab.assert_called_once_with(
+            script_file.resolve().as_uri(), "import vapoursynth as vs\n", language="python", is_main=False
+        )
+
+    def test_monaco_dock_open_file_failure(self, editor_dock: MonacoEditorDock, tmp_path: Path) -> None:
+        non_existent = tmp_path / "does_not_exist.py"
+        assert editor_dock.open_file(non_existent) is False
+
+    def test_monaco_dock_open_files(self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture) -> None:
+        spy_open = mocker.spy(editor_dock, "open_file")
+        f1 = tmp_path / "one.py"
+        f1.touch()
+        f2 = tmp_path / "two.vpy"
+        f2.touch()
+
+        editor_dock.open_files([f1, f2])
+        assert spy_open.call_count == 2
+
+    def test_monaco_dock_drag_and_drop_events(
+        self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        spy_open_files = mocker.spy(editor_dock, "open_files")
+        script = tmp_path / "dock_test.py"
+        script.touch()
+
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(script))])
+
+        enter_event = _make_drag_enter_event(mime)
+        editor_dock.dragEnterEvent(enter_event)
+        assert enter_event.isAccepted() is True
+
+        move_event = _make_drag_move_event(mime)
+        editor_dock.dragMoveEvent(move_event)
+        assert move_event.isAccepted() is True
+
+        drop_event = _make_drop_event(mime)
+        editor_dock.dropEvent(drop_event)
+        assert drop_event.isAccepted() is True
+        spy_open_files.assert_called_once_with([script])
+
+    def test_stack_dock_rejects_drops(self, qtbot: QtBot) -> None:
+        parent = QWidget()
+        qtbot.addWidget(parent)
+        stack = QWidget(parent)
+        stack_dock = StackDock(parent, stack)
+
+        assert stack_dock.acceptDrops() is False

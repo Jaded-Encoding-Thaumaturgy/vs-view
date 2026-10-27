@@ -5,7 +5,7 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any, Generic, TypeVar, overload, override
 
-from PySide6.QtCore import QUrl, Slot
+from PySide6.QtCore import QMimeData, QUrl, Slot
 
 if sys.version_info >= (3, 13):
     FallbackT = TypeVar("FallbackT", default=None)
@@ -15,6 +15,9 @@ else:
     FallbackT = typing_extensions.TypeVar("FallbackT", default=None)
 
 logger = getLogger(__name__)
+
+VIRTUAL_NAMES = frozenset({"script.py", "workspace.code-workspace"})
+SUPPORTED_SCRIPT_SUFFIXES = frozenset({".py", ".vpy"})
 
 
 class SafeSlot(Generic[FallbackT]):
@@ -62,7 +65,15 @@ class SafeSlot(Generic[FallbackT]):
         return Slot(*self._types, **self._kwargs)(wrapper)
 
 
-_VIRTUAL_NAMES = frozenset({"script.py", "workspace.code-workspace"})
+def extract_supported_script_files(mime_data: QMimeData) -> list[Path]:
+    """Extract valid local .py/.vpy script file paths from QMimeData."""
+    files = list[Path]()
+    for url in mime_data.urls():
+        if url.isLocalFile():
+            p = Path(url.toLocalFile())
+            if p.is_file() and p.suffix.lower() in SUPPORTED_SCRIPT_SUFFIXES:
+                files.append(p)
+    return files
 
 
 class WorkspaceUri(QUrl):
@@ -78,7 +89,7 @@ class WorkspaceUri(QUrl):
             return p
 
         if local_file.replace("\\", "/").startswith("/workspace/") and (
-            p.name in _VIRTUAL_NAMES or p.name.startswith("untitled_")
+            p.name in VIRTUAL_NAMES or p.name.startswith("untitled_")
         ):
             return None
 

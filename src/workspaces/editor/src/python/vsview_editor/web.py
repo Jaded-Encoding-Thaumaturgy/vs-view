@@ -8,7 +8,7 @@ from typing import Any, TypedDict, override
 
 from jetpytools import CustomNotImplementedError, copy_signature
 from PySide6.QtCore import QEvent, QObject, QUrl, Signal, Slot
-from PySide6.QtGui import QPalette, Qt
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QPalette, Qt
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineScript
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -18,7 +18,7 @@ from vsview.env import getenv_bool
 
 from .logging import js_logger
 from .lsp import LSPConfig
-from .utils import SafeSlot
+from .utils import SafeSlot, extract_supported_script_files
 
 logger = getLogger(__name__)
 
@@ -285,8 +285,11 @@ class MonacoWebPage(QWebEnginePage):
 
 
 class MonacoEditorWidget(QWebEngineView):
+    filesDropped = Signal(list)
+
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
+        self.setAcceptDrops(True)
 
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         self.setPage(MonacoWebPage(self, backgroundColor=self.palette().color(QPalette.ColorRole.Window)))
@@ -319,6 +322,34 @@ class MonacoEditorWidget(QWebEngineView):
     def load(self, thing: Any, /) -> None:
         logger.debug("Loading Monaco editor from %s", thing)
         return super().load(thing)
+
+    @override
+    def deleteLater(self) -> None:
+        if page := self.page():
+            page.deleteLater()
+        return super().deleteLater()
+
+    @override
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if extract_supported_script_files(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    @override
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        if extract_supported_script_files(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    @override
+    def dropEvent(self, event: QDropEvent) -> None:
+        if files := extract_supported_script_files(event.mimeData()):
+            event.acceptProposedAction()
+            self.filesDropped.emit(files)
+            return
+        event.ignore()
 
 
 class TabInfo(TypedDict, total=False):

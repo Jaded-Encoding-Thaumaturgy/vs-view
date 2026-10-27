@@ -3,6 +3,7 @@ from __future__ import annotations
 import linecache
 import shutil
 import subprocess
+from collections.abc import Sequence
 from enum import StrEnum
 from logging import getLogger
 from pathlib import Path
@@ -11,7 +12,7 @@ from uuid import uuid4
 
 from jetpytools import SPath, fallback
 from PySide6.QtCore import QSize, Qt, QTimer, QUrl, QUrlQuery, Signal, Slot
-from PySide6.QtGui import QCloseEvent, QPalette, QShowEvent
+from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDragMoveEvent, QDropEvent, QPalette, QShowEvent
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -46,7 +47,7 @@ from .console import GlobalConsoleHub
 from .lsp import LSP_BASEDPYRIGHT_CONFIG, LSPProcessManager
 from .settings import GlobalSettings, LocalSettings
 from .stubs import get_stubs_dir
-from .utils import ContentPath, WorkspaceUri
+from .utils import ContentPath, WorkspaceUri, extract_supported_script_files
 from .web import MonacoEditorWidget, TabInfo
 
 logger = getLogger(__name__)
@@ -77,6 +78,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
         self.setObjectName(self.__class__.__name__)
+        self.setAcceptDrops(True)
         self.loop = loop
         self.api = api
         self.settings = settings
@@ -102,6 +104,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self.editor.bridge.restartLspRequested.connect(self.restart_lsp)
         self.editor.bridge.consoleResized.connect(self._on_console_resized)
         self.editor.bridge.contentChanged.connect(self._on_content_changed)
+        self.editor.filesDropped.connect(self.open_files)
 
         query = QUrlQuery()
         query.addQueryItem("initialTheme", QUrl.toPercentEncoding(self.settings.global_.options.theme).toStdString())
@@ -254,6 +257,28 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             self._env_stubs_internal.dispose()
         return super().deleteLater()
 
+    @override
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if extract_supported_script_files(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    @override
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        if extract_supported_script_files(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    @override
+    def dropEvent(self, event: QDropEvent) -> None:
+        if files := extract_supported_script_files(event.mimeData()):
+            event.acceptProposedAction()
+            self.open_files(files)
+            return
+        event.ignore()
+
     @property
     def main_filepath(self) -> Path | None:
         return self._main_filepath
@@ -267,6 +292,18 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     @property
     def dirty_tabs(self) -> list[TabInfo]:
         return [t for t in self._open_tabs if t.get("isDirty", False)]
+
+    def open_file(self, filepath: Path) -> bool:
+        """Open a script file in an editor tab."""
+        try:
+            resolved = filepath.resolve()
+            content = resolved.read_text(encoding="utf-8")
+            self._active_filepath = resolved
+            self.editor.bridge.open_tab(resolved.as_uri(), content, language="python", is_main=False)
+            return True
+        except Exception:
+            logger.exception("Error opening script from %s:", filepath)
+            return False
 
     @Slot()
     def restart_lsp(self) -> None:
@@ -385,6 +422,12 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             is_main=False,
         )
 
+    @Slot(list)
+    def open_files(self, filepaths: Sequence[Path]) -> None:
+        """Open multiple script files in editor tabs."""
+        for path in filepaths:
+            self.open_file(path)
+
     @Slot()
     def _on_open_clicked(self) -> None:
         filepath, _ = QFileDialog.getOpenFileName(
@@ -394,13 +437,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             "VapourSynth Script (*.vpy *.py);;All Files (*)",
         )
         if filepath:
-            try:
-                p = Path(filepath)
-                content = p.read_text(encoding="utf-8")
-                self._active_filepath = p
-                self.editor.bridge.open_tab(p.as_uri(), content, language="python", is_main=False)
-            except Exception:
-                logger.exception("Error opening script:")
+            self.open_file(Path(filepath))
 
     @run_in_background(name="SaveScript")
     def save_script(self, filepath: Path, content: str, tab_uri: str | None = None) -> None:
