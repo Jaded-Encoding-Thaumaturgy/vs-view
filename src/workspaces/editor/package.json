@@ -24,6 +24,7 @@
     "@codingame/monaco-vscode-extension-api": "38.0.4",
     "@codingame/monaco-vscode-extensions-service-override": "38.0.4",
     "@codingame/monaco-vscode-files-service-override": "38.0.4",
+    "@codingame/monaco-vscode-keybindings-service-override": "38.0.4",
     "@codingame/monaco-vscode-languages-service-override": "38.0.4",
     "@codingame/monaco-vscode-log-service-override": "38.0.4",
     "@codingame/monaco-vscode-model-service-override": "38.0.4",

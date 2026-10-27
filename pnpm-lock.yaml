@@ -221,6 +221,9 @@ importers:
       '@codingame/monaco-vscode-files-service-override':
         specifier: 38.0.4
         version: 38.0.4
+      '@codingame/monaco-vscode-keybindings-service-override':
+        specifier: 38.0.4
+        version: 38.0.4
       '@codingame/monaco-vscode-languages-service-override':
         specifier: 38.0.4
         version: 38.0.4
@@ -346,6 +349,9 @@ packages:
 
   '@codingame/monaco-vscode-host-service-override@38.0.4':
     resolution: {integrity: sha512-/qYMesybOKzy9qsXM/fEEUw9ltlFYjcm2Dr3yS966WQCo5rm6Nwen7H+1rVVbnrySDAR2XJj7tAJQVoFoAV/wg==}
+
+  '@codingame/monaco-vscode-keybindings-service-override@38.0.4':
+    resolution: {integrity: sha512-nua13PDlXLFuD4GA9wrxXZO16IPYrAR8f4myAjuwW3lSwPh7NvLj4mLUIZdx7gXraH8APdjgAfsN5xBpb+ozQw==}
 
   '@codingame/monaco-vscode-languages-service-override@38.0.4':
     resolution: {integrity: sha512-/132j0l/tS3YNj4NKN6Kg9YU7er7N8OzF8gjNM9t6/FFb89hpHbLd0GhkmYJ6IPYHLqYRo7sMhpb4Np2cOcuxg==}
@@ -1708,6 +1714,11 @@ snapshots:
   '@codingame/monaco-vscode-host-service-override@38.0.4':
     dependencies:
       '@codingame/monaco-vscode-api': 38.0.4
+
+  '@codingame/monaco-vscode-keybindings-service-override@38.0.4':
+    dependencies:
+      '@codingame/monaco-vscode-api': 38.0.4
+      '@codingame/monaco-vscode-files-service-override': 38.0.4
 
   '@codingame/monaco-vscode-languages-service-override@38.0.4':
     dependencies:

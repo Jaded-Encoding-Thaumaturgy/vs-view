@@ -8,7 +8,17 @@ import {
   IMarkdownRendererService,
   initialize as initializeServices,
 } from '@codingame/monaco-vscode-api/services';
+import {
+  Keybinding,
+  ScanCodeChord,
+} from '@codingame/monaco-vscode-api/vscode/vs/base/common/keybindings';
+import {
+  IMMUTABLE_CODE_TO_KEY_CODE,
+  KeyCode,
+  ScanCodeUtils,
+} from '@codingame/monaco-vscode-api/vscode/vs/base/common/keyCodes';
 import { SyncDescriptor } from '@codingame/monaco-vscode-api/vscode/vs/platform/instantiation/common/descriptors';
+import type { IKeyboardEvent } from '@codingame/monaco-vscode-api/vscode/vs/platform/keybinding/common/keybinding';
 import { MarkdownRendererService } from '@codingame/monaco-vscode-api/vscode/vs/platform/markdown/browser/markdownRenderer';
 import getConfigurationServiceOverride from '@codingame/monaco-vscode-configuration-service-override';
 import getExtensionServiceOverride from '@codingame/monaco-vscode-extensions-service-override';
@@ -17,6 +27,11 @@ import getFilesServiceOverride, {
   RegisteredMemoryFile,
   registerFileSystemOverlay,
 } from '@codingame/monaco-vscode-files-service-override';
+import getKeybindingsServiceOverride from '@codingame/monaco-vscode-keybindings-service-override';
+import {
+  WindowsKeyboardMapper,
+  type WindowsNativeResolvedKeybinding,
+} from '@codingame/monaco-vscode-keybindings-service-override/vscode/vs/workbench/services/keybinding/common/windowsKeyboardMapper';
 import getLanguagesServiceOverride from '@codingame/monaco-vscode-languages-service-override';
 import getLogServiceOverride from '@codingame/monaco-vscode-log-service-override';
 import getModelServiceOverride from '@codingame/monaco-vscode-model-service-override';
@@ -51,6 +66,38 @@ self.MonacoEnvironment = {
     }
   },
 };
+
+// Work around QtWebEngine's WebEventFactory::windowsKeyCodeForKeyEvent,
+// which derives KeyboardEvent.keyCode from Qt::Key (assuming a US-QWERTY layout) instead of the native Win32 virtual key
+// (e.g. reporting keyCode 186/Semicolon instead of 191/Slash for ':' on French AZERTY),
+// while preserving the hardware scan code in KeyboardEvent.code.
+const origResolveKeyboardEvent = Object.getOwnPropertyDescriptor(
+  WindowsKeyboardMapper.prototype,
+  'resolveKeyboardEvent',
+)?.value as WindowsKeyboardMapper['resolveKeyboardEvent'] | undefined;
+if (origResolveKeyboardEvent) {
+  WindowsKeyboardMapper.prototype.resolveKeyboardEvent = function (
+    this: WindowsKeyboardMapper,
+    keyboardEvent: IKeyboardEvent,
+  ): WindowsNativeResolvedKeybinding {
+    const base = origResolveKeyboardEvent.call(this, keyboardEvent);
+    const scanCode = ScanCodeUtils.toEnum(keyboardEvent.code);
+    if (IMMUTABLE_CODE_TO_KEY_CODE[scanCode] === KeyCode.DependsOnKbLayout) {
+      const [chord] = base.getChords();
+      if (chord) {
+        const [resolved] = this.resolveKeybinding(
+          new Keybinding([
+            new ScanCodeChord(chord.ctrlKey, chord.shiftKey, chord.altKey, chord.metaKey, scanCode),
+          ]),
+        );
+        if (resolved) {
+          return resolved as WindowsNativeResolvedKeybinding;
+        }
+      }
+    }
+    return base;
+  };
+}
 
 /** Initialize VS Code extension host & services before Monaco creation */
 export async function initVscodeServices(): Promise<Result<void>> {
@@ -112,6 +159,7 @@ export async function initVscodeServices(): Promise<Result<void>> {
         ...getTextmateServiceOverride(),
         ...getThemeServiceOverride(),
         ...getFilesServiceOverride(),
+        ...getKeybindingsServiceOverride(),
         [IMarkdownRendererService.toString()]: new SyncDescriptor(
           MarkdownRendererService,
           [],
