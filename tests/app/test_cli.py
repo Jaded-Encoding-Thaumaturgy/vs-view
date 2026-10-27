@@ -7,15 +7,17 @@ import sys
 from collections.abc import Generator
 from concurrent.futures import Future
 from pathlib import Path
-from unittest.mock import MagicMock
+from typing import Any
+from unittest.mock import MagicMock, call
 
 import pytest
 from cyclopts import CoercionError, CycloptsError, Token, ValidationError
 from pytest_mock import MockerFixture
 
 from vsview.app.plugins.manager import PluginManager
+from vsview.app.settings import SettingsManager
 from vsview.app.settings.models import GlobalSettings
-from vsview.app.workspace import PythonScriptWorkspace
+from vsview.app.workspace import PythonScriptWorkspace, QuickScriptWorkspace, VideoFileWorkspace
 from vsview.cli import (
     CycloptsGroupError,
     _populate_path,
@@ -493,9 +495,7 @@ class TestMainCommandRouting:
         with pytest.raises(SystemExit, match=r"^0$"):
             app(["--no-default-workspace"], exit_on_error=False)
 
-        mock_window.script_subaction.trigger.assert_not_called()
-        mock_window.file_subaction.trigger.assert_not_called()
-        mock_window.quick_script_subaction.trigger.assert_not_called()
+        mock_window.add_workspace.assert_not_called()
 
     def test_main_default_workspaces_created_when_no_options(
         self, mock_gui_components: tuple[MagicMock, MagicMock]
@@ -505,9 +505,50 @@ class TestMainCommandRouting:
         with pytest.raises(SystemExit, match=r"^0$"):
             app([], exit_on_error=False)
 
-        mock_window.script_subaction.trigger.assert_called_once()
-        mock_window.file_subaction.trigger.assert_called_once()
-        mock_window.quick_script_subaction.trigger.assert_called_once()
+        assert mock_window.add_workspace.call_args_list == [
+            call(PythonScriptWorkspace),
+            call(VideoFileWorkspace),
+            call(QuickScriptWorkspace),
+        ]
+
+    @pytest.mark.parametrize(
+        ("configured_workspaces", "expected_calls"),
+        [
+            (["quick-script", "script"], [call(QuickScriptWorkspace), call(PythonScriptWorkspace)]),
+            (["script", "script"], [call(PythonScriptWorkspace), call(PythonScriptWorkspace)]),
+            ([], []),
+        ],
+    )
+    def test_main_custom_default_workspaces_from_settings(
+        self,
+        mock_gui_components: tuple[MagicMock, MagicMock],
+        configured_workspaces: list[str],
+        expected_calls: list[Any],
+    ) -> None:
+        _, mock_window = mock_gui_components
+        SettingsManager.global_settings.default_workspaces = configured_workspaces
+
+        with pytest.raises(SystemExit, match=r"^0$"):
+            app([], exit_on_error=False)
+
+        assert mock_window.add_workspace.call_args_list == expected_calls
+
+    def test_main_unknown_default_workspace_logs_warning_and_skips(
+        self,
+        mock_gui_components: tuple[MagicMock, MagicMock],
+        capfd: pytest.CaptureFixture[str],
+    ) -> None:
+        _, mock_window = mock_gui_components
+        SettingsManager.global_settings.default_workspaces = ["non_existent_wk", "script"]
+
+        with pytest.raises(SystemExit, match=r"^0$"):
+            app([], exit_on_error=False)
+
+        out, err = capfd.readouterr()
+        combined = out + err
+        assert "non_existent_wk" in combined
+        assert "doesn't exist" in combined
+        mock_window.add_workspace.assert_called_once_with(PythonScriptWorkspace)
 
     def test_main_meta_triggers_path_population_when_pyapp_active(
         self,

@@ -117,7 +117,7 @@ vsview COMMAND [OPTIONS] [ARGS...]
 #### `--no-default-workspace`
 :   Start the app without opening any workspace.
 
-    Suppresses the three default workspaces (Python Script, Video File, Quick Script)
+    Suppresses the default workspaces (by default Python Script, Video File, Quick Script, or configurable in **Settings -> General -> Default workspaces**)
     that are normally opened when no files or `--workspace` flags are provided.
 
     **Env:** `VSVIEW_NO_DEFAULT_WORKSPACE`

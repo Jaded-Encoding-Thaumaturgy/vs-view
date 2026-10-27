@@ -254,6 +254,7 @@ def main(
     """
     from .app.main import Application, MainWindow
     from .app.plugins.manager import PluginManager
+    from .app.settings import SettingsManager
     from .app.workspace import BaseWorkspace, PythonScriptWorkspace, QuickScriptWorkspace, VideoFileWorkspace
 
     # Setup env vars
@@ -318,51 +319,40 @@ def main(
                 main_window.load_new_script(file, **arg)
             else:
                 main_window.load_new_file(file)
-    elif workspace:
-        PluginManager.wait_for_loaded()
-        app.processEvents()
+    elif workspace or not no_default_workspace:
+        target_workspaces = workspace or SettingsManager.global_settings.default_workspaces
 
-        workspaces: list[type[BaseWorkspace]] = [
+        builtin_workspaces: list[type[BaseWorkspace]] = [
             PythonScriptWorkspace,
             VideoFileWorkspace,
             QuickScriptWorkspace,
-            *PluginManager.workspaces,
         ]
-        possibles = {w.title.lower().replace(" ", "-"): w for w in workspaces}
+        possibles = {w.title.lower().replace(" ", "-"): w for w in builtin_workspaces}
+
+        if any(choice not in possibles for choice in target_workspaces):
+            PluginManager.wait_for_loaded()
+            for w in PluginManager.workspaces:
+                possibles[w.title.lower().replace(" ", "-")] = w
+
+        app.processEvents()
         should_exit = False
 
         with main_window.stack.disable_animation():
-            for choice in workspace:
+            for choice in target_workspaces:
                 if choice not in possibles:
-                    logger.critical("The %r workspace doesn't exist. Pick from %s", choice, list(possibles))
-                    should_exit = True
+                    if workspace:
+                        logger.critical("The %r workspace doesn't exist. Pick from %s", choice, list(possibles))
+                        should_exit = True
+                    else:
+                        logger.warning("The default workspace %r doesn't exist. Pick from %s", choice, list(possibles))
                     continue
                 main_window.add_workspace(possibles[choice])
 
+            if buttons := main_window.button_group.buttons():
+                buttons[0].click()
+
         if should_exit:
             raise SystemExit(app.exit(1))
-
-    elif not no_default_workspace:
-        # Run VSView Editor as default workspace when launched from pythonw and PYAPP environment variable
-        if IS_GUI_MODE and getenv_bool("PYAPP"):
-            PluginManager.wait_for_loaded()
-            app.processEvents()
-
-            for wk in PluginManager.workspaces:
-                if wk.identifier == "jet_vsview_editor":
-                    main_window.add_workspace(wk)
-                    break
-            else:
-                logger.critical("The VSView Editor workspace doesn't exist. Broken installation!")
-                raise SystemExit(app.exit(1))
-        else:
-            # Now create default workspaces
-            app.processEvents()
-            with main_window.stack.disable_animation():
-                main_window.script_subaction.trigger()
-                main_window.file_subaction.trigger()
-                main_window.quick_script_subaction.trigger()
-                main_window.button_group.buttons()[0].click()
 
     raise SystemExit(app.exec())
 

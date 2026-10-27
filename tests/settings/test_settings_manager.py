@@ -7,12 +7,15 @@ from pathlib import Path
 
 import pytest
 from jetpytools import CustomTypeError
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence
+from pytestqt.qtbot import QtBot
 
+import vsview.logging
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import SettingsDialog
 from vsview.app.settings.manager import SettingsManager, SettingsSignals
-from vsview.app.settings.metadata import LineEdit
+from vsview.app.settings.metadata import LineEdit, ListEdit
 from vsview.app.settings.models import (
     GlobalSettings,
     LocalSettings,
@@ -354,3 +357,102 @@ def test_settings_dialog_global_settings_registry_dynamic_combination(monkeypatc
     assert len(registry2) == len(core_entries) + 2
     assert registry2[: len(core_entries)] == core_entries
     assert registry2[len(core_entries) :] == [dummy_entry1, dummy_entry2]
+
+
+@pytest.mark.parametrize(
+    ("is_gui", "pyapp_env", "expected_default"),
+    [
+        (False, "0", ["script", "file", "quick-script"]),
+        (True, "0", ["script", "file", "quick-script"]),
+        (False, "1", ["script", "file", "quick-script"]),
+        (True, "1", ["editor"]),
+    ],
+)
+def test_global_settings_default_workspaces_factory(
+    monkeypatch: pytest.MonkeyPatch,
+    is_gui: bool,
+    pyapp_env: str,
+    expected_default: list[str],
+) -> None:
+    monkeypatch.setattr(vsview.logging, "IS_GUI_MODE", is_gui)
+    monkeypatch.setenv("PYAPP", pyapp_env)
+
+    settings = GlobalSettings()
+    assert settings.default_workspaces == expected_default
+
+
+@pytest.mark.parametrize(
+    ("unique", "sort", "input_vals", "expected_vals"),
+    [
+        (True, True, ["b", "a", "b"], ["a", "b"]),
+        (True, False, ["b", "a", "b"], ["b", "a"]),
+        (False, True, ["b", "a", "b"], ["a", "b", "b"]),
+        (False, False, ["b", "a", "b"], ["b", "a", "b"]),
+    ],
+)
+def test_list_edit_unique_and_sort_options(
+    qtbot: QtBot,
+    unique: bool,
+    sort: bool,
+    input_vals: list[str],
+    expected_vals: list[str],
+) -> None:
+    meta = ListEdit(label="Items", value_type=str, unique=unique, sort=sort)
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+
+    meta.load_value(widget, input_vals)
+    assert meta.get_value(widget) == expected_vals
+
+
+def test_list_edit_items_allow_empty_and_reset(qtbot: QtBot) -> None:
+    choices = [("Script", "script"), ("File", "file"), ("Quick Script", "quick-script")]
+    meta = ListEdit(
+        label="Default workspaces",
+        value_type=str,
+        default_value=lambda: ["script", "file"],
+        items=lambda: choices,
+        unique=False,
+        sort=False,
+        allow_empty=True,
+    )
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+
+    assert widget.dialog.comboBoxItems() == ["Script", "File", "Quick Script"]
+    assert widget.dialog.isComboBoxEditable() is False
+    assert widget.reset_btn is not None
+
+    # Load initial values and verify human-readable labels and underlying UserRole values
+    meta.load_value(widget, ["quick-script", "script"])
+    assert [widget.list_widget.item(i).text() for i in range(widget.list_widget.count())] == ["Quick Script", "Script"]
+    assert meta.get_value(widget) == ["quick-script", "script"]
+
+    # Validate adding an item by its display label
+    widget.validate_text("File")
+    assert meta.get_value(widget) == ["quick-script", "script", "file"]
+
+    # Clear all items via remove_btn and verify allow_empty=True preserves []
+    widget.list_widget.selectAll()
+    qtbot.mouseClick(widget.remove_btn, Qt.MouseButton.LeftButton)
+    assert meta.get_value(widget) == []
+
+    # Click reset_btn to restore default_value
+    qtbot.mouseClick(widget.reset_btn, Qt.MouseButton.LeftButton)
+    assert meta.get_value(widget) == ["script", "file"]
+
+
+def test_list_edit_stringifies_custom_objects_when_items_not_set(qtbot: QtBot) -> None:
+    class FakeKernel:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def __str__(self) -> str:
+            return self.name
+
+    meta = ListEdit(label="Kernels", value_type=str)
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+
+    meta.load_value(widget, [FakeKernel("Bilinear"), FakeKernel("Bicubic")])
+    assert meta.get_value(widget) == ["Bicubic", "Bilinear"]

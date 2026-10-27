@@ -529,7 +529,7 @@ class ListEdit[T: SupportsRichComparison](WidgetMetadata[ListEditWidget[T]]):
     value_type: type[T]
     """Type of values in the list."""
 
-    default_value: T | Sequence[T] | None = field(default=None, kw_only=True)
+    default_value: T | Sequence[T] | Callable[[], T | Sequence[T]] | None = field(default=None, kw_only=True)
     """Default value for the setting."""
 
     _: KW_ONLY
@@ -540,9 +540,31 @@ class ListEdit[T: SupportsRichComparison](WidgetMetadata[ListEditWidget[T]]):
     completions: Sequence[str] | None = None
     """Completions for the dialog."""
 
+    items: Sequence[tuple[str, T]] | Callable[[], Sequence[tuple[str, T]]] | None = None
+    """Fixed choices of (display_text, value) tuples or a callable returning them."""
+
+    unique: bool = True
+    """Whether to deduplicate values."""
+
+    sort: bool = True
+    """Whether to sort values."""
+
+    allow_empty: bool = False
+    """Whether to allow an empty list even when default_value is specified."""
+
     @override
     def create_widget(self, parent: QWidget | None = None) -> ListEditWidget[T]:
-        return ListEditWidget(self.value_type, parent, self.default_value, self.dialog_label_text, self.completions)
+        default_val = self.default_value() if callable(self.default_value) else self.default_value
+        resolved_items = self.items() if callable(self.items) else self.items
+        return ListEditWidget(
+            self.value_type,
+            parent,
+            default_val,
+            self.dialog_label_text,
+            self.completions,
+            resolved_items,
+            self.allow_empty,
+        )
 
     @override
     def load_value(self, widget: ListEditWidget[T], value: Any) -> None:
@@ -552,7 +574,13 @@ class ListEdit[T: SupportsRichComparison](WidgetMetadata[ListEditWidget[T]]):
     @override
     def get_value(self, widget: ListEditWidget[T]) -> Any:
         with self.apply_transform(widget.get_values(), self.from_ui) as value:
-            return sorted(set(value)) if isinstance(value, list) else value
+            if not isinstance(value, list):
+                return value
+            if self.unique:
+                value = list(dict.fromkeys(value))
+            if self.sort:
+                value = sorted(value)
+            return value
 
 
 @dataclass(frozen=True, slots=True)

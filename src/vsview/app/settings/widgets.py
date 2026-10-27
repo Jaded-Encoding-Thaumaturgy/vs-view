@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QSizePolicy,
     QSpinBox,
     QVBoxLayout,
@@ -146,21 +147,29 @@ class ListEditWidget[T](QWidget, IconReloadMixin):
         default_value: T | Sequence[T] | None = None,
         dialog_label_text: str | None = None,
         completions: Sequence[str] | None = None,
+        items: Sequence[tuple[str, T]] | None = None,
+        allow_empty: bool = False,
     ) -> None:
         super().__init__(parent)
         self.value_type = value_type
         self.adapter = TypeAdapter[T](value_type)
-        self.default_value = default_value
+        self.default_value = to_arr(default_value) if default_value is not None else None
+        self.allow_empty = allow_empty
+        self._items_to_val = dict(items) if items is not None else None
+        self._val_to_label = {v: k for k, v in items} if items is not None else None
 
         self.dialog = QInputDialog(self)
         self.dialog.setInputMode(QInputDialog.InputMode.TextInput)
         self.dialog.setWindowTitle("Add Item")
         self.dialog.setLabelText(dialog_label_text or f"Enter {self.value_type.__name__}:")
+        if items is not None:
+            self.dialog.setComboBoxItems([label for label, _ in items])
+            self.dialog.setComboBoxEditable(False)
         self.dialog.finished.connect(self._on_dialog_finished)
 
         self.dialog_line_edit = self.dialog.findChild(QLineEdit)
 
-        if completions and self.dialog_line_edit:
+        if completions and self.dialog_line_edit and items is None:
             self.completer: QCompleter | None = QCompleter(
                 completions,
                 self.dialog_line_edit,
@@ -179,6 +188,11 @@ class ListEditWidget[T](QWidget, IconReloadMixin):
         self.list_widget.setAlternatingRowColors(True)
         self.list_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
         self.list_widget.setMaximumHeight(100)
+        self.list_widget.setDragEnabled(True)
+        self.list_widget.setAcceptDrops(True)
+        self.list_widget.setDropIndicatorShown(True)
+        self.list_widget.setDragDropMode(QListWidget.DragDropMode.InternalMove)
+        self.list_widget.setDefaultDropAction(Qt.DropAction.MoveAction)
         layout.addWidget(self.list_widget)
 
         btn_layout = QHBoxLayout()
@@ -192,6 +206,14 @@ class ListEditWidget[T](QWidget, IconReloadMixin):
 
         btn_layout.addWidget(self.add_btn)
         btn_layout.addWidget(self.remove_btn)
+
+        if self.default_value is None:
+            self.reset_btn = None
+        else:
+            self.reset_btn = self.make_tool_button(IconName.ARROW_U_TOP_LEFT, "Reset to default", self)
+            self.reset_btn.clicked.connect(self._reset_to_default)
+            btn_layout.addWidget(self.reset_btn)
+
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
@@ -203,42 +225,65 @@ class ListEditWidget[T](QWidget, IconReloadMixin):
         if text := self.dialog.textValue():
             self.validate_text(text)
 
-        self.dialog.setTextValue("")
+        if self._items_to_val is None:
+            self.dialog.setTextValue("")
 
     @Slot()
     def _remove_selected(self) -> None:
         for item in self.list_widget.selectedItems():
             self.list_widget.takeItem(self.list_widget.row(item))
 
+    @Slot()
+    def _reset_to_default(self) -> None:
+        if self.default_value is not None:
+            self.set_values(self.default_value)
+
     def get_values(self) -> list[T]:
-        values = []
+        values = list[T]()
         for i in range(self.list_widget.count()):
-            text = self.list_widget.item(i).text()
+            item = self.list_widget.item(i)
+            raw = item.data(Qt.ItemDataRole.UserRole)
+            target = raw if raw is not None else item.text()
             try:
-                values.append(self.adapter.validate_python(text))
+                val = self.adapter.validate_python(target)
             except ValidationError as e:
                 logger.warning("Invalid value: %s", e)
+            else:
+                values.append(val)
 
-        if not values and self.default_value:
-            return to_arr(self.default_value)
+        if not values and not self.allow_empty and self.default_value:
+            return self.default_value
 
         return values
 
-    def set_values(self, values: list[T]) -> None:
+    def set_values(self, values: Sequence[T]) -> None:
         self.list_widget.clear()
 
-        if not values and self.default_value:
-            values = to_arr(self.default_value)
+        if not values and not self.allow_empty and self.default_value:
+            values = self.default_value
 
         for v in values:
-            self.list_widget.addItem(str(v))
+            self._add_value(v)
 
     def validate_text(self, text: str) -> None:
+        if self._items_to_val is not None and text in self._items_to_val:
+            self._add_value(self._items_to_val[text])
+            return
+
         try:
-            self.adapter.validate_python(text)
-            self.list_widget.addItem(text)
+            val = self.adapter.validate_python(text)
         except ValidationError as e:
             logger.error("Invalid value: %s", e)
+        else:
+            self._add_value(val)
+
+    def _add_value(self, val: T) -> None:
+        if self._val_to_label is not None:
+            item = QListWidgetItem(self._val_to_label.get(val, str(val)))
+            item.setData(Qt.ItemDataRole.UserRole, val)
+            self.list_widget.addItem(item)
+        else:
+            self.list_widget.addItem(str(val))
 
 
 class PathListEditWidget(QWidget, IconReloadMixin):

@@ -44,6 +44,7 @@ from .metadata import (
     Dropdown,
     FilePicker,
     LineEdit,
+    ListEdit,
     PathListEdit,
     Spin,
     WidgetMetadata,
@@ -708,6 +709,26 @@ Base64Bytes = Annotated[
 ]
 
 
+def _get_default_workspaces() -> list[str]:
+    from ...logging import IS_GUI_MODE
+
+    # Run VSView Editor as default workspace when launched from pythonw and PYAPP environment variable
+    return ["editor"] if IS_GUI_MODE and getenv_bool("PYAPP") else ["script", "file", "quick-script"]
+
+
+def _get_workspace_items() -> list[tuple[str, str]]:
+    from ..plugins.manager import PluginManager
+    from ..workspace import BaseWorkspace, PythonScriptWorkspace, QuickScriptWorkspace, VideoFileWorkspace
+
+    workspaces: list[type[BaseWorkspace]] = [
+        PythonScriptWorkspace,
+        VideoFileWorkspace,
+        QuickScriptWorkspace,
+        *PluginManager.workspaces,
+    ]
+    return [(w.title, w.title.lower().replace(" ", "-")) for w in workspaces]
+
+
 class GlobalSettings(BaseSettings):
     """
     Application-wide settings stored in the package directory.
@@ -723,6 +744,21 @@ class GlobalSettings(BaseSettings):
             ShortcutConfig(action_id=action, key_sequence=action.definition.default_key) for action in ActionID
         ]
     )
+
+    default_workspaces: Annotated[
+        list[str],
+        ListEdit(
+            label="Default workspaces",
+            value_type=str,
+            default_value=_get_default_workspaces,
+            dialog_label_text="Select workspace:",
+            items=_get_workspace_items,
+            unique=False,
+            sort=False,
+            allow_empty=True,
+            tooltip="Workspaces to open automatically on startup when no files or --workspace options are passed.",
+        ),
+    ] = Field(default_factory=_get_default_workspaces)
 
     autosave: Annotated[
         time,
