@@ -274,7 +274,7 @@ def check_leaks(stage: Literal["before", "after"], *, before: ProcessMemorySnaps
     for obj in qobjects:
         class_name = obj.__class__.__name__
         if (
-            "Workspace" in class_name
+            class_name.endswith("Workspace")
             or "Plugin" in class_name
             or class_name in ("TabViewWidget", "Timeline", "PlaybackContainer", "GraphicsView")
         ):
@@ -283,13 +283,14 @@ def check_leaks(stage: Literal["before", "after"], *, before: ProcessMemorySnaps
     if lingering_qobjects:
         logger.debug("--- Lingering QObjects Check (%s) ---", stage)
         for obj in lingering_qobjects:
-            is_valid = Shiboken.isValid(obj)
-            logger.warning(
-                "Lingering QObject: %s at %s (C++ Valid: %s)",
-                obj.__class__.__name__,
-                hex(id(obj)),
-                is_valid,
-            )
+            if is_valid := Shiboken.isValid(obj):
+                logger.warning("Lingering QObject: %s at %s (C++ Valid: True)", obj.__class__.__name__, hex(id(obj)))
+            else:
+                logger.debug(
+                    "Reclaimed QObject wrapper in GC heap: %s at %s (C++ Valid: False)",
+                    obj.__class__.__name__,
+                    hex(id(obj)),
+                )
 
             # If running the check after deletion, generate backref graph for lingering instances
             if stage == "after" and is_valid:
