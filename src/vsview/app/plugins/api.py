@@ -625,6 +625,18 @@ class PluginAPI(QObject):
         """
         return ShortcutManager.register_shortcut(action_id, callback, parent, context=context)
 
+    def get_shortcut_key_sequence(self, action_id: str) -> QKeySequence:
+        """
+        Return the key sequence currently assigned to a registered action.
+
+        Args:
+            action_id: The namespaced identifier (e.g., "my_plugin.do_thing").
+
+        Returns:
+            The assigned QKeySequence, or an empty QKeySequence if no shortcut is assigned.
+        """
+        return ShortcutManager.get_key(action_id)
+
     def get_shortcut_label(self, action_id: str) -> str:
         """
         Return the current shortcut's native display string or an empty string if no shortcut is assigned.
