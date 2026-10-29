@@ -549,53 +549,34 @@ class MainWindow(QMainWindow):
 
     def _show_sidebar_context_menu(self, pos: QPoint, btn: WorkspaceToolButton[Any]) -> None:
         menu = QMenu(self)
-        actions = list[QAction]()
 
+        reload_action: QAction | None = None
         if isinstance(btn.workspace, LoaderWorkspace):
-            reload_action = QAction(
-                "Reload",
-                btn.workspace,
-                shortcut=QKeySequence(ShortcutManager.get_key(ActionID.RELOAD)),
-            )
+            reload_action = menu.addAction("Reload")
+            reload_action.setShortcut(QKeySequence(ShortcutManager.get_key(ActionID.RELOAD)))
             reload_action.setEnabled(btn.workspace.playback.can_reload)
-            reload_action.triggered.connect(btn.workspace.reload_content)
-            actions.append(reload_action)
 
-        clear_action = QAction("Clear", self)
-        clear_action.setProperty("btn", btn)
-        clear_action.triggered.connect(self._on_clear_action_triggered)
-        actions.append(clear_action)
+        clear_action = menu.addAction("Clear")
+        delete_action = menu.addAction("Delete")
 
-        delete_action = QAction("Delete", self)
-        delete_action.setProperty("btn", btn)
-        delete_action.triggered.connect(self._on_delete_workspace_triggered)
-        actions.append(delete_action)
-
-        menu.addActions(actions)
-        menu.exec(btn.mapToGlobal(pos))
-
-        for action in actions:
-            action.deleteLater()
-
+        selected = menu.exec(btn.mapToGlobal(pos))
         menu.deleteLater()
+
+        if not Shiboken.isValid(btn):
+            return
+
+        if selected is reload_action and isinstance(btn.workspace, LoaderWorkspace) and Shiboken.isValid(btn.workspace):
+            btn.workspace.reload_content()
+        elif selected is clear_action:
+            self.clear_workspace(btn)
+        elif selected is delete_action:
+            self.delete_workspace(btn)
 
     @Slot(QPoint)
     def _on_sidebar_context_menu_requested(self, pos: QPoint) -> None:
         btn = self.sender()
         if isinstance(btn, WorkspaceToolButton):
             self._show_sidebar_context_menu(pos, btn)
-
-    @Slot()
-    def _on_clear_action_triggered(self) -> None:
-        action = self.sender()
-        if isinstance(action, QAction) and (btn := action.property("btn")):
-            self.clear_workspace(btn)
-
-    @Slot()
-    def _on_delete_workspace_triggered(self) -> None:
-        action = self.sender()
-        if isinstance(action, QAction) and (btn := action.property("btn")):
-            self.delete_workspace(btn)
 
     @Slot()
     def _populate_workspace_menu(self) -> None:
