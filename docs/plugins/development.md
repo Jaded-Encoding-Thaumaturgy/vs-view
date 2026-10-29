@@ -97,7 +97,6 @@ Plugins can define persistent settings that automatically appear in the user's s
 ```python
 from typing import Annotated
 
-from jetpytools import fallback
 from pydantic import BaseModel
 from vsview.api import LocalSettingsModel, PluginSettings, Dropdown
 
@@ -124,11 +123,12 @@ class MyPlugin(WidgetPluginBase[GlobalSettings, LocalSettings]):  # (3)!
         if self.settings.global_.mode == "h":
             ...
 
-        self.threshold = fallback(self.settings.local_.threshold, self.settings.global_.threshold)
+        # self.settings.local_ automatically resolves fallbacks from global_
+        self.threshold = self.settings.local_.threshold
 ```
 
 1.  The `#!python Annotated` type allows adding a supported widget to be registered in the settings panel. See the [reference API](../api/developer/#ui-settings) for the different supported widgets.
-2. By inheriting from `#!python LocalSettingsModel` and by setting `threshold=None` we make a local threshold value that falls back to the globally defined value above.
+2. By inheriting from `#!python LocalSettingsModel` and setting `threshold=None`, `self.settings.local_.threshold` automatically falls back to the globally defined value above when unresolved.
 3. In order to access the settings and register the models with the VSView settings, make sure the classes are added here as generic types.
 
 ### Organizing Settings into Sections

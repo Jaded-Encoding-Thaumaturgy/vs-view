@@ -56,22 +56,33 @@ logger = getLogger(__name__)
 
 
 class GraphicsViewProxy(_GraphicsViewProxy):
-    """Proxy for a graphics view."""
+    """
+    Proxy for a graphics view associated with an active video tab.
+
+    Instances are transient and scoped to the currently active tab.
+    Do not cache `api.current_view` across tab switches, always query it fresh.
+    """
 
     @property
     def pixmap(self) -> QPixmap:
-        """Return the pixmap (implicitly shared)."""
+        """Return the pixmap (implicitly shared). Must be called on the main GUI thread."""
         return self.__view.pixmap_item.pixmap()
 
     @property
     def image(self) -> QImage:
-        """Return a copy of the image."""
+        """
+        Return a copy of the image.
+
+        Must be called on the main GUI thread because it accesses the underlying QGraphicsPixmapItem.
+        """
         return self.__view.pixmap_item.pixmap().toImage()
 
     @property
     def cursor_pos(self) -> QPointF:
         """
-        Return the current cursor position in scene coordinates.
+        Return the current cursor position in scene coordinates (floating-point).
+
+        To map to source image pixel coordinates, use `map_to_image(self.viewport.cursor_pos)`.
         """
         return self.map_to_scene(self.viewport.cursor_pos)
 
@@ -104,7 +115,7 @@ class GraphicsViewProxy(_GraphicsViewProxy):
         @property
         def cursor_pos(self) -> QPoint:
             """
-            Return the current cursor position in viewport coordinates.
+            Return the current cursor position in viewport coordinates (integer pixels).
             """
             return self.map_from_global(QCursor.pos())
 
@@ -118,6 +129,9 @@ class GraphicsViewProxy(_GraphicsViewProxy):
         def set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
             """
             Set the cursor for the current view's viewport.
+
+            Note:
+                The cursor automatically resets to `Qt.CursorShape.OpenHandCursor` when switching video tabs.
             """
             v = self.__viewport
             v.setCursor(cursor)
@@ -157,6 +171,10 @@ class GraphicsViewProxy(_GraphicsViewProxy):
     def map_to_image(self, point: QPoint | QPointF) -> QPointF:
         """
         Map coordinates from viewport to the source image's pixel coordinate space.
+
+        Args:
+            point: The point in viewport or widget local coordinates
+                (e.g. from `self.viewport.cursor_pos` or `QMouseEvent.position()`).
         """
         return self.__view.map_to_image(point)
 
@@ -202,14 +220,15 @@ class TimelineProxy(_TimelineProxy):
         update: bool = True,
     ) -> None:
         """
-        Add one or more notches to the timeline.
+        Add one or more notches or range spans to the timeline.
 
         Args:
             identifier: A string identifier for the group of notches.
-            data: The position(s) of the notch(es).
+            data: The position(s) or range(s) of the notch(es).
+                Accepts a single frame/time, a sequence of positions, or `(start, end)` tuples for range spans.
             color: The color of the notch markers. Defaults to black.
             label: An optional label to display with the notch.
-            notch_id: An optional hashable ID to uniquely identify this specific notch.
+            notch_id: An optional hashable ID to uniquely identify this specific notch within the group.
             update: If True (default), triggers a visual update of the timeline.
         """
         for start, end in self._norm_data(data):
@@ -231,8 +250,9 @@ class TimelineProxy(_TimelineProxy):
 
         Args:
             identifier: The group identifier of the notches to remove.
-            data: The position(s) of the notch(es) to remove.
-            notch_id: If provided, only removes notches matching this specific ID.
+            data: The position(s) or range(s) of the notch(es) to remove.
+                Note that `data` must match the notch's position even when `notch_id` is supplied.
+            notch_id: Optional hashable ID used when adding the notch.
             update: If True (default), triggers a visual update of the timeline.
         """
         for start, end in self._norm_data(data):
@@ -243,7 +263,7 @@ class TimelineProxy(_TimelineProxy):
 
     def clear_notches(self, identifier: str | Iterable[str], *, update: bool = True) -> None:
         """
-        Clear all notches associated with the given identifier(s).
+        Clear all notches associated with the given group identifier(s).
 
         Args:
             identifier: A single identifier or an iterable of identifiers to clear.
@@ -263,7 +283,7 @@ class TimelineProxy(_TimelineProxy):
 
 
 class PlaybackProxy(_PlaybackProxy):
-    """Proxy for the playback."""
+    """Proxy for controlling playback position."""
 
     def seek(self, frame_or_time: int | timedelta, /) -> bool:
         """
@@ -273,7 +293,11 @@ class PlaybackProxy(_PlaybackProxy):
             frame_or_time: The frame number or time to seek to.
 
         Returns:
-            bool: True if the seek was successful, False otherwise.
+            bool: True if the seek was initiated, False if playback is currently active,
+                the workspace is busy/blocked by a WorkspaceBlocker, or the frame is out of bounds.
+
+        Raises:
+            NoCurrentVideoOutputError: If no video output is currently available in the active workspace.
         """
         if self.__playback_manager.state.is_playing:
             logger.debug("Video is playing, skipping seek request")
@@ -295,7 +319,8 @@ class PluginSecrets(_PluginSecrets):
     """
     Secure secret storage API for plugins, backed by the OS keyring.
 
-    The `keyring` package is necessary for this API to work. You can depend on it with `vsview[secrets]`.
+    All stored secrets are automatically scoped and namespaced to the plugin's `identifier`.
+    The `keyring` package is necessary for this API to work (`vsview[secrets]`).
     """
 
     if TYPE_CHECKING:
@@ -399,19 +424,19 @@ class PluginAPI(QObject):
     """API for plugins to interact with the workspace."""
 
     statusMessage = Signal(str)  # message
-    """Signal to emit status messages."""
+    """Signal to emit status messages displayed in the main window status bar."""
 
     globalSettingsChanged = Signal()
-    """Signal to emit when global settings change."""
+    """Signal emitted when global settings change or are invalidated."""
 
     localSettingsChanged = Signal(str)
-    """Signal to emit when local settings change."""
+    """Signal emitted when local settings change, passing the affected script file path."""
 
     aboutToSaveGlobal = Signal()
-    """Signal to emit before global settings are saved."""
+    """Signal emitted immediately before global settings are saved to disk."""
 
     aboutToSaveLocal = Signal(str)  # path
-    """Signal to emit before local settings are saved."""
+    """Signal emitted immediately before local settings are saved to disk, passing the script file path."""
 
     @property
     def file_path(self) -> Path | None:
@@ -425,7 +450,12 @@ class PluginAPI(QObject):
 
     @property
     def current_time(self) -> Time:
-        """Return the current time."""
+        """
+        Return the current playback time.
+
+        Raises:
+            NoCurrentVideoOutputError: If no video output is currently available in the active workspace.
+        """
         return _get_controller(self).current_time
 
     @property
@@ -435,12 +465,17 @@ class PluginAPI(QObject):
 
     @property
     def voutputs(self) -> list[VideoOutputProxy]:
-        """Return a dictionary of VideoOutputProxy objects for all tabs."""
+        """Return a list of VideoOutputProxy objects for all tabs."""
         return _get_controller(self).voutputs
 
     @property
     def current_voutput(self) -> VideoOutputProxy:
-        """Return the VideoOutput for the currently selected tab."""
+        """
+        Return the VideoOutputProxy for the currently selected tab.
+
+        Raises:
+            NoCurrentVideoOutputError: If no video output is currently available in the active workspace.
+        """
         return _get_controller(self).current_voutput
 
     @property
@@ -450,6 +485,7 @@ class PluginAPI(QObject):
 
     @property
     def current_aoutput(self) -> AudioOutputProxy | None:
+        """Return the AudioOutputProxy for the current audio stream, or None if no audio output exists."""
         return _get_controller(self).current_aoutput
 
     @property
@@ -460,8 +496,13 @@ class PluginAPI(QObject):
     @property
     def settings(self) -> SimpleNamespace:
         """
-        !!! warning "Unstable API"
-            Return the application's global and local settings as nested SimpleNamespace proxy objects.
+        Warning: Unstable API
+            Return a read-only snapshot of the application's global and local settings
+            as nested SimpleNamespace proxy objects (excluding plugin settings).
+
+        Note:
+            To access and persist your own plugin's settings, use `self.settings` on
+            `WidgetPluginBase` or `NodeProcessor` instead of `api.settings`.
         """
 
         def recursive_ns(data: dict[str, Any]) -> SimpleNamespace:
@@ -481,7 +522,12 @@ class PluginAPI(QObject):
 
     @property
     def current_view(self) -> GraphicsViewProxy:
-        """Return a proxy for the current view."""
+        """
+        Return a transient proxy for the current tab's graphics view.
+
+        Raises:
+            NoCurrentViewError: If no graphics view is currently available in the active workspace.
+        """
         return _get_controller(self).current_view_proxy
 
     @property
@@ -496,13 +542,16 @@ class PluginAPI(QObject):
 
     @property
     def busy(self) -> bool:
-        """Return whether the plugin API is busy by any plugins."""
+        """Return whether any plugin currently holds an active WorkspaceBlocker."""
         return _get_controller(self).busy
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """
-        Return a path to a local storage directory for the given plugin,
+        Return a directory path for persistent plugin storage next to the loaded script,
         or None if the current workspace has no file path.
+
+        Note:
+            The directory is automatically created on disk if it does not already exist.
         """
         return _get_controller(self).get_local_storage(plugin)
 
@@ -516,7 +565,10 @@ class PluginAPI(QObject):
     @contextmanager
     def vs_context(self) -> Generator[None]:
         """
-        Context manager for using the VapourSynth environment of the workspace.
+        Context manager activating the workspace's managed VapourSynth environment.
+
+        Required when creating clips, filtering, or evaluating frames outside standard callbacks
+        such as `PluginGraphicsView.get_node` or `NodeProcessor.prepare`.
         """
         with _get_controller(self).vs_context():
             try:
@@ -526,7 +578,11 @@ class PluginAPI(QObject):
 
     def blocker(self, caller: WidgetPluginBase[Any, Any] | None = None) -> WorkspaceBlocker:
         """
-        Create a WorkspaceBlocker for this plugin.
+        Create a WorkspaceBlocker to mark the workspace as busy.
+
+        Args:
+            caller: Optional widget holding the blocker.
+                When supplied, the lock is tracked against the caller's lifetime and released if destroyed.
         """
         return _get_controller(self).create_blocker(self, caller)
 
@@ -626,9 +682,19 @@ else:
 
 class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     """
-    Settings wrapper providing lazy, always-fresh access.
+    Settings wrapper providing lazy, live access to plugin configuration models.
 
-    Returns None if no settings model is defined for the scope.
+    Direct attribute assignments (e.g., `self.settings.global_.key = value`)
+    are automatically intercepted and persisted to disk.
+
+    Note:
+        In-place mutations of mutable containers (e.g., `self.settings.global_.items.append(...)`)
+        do not trigger `__setattr__` and are not persisted automatically. Reassign the attribute
+        or use `update_global_settings()` / `update_local_settings()`.
+
+        When local settings inherit from `LocalSettingsModel`, `self.settings.local_` automatically
+        resolves with global fallbacks applied for any `None` values. Returns None if no settings
+        model is defined for the scope.
     """
 
     def __init__(self, plugin: _PluginLike) -> None:
@@ -684,7 +750,15 @@ class _PluginBase(Generic[TGlobalSettings, TLocalSettings], metaclass=_PluginBas
 
 
 class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, metaclass=_PluginBaseMeta):
-    """Base class for all widget plugins."""
+    """
+    Base class for all widget plugins (tool panels and tool docks).
+
+    Note: Visibility Gating
+        Lifecycle and interaction hooks are only called when the widget is truly visible
+        (not hidden, collapsed in a splitter, or placed on an inactive dock tab).
+
+        When a hidden plugin becomes visible again, `on_current_voutput_changed` is invoked automatically.
+    """
 
     __plugin_base__ = True
 
@@ -695,35 +769,39 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
 
     def on_workspace_loaded(self) -> None:
         """
-        Called when the workspace is loaded or reloaded.
+        Called when the workspace has loaded or reloaded content.
 
-        Execution Thread: **Main or Background**.
-        If you need to update the UI, use the `@run_in_loop` decorator.
+        Execution Thread: **Background**.
+
+        Any UI updates MUST use the `@run_in_loop` decorator.
         """
 
     def on_workspace_destroy(self) -> None:
         """
-        Called when the workspace is destroyed.
+        Called when the workspace is being destroyed.
 
-        Execution Thread: **Main or Background**.
-        If you need to update the UI, use the `@run_in_loop` decorator.
+        Execution Thread: **Background**.
+
+        Any UI updates MUST use the `@run_in_loop` decorator.
         """
 
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
         """
-        Called when the current video output changes.
+        Called when the active video output tab changes, or when the plugin becomes visible.
 
         Execution Thread: **Main or Background**.
-        If you need to update the UI, use the `@run_in_loop` decorator.
+
+        Any UI updates MUST use the `@run_in_loop` decorator.
         """
         self.on_current_frame_changed(self.api.current_frame)
 
     def on_current_frame_changed(self, n: int) -> None:
         """
-        Called when the current frame changes.
+        Called when the current playback/scrub frame changes while the plugin is visible.
 
         Execution Thread: **Main or Background**.
-        If you need to update the UI, use the `@run_in_loop` decorator.
+
+        Any UI updates MUST use the `@run_in_loop` decorator
         """
 
     def on_playback_started(self) -> None:
@@ -742,56 +820,66 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
 
     def on_view_context_menu(self, event: QContextMenuEvent) -> None:
         """
-        Called when a context menu of the current view is requested.
+        Called when a context menu in the active video view is requested.
 
-        The event is forwarded BEFORE the view processes it.
+        Forwarded BEFORE the view processes it. Call `event.ignore()` to suppress the view's default context menu
+        and display a custom menu.
 
         Execution Thread: **Main**.
         """
 
     def on_view_mouse_moved(self, event: QMouseEvent) -> None:
         """
-        Called when the mouse of the current view is moved.
+        Called when the mouse moves over the active video view.
 
-        The event is forwarded AFTER the view processes it.
+        Coordinates in `event.position()` are in **viewport coordinates**.
+        To map to source image pixel coordinates, use `self.api.current_view.map_to_image(event.position().toPoint())`.
 
         Execution Thread: **Main**.
         """
 
     def on_view_mouse_pressed(self, event: QMouseEvent) -> None:
         """
-        Called when the mouse of the current view is pressed.
+        Called when a mouse button is pressed in the active video view.
 
-        The event is forwarded AFTER the view processes it.
+        Coordinates in `event.position()` are in **viewport coordinates**.
+        To map to source image pixel coordinates, use `self.api.current_view.map_to_image(event.position().toPoint())`.
 
         Execution Thread: **Main**.
         """
 
     def on_view_mouse_released(self, event: QMouseEvent) -> None:
         """
-        Called when the mouse of the current view is released.
+        Called when a mouse button is released in the active video view.
 
-        The event is forwarded AFTER the view processes it.
+        Coordinates in `event.position()` are in **viewport coordinates**.
+        To map to source image pixel coordinates, use `self.api.current_view.map_to_image(event.position().toPoint())`.
 
         Execution Thread: **Main**.
         """
 
     def on_view_rect_selection_changed(self, rect: QRect) -> None:
         """
-        Called when the current view's rectangular selection changes.
-
-        `rect` is in source image pixel coordinates. An empty rect means the selection was cleared.
+        Called when the user drags or alters the rectangular selection overlay.
 
         Execution Thread: **Main**.
+
+        Args:
+            rect: Selection rectangle in **source image pixel coordinates**.
+                An empty QRect indicates that the selection was cleared.
+
         """
 
     def on_view_rect_selection_finished(self, rect: QRect) -> None:
         """
-        Called when the current view's rectangular selection interaction finishes.
-
-        `rect` is in source image pixel coordinates. An empty rect means the selection was cleared.
+        Called when rectangular selection interaction completes (mouse released or finished).
 
         Execution Thread: **Main**.
+
+        Args:
+            rect: Final selection rectangle in **source image pixel coordinates**.
+                An empty QRect indicates that the selection was cleared.
+
         """
 
     def on_view_key_press(self, event: QKeyEvent) -> None:
@@ -814,14 +902,20 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
 
     def on_hide(self) -> None:
         """
-        Called when the plugin is hidden.
+        Called when the plugin widget is hidden, dock tab backgrounded, or pane collapsed.
 
         Execution Thread: **Main**.
         """
 
 
 class PluginGraphicsView(BaseGraphicsView):
-    """Graphics view for plugins."""
+    """
+    Graphics view for plugins designed to display custom VapourSynth output.
+
+    Note:
+        Instances parented within a `WidgetPluginBase` hierarchy are automatically discovered
+        and managed by the controller. Ensure views are properly parented and set to visible to receive frame updates.
+    """
 
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent)
@@ -846,23 +940,33 @@ class PluginGraphicsView(BaseGraphicsView):
         """
         Called when the current video output changes.
 
-        **Warning**: Do not call `self.refresh()` here, as it will cause an infinite loop.
-        If you need to update the display manually, use `self.update_display()`.
-
         Execution Thread: **Main or Background**.
-        If you need to update the UI, use the `@run_in_loop` decorator.
+
+        Any UI updates MUST use the `@run_in_loop` decorator
+
+        Warning:
+            - Do not call `self.refresh()` here, as it will cause an infinite loop.
+            - If you need to update the display manually, use `self.update_display()`.
+
         """
 
     def on_current_frame_changed(self, n: int, f: vs.VideoFrame) -> None:
         """
         Called when the current frame changes.
-        `n` is the frame number and `f` is the packed VideoFrame in GRAY32 format.
-
-        **Warning**: Do not call `self.refresh()` here, as it will cause an infinite loop.
-        If you need to update the display manually, use `self.update_display()`.
 
         Execution Thread: **Main or Background**.
-        If you need to update the UI, use the `@run_in_loop` decorator.
+
+        If you need to update the display manually, use `self.update_display()` or `@run_in_loop`.
+
+        Warning:
+            - Do not call `self.refresh()` here, as it will cause an infinite loop.
+            - The `f` VideoFrame is closed immediately after this method exits.
+              Any `QImage` produced via `frame_to_qimage(f)` MUST be copied (`.copy()`)
+              to prevent memory corruption from accessing freed frame memory.
+
+        Args:
+            n: Frame number.
+            f: Packed VideoFrame in GRAY32 / packed format.
         """
         self.update_display(self.api.current_voutput.packer_sdr.frame_to_qimage(f).copy())
 
@@ -880,13 +984,25 @@ class NodeProcessor(
     Generic[NodeT, TGlobalSettings, TLocalSettings],
     metaclass=_PluginBaseMeta,
 ):
-    """Interface for objects that process VapourSynth nodes."""
+    """
+    Interface for plugins that intercept and transform raw VapourSynth video or audio output nodes.
+
+    Note:
+        Registered via `vsview_get_video_processor` or `vsview_get_audio_processor`.
+
+        Only **one** video processor and **one** audio processor can be active application-wide.
+        The first registered plugin takes precedence.
+    """
 
     __plugin_base__ = True
 
     def prepare(self, node: NodeT, /) -> NodeT:
         """
         Process the input node and return a modified node of the same type.
+
+        Called during output initialization within the VapourSynth environment before
+        packing or playback pipeline setup.
+        The returned node must preserve clip length and stream compatibility.
 
         Args:
             node: The raw input node (VideoNode or AudioNode).
