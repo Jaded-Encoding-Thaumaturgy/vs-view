@@ -28,7 +28,7 @@ const { FakeUri, FakeTextModel, modelsMap, mockModelsList } = vi.hoisted(() => {
     }
 
     public static parse(uriStr: string): FakeUri {
-      const scheme = uriStr.split(':')[0] || 'file';
+      const scheme = uriStr.split(':')[0] ?? 'file';
       let path = uriStr.replace(/^[^:]+:\/\//, '');
       if (!path.startsWith('/')) {
         path = '/' + path;

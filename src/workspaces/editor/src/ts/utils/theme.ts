@@ -128,12 +128,12 @@ export const SUPPORTED_THEMES: Record<string, ThemeDefinition> = {
 /**
  * Gets the canonical theme definition from a theme name.
  */
-export function getThemeDefinition(themeName: string): Result<ThemeDefinition, Error> {
+export function getThemeDefinition(themeName: string): Result<ThemeDefinition> {
   const matched = SUPPORTED_THEMES[themeName];
   return matched ? Result.ok(matched) : Result.err(new Error(`Unsupported theme: '${themeName}'`));
 }
 
 export function getInitialTheme(): string {
   const urlTheme = new URLSearchParams(window.location.search).get('initialTheme');
-  return urlTheme || (window.ENV?.VSVIEW !== undefined ? undefined : 'Dark Modern')!;
+  return urlTheme ?? (window.ENV?.VSVIEW !== undefined ? undefined : 'Dark Modern')!;
 }

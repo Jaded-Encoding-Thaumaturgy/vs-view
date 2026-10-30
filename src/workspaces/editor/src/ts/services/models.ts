@@ -10,8 +10,7 @@ import { isSameResource } from '../utils/uri';
 export function findExistingModel(
   resource: monaco.Uri | vscode.Uri,
 ): monaco.editor.ITextModel | undefined {
-  const monacoUri = resource as monaco.Uri;
-  const direct = monacoEditor.editor.getModel(monacoUri);
+  const direct = monacoEditor.editor.getModel(resource);
   if (direct && !direct.isDisposed()) {
     return direct;
   }

@@ -115,7 +115,7 @@ const {
     constructor(id: string, name: string, clientOptions: unknown) {
       this.id = id;
       this.name = name;
-      this.clientOptions = (clientOptions || {}) as MockClientOptions;
+      this.clientOptions = clientOptions ?? {};
       lspState.createdClients.push({
         id,
         name,
@@ -259,8 +259,6 @@ class MockWebSocket extends EventTarget {
 // Import LspService and Types
 import { type LspServerConfig, LspService, WebSocketLanguageClient } from './service';
 
-type MockClientInstance = InstanceType<typeof MockBaseLanguageClient>;
-
 describe('LspService and Language Client Lifecycle', () => {
   let service: LspService;
 
@@ -319,7 +317,7 @@ describe('LspService and Language Client Lifecycle', () => {
       expect(clientRecord.id).toBe('basedpyright');
       expect(clientRecord.name).toBe('BasedPyright');
 
-      const client = clientRecord.instance as MockClientInstance;
+      const client = clientRecord.instance;
       expect(client.start).toHaveBeenCalled();
     });
 
@@ -352,7 +350,7 @@ describe('LspService and Language Client Lifecycle', () => {
       ws1.simulateOpen();
 
       expect(lspState.createdClients).toHaveLength(1);
-      const client1 = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client1 = lspState.createdClients[0]!.instance;
 
       // Reconnect same client ID on different port
       const config2: LspServerConfig = {
@@ -414,7 +412,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
 
       await service.disconnect('ruff');
 
@@ -443,8 +441,8 @@ describe('LspService and Language Client Lifecycle', () => {
       (lspState.createdSockets[1] as MockWebSocket).simulateOpen();
 
       expect(lspState.createdClients).toHaveLength(2);
-      const clientA = lspState.createdClients[0]!.instance as MockClientInstance;
-      const clientB = lspState.createdClients[1]!.instance as MockClientInstance;
+      const clientA = lspState.createdClients[0]!.instance;
+      const clientB = lspState.createdClients[1]!.instance;
 
       await service.disconnect();
 
@@ -466,7 +464,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
 
       ws.simulateClose();
 
@@ -507,7 +505,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
 
       // Trigger configuration change that affects 'python'
       for (const listener of vscodeWorkspaceMock.configChangeListeners) {
@@ -534,7 +532,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
 
       // Trigger change for 'basedpyright'
       for (const listener of vscodeWorkspaceMock.configChangeListeners) {
@@ -561,7 +559,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
 
       // Trigger change for unrelated 'workbench.colorTheme'
       for (const listener of vscodeWorkspaceMock.configChangeListeners) {
@@ -586,7 +584,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
       client.state = State.Stopped;
 
       for (const listener of vscodeWorkspaceMock.configChangeListeners) {
@@ -612,7 +610,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
 
       expect(client.notificationHandlers.has('$/progress')).toBe(true);
 
@@ -647,7 +645,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
 
       expect(client.notificationHandlers.has('custom/indexingStart')).toBe(true);
       expect(client.notificationHandlers.has('custom/indexingEnd')).toBe(true);
@@ -670,7 +668,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
       const middleware = client.clientOptions.middleware;
       expect(middleware?.didOpen).toBeDefined();
 
@@ -713,7 +711,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
       const middleware = client.clientOptions.middleware;
       expect(middleware?.provideDefinition).toBeDefined();
 
@@ -753,7 +751,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
       const middleware = client.clientOptions.middleware;
 
       const doc = {
@@ -792,7 +790,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
       const middleware = client.clientOptions.middleware;
 
       // Start progress
@@ -853,7 +851,7 @@ describe('LspService and Language Client Lifecycle', () => {
       const ws = lspState.createdSockets[0] as MockWebSocket;
       ws.simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
       const middleware = client.clientOptions.middleware;
 
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -986,7 +984,7 @@ describe('LspService and Language Client Lifecycle', () => {
       await service.connect(config);
       (lspState.createdSockets[0] as MockWebSocket).simulateOpen();
 
-      const client = lspState.createdClients[0]!.instance as MockClientInstance;
+      const client = lspState.createdClients[0]!.instance;
 
       service.dispose();
 

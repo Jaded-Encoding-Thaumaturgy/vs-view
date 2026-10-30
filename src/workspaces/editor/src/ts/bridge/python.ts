@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import type { EditorService } from '../editor/service';
 import type { LspService } from '../lsp/service';
 import type { FileStatResponse, PythonBridge, QWebSignal } from '../types';
-import { ConsolePanelService } from '../ui/console';
+import type { ConsolePanelService } from '../ui/console';
 import { DOM_IDS } from '../ui/constants';
 import { DisposableStore, toDisposable } from '../utils/disposables';
 import { Result, ResultAsync } from '../utils/result';
@@ -75,7 +75,7 @@ export class BridgeService implements vscode.Disposable {
 
   public initBridge(): void {
     new window.QWebChannel(window.qt.webChannelTransport, (channel) => {
-      const pyBridge = channel.objects['bridge'] as PythonBridge;
+      const pyBridge = channel.objects['bridge'] as PythonBridge | undefined;
 
       if (!pyBridge) {
         console.error('Bridge object not found in channel.');
@@ -128,13 +128,13 @@ export class BridgeService implements vscode.Disposable {
     );
     this.disposables.add(
       this.editorService.onDidChangeActiveTab((uri) => {
-        this.bridge?.onActiveTabChanged(uri || '');
+        this.bridge?.onActiveTabChanged(uri ?? '');
         this.flushContentChanged();
       }),
     );
     this.disposables.add(
       this.editorService.onDidChangeMainTab((uri) => {
-        this.bridge?.onMainTabChanged(uri || '');
+        this.bridge?.onMainTabChanged(uri ?? '');
         this.flushContentChanged();
       }),
     );
@@ -173,7 +173,7 @@ export class BridgeService implements vscode.Disposable {
     }
     this.bridge?.onContentChanged(this.editorService.getValue());
     this.bridge?.onMainContentChanged(this.editorService.getMainValue());
-    this.editorService.updateTabBar?.();
+    this.editorService.updateTabBar();
   }
 
   private bindSignal<T extends (...args: never[]) => void>(
@@ -234,14 +234,14 @@ export class BridgeService implements vscode.Disposable {
               ? p.configurationSection
               : Array.isArray(p.configurationSection) &&
                   p.configurationSection.every((item) => typeof item === 'string')
-                ? (p.configurationSection as string[])
+                ? p.configurationSection
                 : undefined;
 
           const progressNotifications = Array.isArray(p.progressNotifications)
             ? (p.progressNotifications as Array<{ begin?: unknown; end?: unknown }>)
                 .filter(
                   (pair): pair is { begin: string; end: string } =>
-                    typeof pair?.begin === 'string' && typeof pair?.end === 'string',
+                    typeof pair.begin === 'string' && typeof pair.end === 'string',
                 )
                 .map((pair) => ({ begin: pair.begin, end: pair.end }))
             : undefined;

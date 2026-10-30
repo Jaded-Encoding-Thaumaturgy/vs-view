@@ -67,6 +67,7 @@ interface MockEditorServiceFixture {
   requestFormat: ReturnType<typeof vi.fn>;
   updateOptionsFromMap: ReturnType<typeof vi.fn>;
   layout: ReturnType<typeof vi.fn>;
+  updateTabBar: ReturnType<typeof vi.fn>;
   emitContentChange: () => void;
   emitActiveTabChange: (uri: string | null) => void;
   emitMainTabChange: (uri: string | null) => void;
@@ -100,6 +101,7 @@ function createMockEditorService(): MockEditorServiceFixture {
   const requestFormat = vi.fn();
   const updateOptionsFromMap = vi.fn();
   const layout = vi.fn();
+  const updateTabBar = vi.fn();
 
   const service = {
     getValue,
@@ -115,6 +117,7 @@ function createMockEditorService(): MockEditorServiceFixture {
     requestFormat,
     updateOptionsFromMap,
     layout,
+    updateTabBar,
     onDidChangeContent: vi.fn((cb: () => void) => contentChangeEmitter.event(cb)),
     onDidChangeActiveTab: vi.fn((cb: (uri: string | null) => void) =>
       activeTabChangeEmitter.event(cb),
@@ -145,6 +148,7 @@ function createMockEditorService(): MockEditorServiceFixture {
     requestFormat,
     updateOptionsFromMap,
     layout,
+    updateTabBar,
     emitContentChange: () => contentChangeEmitter.fire(undefined),
     emitActiveTabChange: (uri: string | null) => activeTabChangeEmitter.fire(uri),
     emitMainTabChange: (uri: string | null) => mainTabChangeEmitter.fire(uri),
@@ -653,9 +657,7 @@ describe('BridgeService', () => {
       it('returns err when BridgeService is not instantiated', () => {
         const result = BridgeService.active;
         expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toBe('BridgeService instance is not available');
-        }
+        expect(() => result.unwrap()).toThrow('BridgeService instance is not available');
       });
 
       it('returns ok when BridgeService is initialized', () => {
@@ -664,9 +666,7 @@ describe('BridgeService', () => {
 
         const result = BridgeService.active;
         expect(result.ok).toBe(true);
-        if (result.ok) {
-          expect(result.value).toBe(mockBridgeFixture.bridge);
-        }
+        expect(result.unwrap()).toBe(mockBridgeFixture.bridge);
       });
 
       it('returns err after BridgeService is disposed', () => {
@@ -677,9 +677,7 @@ describe('BridgeService', () => {
         service.dispose();
         const result = BridgeService.active;
         expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toBe('BridgeService instance is not available');
-        }
+        expect(() => result.unwrap()).toThrow('BridgeService instance is not available');
       });
     });
 
@@ -715,17 +713,13 @@ describe('BridgeService', () => {
 
         const res = await BridgeService.readFile('d:/nonexistent.py');
         expect(res.ok).toBe(false);
-        if (!res.ok) {
-          expect(res.error.message).toBe('Failed to read file: d:/nonexistent.py');
-        }
+        expect(() => res.unwrap()).toThrow('Failed to read file: d:/nonexistent.py');
       });
 
       it('returns err when no active bridge instance exists', async () => {
         const res = await BridgeService.readFile('d:/test.py');
         expect(res.ok).toBe(false);
-        if (!res.ok) {
-          expect(res.error.message).toBe('BridgeService instance is not available');
-        }
+        expect(() => res.unwrap()).toThrow('BridgeService instance is not available');
       });
     });
 
@@ -768,17 +762,13 @@ describe('BridgeService', () => {
 
         const res = await BridgeService.statFile('d:/missing.py');
         expect(res.ok).toBe(false);
-        if (!res.ok) {
-          expect(res.error.message).toBe('File not found: d:/missing.py');
-        }
+        expect(() => res.unwrap()).toThrow('File not found: d:/missing.py');
       });
 
       it('returns err when no active bridge instance exists', async () => {
         const res = await BridgeService.statFile('d:/test.py');
         expect(res.ok).toBe(false);
-        if (!res.ok) {
-          expect(res.error.message).toBe('BridgeService instance is not available');
-        }
+        expect(() => res.unwrap()).toThrow('BridgeService instance is not available');
       });
     });
   });

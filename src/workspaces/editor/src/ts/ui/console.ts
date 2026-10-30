@@ -90,7 +90,7 @@ export class ConsolePanelService implements vscode.Disposable {
   }
 
   public toggle(forceState?: boolean): void {
-    this.isVisible = forceState !== undefined ? forceState : !this.isVisible;
+    this.isVisible = forceState ?? !this.isVisible;
 
     if (this.isVisible) {
       this.panelElement.classList.remove('hidden');
@@ -161,7 +161,7 @@ export class ConsolePanelService implements vscode.Disposable {
     );
     const fg = getProp('--vscode-terminal-foreground', '--vscode-foreground');
     const cursor =
-      getProp('--vscode-terminalCursor-foreground', '--vscode-editorCursor-foreground') || fg;
+      getProp('--vscode-terminalCursor-foreground', '--vscode-editorCursor-foreground') ?? fg;
     const selectionBackground = getProp(
       '--vscode-terminal-selectionBackground',
       '--vscode-editor-selectionBackground',

@@ -1,5 +1,5 @@
 import { Event } from '@codingame/monaco-vscode-api/vscode/vs/base/common/event';
-import { type IDisposable } from '@codingame/monaco-vscode-api/vscode/vs/base/common/lifecycle';
+import type { IDisposable } from '@codingame/monaco-vscode-api/vscode/vs/base/common/lifecycle';
 import { isLinux } from '@codingame/monaco-vscode-api/vscode/vs/base/common/platform';
 import {
   FilePermission,

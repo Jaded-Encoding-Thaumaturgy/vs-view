@@ -180,18 +180,17 @@ describe('ConsolePanelService', () => {
     panelEl = document.createElement('div');
     panelEl.id = DOM_IDS.CONSOLE_PANEL;
     Object.defineProperty(panelEl, 'clientHeight', { value: 200, writable: true });
-    panelEl.getBoundingClientRect = () =>
-      ({
-        width: 800,
-        height: 200,
-        top: 600,
-        bottom: 800,
-        left: 0,
-        right: 800,
-        x: 0,
-        y: 600,
-        toJSON: () => ({}),
-      }) as DOMRect;
+    panelEl.getBoundingClientRect = () => ({
+      width: 800,
+      height: 200,
+      top: 600,
+      bottom: 800,
+      left: 0,
+      right: 800,
+      x: 0,
+      y: 600,
+      toJSON: () => ({}),
+    });
 
     resizerEl = document.createElement('div');
     resizerEl.id = DOM_IDS.CONSOLE_RESIZER;
@@ -270,9 +269,9 @@ describe('ConsolePanelService', () => {
 
       expect(service.visible).toBe(true);
       expect(terminalState.lastCreatedTerminal).not.toBeNull();
-      expect(terminalState.lastCreatedTerminal?.openedIn).toBe(xtermContainerEl);
-      expect(terminalState.lastCreatedTerminal?.options.cursorBlink).toBe(false);
-      expect(terminalState.lastCreatedTerminal?.options.disableStdin).toBe(true);
+      expect(terminalState.lastCreatedTerminal.openedIn).toBe(xtermContainerEl);
+      expect(terminalState.lastCreatedTerminal.options.cursorBlink).toBe(false);
+      expect(terminalState.lastCreatedTerminal.options.disableStdin).toBe(true);
       expect(document.documentElement.dataset.theme).toBe('Dark Modern');
       expect(panelEl.classList.contains('hidden')).toBe(false);
       expect(resizerEl.classList.contains('hidden')).toBe(false);
@@ -294,7 +293,7 @@ describe('ConsolePanelService', () => {
 
       service.append('line1\nline2\r\nline3\n');
 
-      expect(terminalState.lastCreatedTerminal?.writtenData).toEqual([
+      expect(terminalState.lastCreatedTerminal.writtenData).toEqual([
         'line1\r\nline2\r\nline3\r\n',
       ]);
     });
@@ -302,20 +301,20 @@ describe('ConsolePanelService', () => {
     it('writes single line without newline as is', () => {
       using service = new ConsolePanelService();
       service.append('simple text');
-      expect(terminalState.lastCreatedTerminal?.writtenData).toEqual(['simple text']);
+      expect(terminalState.lastCreatedTerminal.writtenData).toEqual(['simple text']);
     });
   });
 
   describe('clear()', () => {
     it('clears terminal content and handles clear button click', () => {
       using service = new ConsolePanelService();
-      expect(terminalState.lastCreatedTerminal?.clearedCount).toBe(0);
+      expect(terminalState.lastCreatedTerminal.clearedCount).toBe(0);
 
       service.clear();
-      expect(terminalState.lastCreatedTerminal?.clearedCount).toBe(1);
+      expect(terminalState.lastCreatedTerminal.clearedCount).toBe(1);
 
       clearBtnEl.click();
-      expect(terminalState.lastCreatedTerminal?.clearedCount).toBe(2);
+      expect(terminalState.lastCreatedTerminal.clearedCount).toBe(2);
     });
   });
 
@@ -416,9 +415,9 @@ describe('ConsolePanelService', () => {
       terminalState.lastCreatedFitAddon.fitCalled = false;
       window.dispatchEvent(new Event('resize'));
 
-      expect(terminalState.lastCreatedFitAddon?.fitCalled).toBe(true);
+      expect(terminalState.lastCreatedFitAddon.fitCalled).toBe(true);
       expect(mockBridge.onConsoleResized).toHaveBeenCalledWith(
-        terminalState.lastCreatedTerminal?.cols,
+        terminalState.lastCreatedTerminal.cols,
       );
     });
   });
@@ -426,7 +425,7 @@ describe('ConsolePanelService', () => {
   describe('Keyboard event handler', () => {
     it('handles Ctrl+C by copying selection if text is selected', () => {
       using _service = new ConsolePanelService();
-      const handler = terminalState.lastCreatedTerminal?.customKeyEventHandler;
+      const handler = terminalState.lastCreatedTerminal.customKeyEventHandler;
       expect(handler).toBeDefined();
 
       terminalState.lastCreatedTerminal.selectedText = 'copied text';
@@ -443,7 +442,7 @@ describe('ConsolePanelService', () => {
 
     it('allows default Ctrl+C when no text is selected', () => {
       using _service = new ConsolePanelService();
-      const handler = terminalState.lastCreatedTerminal?.customKeyEventHandler;
+      const handler = terminalState.lastCreatedTerminal.customKeyEventHandler;
 
       terminalState.lastCreatedTerminal.selectedText = '';
 
@@ -459,7 +458,7 @@ describe('ConsolePanelService', () => {
 
     it('handles Ctrl+A by selecting all content', () => {
       using _service = new ConsolePanelService();
-      const handler = terminalState.lastCreatedTerminal?.customKeyEventHandler;
+      const handler = terminalState.lastCreatedTerminal.customKeyEventHandler;
 
       const ctrlA = new KeyboardEvent('keydown', {
         key: 'a',
@@ -468,12 +467,12 @@ describe('ConsolePanelService', () => {
 
       const handled = handler!(ctrlA);
       expect(handled).toBe(false);
-      expect(terminalState.lastCreatedTerminal?.selectionAllCalled).toBe(true);
+      expect(terminalState.lastCreatedTerminal.selectionAllCalled).toBe(true);
     });
 
     it('handles Ctrl+K by clearing terminal', () => {
       using _service = new ConsolePanelService();
-      const handler = terminalState.lastCreatedTerminal?.customKeyEventHandler;
+      const handler = terminalState.lastCreatedTerminal.customKeyEventHandler;
 
       const ctrlK = new KeyboardEvent('keydown', {
         key: 'k',
@@ -482,12 +481,12 @@ describe('ConsolePanelService', () => {
 
       const handled = handler!(ctrlK);
       expect(handled).toBe(false);
-      expect(terminalState.lastCreatedTerminal?.clearedCount).toBe(1);
+      expect(terminalState.lastCreatedTerminal.clearedCount).toBe(1);
     });
 
     it('ignores non-modifier keys or unhandled combinations', () => {
       using _service = new ConsolePanelService();
-      const handler = terminalState.lastCreatedTerminal?.customKeyEventHandler;
+      const handler = terminalState.lastCreatedTerminal.customKeyEventHandler;
 
       const regularKey = new KeyboardEvent('keydown', { key: 'x', ctrlKey: false });
       expect(handler!(regularKey)).toBe(true);
@@ -565,7 +564,7 @@ describe('ConsolePanelService', () => {
       );
 
       selectAllItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(terminalState.lastCreatedTerminal?.selectionAllCalled).toBe(true);
+      expect(terminalState.lastCreatedTerminal.selectionAllCalled).toBe(true);
       expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).toBeNull();
     });
 
@@ -582,7 +581,7 @@ describe('ConsolePanelService', () => {
       );
 
       clearItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(terminalState.lastCreatedTerminal?.clearedCount).toBe(1);
+      expect(terminalState.lastCreatedTerminal.clearedCount).toBe(1);
       expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).toBeNull();
     });
 
@@ -722,7 +721,7 @@ describe('ConsolePanelService', () => {
   describe('Disposal lifecycle', () => {
     it('disposes terminal instance and cleans up DOM listeners', () => {
       const service = new ConsolePanelService();
-      expect(terminalState.lastCreatedTerminal?.disposed).toBe(false);
+      expect(terminalState.lastCreatedTerminal.disposed).toBe(false);
 
       // Open context menu
       xtermContainerEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
@@ -730,7 +729,7 @@ describe('ConsolePanelService', () => {
 
       service.dispose();
 
-      expect(terminalState.lastCreatedTerminal?.disposed).toBe(true);
+      expect(terminalState.lastCreatedTerminal.disposed).toBe(true);
       expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).toBeNull();
     });
   });

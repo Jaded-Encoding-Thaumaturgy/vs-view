@@ -196,8 +196,8 @@ const { FakeEmitter, FakeUri, FakeCodeEditor, FakeTextModel, modelsMap, editorSt
 
       public restoreViewState(state: Record<string, unknown>): void {
         this.viewState = state;
-        if (state?.cursor) this.position = state.cursor;
-        if (state?.selection) this.selection = state.selection;
+        if (state.cursor) this.position = state.cursor;
+        if (state.selection) this.selection = state.selection;
       }
 
       public addAction(action: { id: string; label: string; run: () => void }): {
@@ -269,7 +269,7 @@ vi.mock('vscode', () => ({
   },
   Disposable: {
     from: (...disposables: Array<{ dispose?: () => void }>) => ({
-      dispose: () => disposables.forEach((d) => d?.dispose?.()),
+      dispose: () => disposables.forEach((d) => d.dispose?.()),
     }),
   },
 }));

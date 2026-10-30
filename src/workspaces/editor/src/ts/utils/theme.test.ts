@@ -30,28 +30,26 @@ describe('Theme utilities', () => {
     test.each(Object.entries(DEFAULT_THEMES))(
       "resolves default theme '%s'",
       (themeName, expectedDef) => {
-        const result = getThemeDefinition(themeName);
-        expect(result.ok).toBe(true);
-
-        if (result.ok) {
-          expect(result.value.id).toBe(expectedDef.id);
-          expect(result.value.kind.value).toBe(expectedDef.kind.value);
-          expect(result.value.kind.uiTheme).toBe(expectedDef.kind.uiTheme);
-        }
+        expect(getThemeDefinition(themeName)).toMatchObject({
+          ok: true,
+          value: {
+            id: expectedDef.id,
+            kind: { value: expectedDef.kind.value, uiTheme: expectedDef.kind.uiTheme },
+          },
+        });
       },
     );
   });
 
   describe('getThemeDefinition with GITHUB_THEMES', () => {
     test.each(GITHUB_THEMES)("resolves GitHub theme '$id'", (themeConfig) => {
-      const result = getThemeDefinition(themeConfig.id);
-      expect(result.ok).toBe(true);
-
-      if (result.ok) {
-        expect(result.value.id).toBe(themeConfig.id);
-        expect(result.value.kind.value).toBe(themeConfig.kind.value);
-        expect(result.value.kind.uiTheme).toBe(themeConfig.kind.uiTheme);
-      }
+      expect(getThemeDefinition(themeConfig.id)).toMatchObject({
+        ok: true,
+        value: {
+          id: themeConfig.id,
+          kind: { value: themeConfig.kind.value, uiTheme: themeConfig.kind.uiTheme },
+        },
+      });
     });
   });
 
@@ -66,13 +64,12 @@ describe('Theme utilities', () => {
       '',
       '   ',
     ])("returns Result.err for unknown theme '%s'", (themeName) => {
-      const result = getThemeDefinition(themeName);
-      expect(result.ok).toBe(false);
-
-      if (!result.ok) {
-        expect(result.error).toBeInstanceOf(Error);
-        expect(result.error.message).toBe(`Unsupported theme: '${themeName}'`);
-      }
+      expect(getThemeDefinition(themeName)).toMatchObject({
+        ok: false,
+        error: expect.objectContaining({
+          message: `Unsupported theme: '${themeName}'`,
+        }),
+      });
     });
   });
 

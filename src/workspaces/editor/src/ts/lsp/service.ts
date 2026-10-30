@@ -180,9 +180,7 @@ export class LspService implements vscode.Disposable {
                 );
               }
               await progressTracker.waitForProgressOrTimeout(token, 2500);
-              if (!token.isCancellationRequested) {
-                result = await next(document, position, token);
-              }
+              result = await next(document, position, token);
             }
 
             if (result) {
@@ -256,8 +254,8 @@ export class LspService implements vscode.Disposable {
 
       sessionDisposables.add(
         client.onNotification('$/progress', (params: LspProgressNotification) => {
-          const kind = params?.value?.kind;
-          const token = params?.token;
+          const kind = params.value?.kind;
+          const token = params.token;
 
           if (token !== undefined) {
             if (kind === 'begin') {
@@ -269,7 +267,7 @@ export class LspService implements vscode.Disposable {
 
           if (window.ENV?.VSVIEW_DEBUG) {
             if (kind === 'begin') {
-              console.debug(`[LSP ${config.id}] ${params.value?.title || 'Analysis started'}`);
+              console.debug(`[LSP ${config.id}] ${params.value?.title ?? 'Analysis started'}`);
             } else if (kind === 'end') {
               console.debug(`[LSP ${config.id}] Analysis complete.`);
             }

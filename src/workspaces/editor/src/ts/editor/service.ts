@@ -335,7 +335,7 @@ export class EditorService implements vscode.Disposable {
 
         this.tabs.set(uriString, tab);
       } else {
-        if (!tab.isDirty && content !== undefined && tab.model.getValue() !== content) {
+        if (!tab.isDirty && tab.model.getValue() !== content) {
           tab.model.setValue(content);
           tab.savedVersionId = tab.model.getAlternativeVersionId();
           tab.isDirty = false;
@@ -679,7 +679,7 @@ export class EditorService implements vscode.Disposable {
     const uri = this.normalizeUri(uriInput);
     const path = uri.path;
     const parts = path.split('/').filter(Boolean);
-    const filename = parts[parts.length - 1] || 'script.py';
+    const filename = parts[parts.length - 1] ?? 'script.py';
     if ((filename === '__init__.pyi' || filename === '__init__.py') && parts.length >= 2) {
       return `${parts[parts.length - 2]}/${filename}`;
     }
