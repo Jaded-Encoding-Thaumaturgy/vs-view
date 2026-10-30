@@ -15,7 +15,8 @@
     "build": "vp build",
     "watch": "vp build --watch",
     "test": "vp test run",
-    "test:watch": "vp test"
+    "test:watch": "vp test",
+    "dev": "vp dev --host localhost --port 5173 --strictPort"
   },
   "dependencies": {
     "@codingame/monaco-vscode-api": "38.0.4",

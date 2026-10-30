@@ -68,7 +68,7 @@ Most of these symbols are re-exported through the top-level `vsview.api` module 
     options:
         heading_level: 3
         members:
-           - WidgetMetadata 
+           - WidgetMetadata
            - Checkbox
            - Dropdown
            - Spin
@@ -100,7 +100,7 @@ Most of these symbols are re-exported through the top-level `vsview.api` module 
         heading_level: 3
         members:
            - hookimpl
-           - Packer 
+           - Packer
            - run_in_background
            - run_in_loop
            - IconName
@@ -112,3 +112,4 @@ Most of these symbols are re-exported through the top-level `vsview.api` module 
            - cache_clip
            - path_to_hash
            - get_console_level
+           - setup_web_logger

@@ -41,6 +41,7 @@ from vsview.api._helpers import output_metadata
 from vsview.api.workspace import PluginWorkspace
 from vsview.app.settings import SettingsManager
 from vsview.app.workspace import BaseGenericFileWorkspace, VSEngineWorkspace, get_default_script
+from vsview.env import getenv_bool
 from vsview.vsenv import QtEventLoop, create_environment
 
 from .console import GlobalConsoleHub
@@ -111,7 +112,12 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         query.addQueryItem("windowColorRole", self.palette().color(QPalette.ColorRole.Window).name())
         query.addQueryItem("windowTextRole", self.palette().color(QPalette.ColorRole.WindowText).name())
         query.addQueryItem("accentColor", self.palette().color(QPalette.ColorRole.Accent).name())
-        url = QUrl.fromLocalFile(MonacoEditorDock.INDEX_PATH)
+
+        url = (
+            QUrl("http://localhost:5173")
+            if getenv_bool("VSVIEW_EDITOR_DEV")
+            else QUrl.fromLocalFile(MonacoEditorDock.INDEX_PATH)
+        )
         url.setQuery(query)
         self.editor.load(url)
 

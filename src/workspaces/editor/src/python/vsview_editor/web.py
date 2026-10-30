@@ -10,17 +10,17 @@ from jetpytools import CustomNotImplementedError, copy_signature
 from PySide6.QtCore import QEvent, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QPalette, Qt
 from PySide6.QtWebChannel import QWebChannel
-from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineScript
+from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 
-from vsview.env import getenv_bool
+from vsview.api import DefaultWebChannelScript, VSViewEnInjectionScript, setup_web_logger
 
-from .logging import js_logger
 from .lsp import LSPConfig
 from .utils import SafeSlot, extract_supported_script_files
 
 logger = getLogger(__name__)
+js_logger = setup_web_logger("vsview_editor_js")
 
 
 class MonacoBridge(QObject):
@@ -275,13 +275,11 @@ class MonacoWebPage(QWebEnginePage):
         line_number: int,
         source_id: str,
     ) -> None:
-        if source_id.startswith("file:"):
-            source_id = QUrl(source_id).fileName() or Path(source_id).name
-        elif "/" in source_id or "\\" in source_id:
-            source_id = Path(source_id).name
-
-        lvl = self.LOG_LEVELS.get(level, DEBUG)
-        js_logger.log(lvl, message, extra={"js_source": source_id, "js_lineno": line_number})
+        js_logger.log(
+            self.LOG_LEVELS.get(level, DEBUG),
+            message,
+            extra={"js_source": source_id, "js_lineno": line_number},
+        )
 
 
 class MonacoEditorWidget(QWebEngineView):
@@ -303,13 +301,8 @@ class MonacoEditorWidget(QWebEngineView):
         self.page().setWebChannel(channel)
 
         # Inject environment configuration into JavaScript before document creation
-        env_data = {"VSVIEW_DEBUG": getenv_bool("VSVIEW_DEBUG"), "VSVIEW": True}
-        script = QWebEngineScript()
-        script.setName("vsview_env_injection")
-        script.setSourceCode(f"window.ENV = Object.freeze({json.dumps(env_data)});\n")
-        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
-        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
-        self.page().scripts().insert(script)
+        self.page().scripts().insert(DefaultWebChannelScript())
+        self.page().scripts().insert(VSViewEnInjectionScript())
 
     @override
     def changeEvent(self, event: QEvent) -> None:
@@ -325,8 +318,9 @@ class MonacoEditorWidget(QWebEngineView):
 
     @override
     def deleteLater(self) -> None:
-        if page := self.page():
-            page.deleteLater()
+        self.page().webChannel().deregisterObject(self.bridge)
+        self.page().webChannel().deleteLater()
+        self.page().deleteLater()
         return super().deleteLater()
 
     @override

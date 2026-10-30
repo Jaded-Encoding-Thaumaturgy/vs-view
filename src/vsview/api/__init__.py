@@ -1,5 +1,7 @@
 """API for vsview"""
 
+from typing import TYPE_CHECKING, Any
+
 from ..app.icon import IconName, IconReloadMixin, load_icon
 from ..app.packing import Packer
 from ..app.plugins import (
@@ -51,11 +53,14 @@ from ..app.views import OutputInfo
 from ..app.views.components import AbstractTableModel, Accordion, AnimatedToggle, NonClosingMenu, SegmentedControl
 from ..app.views.timeline import FrameEdit, TimeEdit
 from ..app.views.video import BaseGraphicsView
-from ..logging import get_console_level
+from ..logging import get_console_level, setup_web_logger
 from ..types import Frame, Time
 from ..vsenv import run_in_background, run_in_loop
 from .info import Context, get_cached, get_reload_count, get_state, is_preview, is_reload, register_on_workspace_destroy
 from .output import catch_output, get_output, get_outputs, set_output
+
+if TYPE_CHECKING:
+    from ..app.views.web import DefaultWebChannelScript, VSViewEnInjectionScript, WebEngineScript
 
 __all__ = [
     "AbstractTableModel",
@@ -69,6 +74,7 @@ __all__ = [
     "ColorPickerInput",
     "Context",
     "CustomSpinBox",
+    "DefaultWebChannelScript",
     "DoubleSpin",
     "Dropdown",
     "FilePicker",
@@ -108,7 +114,9 @@ __all__ = [
     "Time",
     "TimeEdit",
     "TimelineProxy",
+    "VSViewEnInjectionScript",
     "VideoOutputProxy",
+    "WebEngineScript",
     "WidgetMetadata",
     "WidgetPluginBase",
     "WidgetTimeEdit",
@@ -130,4 +138,16 @@ __all__ = [
     "run_in_background",
     "run_in_loop",
     "set_output",
+    "setup_web_logger",
 ]
+
+if not TYPE_CHECKING:
+
+    def __getattr__(name: str) -> Any:
+        import importlib
+
+        if name in ["DefaultWebChannelScript", "VSViewEnInjectionScript", "WebEngineScript"]:
+            mod = importlib.import_module("vsview.app.views.web")
+            return getattr(mod, name)
+
+        raise AttributeError
