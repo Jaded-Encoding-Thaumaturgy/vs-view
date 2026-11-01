@@ -294,7 +294,7 @@ def test_playback_manager_seek_bounds(
 
 def test_playback_manager_pending_frame_prop(
     playback_manager_setup: PlaybackManagerSetup,
-    mocker: MockerFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manager, *_ = playback_manager_setup
 
@@ -302,12 +302,12 @@ def test_playback_manager_pending_frame_prop(
     assert manager.has_pending_frame is False
 
     # During in-flight rendering, seeking sets pending frame without dispatching immediately
-    mocker.patch.object(manager, "_timeline_rendering", True)
+    monkeypatch.setattr(manager, "_timeline_rendering", True)
     manager.seek_to_frame_coalesced(Frame(15))
     assert manager.has_pending_frame is True
 
     # When rendering completes, pending frame is rendered and cleared
-    mocker.patch.object(manager, "_timeline_rendering", False)
+    monkeypatch.setattr(manager, "_timeline_rendering", False)
     manager.render_pending_frame()
     assert manager.has_pending_frame is False
 
