@@ -3,7 +3,7 @@
     "noEmit": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "allowImportingTsExtensions": true,
-    "esModuleInterop": true
-  }
+    "allowImportingTsExtensions": true
+  },
+  "include": ["vite.config.ts"]
 }
