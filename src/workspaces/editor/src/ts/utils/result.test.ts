@@ -5,7 +5,7 @@ import { Err, Ok, Result, ResultAsync } from './result';
 describe('Result utility', () => {
   describe('type inference', () => {
     it('should infer correct types for ok and err variants', () => {
-      expectTypeOf(Result.ok(42)).toEqualTypeOf<Ok<number, never>>();
+      expectTypeOf(Result.ok(42)).toEqualTypeOf<Ok<number>>();
       expectTypeOf(Result.err('fail')).toEqualTypeOf<Err<string>>();
     });
   });

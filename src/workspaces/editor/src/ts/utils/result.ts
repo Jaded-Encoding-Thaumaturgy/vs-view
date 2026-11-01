@@ -48,7 +48,7 @@ export class Ok<T, E = never> {
   /**
    * Returns the contained Ok value, or the provided fallback value if Err.
    */
-  unwrapOr<U>(_fallback: U): T {
+  unwrapOr(_fallback: unknown): T {
     return this.value;
   }
 
@@ -68,7 +68,7 @@ export class Err<E = Error> {
    * Transforms the contained value if Ok, otherwise leaves Err untouched.
    */
   map<U>(_fn: (val: never) => U): Result<U, E> {
-    return this as unknown as Result<U, E>;
+    return this;
   }
 
   /**
@@ -82,7 +82,7 @@ export class Err<E = Error> {
    * Chains another fallible operation if Ok, returning its Result.
    */
   andThen<U, F = E>(_fn: (val: never) => Result<U, F>): Result<U, E | F> {
-    return this as unknown as Result<U, E | F>;
+    return this;
   }
 
   /**
@@ -154,7 +154,7 @@ export class ResultAsync<T, E = Error> implements PromiseLike<Result<T, E>> {
   map<U>(fn: (val: T) => U | PromiseLike<U>): ResultAsync<U, E> {
     return new ResultAsync<U, E>(
       this.promise.then(async (res): Promise<Result<U, E>> => {
-        if (!res.ok) return res as unknown as Result<U, E>;
+        if (!res.ok) return res;
         return Result.ok(await fn(res.value));
       }),
     );
@@ -180,7 +180,7 @@ export class ResultAsync<T, E = Error> implements PromiseLike<Result<T, E>> {
   ): ResultAsync<U, E | F> {
     return new ResultAsync<U, E | F>(
       this.promise.then(async (res): Promise<Result<U, E | F>> => {
-        if (!res.ok) return res as unknown as Result<U, E | F>;
+        if (!res.ok) return res;
         return await fn(res.value);
       }),
     );
@@ -242,7 +242,7 @@ export const Result = {
   /**
    * Creates an Ok variant containing value T.
    */
-  ok<T>(value: T): Ok<T, never> {
+  ok<T>(value: T): Ok<T> {
     return new Ok(value);
   },
   /**
