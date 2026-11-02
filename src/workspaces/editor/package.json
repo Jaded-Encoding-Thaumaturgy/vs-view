@@ -1,5 +1,5 @@
 {
-  "name": "vsview-editor-npm",
+  "name": "vsview-editor",
   "private": true,
   "description": "Monaco-based code editor workspace for VSView",
   "keywords": [
