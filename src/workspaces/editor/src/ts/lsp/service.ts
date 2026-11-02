@@ -7,9 +7,8 @@ import {
   type MessageTransports,
   State,
 } from 'vscode-languageclient/browser';
+import { DisposableStore, Result } from 'vsview-shared';
 
-import { DisposableStore } from '../utils/disposables';
-import { Result } from '../utils/result';
 import { canonicalUriKey } from '../utils/uri';
 import { WebSocketMessageReader, WebSocketMessageWriter } from './connection';
 import { type LspProgressNotification, LspProgressTracker } from './progress';

@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import { DisposableStore, toDisposable } from './disposables';
+import { Disposable, DisposableStore, toDisposable } from './disposables';
+
+class TestComponent extends Disposable {
+  public register(fn: () => void): void {
+    this._disposables.add(toDisposable(fn));
+  }
+}
 
 describe('Disposables utility', () => {
   describe('toDisposable', () => {
@@ -30,13 +36,9 @@ describe('Disposables utility', () => {
       const store = new DisposableStore();
       const callOrder: number[] = [];
 
-      const d1 = toDisposable(() => callOrder.push(1));
-      const d2 = toDisposable(() => callOrder.push(2));
-      const d3 = toDisposable(() => callOrder.push(3));
-
-      store.add(d1);
-      store.add(d2);
-      store.add(d3);
+      store.add(toDisposable(() => callOrder.push(1)));
+      store.add(toDisposable(() => callOrder.push(2)));
+      store.add(toDisposable(() => callOrder.push(3)));
 
       store.dispose();
 
@@ -48,9 +50,8 @@ describe('Disposables utility', () => {
       store.dispose();
 
       const teardown = vi.fn();
-      const disposable = toDisposable(teardown);
+      store.add(toDisposable(teardown));
 
-      store.add(disposable);
       expect(teardown).toHaveBeenCalledOnce();
     });
 
@@ -91,6 +92,17 @@ describe('Disposables utility', () => {
         store.add(toDisposable(teardown));
         expect(teardown).not.toHaveBeenCalled();
       }
+      expect(teardown).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('Disposable base class', () => {
+    it('disposes tracked resources on dispose()', () => {
+      const teardown = vi.fn();
+      const component = new TestComponent();
+      component.register(teardown);
+
+      component.dispose();
       expect(teardown).toHaveBeenCalledOnce();
     });
   });

@@ -83,7 +83,7 @@ export default defineConfig({
       '*.qss',
       '**/*.toml',
       'src/vsview/assets/',
-      'src/workspaces/editor/src/python/vsview_editor/web_dist/',
+      'src/workspaces/**/web_dist/',
     ],
     overrides: [
       {
@@ -101,7 +101,7 @@ export default defineConfig({
     tabWidth: 2,
   },
   test: {
-    projects: ['src/workspaces/editor'],
+    projects: ['src/workspaces/editor', 'src/shared/ts'],
     silent: true,
   },
 });
