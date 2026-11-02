@@ -16,7 +16,7 @@ def extract_theme_tokens(palette: QPalette) -> dict[str, Any]:
         surface = base_color if base_color.name() != window_color.name() else window_color.lighter(115)
         surface_elevated = surface.lighter(115)
         surface_hover = surface.lighter(130)
-        border = window_color.lighter(140)
+        border = window_color.lighter(210)
         text_secondary = palette.color(QPalette.ColorRole.PlaceholderText)
         if text_secondary.alpha() == 0 or text_secondary.name() == text_color.name():
             text_secondary = text_color.darker(140)
