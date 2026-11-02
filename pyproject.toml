@@ -83,6 +83,7 @@ recommended = [
 secrets = ["keyring>=25.7.0"]
 full = [
     "vsview[recommended]",
+    "vsview-graph",
     "vsview-editor",
     "vsview-remote",
     "vsview-histogram",
@@ -118,6 +119,7 @@ plugins = [
     "vsview-comp",
     "vsview-fftspectrum",
     "vsview-frameprops-extended",
+    "vsview-graph",
     "vsview-histogram",
     "vsview-nativeres",
     "vsview-split-planes",
@@ -184,6 +186,7 @@ vsview-fftspectrum = { workspace = true }
 vsview-frameprops-extended = { workspace = true }
 vsview-split-planes = { workspace = true }
 vsview-histogram = { workspace = true }
+vsview-graph = { workspace = true }
 # Workspaces
 vsview-editor = { workspace = true }
 vsview-remote = { workspace = true }
@@ -192,8 +195,7 @@ vsview-remote = { workspace = true }
 testpaths = ["tests"]
 env = [
     "QT_QPA_PLATFORM=offscreen",
-    "QTWEBENGINE_DISABLE_SANDBOX=1",
-    "QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu --log-level=3",
+    "QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu --disable-dev-shm-usage --log-level=3",
 ]
 markers = [
     "unit: Fast, isolated unit tests",

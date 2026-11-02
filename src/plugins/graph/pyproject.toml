@@ -1,0 +1,79 @@
+[build-system]
+requires = ["hatchling>=1.29.0", "hatch-js>=0.1.4", "versioningit"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vsview-graph"
+description = "Interactive dependency graph visualizer for vsview using Cytoscape.js and vsgraph"
+readme = "README.md"
+license = "EUPL-1.2"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "Vardë", email = "ichunjo.le.terrible@gmail.com" }]
+maintainers = [
+    { name = "Vardë", email = "ichunjo.le.terrible@gmail.com" },
+    { name = "Jaded Encoding Thaumaturgy", email = "jaded.encoding.thaumaturgy@gmail.com" },
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Video",
+    "Typing :: Typed",
+]
+dependencies = ["vapoursynth-graph>=1.0.2", "vsview>=0.15.0"]
+dynamic = ["version"]
+
+[project.entry-points.vsview]
+vsview_graph = "vsview_graph"
+
+[project.urls]
+"Documentation" = "https://jaded-encoding-thaumaturgy.github.io/vs-view/plugins/second-party/#dependency-graph"
+"Source Code" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/graph/"
+"Bug Tracker" = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/issues"
+"Contact" = "https://discord.gg/XTpc6Fa9eB"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/python/vsview_graph"]
+artifacts = ["src/python/vsview_graph/web_dist/"]
+
+[tool.hatch.build.hooks.hatch-js]
+path = "."
+tool = "pnpm"
+install_cmd = "install --frozen-lockfile --silent"
+build_cmd = "build"
+targets = ["src/python/vsview_graph/web_dist/index.html"]
+
+[tool.hatch.version]
+source = "versioningit"
+
+[tool.versioningit.vcs]
+match = ["graph/v*"]
+default-tag = "graph/v0.0.0"
+
+[tool.versioningit.tag2version]
+rmprefix = "graph/v"
+
+[tool.versioningit.format]
+distance = "{next_version}.dev{distance}+{vcs}{rev}"
+dirty = "{next_version}+dirty"
+distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.dirty"
+
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "package.json" },
+    { file = "vite.config.ts" },
+    { file = "src/ts/**/*.ts" },
+    { file = "src/ts/**/*.js" },
+    { file = "../../shared/ts/src/**/*.ts" },
+    { file = "src/ts/styles.css" },
+    { file = "src/ts/index.html" },
+]
+
+[tool.uv.sources]
+vsview = { workspace = true }

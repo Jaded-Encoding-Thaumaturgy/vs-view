@@ -1,0 +1,31 @@
+{
+  "name": "vsview-graph",
+  "private": true,
+  "description": "Interactive dependency graph visualizer for vsview using Cytoscape.js",
+  "license": "EUPL-1.2",
+  "author": "Vardë <ichunjo.le.terrible@gmail.com>",
+  "type": "module",
+  "scripts": {
+    "build": "vp build",
+    "watch": "vp build --watch",
+    "test": "vp test run",
+    "test:watch": "vp test",
+    "dev": "vp dev --host localhost --port 5174 --strictPort"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "3.1.3",
+    "cytoscape": "3.34.4",
+    "cytoscape-dagre": "4.0.1",
+    "lit-html": "catalog:",
+    "vsview-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/cytoscape-dagre": "2.3.4",
+    "@types/node": "catalog:",
+    "happy-dom": "21.0.4",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}
