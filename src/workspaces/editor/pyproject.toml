@@ -78,6 +78,7 @@ cache-keys = [
     { file = "vite.config.ts" },
     { file = "src/ts/**/*.ts" },
     { file = "src/ts/**/*.js" },
+    { file = "../../shared/ts/src/**/*.ts" },
     { file = "src/ts/index.css" },
     { file = "src/ts/index.html" },
 ]

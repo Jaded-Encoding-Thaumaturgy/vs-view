@@ -168,6 +168,7 @@ jobs:
           filters: |
             vsview-editor:
               - 'src/workspaces/editor/**'
+              - 'src/shared/ts/**'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'vite.config.ts'

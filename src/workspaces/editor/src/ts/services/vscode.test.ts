@@ -94,10 +94,10 @@ import {
   FileType,
 } from '@codingame/monaco-vscode-api/vscode/vs/platform/files/common/files';
 import type * as monaco from 'monaco-editor';
+import { Result, ResultAsync } from 'vsview-shared';
 
 import { BridgeService } from '../bridge/python';
 import type { FileStatResponse } from '../types';
-import { Result, ResultAsync } from '../utils/result';
 import { DiskFileSystemProvider } from './fs';
 import { findExistingModel } from './models';
 

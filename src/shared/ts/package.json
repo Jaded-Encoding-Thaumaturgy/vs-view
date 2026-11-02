@@ -1,0 +1,22 @@
+{
+  "name": "vsview-shared",
+  "private": true,
+  "description": "Shared TypeScript utilities for vsview's Qt web frontends",
+  "license": "MIT",
+  "author": "Vardë <ichunjo.le.terrible@gmail.com>",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vp test run",
+    "test:watch": "vp test"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}

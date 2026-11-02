@@ -7,8 +7,7 @@ import {
   type MessageReader,
   type MessageWriter,
 } from 'vscode-jsonrpc';
-
-import { Result } from '../utils/result';
+import { Result } from 'vsview-shared';
 
 /**
  * MessageReader for WebSocket integration with VS Code LanguageClient.

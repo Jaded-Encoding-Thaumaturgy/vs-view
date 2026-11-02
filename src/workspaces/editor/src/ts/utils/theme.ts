@@ -1,3 +1,5 @@
+import { Result } from 'vsview-shared';
+
 import githubDarkColorblind from '../assets/themes/github/dark-colorblind.json?url';
 import githubDarkDefault from '../assets/themes/github/dark-default.json?url';
 import githubDarkDimmed from '../assets/themes/github/dark-dimmed.json?url';
@@ -7,7 +9,6 @@ import githubLightColorblind from '../assets/themes/github/light-colorblind.json
 import githubLightDefault from '../assets/themes/github/light-default.json?url';
 import githubLightHighContrast from '../assets/themes/github/light-high-contrast.json?url';
 import githubLight from '../assets/themes/github/light.json?url';
-import { Result } from './result';
 
 type Kind = 'light' | 'dark' | 'hc-black' | 'hc-light';
 type UiTheme = 'vs-dark' | 'vs' | 'hc-black' | 'hc-light';

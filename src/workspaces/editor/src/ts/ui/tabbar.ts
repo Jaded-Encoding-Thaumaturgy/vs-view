@@ -1,7 +1,7 @@
 import type * as vscode from 'vscode';
+import { DisposableStore, toDisposable } from 'vsview-shared';
 
 import type { TabInfo } from '../types';
-import { DisposableStore, toDisposable } from '../utils/disposables';
 import { DOM_IDS } from './constants';
 
 export type TabBarCallbacks = {

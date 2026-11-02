@@ -38,7 +38,8 @@
     "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@38.0.4",
     "vscode": "npm:@codingame/monaco-vscode-extension-api@38.0.4",
     "vscode-jsonrpc": "10.0.0",
-    "vscode-languageclient": "11.0.0"
+    "vscode-languageclient": "11.0.0",
+    "vsview-shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

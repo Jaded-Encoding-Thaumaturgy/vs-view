@@ -1,14 +1,13 @@
 import { updateUserConfiguration } from '@codingame/monaco-vscode-configuration-service-override';
 import * as monaco from 'monaco-editor';
 import * as vscode from 'vscode';
+import { DisposableStore, Result } from 'vsview-shared';
 
 import { BridgeService } from '../bridge/python';
 import { findExistingModel } from '../services/models';
 import type { EditorOptionsPayload, TabInfo } from '../types';
 import { DOM_IDS } from '../ui/constants';
 import { TabBarView } from '../ui/tabbar';
-import { DisposableStore } from '../utils/disposables';
-import { Result } from '../utils/result';
 import { getInitialTheme, getThemeDefinition } from '../utils/theme';
 import { isSameResource } from '../utils/uri';
 import * as config from './config';

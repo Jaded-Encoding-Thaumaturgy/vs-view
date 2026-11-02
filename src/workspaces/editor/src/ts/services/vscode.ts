@@ -43,10 +43,10 @@ import getThemeServiceOverride from '@codingame/monaco-vscode-theme-service-over
 import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import * as vscode from 'vscode';
+import { Result } from 'vsview-shared';
 
 import githubThemeVersion from '../assets/themes/github/VERSION?raw';
 import * as config from '../editor/config';
-import { Result } from '../utils/result';
 import { GITHUB_THEMES } from '../utils/theme';
 import { DiskFileSystemProvider } from './fs';
 

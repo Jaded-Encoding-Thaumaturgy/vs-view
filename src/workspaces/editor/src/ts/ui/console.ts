@@ -1,10 +1,9 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { type ITheme, Terminal } from '@xterm/xterm';
 import * as vscode from 'vscode';
+import { DisposableStore, Result, toDisposable } from 'vsview-shared';
 
 import { BridgeService } from '../bridge/python';
-import { DisposableStore, toDisposable } from '../utils/disposables';
-import { Result } from '../utils/result';
 import { getInitialTheme, getThemeDefinition } from '../utils/theme';
 import { DOM_IDS } from './constants';
 

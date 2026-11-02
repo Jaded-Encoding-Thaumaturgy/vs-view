@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import * as vscode from 'vscode';
+import { Result } from 'vsview-shared';
 
 import { BridgeService } from '../bridge/python';
 import type { PythonBridge } from '../types';
-import { Result } from '../utils/result';
 import { DOM_IDS } from './constants';
 
 // Hoisted xterm / FitAddon / vscode mocks

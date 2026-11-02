@@ -1,11 +1,13 @@
-import type * as vscode from 'vscode';
-
 import { Result } from './result';
 
+export interface IDisposable {
+  dispose(): void;
+}
+
 /**
- * Utility function to create a `vscode.Disposable` from a teardown callback.
+ * Utility function to create an `IDisposable` from a teardown callback.
  */
-export function toDisposable(fn: () => void): vscode.Disposable {
+export function toDisposable(fn: () => void): IDisposable {
   let isDisposed = false;
   return {
     dispose: () => {
@@ -20,12 +22,12 @@ export function toDisposable(fn: () => void): vscode.Disposable {
 /**
  * Manages a collection of disposables to ensure proper cleanup of resources.
  */
-export class DisposableStore implements vscode.Disposable {
+export class DisposableStore implements IDisposable {
   private isDisposed = false;
-  private disposables: vscode.Disposable[] = [];
+  private readonly disposables: IDisposable[] = [];
 
   /** Add a disposable resource to the store. */
-  public add<T extends vscode.Disposable>(disposable: T): T {
+  public add<T extends IDisposable>(disposable: T): T {
     if (this.isDisposed) {
       disposable.dispose();
     } else {
@@ -34,7 +36,7 @@ export class DisposableStore implements vscode.Disposable {
     return disposable;
   }
 
-  /** Dispose all tracked resources. */
+  /** Dispose all tracked resources in LIFO order. */
   public dispose(): void {
     if (this.isDisposed) return;
     this.isDisposed = true;
@@ -44,6 +46,21 @@ export class DisposableStore implements vscode.Disposable {
         console.error('Error during resource disposal:', e),
       );
     }
+  }
+
+  public [Symbol.dispose](): void {
+    this.dispose();
+  }
+}
+
+/**
+ * Abstract base class for components managing owned disposables.
+ */
+export abstract class Disposable implements IDisposable {
+  protected readonly _disposables = new DisposableStore();
+
+  public dispose(): void {
+    this._disposables.dispose();
   }
 
   public [Symbol.dispose](): void {

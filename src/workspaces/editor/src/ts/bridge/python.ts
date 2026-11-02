@@ -1,12 +1,11 @@
 import * as vscode from 'vscode';
+import { DisposableStore, Result, ResultAsync, toDisposable } from 'vsview-shared';
 
 import type { EditorService } from '../editor/service';
 import type { LspService } from '../lsp/service';
 import type { FileStatResponse, PythonBridge, QWebSignal } from '../types';
 import type { ConsolePanelService } from '../ui/console';
 import { DOM_IDS } from '../ui/constants';
-import { DisposableStore, toDisposable } from '../utils/disposables';
-import { Result, ResultAsync } from '../utils/result';
 
 export class BridgeService implements vscode.Disposable {
   private static activeInstance: BridgeService | null = null;
