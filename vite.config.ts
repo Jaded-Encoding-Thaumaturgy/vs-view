@@ -101,7 +101,7 @@ export default defineConfig({
     tabWidth: 2,
   },
   test: {
-    projects: ['src/workspaces/editor', 'src/shared/ts'],
+    projects: ['src/workspaces/editor', 'src/plugins/graph', 'src/shared/ts'],
     silent: true,
   },
 });

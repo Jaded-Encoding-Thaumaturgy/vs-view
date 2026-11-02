@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vsview Dependency Graph</title>
+    <script>
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const initial = {
+          '--initial-bg': params.get('windowColorRole'),
+          '--initial-fg': params.get('windowTextRole'),
+          '--initial-accent': params.get('accentColor'),
+        };
+        for (const [name, value] of Object.entries(initial)) {
+          document.documentElement.style.setProperty(name, value);
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="cy"></div>
+      <div id="hud" class="hud-container"></div>
+      <div id="inspector-drawer" class="inspector-drawer"></div>
+      <div id="overview" class="overview-container"></div>
+      <div id="error-banner" class="error-banner"></div>
+
+      <div id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading Dependency Graph...</div>
+      </div>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

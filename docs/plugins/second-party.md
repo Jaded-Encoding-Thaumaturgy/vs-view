@@ -19,6 +19,14 @@ Second-party plugins are officially maintained but distributed as separate packa
 
     [:lucide-move-right: Details](#comparison) · [:fontawesome-brands-github: Source](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/comp)
 
+- :lucide-network: **Dependency Graph**
+
+    ---
+
+    Interactive visualizer of the VapourSynth filter graph, with a profiling heatmap, call stacks and exports.
+
+    [:lucide-move-right: Details](#dependency-graph) · [:fontawesome-brands-github: Source](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/graph)
+
 - :lucide-code: **Editor**
 
     ---
@@ -196,6 +204,128 @@ All `set_output` outputs are available by default. Pass `allow_comp` to explicit
 
 ---
 
+## Dependency Graph [ :fontawesome-brands-github: ](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/graph){ title="Source Code" }
+
+=== "pip"
+    ```bash title="Install Dependency Graph"
+    pip install vsview-graph
+    ```
+=== "uv"
+    ```bash title="Add Dependency Graph"
+    uv add vsview-graph
+    ```
+
+The Dependency Graph dock renders the filter dependency graph of any output using [vsgraph](https://github.com/Ichunjo/vs-graph) and Cytoscape.js.
+
+### Features
+
+- **Layouts:** Dagre (TB / LR), breadth-first, concentric, and grid.
+- **Profiling:** Heatmap and per-node execution timings.
+- **Visual encoding:** Concurrency mode borders, request pattern edges, and media change highlights.
+- **Lineage:** Highlights upstream dependencies and downstream consumers for the selected node.
+- **Inspector:** Node and edge specs, inputs, call stacks, and copy actions (ID, Python call, report).
+- **Overview panel:** Graph metrics, concurrency warnings, media transitions, and filter mode filters.
+- **Search:** Space-separated keywords and `/regex/flags` matching node attributes and call arguments.
+- **Export:** DOT, Mermaid, ASCII, JSON, and PNG.
+
+### Settings
+
+| Setting               | Default | Description                                                                                      |
+| --------------------- | ------- | ------------------------------------------------------------------------------------------------ |
+| **Layout Direction**  | `TB`    | Graph flow: `TB` (top-to-bottom) or `LR` (left-to-right).                                        |
+| **Layout Algorithm**  | `Dagre` | Algorithm: `Dagre` (hierarchical, respects direction), `Breadth First`, `Concentric`, or `Grid`. |
+| **Rank Separation**   | `60 px` | Spacing between levels in Dagre (20–200 px).                                                     |
+| **Node Separation**   | `40 px` | Spacing between sibling nodes in Dagre and Concentric (10–200 px).                               |
+| **Profiling Heatmap** | `off`   | Toggles profiling heatmap overlay.                                                               |
+| **Auto-Fit Viewport** | `on`    | Fits graph to screen on reload.                                                                  |
+| **Show Timings**      | `on`    | Shows execution times on nodes and tooltips.                                                     |
+| **Timing Unit**       | `auto`  | Time format: `auto` (adaptive), `ms`, or `ns`.                                                   |
+
+### HUD Toolbar
+
+- **Output:** Select an output or follow the active timeline output.
+- **Navigation:** Zoom (`+` / `−`), fit to view (`Fit`), reset zoom (`1:1`), and orientation (`↕ TB` / `↔ LR`).
+- **Actions:** Toggles for `Heatmap`, edge `Patterns`, `Overview` panel, and `↻` (re-inspect).
+- **Search:** Input with match count.
+
+### Search Syntax
+
+Matches against node names, IDs, labels, call stack functions, namespaces, argument names, and argument values:
+
+- **Words:** Space-separated terms use AND matching (e.g. `std crop left 8`).
+- **Regex:** Enclose in slashes with optional flags (e.g. `/crop$/i`). Invalid syntax displays `!`.
+
+### Visual Encoding
+
+- **Filter modes (`vs.FilterMode`):**
+    - `PARALLEL`: Solid border.
+    - `PARALLEL_REQUESTS`: Dashed green border.
+    - `UNORDERED`: Dotted highlight border.
+    - `FRAME_STATE`: Dashed red border (serialized frame processing).
+    - `Root node`: Amber border.
+- **Request patterns (`vsgraph.RequestPattern`):**
+    - `GENERAL`: Solid line.
+    - `STRICT_SPATIAL`: Dotted line (skips frame cache).
+    - `NO_FRAME_REUSE`: Dashed line (disables frame reuse).
+    - `FRAME_REUSE_LAST_ONLY`: Thick dashed line.
+- **Media transitions:** Amber edges and target glows mark format, resolution, fps, or frame count changes.
+- **Selection & Lineage:** Selecting a node highlights upstream inputs and downstream outputs; unrelated elements are dimmed.
+
+### Profiling Heatmap
+
+Node background color indicates relative execution time (square-root scaled against the slowest node):
+
+- **Slate:** Baseline / negligible.
+- **Teal:** Fast.
+- **Amber:** Moderate.
+- **Orange:** Heavy.
+- **Red:** Bottleneck.
+
+### Inspector Drawer
+
+Clicking a node or edge opens its details (specs, performance, inputs, call stack, and copy actions) in the side drawer.
+Node references in the drawer are clickable and jump to the related node.
+
+### Overview Panel
+
+Toggle with **Overview** or ++l++.
+It summarizes the graph (counts, timings, formats), lists warnings and media changes, and offers filters that dim unrelated nodes on the canvas.
+
+### Context Menu & Export
+
+Right-click the canvas:
+
+| Action              | Description                                         |
+| :------------------ | :---------------------------------------------------|
+| **Fit to View**     | Fit graph into viewport (++f++).                    |
+| **Reset View**      | Reset zoom to 100% (++0++).                         |
+| **Reload Graph**    | Re-inspect active output and update timings (++r++).|
+| **Copy Graph as →** | Copy as PNG Image, DOT, Mermaid, ASCII, or JSON.    |
+| **Save Graph as →** | Save as PNG Image, DOT, Mermaid, ASCII, or JSON.    |
+
+### Timings and caching
+
+The graph is inspected once per output and cached; the displayed timings are a snapshot of the last inspection.
+Press the refresh button to re-inspect the current output.
+
+### Keyboard Shortcuts
+
+| Shortcut                | Action                                 |
+| :---------------------- | :------------------------------------- |
+| `Up` / `Down`           | Walk to the parent / child dependency  |
+| `Shift` + `Up` / `Down` | Cycle between sibling dependencies     |
+| `Home` / `End`          | Jump to the root / deepest leaf        |
+| `Enter`                 | Center the selected node               |
+| `Esc`                   | Clear the selection                    |
+| `0`                     | Reset zoom                             |
+| `F`                     | Fit the graph                          |
+| `H`                     | Toggle the profiling heatmap           |
+| `P`                     | Toggle request-pattern labels          |
+| `L`                     | Toggle the overview panel              |
+| `R`                     | Re-inspect the graph                   |
+| `/`                     | Focus the search box                   |
+
+
 ## FFT Spectrum [ :fontawesome-brands-github: ](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/tree/main/src/plugins/fftspectrum){ title="Source Code" }
 
 === "pip"
@@ -222,7 +352,7 @@ The FFT Spectrum tool provides a visualization of the Fast Fourier Transform (FF
     uv add vsview-histogram
     ```
 
-Provides per-frame video scopes as tabs inside a single panel. 
+Provides per-frame video scopes as tabs inside a single panel.
 
 - Updates are paused during playback and resume on the active tab when playback stops.
 - Right-click any plot to copy or save the view.

@@ -1,5 +1,6 @@
 packages:
   - src/workspaces/editor
+  - src/plugins/graph/
   - src/shared/ts
 
 catalogMode: prefer
