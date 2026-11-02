@@ -423,25 +423,27 @@ def test_graph_plugin_node_selection_lifecycle(
     # 1. Selecting a node preserves selection on subsequent topology updates
     plugin.view.bridge.dispatchFromJs(JsToPyCommand.NODE_SELECT, json.dumps({"id": selected_id}))
     received_dispatches.clear()
-    fut = plugin.update_graph(force_layout=True)
-    qtbot.waitUntil(fut.done, timeout=2000)
-    assert PyToJsCommand.SET_DATA in received_dispatches
-    assert received_dispatches[PyToJsCommand.SELECT_NODE] == {"id": selected_id}
+    plugin.update_graph(force_layout=True)
+    qtbot.waitUntil(
+        lambda: (
+            PyToJsCommand.SET_DATA in received_dispatches
+            and received_dispatches.get(PyToJsCommand.SELECT_NODE) == {"id": selected_id}
+        ),
+        timeout=2000,
+    )
 
     # 2. Deselecting a node removes selection re-application
     plugin.view.bridge.dispatchFromJs(JsToPyCommand.NODE_DESELECT, "{}")
     received_dispatches.clear()
-    fut = plugin.update_graph(force_layout=True)
-    qtbot.waitUntil(fut.done, timeout=2000)
-    assert PyToJsCommand.SET_DATA in received_dispatches
+    plugin.update_graph(force_layout=True)
+    qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in received_dispatches, timeout=2000)
     assert PyToJsCommand.SELECT_NODE not in received_dispatches
 
     # 3. A selection pointing to an orphan node is dropped and not re-applied
     plugin.view.bridge.dispatchFromJs(JsToPyCommand.NODE_SELECT, json.dumps({"id": "nonexistent_node"}))
     received_dispatches.clear()
-    fut = plugin.update_graph(force_layout=True)
-    qtbot.waitUntil(fut.done, timeout=2000)
-    assert PyToJsCommand.SET_DATA in received_dispatches
+    plugin.update_graph(force_layout=True)
+    qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in received_dispatches, timeout=2000)
     assert PyToJsCommand.SELECT_NODE not in received_dispatches
 
 
