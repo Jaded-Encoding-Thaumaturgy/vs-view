@@ -109,11 +109,10 @@ export class CytoscapeCanvas implements IDisposable {
     this._heatmapActive = active;
     if (!this.cy) return;
 
-    if (!this._heatmapActive) {
+    if (!active) {
       this.cy.nodes().removeStyle('background-color');
-    } else {
-      this.applyHeatmap();
     }
+    this.applyVisualState();
   }
 
   public get selectedId(): string | null {
@@ -216,7 +215,7 @@ export class CytoscapeCanvas implements IDisposable {
     this.visualState.setModeFilter(mode);
 
     if (this.cy) {
-      this.visualState.apply(this.cy);
+      this.applyVisualState();
     }
   }
 
@@ -225,7 +224,7 @@ export class CytoscapeCanvas implements IDisposable {
     this.visualState.setMediaOnly(enabled);
 
     if (this.cy) {
-      this.visualState.apply(this.cy);
+      this.applyVisualState();
     }
   }
 
@@ -234,7 +233,7 @@ export class CytoscapeCanvas implements IDisposable {
     this.visualState.setGroupHighlight(nodeIds);
 
     if (this.cy) {
-      this.visualState.apply(this.cy);
+      this.applyVisualState();
     }
   }
 
@@ -402,7 +401,7 @@ export class CytoscapeCanvas implements IDisposable {
     }
 
     this.cy.layout(options).run();
-    this.visualState.apply(this.cy);
+    this.applyVisualState();
   }
 
   public setTimingDisplay(show: boolean, unit: TimingUnit): void {
@@ -512,7 +511,7 @@ export class CytoscapeCanvas implements IDisposable {
     this.visualState.clearLineage();
 
     if (this.cy) {
-      this.visualState.apply(this.cy);
+      this.applyVisualState();
     }
   }
 
@@ -520,14 +519,14 @@ export class CytoscapeCanvas implements IDisposable {
     if (!this.cy) return;
 
     this.visualState.setSearch(matchingIds.length > 0 ? matchingIds : null);
-    this.visualState.apply(this.cy);
+    this.applyVisualState();
   }
 
   public clearSearch(): void {
     if (!this.cy) return;
 
     this.visualState.setSearch(null);
-    this.visualState.apply(this.cy);
+    this.applyVisualState();
   }
 
   public getNodes(): CanvasNodeData[] {
@@ -684,14 +683,23 @@ export class CytoscapeCanvas implements IDisposable {
       selectedNode.predecessors().map((node) => node.id()),
       selectedNode.successors().map((node) => node.id()),
     );
-    this.visualState.apply(this.cy);
+    this.applyVisualState();
   }
 
   private clearLineage(): void {
     if (!this.cy) return;
 
     this.visualState.clearLineage();
-    this.visualState.apply(this.cy);
+    this.applyVisualState();
+  }
+
+  private applyVisualState(): void {
+    if (this.cy) {
+      this.visualState.apply(this.cy, { showLineage: !this.heatmapActive });
+      if (this.heatmapActive) {
+        this.applyHeatmap();
+      }
+    }
   }
 
   private applyHeatmap(): void {
@@ -782,7 +790,7 @@ export class CytoscapeCanvas implements IDisposable {
           width: 'data(node_width)',
           height: 'data(node_height)',
           padding: '12px',
-          'transition-property': 'background-color, border-color, border-width, opacity',
+          'transition-property': 'border-color, border-width, opacity',
           'transition-duration': 0.15,
         },
       },

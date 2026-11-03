@@ -36,6 +36,18 @@ describe('VisualState', () => {
     expect(cy.$('#e1').hasClass('highlighted-upstream')).toBe(true);
     expect(cy.$('#e2').hasClass('highlighted-downstream')).toBe(true);
 
+    // Heatmap mode keeps every node fully visible without discarding the current selection.
+    state.apply(cy, { showLineage: false });
+    expect(cy.$('#a').hasClass('highlighted-upstream')).toBe(false);
+    expect(cy.$('#c').hasClass('highlighted-downstream')).toBe(false);
+    expect(cy.$('#d').hasClass('dimmed')).toBe(false);
+
+    // Disabling heatmap restores the still-active lineage treatment.
+    state.apply(cy);
+    expect(cy.$('#a').hasClass('highlighted-upstream')).toBe(true);
+    expect(cy.$('#c').hasClass('highlighted-downstream')).toBe(true);
+    expect(cy.$('#d').hasClass('dimmed')).toBe(true);
+
     state.clearLineage();
     expect(state.hasLineage).toBe(false);
     state.apply(cy);

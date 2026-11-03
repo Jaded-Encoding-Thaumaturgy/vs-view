@@ -204,6 +204,30 @@ describe('CytoscapeCanvas', () => {
     expect(canvas.heatmapActive).toBe(false);
   });
 
+  it('keeps heatmap active without applying lineage dimming on selection', () => {
+    canvas.init(container);
+    canvas.setGraphData({
+      nodes: [
+        { data: makeNode({ id: 'n1', processing_time_ns: 1_000_000 }) },
+        { data: makeNode({ id: 'n2', processing_time_ns: 4_000_000 }) },
+      ],
+      edges: [{ data: makeEdge({ id: 'e1', source: 'n1', target: 'n2' }) }],
+      analysis: makeGraphAnalysis({ nodeCount: 2, edgeCount: 1 }),
+    });
+    canvas.heatmapActive = true;
+
+    const cy = (canvas as unknown as { cy: cytoscape.Core }).cy;
+    expect(canvas.selectNodeById('n2')?.id).toBe('n2');
+    expect(cy.getElementById('n1').hasClass('dimmed')).toBe(false);
+    expect(cy.getElementById('n2').hasClass('dimmed')).toBe(false);
+
+    canvas.clearSelection();
+
+    expect(canvas.heatmapActive).toBe(true);
+    expect(cy.getElementById('n1').hasClass('dimmed')).toBe(false);
+    expect(cy.getElementById('n2').hasClass('dimmed')).toBe(false);
+  });
+
   it('sorts incoming connections by edge index and manages edge tooltip on hover', () => {
     canvas.init(container);
     const nodeA = makeNode({ id: 'src_a', name: 'ClipA' });

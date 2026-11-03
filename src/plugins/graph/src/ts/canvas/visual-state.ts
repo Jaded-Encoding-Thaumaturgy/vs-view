@@ -59,7 +59,7 @@ export class VisualState {
     this.groupHighlight = nodeIds === null ? null : new Set(nodeIds);
   }
 
-  public apply(cy: cytoscape.Core): void {
+  public apply(cy: cytoscape.Core, { showLineage = true } = {}): void {
     cy.batch(() => {
       const nodes = cy.nodes();
       const edges = cy.edges();
@@ -68,7 +68,7 @@ export class VisualState {
       edges.removeClass(EDGE_TRANSIENT_CLASSES);
 
       const dimmed = new Set<string>();
-      const lineageActive = this.selectedId !== null;
+      const lineageActive = showLineage && this.selectedId !== null;
       const groupHighlightActive = this.groupHighlight !== null;
 
       nodes.forEach((node) => {
