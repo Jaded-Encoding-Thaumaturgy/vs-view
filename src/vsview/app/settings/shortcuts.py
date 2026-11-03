@@ -13,7 +13,7 @@ from typing import Any, Final, Literal, cast
 from jetpytools import CustomNotImplementedError, Singleton, cachedproperty, inject_self
 from PySide6.QtCore import QKeyCombination, Qt, Slot
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QMenu, QWidget
 
 from ..utils import QObjectSet
 from .action import ActionDefinition, ActionID
@@ -205,6 +205,23 @@ class ShortcutManager(Singleton):
 
         return value
 
+    @inject_self
+    def scopes_overlap(self, first_id: str, second_id: str) -> bool:
+        """
+        Check whether the live shortcut scopes of two actions can be active for the same focused widget.
+
+        Args:
+            first_id: The first action identifier.
+            second_id: The second action identifier.
+
+        Returns:
+            True if both actions may be active simultaneously, False if their scopes are disjoint.
+        """
+        if (first := self._live_scopes(first_id)) is None or (second := self._live_scopes(second_id)) is None:
+            return True
+
+        return any(self._scope_pair_overlaps(a, b) for a in first for b in second)
+
     def _update_action(self, action_id: str, action: QAction) -> None:
         key = self.get_key(action_id)
         action.setShortcut(key)
@@ -223,6 +240,30 @@ class ShortcutManager(Singleton):
     def _update_shortcut(self, action_id: str, shortcut: QShortcut) -> None:
         shortcut.setKey(self.get_key(action_id))
 
+    def _live_scopes(self, action_id: str) -> list[tuple[Qt.ShortcutContext, QWidget]] | None:
+        scopes = list[tuple[Qt.ShortcutContext, QWidget]]()
+
+        for action in self._actions.get(action_id, ()):
+            for obj in action.associatedObjects():
+                if not isinstance(obj, QWidget):
+                    continue
+
+                widget: QWidget | None = obj
+
+                # Menu actions are triggered from wherever the menu is attached
+                # (context menu owner or menubar)
+                while isinstance(widget, QMenu):
+                    widget = widget.parentWidget()
+
+                if widget is not None:
+                    scopes.append((action.shortcutContext(), widget))
+
+        for shortcut in self._shortcuts.get(action_id, ()):
+            if isinstance(parent := shortcut.parent(), QWidget):
+                scopes.append((shortcut.context(), parent))
+
+        return scopes or None
+
     @Slot()
     def _on_settings_changed(self) -> None:
         logger.debug("Hot-reloading shortcuts...")
@@ -235,30 +276,25 @@ class ShortcutManager(Singleton):
                 self._update_shortcut(aid, shortcut)
 
         logger.debug("Shortcuts hot-reloaded")
-        # FIXME:
-        # self._check_conflicts()
 
-    @inject_self
-    def _check_conflicts(self) -> None:
-        # Unused
-        # This method is too fragile because two shortcuts could work with the same key sequence
-        # but with a difference parent context
-        key_map = dict[str, list[str]]()
+    @staticmethod
+    def _scope_pair_overlaps(
+        first: tuple[Qt.ShortcutContext, QWidget],
+        second: tuple[Qt.ShortcutContext, QWidget],
+    ) -> bool:
+        (first_ctx, first_widget), (second_ctx, second_widget) = first, second
+        sctx = Qt.ShortcutContext
 
-        for action_id in self._definitions:
-            if (key := self.get_key(action_id)).isEmpty():
-                continue
+        if sctx.ApplicationShortcut in (first_ctx, second_ctx):
+            return True
 
-            key_map.setdefault(key.toString(), []).append(action_id)
+        if sctx.WindowShortcut in (first_ctx, second_ctx):
+            return first_widget.window() is second_widget.window()
 
-        for key, action_ids in key_map.items():
-            if len(action_ids) > 1:
-                labels = [self._definitions[aid].label if aid in self._definitions else aid for aid in action_ids]
-                logger.warning(
-                    "Shortcut conflict detected: key '%s' is assigned to multiple actions: %s",
-                    key,
-                    ", ".join(labels),
-                )
+        def covers(ctx: Qt.ShortcutContext, owner: QWidget, target: QWidget) -> bool:
+            return owner is target or (ctx == sctx.WidgetWithChildrenShortcut and owner.isAncestorOf(target))
+
+        return covers(first_ctx, first_widget, second_widget) or covers(second_ctx, second_widget, first_widget)
 
 
 # QWERTY physical key hardware scan codes (US QWERTY standard)

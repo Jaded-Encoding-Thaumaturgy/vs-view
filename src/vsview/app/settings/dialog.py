@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass, field
 from functools import partial
+from itertools import combinations
 from logging import getLogger
 from pathlib import Path
 from typing import Any, Self, override
@@ -629,25 +630,21 @@ class SettingsDialog(QDialog, IconReloadMixin):
         key_to_actions = dict[str, list[str]]()
 
         for aid, editor in self._shortcut_widgets.editors.items():
-            key = editor.keySequence().toString()
+            if key := editor.keySequence().toString():
+                key_to_actions.setdefault(key, []).append(aid)
 
-            if not key or (
-                # Exclude plugin shortcuts with a reduced scope
-                aid.split(".")[0] in self._plugin_names
-                and ShortcutManager.get_hierarchy(aid)
-                <= ShortcutManager.SCOPE_HIERARCHY[Qt.ShortcutContext.WidgetWithChildrenShortcut]
-            ):
-                continue
-
-            key_to_actions.setdefault(key, []).append(aid)
-
-        # Find conflicting keys (assigned to more than one action)
-        conflicting_keys = {key for key, actions in key_to_actions.items() if len(actions) > 1}
+        # Collect conflicting pairs among actions sharing the same key
+        conflicts = dict[str, list[str]]()
+        for actions in key_to_actions.values():
+            for first, second in combinations(actions, 2):
+                if self._shortcuts_conflict(first, second):
+                    conflicts.setdefault(first, []).append(second)
+                    conflicts.setdefault(second, []).append(first)
 
         # Update each editor's conflict state
         for aid, editor in self._shortcut_widgets.editors.items():
-            key = editor.keySequence().toString()
-            has_conflict = key in conflicting_keys
+            conflicting_ids = conflicts.get(aid, [])
+            has_conflict = bool(conflicting_ids)
             conflict_label = self._shortcut_widgets.conflict_labels[aid]
 
             conflict_label.setText("⚠" if has_conflict else "")
@@ -657,12 +654,26 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
             # Update tooltip to show what it conflicts with
             if has_conflict:
-                conflicting_with = [
-                    ShortcutManager.definitions[other_aid].label
-                    for other_aid in key_to_actions[key]
-                    if other_aid != aid
-                ]
-                conflict_label.setToolTip(f"Conflicts with: {', '.join(conflicting_with)}")
+                conflict_label.setToolTip(
+                    f"Conflicts with: {
+                        ', '.join(ShortcutManager.definitions[other_aid].label for other_aid in conflicting_ids)
+                    }"
+                )
+
+    def _shortcuts_conflict(self, first: str, second: str) -> bool:
+        def is_scoped_plugin_shortcut(aid: str) -> bool:
+            return (
+                aid.split(".")[0] in self._plugin_names
+                and ShortcutManager.get_hierarchy(aid)
+                <= ShortcutManager.SCOPE_HIERARCHY[Qt.ShortcutContext.WidgetWithChildrenShortcut]
+            )
+
+        # Shortcuts outside plugin widget scopes are always considered conflicting with each other
+        if not (is_scoped_plugin_shortcut(first) or is_scoped_plugin_shortcut(second)):
+            return True
+
+        # Plugin shortcuts with a reduced scope only conflict when both can be active for the same focused widget
+        return ShortcutManager.scopes_overlap(first, second)
 
     @cachedproperty
     def _default_shortcuts(self) -> dict[str, QKeySequence]:
