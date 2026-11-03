@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import base64
 import threading
-from dataclasses import dataclass
 from functools import partial
 from logging import getLogger
 from pathlib import Path
-from typing import Any, assert_never, override
+from typing import Any, NamedTuple, assert_never, override
 
 import vsengine
 import vsgraph
@@ -16,7 +15,6 @@ from PySide6.QtGui import QCursor, QImage, QShowEvent
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QVBoxLayout, QWidget
 
 from vsview.api import PluginAPI, VideoOutputProxy, WidgetPluginBase, run_in_background, run_in_loop
-from vsview.app.settings import ShortcutManager
 from vsview.env import getenv_bool
 
 from .analysis import enrich_cytoscape_payload
@@ -30,8 +28,7 @@ from .web import GraphWebView
 logger = getLogger(__name__)
 
 
-@dataclass(slots=True)
-class CachedGraph:
+class CachedGraph(NamedTuple):
     graph: vsgraph.Graph[Any]
     payload: dict[str, Any]
 
@@ -47,8 +44,6 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent, api)
-
-        ShortcutManager.register_definitions(self.shortcuts)
 
         self._selected_idx: int | None = None
         self._is_dirty = False
