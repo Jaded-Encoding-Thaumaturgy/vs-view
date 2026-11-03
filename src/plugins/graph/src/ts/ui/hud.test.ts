@@ -32,7 +32,7 @@ function createMockCanvas(nodes: CanvasNodeData[] = []) {
 describe('HudController', () => {
   let container: HTMLElement;
   let mockCanvas: ReturnType<typeof createMockCanvas>;
-  let onRefreshRequested: ReturnType<typeof vi.fn<() => void>>;
+  let onReloadRequested: ReturnType<typeof vi.fn<() => void>>;
   let onOutputSelected: ReturnType<typeof vi.fn<(index: number) => void>>;
   let onNodeMatched: ReturnType<typeof vi.fn<(nodeId: string) => void>>;
   let onPatternsToggled: ReturnType<typeof vi.fn<(enabled: boolean) => void>>;
@@ -49,7 +49,7 @@ describe('HudController', () => {
       makeCanvasNode({ id: 'n3', name: 'CropSecond', label: 'CropSecond' }),
     ]);
 
-    onRefreshRequested = vi.fn<() => void>();
+    onReloadRequested = vi.fn<() => void>();
     onOutputSelected = vi.fn<(index: number) => void>();
     onNodeMatched = vi.fn<(nodeId: string) => void>();
     onPatternsToggled = vi.fn<(enabled: boolean) => void>();
@@ -58,7 +58,7 @@ describe('HudController', () => {
     hud = new HudController({
       container,
       canvas: mockCanvas as unknown as CytoscapeCanvas,
-      onRefreshRequested,
+      onReloadRequested,
       onOutputSelected,
       onNodeMatched,
       onPatternsToggled,
@@ -125,7 +125,7 @@ describe('HudController', () => {
     expect(onOverviewRequested).toHaveBeenCalledTimes(1);
 
     container.querySelector<HTMLButtonElement>('#hud-refresh')?.click();
-    expect(onRefreshRequested).toHaveBeenCalledTimes(1);
+    expect(onReloadRequested).toHaveBeenCalledTimes(1);
 
     hud.syncOptions({ direction: 'TB', heatmap: false, patterns: false });
     expect(dirBtn.textContent.trim()).toBe('↕ TB');

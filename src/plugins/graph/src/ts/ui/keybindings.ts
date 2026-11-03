@@ -14,7 +14,7 @@ export interface KeybindingActions {
   toggleHeatmap: () => void;
   togglePatterns: () => void;
   toggleOverview: () => void;
-  refresh: () => void;
+  reload: () => void;
   focusSearch: () => void;
 }
 

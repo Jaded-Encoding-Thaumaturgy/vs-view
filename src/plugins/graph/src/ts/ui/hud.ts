@@ -12,7 +12,7 @@ import { isEmptyQuery, matchesNode, parseSearchQuery } from '../utils/search';
 interface HudOptions {
   container: HTMLElement;
   canvas: CytoscapeCanvas;
-  onRefreshRequested: () => void;
+  onReloadRequested: () => void;
   onOutputSelected: (index: number) => void;
   onNodeMatched?: (nodeId: string) => void;
   onPatternsToggled?: (enabled: boolean) => void;
@@ -317,7 +317,7 @@ export class HudController extends Disposable {
           id="hud-refresh"
           class="hud-btn"
           title="Re-inspect the graph and refresh timings"
-          @click=${() => this.opts.onRefreshRequested()}
+          @click=${() => this.opts.onReloadRequested()}
         >
           ↻
         </button>

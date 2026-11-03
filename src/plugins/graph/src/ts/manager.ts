@@ -77,7 +77,7 @@ export class GraphManager extends Disposable {
         toggleHeatmap: () => this.toggleHeatmap(),
         togglePatterns: () => this.togglePatterns(),
         toggleOverview: () => this.overview.toggle(),
-        refresh: () => {
+        reload: () => {
           this.bridge.sendEvent('graph.reload');
         },
         focusSearch: () => this.hud.focusSearch(),
@@ -94,7 +94,7 @@ export class GraphManager extends Disposable {
       new HudController({
         container: options.hudContainer,
         canvas: this.canvas,
-        onRefreshRequested: () => this.bridge.sendEvent('graph.reload'),
+        onReloadRequested: () => this.bridge.sendEvent('graph.reload'),
         onOutputSelected: (index) => this.bridge.sendEvent('output.select', { index }),
         onNodeMatched: (nodeId) => this.focusNode(nodeId),
         onPatternsToggled: (enabled) => this.overview.setPatterns(enabled),

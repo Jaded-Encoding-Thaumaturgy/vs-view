@@ -21,7 +21,7 @@ function createMockActions(): KeybindingActions {
     toggleHeatmap: vi.fn(),
     togglePatterns: vi.fn(),
     toggleOverview: vi.fn(),
-    refresh: vi.fn(),
+    reload: vi.fn(),
     focusSearch: vi.fn(),
   };
 }
@@ -97,9 +97,9 @@ describe('formatShortcut', () => {
   it.each([
     [makeRule({ action: 'fit', key: 'f' }), 'F'],
     [makeRule({ action: 'resetView', key: '0' }), '0'],
-    [makeRule({ action: 'refresh', key: 'r', ctrl: true }), 'Ctrl+R'],
+    [makeRule({ action: 'reload', key: 'r', ctrl: true }), 'Ctrl+R'],
     [
-      makeRule({ action: 'refresh', key: 'r', ctrl: true, shift: true, alt: true, meta: true }),
+      makeRule({ action: 'reload', key: 'r', ctrl: true, shift: true, alt: true, meta: true }),
       'Ctrl+Alt+Shift+Meta+R',
     ],
     [makeRule({ action: 'play', key: ' ' }), 'Space'],
