@@ -51,16 +51,19 @@ describe('CytoscapeCanvas', () => {
     );
   });
 
-  it('throws an error when Canvas 2D context is unavailable for node sizing', () => {
+  it('falls back to character-based width measurement when Canvas 2D context is unavailable', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     canvas.init(container);
-    expect(() => {
-      canvas.setGraphData({
-        nodes: [{ data: makeNode({ id: 'n1', label: 'Test' }) }],
-        edges: [],
-        analysis: makeGraphAnalysis({ nodeCount: 1 }),
-      });
-    }).toThrow('Canvas 2D context is unavailable for label measurement');
+    canvas.setGraphData({
+      nodes: [{ data: makeNode({ id: 'n1', label: 'Test', processing_time_ns: 0 }) }],
+      edges: [],
+      analysis: makeGraphAnalysis({ nodeCount: 1 }),
+    });
+
+    const node = canvas.getNodeById('n1');
+    expect(node).not.toBeNull();
+    expect(node?.node_width).toBe(4 * 8);
+    expect(node?.node_height).toBe(14);
   });
 
   it('populates graph elements, preserves edge media transitions, and resolves incoming nodes', () => {

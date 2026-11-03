@@ -22,6 +22,7 @@ cytoscape.use(dagre);
 
 const LABEL_FONT = 'normal bold 14px system-ui, -apple-system, sans-serif';
 const LABEL_FONT_SIZE = 14;
+const FALLBACK_CHAR_WIDTH = 8;
 
 export class CytoscapeCanvas implements IDisposable {
   private cy: cytoscape.Core | null = null;
@@ -733,9 +734,13 @@ export class CytoscapeCanvas implements IDisposable {
   private getLineMeasurer(): (line: string) => number {
     if (this.lineMeasurer) return this.lineMeasurer;
 
-    const context = document.createElement('canvas').getContext('2d');
+    const context = Result.fromThrowable(() =>
+      document.createElement('canvas').getContext('2d'),
+    ).unwrapOr(null);
+
     if (!context) {
-      throw new Error('Canvas 2D context is unavailable for label measurement');
+      this.lineMeasurer = (line) => line.length * FALLBACK_CHAR_WIDTH;
+      return this.lineMeasurer;
     }
 
     context.font = LABEL_FONT;
