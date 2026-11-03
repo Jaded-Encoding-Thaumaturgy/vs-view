@@ -25,6 +25,7 @@ from vsview.app.plugins.api import PluginAPI, WidgetPluginBase, WorkspaceBlocker
 from vsview.app.plugins.contracts import AudioOutputProxy, VideoOutputProxy
 from vsview.app.plugins.exceptions import NoCurrentVideoOutputError
 from vsview.app.settings import SettingsManager
+from vsview.app.settings.shortcuts import ShortcutManager
 from vsview.types import Frame, Time
 
 
@@ -360,6 +361,9 @@ class HarnessPluginController(QObject):
         """Instantiate a plugin widget, wire it to the harness API, and register it with qtbot."""
         plugin = plugin_cls(None, self.api)  # pyright: ignore[reportArgumentType]
         self._qtbot.addWidget(plugin)
+
+        if hasattr(plugin_cls, "shortcuts"):
+            ShortcutManager.register_definitions(plugin_cls.shortcuts)
 
         self.managed_plugins.append(plugin)
         if self._current_voutput is not None:
