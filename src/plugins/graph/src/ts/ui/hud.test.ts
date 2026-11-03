@@ -177,19 +177,26 @@ describe('HudController', () => {
     hud.refreshSearch(false);
     expect(countEl.textContent.trim()).toBe('3/3'); // n3 is now at index 2 (3/3)
 
-    // Invalid regex marks input invalid, displays '!', and updates tooltip to error
+    // Invalid regex marks input invalid, displays '!', clears previous canvas search, and updates tooltip to error
+    mockCanvas.clearSearch.mockClear();
+    onNodeMatched.mockClear();
     input.value = '/unterminated[';
     input.dispatchEvent(new Event('input'));
     expect(input.classList.contains('invalid')).toBe(true);
     expect(countEl.textContent.trim()).toBe('!');
     expect(input.title).toContain('Invalid regular expression');
     expect(nextBtn.disabled).toBe(true);
+    expect(mockCanvas.clearSearch).toHaveBeenCalledTimes(1);
+
+    // Pressing Enter on an invalid regex does not cycle stale matches
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(onNodeMatched).not.toHaveBeenCalled();
 
     // Escape clears search, resets canvas highlight, and restores default tooltip
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(input.value).toBe('');
     expect(countEl.textContent.trim()).toBe('');
     expect(input.title).toBe(DEFAULT_SEARCH_TOOLTIP);
-    expect(mockCanvas.clearSearch).toHaveBeenCalled();
+    expect(mockCanvas.clearSearch).toHaveBeenCalledTimes(2);
   });
 });

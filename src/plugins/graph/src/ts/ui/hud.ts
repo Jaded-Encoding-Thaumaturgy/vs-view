@@ -131,11 +131,7 @@ export class HudController extends Disposable {
     const query = parseSearchQuery(this.searchQuery);
     this.searchError = query.error;
 
-    if (query.error !== null) {
-      return;
-    }
-
-    if (isEmptyQuery(query)) {
+    if (query.error !== null || isEmptyQuery(query)) {
       this.searchMatches = [];
       this.searchIndex = -1;
       this.opts.canvas.clearSearch();
