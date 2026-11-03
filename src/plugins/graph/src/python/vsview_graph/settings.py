@@ -102,7 +102,7 @@ class GraphShortcut(StrEnum):
     definition: ActionDefinition
 
     FIT = "fit", "Fit Graph", "F"
-    RESET_VIEW = "reset_view", "Reset Zoom", "0"
+    RESET_VIEW = "reset_view", "Reset Zoom", "Ctrl+0"
     TOGGLE_HEATMAP = "toggle_heatmap", "Toggle Heatmap", "H"
     TOGGLE_PATTERNS = "toggle_patterns", "Toggle Edge Patterns", "P"
     TOGGLE_OVERVIEW = "toggle_overview", "Toggle Overview Panel", "L"
