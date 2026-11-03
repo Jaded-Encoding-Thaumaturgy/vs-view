@@ -154,14 +154,30 @@ describe('CytoscapeCanvas', () => {
 
     // Reloading graph data while n2 is selected restores selection and notifies subscribers
     const selectSpy = vi.fn();
+    const clearSpy = vi.fn();
     const sub = canvas.onNodeSelected(selectSpy);
+    const clearSub = canvas.onSelectionCleared(clearSpy);
     canvas.setGraphData(payload, true);
     expect(selectSpy).toHaveBeenCalledTimes(1);
     expect(selectSpy.mock.calls[0]?.[0]?.id).toBe('n2');
-    sub.dispose();
+    expect(clearSpy).not.toHaveBeenCalled();
 
-    canvas.clearSelection();
+    // Reloading when the previously selected node (n2) is absent clears selection and avoids dimming
+    canvas.setGraphData(
+      {
+        nodes: [{ data: makeNode({ id: 'n1', name: 'Source' }) }],
+        edges: [],
+        analysis: makeGraphAnalysis({ nodeCount: 1 }),
+      },
+      true,
+    );
     expect(canvas.selectedId).toBeNull();
+    expect(clearSpy).toHaveBeenCalledTimes(1);
+    const cy = (canvas as unknown as { cy: cytoscape.Core }).cy;
+    expect(cy.getElementById('n1').hasClass('dimmed')).toBe(false);
+
+    sub.dispose();
+    clearSub.dispose();
 
     // Pattern styles and group highlight state
     expect(canvas.isShowingPatternStyles()).toBe(false);

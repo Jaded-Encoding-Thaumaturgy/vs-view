@@ -275,6 +275,9 @@ export class CytoscapeCanvas implements IDisposable {
     const previousPan = shouldPreserve ? this.cy.pan() : null;
     const previousZoom = shouldPreserve ? this.cy.zoom() : null;
 
+    this.selectedNodeId = null;
+    this.visualState.clearLineage();
+
     this.cy.stop();
     this.cy.elements().remove();
 
@@ -338,6 +341,8 @@ export class CytoscapeCanvas implements IDisposable {
       const restoredNode = this.selectNodeById(previousSelectedId);
       if (restoredNode) {
         this.notifyNodeSelected(restoredNode);
+      } else {
+        this.notifySelectionCleared();
       }
     }
   }
