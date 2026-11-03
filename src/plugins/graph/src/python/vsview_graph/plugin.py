@@ -255,7 +255,9 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
             case JsToPyCommand.NODE_DESELECT:
                 self._selected_node_id = None
             case JsToPyCommand.NODE_COPY:
-                self._copy_node_info(str(payload["id"]), NodeCopyTarget(payload["target"]))
+                self._copy_node_info(
+                    str(payload["id"]), NodeCopyTarget(payload["target"]), int(payload.get("frameIdx", 0))
+                )
             case JsToPyCommand.CONTEXT_MENU:
                 self.context_menu.exec(QCursor.pos())
             case JsToPyCommand.EXPORT_GRAPH:
@@ -351,7 +353,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
         self.view.load(url)
 
     @run_in_background(name="CopyNodeInfo")
-    def _copy_node_info(self, node_id: str, target: NodeCopyTarget) -> None:
+    def _copy_node_info(self, node_id: str, target: NodeCopyTarget, frame_idx: int = 0) -> None:
         if target == NodeCopyTarget.ID:
             vsengine.from_thread(lambda: QApplication.clipboard().setText(node_id))
             self.api.statusMessage.emit(f"Copied {target.description}")
@@ -367,7 +369,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
         with self.api.vs_context():
             match target:
                 case NodeCopyTarget.CALL:
-                    text = build_filter_call(node)
+                    text = build_filter_call(node, frame_idx)
                 case NodeCopyTarget.REPORT:
                     text = build_node_report(node, is_root=node.id == cached.graph.root_id)
                 case _:

@@ -39,17 +39,20 @@ def format_python_value(value: Any) -> str:
             return "<invalid>"
 
 
-def build_filter_call(node: vsgraph.Node[Any]) -> str:
-    """Reconstruct the Python call that created a node from its innermost call frame."""
+def build_filter_call(node: vsgraph.Node[Any], frame_idx: int = 0) -> str:
+    """Reconstruct the Python call recorded at `frame_idx` in the node's call stack (0 is the innermost frame)."""
     if not node.call_stack:
         return f"# {node.name} [{node.id}]: no call frame recorded"
+
+    if not 0 <= frame_idx < len(node.call_stack):
+        return f"# {node.name} [{node.id}]: no call frame at index {frame_idx}"
 
     def generate_clip_names() -> Generator[str]:
         yield "clip"
         for n in count(2):
             yield f"clip{n}"
 
-    frame = node.call_stack[0]
+    frame = node.call_stack[frame_idx]
     clip_names = generate_clip_names()
     positional = list[str]()
     keyword = list[str]()

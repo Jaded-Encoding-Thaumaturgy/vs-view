@@ -17,7 +17,7 @@ import { formatFps, formatProcessingTime } from '../utils/format';
 
 interface InspectorDrawerOptions {
   container: HTMLElement;
-  onCopyNode: (id: string, target: NodeCopyTarget) => void;
+  onCopyNode: (id: string, target: NodeCopyTarget, frameIdx?: number) => void;
   resolveNode: (id: string) => CanvasNodeData | null;
   getIncomingConnections: (id: string) => IncomingConnection[];
   onFocusNode: (id: string) => void;
@@ -95,8 +95,8 @@ export class InspectorDrawer extends Disposable {
     if (this.lastNode) this.opts.onCopyNode(this.lastNode.id, 'id');
   }
 
-  private copyFilterCall(): void {
-    if (this.lastNode) this.opts.onCopyNode(this.lastNode.id, 'call');
+  private copyFilterCall(frameIdx: number): void {
+    if (this.lastNode) this.opts.onCopyNode(this.lastNode.id, 'call', frameIdx);
   }
 
   private copyReport(): void {
@@ -322,17 +322,7 @@ export class InspectorDrawer extends Disposable {
 
     return html`
       <div class="inspector-card">
-        <div class="card-title card-title-flex">
-          <span>${title}</span>
-          <button
-            class="card-action-btn"
-            id="inspector-copy-call"
-            title="Copy the filter call as Python"
-            @click=${() => this.copyFilterCall()}
-          >
-            Copy Call
-          </button>
-        </div>
+        <div class="card-title">${title}</div>
         <div class="accordion">
           ${repeat(
             stack,
@@ -349,14 +339,25 @@ export class InspectorDrawer extends Disposable {
 
     return html`
       <div class=${classMap({ 'accordion-item': true, active: isActive })}>
-        <button class="accordion-header" @click=${() => this.toggleFrame(idx)}>
-          <span class="accordion-arrow">${isActive ? '▼' : '▶'}</span>
-          <span class="accordion-frame-lvl">#${frame.level}</span>
-          <span class="accordion-frame-func">
-            ${frame.plugin_ns ? `${frame.plugin_ns}.` : ''}${frame.function}
-          </span>
-          <span class="accordion-plugin-id">${frame.plugin_id}</span>
-        </button>
+        <div class="accordion-header-row">
+          <button class="accordion-header" @click=${() => this.toggleFrame(idx)}>
+            <span class="accordion-arrow">${isActive ? '▼' : '▶'}</span>
+            <span class="accordion-frame-lvl">#${frame.level}</span>
+            <span class="accordion-frame-func">${frame.plugin_ns}.${frame.function} </span>
+            <span class="accordion-plugin-id">${frame.plugin_id}</span>
+          </button>
+          <button
+            class="card-action-btn accordion-copy-btn"
+            data-frame-idx=${idx}
+            title="Copy this frame's filter call as Python"
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              this.copyFilterCall(idx);
+            }}
+          >
+            Copy Call
+          </button>
+        </div>
         <div class="accordion-body">${this.renderArgumentsTable(frame.arguments)}</div>
       </div>
     `;

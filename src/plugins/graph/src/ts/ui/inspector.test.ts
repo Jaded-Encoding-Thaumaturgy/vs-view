@@ -10,13 +10,15 @@ describe('InspectorDrawer', () => {
   let incomingMap: Map<string, IncomingConnection[]>;
   let drawer: InspectorDrawer;
   let focusSpy: ReturnType<typeof vi.fn<(id: string) => void>>;
-  let copyNodeSpy: ReturnType<typeof vi.fn<(id: string, target: NodeCopyTarget) => void>>;
+  let copyNodeSpy: ReturnType<
+    typeof vi.fn<(id: string, target: NodeCopyTarget, frameIdx?: number) => void>
+  >;
 
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
 
-    copyNodeSpy = vi.fn<(id: string, target: NodeCopyTarget) => void>();
+    copyNodeSpy = vi.fn<(id: string, target: NodeCopyTarget, frameIdx?: number) => void>();
     focusSpy = vi.fn<(id: string) => void>();
     nodeMap = new Map();
     incomingMap = new Map();
@@ -79,7 +81,7 @@ describe('InspectorDrawer', () => {
     expect(focusSpy).toHaveBeenCalledWith('node_1');
   });
 
-  it('requests node ID, node report, and filter call copy for the inspected node', () => {
+  it('requests node ID, node report, and per-frame filter call copy for the inspected node', () => {
     const node = makeCanvasNode({
       id: 'node_123',
       name: 'Crop',
@@ -92,6 +94,14 @@ describe('InspectorDrawer', () => {
           function: 'Crop',
           arguments: { clip: 'node_1', left: 8 },
         },
+        {
+          level: 1,
+          frame_id: 'frame_2',
+          plugin_id: 'com.vapoursynth.resize',
+          plugin_ns: 'resize',
+          function: 'Bicubic',
+          arguments: { clip: 'node_1', width: 1280 },
+        },
       ],
     });
     drawer.inspectNode(node);
@@ -102,8 +112,18 @@ describe('InspectorDrawer', () => {
     container.querySelector<HTMLButtonElement>('#inspector-copy-report')?.click();
     expect(copyNodeSpy).toHaveBeenCalledWith('node_123', 'report');
 
-    container.querySelector<HTMLButtonElement>('#inspector-copy-call')?.click();
-    expect(copyNodeSpy).toHaveBeenCalledWith('node_123', 'call');
+    const copyButtons = container.querySelectorAll<HTMLButtonElement>('.accordion-copy-btn');
+    expect(copyButtons).toHaveLength(2);
+
+    copyButtons[1]?.click();
+    expect(copyNodeSpy).toHaveBeenLastCalledWith('node_123', 'call', 1);
+    // Copying must not toggle the accordion frame
+    expect(container.querySelectorAll('.accordion-item')[1]?.classList.contains('active')).toBe(
+      false,
+    );
+
+    copyButtons[0]?.click();
+    expect(copyNodeSpy).toHaveBeenLastCalledWith('node_123', 'call', 0);
   });
 
   it('formats media specs including GPU residency and updates timing display options', () => {

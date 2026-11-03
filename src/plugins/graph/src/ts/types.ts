@@ -253,7 +253,7 @@ export interface JsToPyCommandMap {
   'output.select': { index: number };
   'node.select': { id: string };
   'node.deselect': Record<string, never>;
-  'node.copy': { id: string; target: NodeCopyTarget };
+  'node.copy': { id: string; target: NodeCopyTarget; frameIdx?: number };
   'graph.exportGraph': { format: 'dot' | 'mermaid' | 'ascii' | 'json'; clipboard: boolean };
   'graph.saveImage': {
     format: 'png';

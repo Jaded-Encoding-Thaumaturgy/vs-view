@@ -45,7 +45,11 @@ export class GraphManager extends Disposable {
     this.inspector = this._disposables.add(
       new InspectorDrawer({
         container: options.inspectorContainer,
-        onCopyNode: (id, target) => this.bridge.sendEvent('node.copy', { id, target }),
+        onCopyNode: (id, target, frameIdx) =>
+          this.bridge.sendEvent(
+            'node.copy',
+            frameIdx === undefined ? { id, target } : { id, target, frameIdx },
+          ),
         resolveNode: (id) => this.canvas.getNodeById(id),
         getIncomingConnections: (id) => this.canvas.getIncomingConnections(id),
         onFocusNode: (id) => this.focusNode(id),

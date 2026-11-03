@@ -178,7 +178,7 @@ body {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 370px;
+  width: 400px;
   background: color-mix(in srgb, var(--surface-color) 96%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -365,12 +365,6 @@ body {
   margin-bottom: 10px;
 }
 
-.card-title-flex {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .card-action-btn {
   background: var(--surface-elevated);
   color: var(--text-secondary);
@@ -432,13 +426,24 @@ body {
   background: var(--surface-color);
 }
 
+.accordion-header-row {
+  display: flex;
+  align-items: center;
+  background: var(--surface-elevated);
+}
+
+.accordion-header-row:hover {
+  background: var(--surface-hover);
+}
+
 .accordion-header {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 7px 10px;
-  background: var(--surface-elevated);
+  background: transparent;
   border: none;
   cursor: pointer;
   text-align: left;
@@ -446,8 +451,9 @@ body {
   color: var(--text-primary);
 }
 
-.accordion-header:hover {
-  background: var(--surface-hover);
+.accordion-copy-btn {
+  flex-shrink: 0;
+  margin-right: 8px;
 }
 
 .accordion-arrow {
@@ -469,7 +475,7 @@ body {
 
 .accordion-plugin-id {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
   font-family: var(--font-mono);
   overflow: hidden;

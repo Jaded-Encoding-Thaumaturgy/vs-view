@@ -807,6 +807,33 @@ def test_build_filter_call_variations(graph_env: ManagedEnvironment) -> None:
         empty_node = _make_graph_node(node_id="node_9", name="Mystery", call_stack=[])
         assert build_filter_call(empty_node) == "# Mystery [node_9]: no call frame recorded"
 
+        stacked_node = _make_graph_node(
+            node_id="node_10",
+            name="Resize",
+            call_stack=[
+                vsgraph.CallFrame(
+                    level=0,
+                    id="frame_1",
+                    plugin_id="com.vapoursynth.resize",
+                    plugin_ns="resize",
+                    function="Bicubic",
+                    arguments={"clip": vsgraph.VideoNodeRef(id="1"), "width": 1280},
+                ),
+                vsgraph.CallFrame(
+                    level=1,
+                    id="frame_2",
+                    plugin_id="com.vapoursynth.std",
+                    plugin_ns="std",
+                    function="Crop",
+                    arguments={"clip": vsgraph.VideoNodeRef(id="1"), "top": 4},
+                ),
+            ],
+        )
+        assert build_filter_call(stacked_node) == "core.resize.Bicubic(clip, width=1280)"
+        assert build_filter_call(stacked_node, 1) == "core.std.Crop(clip, top=4)"
+        assert build_filter_call(stacked_node, 2) == "# Resize [node_10]: no call frame at index 2"
+        assert build_filter_call(stacked_node, -1) == "# Resize [node_10]: no call frame at index -1"
+
 
 def test_build_node_report(graph_env: ManagedEnvironment) -> None:
     """Verify plain-text node report formatting for root and non-root nodes."""
@@ -1029,7 +1056,7 @@ def test_graph_plugin_node_copy_command(
     QApplication.clipboard().clear()
     plugin.view.bridge.dispatchFromJs(
         JsToPyCommand.NODE_COPY,
-        json.dumps({"id": node_id, "target": NodeCopyTarget.CALL.value}),
+        json.dumps({"id": node_id, "target": NodeCopyTarget.CALL.value, "frameIdx": 0}),
     )
     qtbot.waitUntil(lambda: QApplication.clipboard().text().startswith("core.std.Crop(clip,"), timeout=2000)
     copied_call = QApplication.clipboard().text()
