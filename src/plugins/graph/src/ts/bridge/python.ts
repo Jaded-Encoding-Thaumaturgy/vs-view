@@ -46,14 +46,15 @@ export class BridgeService implements IDisposable {
     command: K,
     handler: CommandHandler<PyToJsCommandMap[K]>,
   ): IDisposable {
+    const erasedHandler = handler as CommandHandler<unknown>;
     const handlers = this.commandHandlers.get(command) ?? [];
-    handlers.push(handler as CommandHandler<unknown>);
+    handlers.push(erasedHandler);
     this.commandHandlers.set(command, handlers);
 
     return toDisposable(() => {
       const current = this.commandHandlers.get(command);
       if (current) {
-        const index = current.indexOf(handler as CommandHandler<unknown>);
+        const index = current.indexOf(erasedHandler);
         if (index !== -1) {
           current.splice(index, 1);
         }
@@ -102,6 +103,11 @@ export class BridgeService implements IDisposable {
         return;
       }
       payload = parseResult.value;
+    }
+
+    if (!(typeof payload === 'object' && payload !== null && !Array.isArray(payload))) {
+      console.error(`Invalid non-object payload for bridge command ${command}:`, payload);
+      return;
     }
 
     const handlers = this.commandHandlers.get(command);

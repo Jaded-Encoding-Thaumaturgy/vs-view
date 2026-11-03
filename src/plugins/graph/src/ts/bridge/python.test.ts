@@ -103,7 +103,7 @@ describe('BridgeService', () => {
     service.dispose();
   });
 
-  it('rejects malformed JSON payloads and isolates throwing command handlers', async () => {
+  it('rejects malformed JSON or non-object payloads and isolates throwing command handlers', async () => {
     const { emitCommand, emitRawCommand } = setupMockWebChannel();
     const service = new BridgeService();
     await service.initBridge();
@@ -124,6 +124,15 @@ describe('BridgeService', () => {
     expect(errorSpy).toHaveBeenCalledWith(
       'Failed to parse command payload for graph.selectNode:',
       expect.any(Error),
+    );
+
+    // Non-object JSON payloads (null, arrays, primitives) are rejected at the boundary
+    emitRawCommand('graph.selectNode', 'null');
+    expect(throwingHandler).not.toHaveBeenCalled();
+    expect(succeedingHandler).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Invalid non-object payload for bridge command graph.selectNode:',
+      null,
     );
 
     // Valid command invokes both handlers despite the first throwing
