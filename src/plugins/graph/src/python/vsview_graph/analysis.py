@@ -2,20 +2,29 @@ from __future__ import annotations
 
 import math
 from collections import Counter, defaultdict, deque
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from enum import StrEnum
 from fractions import Fraction
 from logging import getLogger
-from typing import Any, Final, Literal, NotRequired, Self, TypedDict
+from typing import Any, NotRequired, Self, TypedDict
 
 import vapoursynth as vs
 import vsgraph
 
-type Severity = Literal["warning", "info"]
-
 logger = getLogger(__name__)
 
-SEVERITY_ORDER: Final[Mapping[Severity, int]] = {"warning": 0, "info": 1}
+
+class Severity(StrEnum):
+    WARNING = "warning", 0
+    INFO = "info", 1
+
+    order: int
+
+    def __new__(cls, value: str, order: int) -> Self:
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.order = order
+        return obj
 
 
 class WarningCode(StrEnum):
@@ -64,8 +73,8 @@ class WarningGroup(TypedDict):
     severity: Severity
     title: str
     description: str
-    warnings: list[GraphWarning]
     nodeIds: list[str]
+    count: int
 
 
 class GraphWarning(TypedDict):
@@ -191,9 +200,9 @@ def collect_warnings(graph: vsgraph.Graph[Any]) -> list[GraphWarning]:
 
     for node in graph.nodes:
         if node.filter_mode is vs.FilterMode.FRAME_STATE:
-            w = GraphWarning(code=WarningCode.FRAME_STATE, severity="warning", nodeId=node.id)
+            w = GraphWarning(code=WarningCode.FRAME_STATE, severity=Severity.WARNING, nodeId=node.id)
         elif node.filter_mode is vs.FilterMode.UNORDERED:
-            w = GraphWarning(code=WarningCode.UNORDERED, severity="info", nodeId=node.id)
+            w = GraphWarning(code=WarningCode.UNORDERED, severity=Severity.INFO, nodeId=node.id)
         else:
             continue
         unique.setdefault((w["code"], w["nodeId"], ""), w)
@@ -201,14 +210,18 @@ def collect_warnings(graph: vsgraph.Graph[Any]) -> list[GraphWarning]:
     for i, edge in enumerate(graph.edges):
         edge_id = format_edge_id(i, edge.source, edge.target)
         if edge.pattern is vsgraph.RequestPattern.NO_FRAME_REUSE:
-            w = GraphWarning(code=WarningCode.NO_FRAME_REUSE, severity="warning", edgeId=edge_id, nodeId=edge.target)
+            w = GraphWarning(
+                code=WarningCode.NO_FRAME_REUSE, severity=Severity.WARNING, edgeId=edge_id, nodeId=edge.target
+            )
         elif edge.pattern is vsgraph.RequestPattern.STRICT_SPATIAL:
-            w = GraphWarning(code=WarningCode.STRICT_SPATIAL, severity="info", edgeId=edge_id, nodeId=edge.target)
+            w = GraphWarning(
+                code=WarningCode.STRICT_SPATIAL, severity=Severity.INFO, edgeId=edge_id, nodeId=edge.target
+            )
         else:
             continue
         unique.setdefault((w["code"], w["nodeId"], w.get("edgeId", "")), w)
 
-    return sorted(unique.values(), key=lambda w: SEVERITY_ORDER[w["severity"]])
+    return sorted(unique.values(), key=lambda w: (w["severity"].order, w["code"]))
 
 
 def compute_depth(graph: vsgraph.Graph[Any]) -> int:
@@ -258,12 +271,12 @@ def group_warnings(warnings: Sequence[GraphWarning]) -> list[WarningGroup]:
                 severity=members[0]["severity"],
                 title=code.wtitle,
                 description=code.description,
-                warnings=members,
                 nodeIds=list(dict.fromkeys(node_id for w in members if (node_id := w.get("nodeId")))),
+                count=len(members),
             )
         )
 
-    return sorted(groups, key=lambda g: (SEVERITY_ORDER[g["severity"]], -len(g["warnings"]), g["title"]))
+    return sorted(groups, key=lambda g: (g["severity"].order, -g["count"], g["title"]))
 
 
 def group_media_transitions(transitions: Iterable[MediaTransition]) -> list[MediaTransitionGroup]:

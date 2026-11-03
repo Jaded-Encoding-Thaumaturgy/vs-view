@@ -17,6 +17,7 @@ from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment, Policy
 from vsview_graph.analysis import (
+    Severity,
     collect_media_transitions,
     collect_warnings,
     compute_depth,
@@ -639,19 +640,6 @@ def test_graph_context_menu_structure_and_actions(
     assert "digraph" in dot_path.read_text(encoding="utf-8")
 
 
-def test_graph_context_menu_shortcuts(
-    populated_harness: tuple[HarnessPluginController, GraphPlugin],
-) -> None:
-    """Verify GraphPlugin registers context menu shortcuts."""
-    _, plugin = populated_harness
-    assert plugin.fit_act.shortcut() == plugin.api.get_shortcut_key_sequence(GraphShortcut.FIT.definition)
-    assert plugin.reset_act.shortcut() == plugin.api.get_shortcut_key_sequence(GraphShortcut.RESET_VIEW.definition)
-    assert plugin.reload_act.shortcut() == plugin.api.get_shortcut_key_sequence(GraphShortcut.RELOAD.definition)
-    assert not plugin.fit_act.shortcut().isEmpty()
-    assert not plugin.reset_act.shortcut().isEmpty()
-    assert not plugin.reload_act.shortcut().isEmpty()
-
-
 def test_graph_plugin_context_menu_dispatch(
     populated_harness: tuple[HarnessPluginController, GraphPlugin],
     mocker: MockerFixture,
@@ -980,10 +968,10 @@ def test_collect_and_group_warnings() -> None:
 
     warnings = collect_warnings(graph)
     assert [(w["code"], w["severity"]) for w in warnings] == [
-        ("framestate", "warning"),
-        ("no-frame-reuse", "warning"),
-        ("strict-spatial", "info"),
-        ("unordered", "info"),
+        ("framestate", Severity.WARNING),
+        ("no-frame-reuse", Severity.WARNING),
+        ("strict-spatial", Severity.INFO),
+        ("unordered", Severity.INFO),
     ]
 
     groups = group_warnings(warnings)

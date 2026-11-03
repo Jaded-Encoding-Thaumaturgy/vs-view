@@ -29,20 +29,13 @@ interface CountedName {
   count: number;
 }
 
-interface GraphWarning {
-  code: WarningCode;
-  severity: WarningSeverity;
-  nodeId?: string;
-  edgeId?: string;
-}
-
 export interface WarningGroup {
   readonly code: WarningCode;
   readonly severity: WarningSeverity;
   readonly title: string;
   readonly description: string;
-  readonly warnings: readonly GraphWarning[];
   readonly nodeIds: readonly string[];
+  readonly count: number;
 }
 
 interface MediaDelta {

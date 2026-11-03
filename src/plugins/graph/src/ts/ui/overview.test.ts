@@ -132,12 +132,8 @@ describe('OverviewPanel', () => {
           title: 'Frame-state serialization',
           description:
             'Serializes the entire frame lifecycle to one frame at a time, bypassing parallelism.',
-          warnings: stateNodes.map((n) => ({
-            code: 'framestate',
-            severity: 'warning',
-            nodeId: n.id,
-          })),
           nodeIds,
+          count: stateNodes.length,
         },
       ],
       transitionCount: 1,

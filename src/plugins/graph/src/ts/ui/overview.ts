@@ -331,7 +331,7 @@ export class OverviewPanel extends Disposable {
     return this.renderAccordionGroup({
       key: `w:${group.code}`,
       title: group.title,
-      count: group.warnings.length,
+      count: group.count,
       countUnit: 'occurrences',
       highlightLabel: 'affected nodes',
       nodeIds: group.nodeIds,
