@@ -504,7 +504,11 @@ export class InspectorDrawer extends Disposable {
       if (val.some((item) => isNodeRef(item) || isFrameRef(item) || isFuncRef(item))) {
         return html`
           <div class="badge-list">
-            ${val.map((item, idx) => html`${this.renderArgumentValue(`${key}[${idx}]`, item)}`)}
+            ${repeat(
+              val,
+              (_item, idx) => `${key}[${idx}]`,
+              (item, idx) => this.renderArgumentValue(`${key}[${idx}]`, item),
+            )}
           </div>
         `;
       }
