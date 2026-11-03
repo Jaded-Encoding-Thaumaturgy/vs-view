@@ -287,4 +287,120 @@ describe('InspectorDrawer', () => {
     expect(focusSpy).toHaveBeenCalledWith('node_2');
     connsDrawer.dispose();
   });
+
+  describe('Resizing', () => {
+    it('resizes width on pointer drag, clamps to both bounds, and resets on double click', () => {
+      const resizer = container.querySelector<HTMLElement>('#inspector-resizer');
+      expect(resizer).not.toBeNull();
+
+      const originalDescriptor = Object.getOwnPropertyDescriptor(container, 'parentElement');
+      Object.defineProperty(container, 'parentElement', {
+        value: { clientWidth: 1000 },
+        configurable: true,
+      });
+
+      try {
+        resizer?.dispatchEvent(
+          new PointerEvent('pointerdown', { pointerId: 1, clientX: 600, button: 0, bubbles: true }),
+        );
+        expect(container.classList.contains('resizing')).toBe(true);
+        expect(resizer?.classList.contains('dragging')).toBe(true);
+        expect(document.body.style.userSelect).toBe('none');
+        expect(document.body.style.cursor).toBe('col-resize');
+
+        // Other pointer IDs should be ignored (multi-touch protection)
+        window.dispatchEvent(
+          new PointerEvent('pointermove', { pointerId: 2, clientX: 300, bubbles: true }),
+        );
+        expect(container.style.getPropertyValue('--inspector-width')).toBe('');
+
+        window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2, bubbles: true }));
+        expect(container.classList.contains('resizing')).toBe(true);
+
+        // Other pointer IDs should be ignored (multi-touch protection)
+        window.dispatchEvent(
+          new PointerEvent('pointermove', { pointerId: 2, clientX: 300, bubbles: true }),
+        );
+        expect(container.style.getPropertyValue('--inspector-width')).toBe('');
+
+        window.dispatchEvent(
+          new PointerEvent('pointerup', { pointerId: 2, bubbles: true }),
+        );
+        expect(container.classList.contains('resizing')).toBe(true);
+
+        // Drag left to clientX = 500 (delta +100 -> 400 + 100 = 500)
+        window.dispatchEvent(
+          new PointerEvent('pointermove', { pointerId: 1, clientX: 500, bubbles: true }),
+        );
+        expect(container.style.getPropertyValue('--inspector-width')).toBe('500px');
+
+        // Drag right past min bound (delta -200 -> 400 - 200 = 200 clamped to 280)
+        window.dispatchEvent(
+          new PointerEvent('pointermove', { pointerId: 1, clientX: 800, bubbles: true }),
+        );
+        expect(container.style.getPropertyValue('--inspector-width')).toBe('280px');
+
+        // Drag far left past max bound (parentWidth: 1000, max: 920px)
+        window.dispatchEvent(
+          new PointerEvent('pointermove', { pointerId: 1, clientX: -1000, bubbles: true }),
+        );
+        expect(container.style.getPropertyValue('--inspector-width')).toBe('920px');
+
+        // Pointer up on matching pointerId finishes dragging
+        window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, bubbles: true }));
+        expect(container.classList.contains('resizing')).toBe(false);
+        expect(resizer?.classList.contains('dragging')).toBe(false);
+        expect(document.body.style.userSelect).toBe('');
+        expect(document.body.style.cursor).toBe('');
+
+        // Double click resets width
+        resizer?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        expect(container.style.getPropertyValue('--inspector-width')).toBe('');
+      } finally {
+        if (originalDescriptor) {
+          Object.defineProperty(container, 'parentElement', originalDescriptor);
+        } else {
+          delete (container as unknown as Record<string, unknown>).parentElement;
+        }
+      }
+    });
+
+    it('cleans up drag event listeners and document styles when closed mid-drag', () => {
+      drawer.open();
+      const resizer = container.querySelector<HTMLElement>('#inspector-resizer');
+      resizer?.dispatchEvent(
+        new PointerEvent('pointerdown', { pointerId: 1, clientX: 600, button: 0, bubbles: true }),
+      );
+      expect(container.classList.contains('resizing')).toBe(true);
+
+      drawer.close();
+      expect(container.classList.contains('resizing')).toBe(false);
+      expect(document.body.style.userSelect).toBe('');
+      expect(document.body.style.cursor).toBe('');
+
+      window.dispatchEvent(
+        new PointerEvent('pointermove', { pointerId: 1, clientX: 500, bubbles: true }),
+      );
+      expect(container.style.getPropertyValue('--inspector-width')).toBe('');
+    });
+
+    it('cleans up drag event listeners and document styles when disposed mid-drag', () => {
+      const resizer = container.querySelector<HTMLElement>('#inspector-resizer');
+      resizer?.dispatchEvent(
+        new PointerEvent('pointerdown', { pointerId: 1, clientX: 600, button: 0, bubbles: true }),
+      );
+      expect(container.classList.contains('resizing')).toBe(true);
+      expect(document.body.style.userSelect).toBe('none');
+      expect(document.body.style.cursor).toBe('col-resize');
+
+      drawer.dispose();
+      expect(document.body.style.userSelect).toBe('');
+      expect(document.body.style.cursor).toBe('');
+
+      window.dispatchEvent(
+        new PointerEvent('pointermove', { pointerId: 1, clientX: 500, bubbles: true }),
+      );
+      expect(container.style.getPropertyValue('--inspector-width')).toBe('');
+    });
+  });
 });

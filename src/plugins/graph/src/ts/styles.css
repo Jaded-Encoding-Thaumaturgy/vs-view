@@ -178,7 +178,9 @@ body {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 400px;
+  width: var(--inspector-width, 400px);
+  min-width: 280px;
+  max-width: calc(100% - 80px);
   background: color-mix(in srgb, var(--surface-color) 96%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -186,13 +188,52 @@ body {
   box-shadow: -4px 0 24px rgba(0, 0, 0, 0.6);
   z-index: 200;
   transform: translateX(100%);
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s 0.25s;
   display: flex;
   flex-direction: column;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .inspector-drawer.open {
   transform: translateX(0);
+  pointer-events: auto;
+  visibility: visible;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.inspector-drawer.resizing {
+  transition: none;
+  user-select: none;
+}
+
+.inspector-resizer {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 10;
+  touch-action: none;
+}
+
+.inspector-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.inspector-resizer:hover::after,
+.inspector-resizer.dragging::after {
+  background: var(--accent);
 }
 
 .inspector-header {

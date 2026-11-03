@@ -30,12 +30,17 @@ interface EdgeInspectionState {
 }
 
 export class InspectorDrawer extends Disposable {
+  private static readonly DEFAULT_WIDTH = 400;
+  private static readonly MIN_WIDTH = 280;
+  private static readonly VIEWPORT_MARGIN = 80;
+
   private isOpen = false;
   private showTimings = true;
   private timingUnit: TimingUnit = 'auto';
   private lastNode: NodeData | null = null;
   private lastEdge: EdgeInspectionState | null = null;
   private openFrames = new Set<number>([0]);
+  private dragController: AbortController | null = null;
 
   constructor(private readonly opts: InspectorDrawerOptions) {
     super();
@@ -47,6 +52,7 @@ export class InspectorDrawer extends Disposable {
   }
 
   public override dispose(): void {
+    this.stopDragging();
     render(nothing, this.opts.container);
     super.dispose();
   }
@@ -87,8 +93,82 @@ export class InspectorDrawer extends Disposable {
 
   public close(): void {
     if (!this.isOpen) return;
+    this.stopDragging();
     this.isOpen = false;
     this.opts.container.classList.remove('open');
+  }
+
+  public resetWidth(): void {
+    this.opts.container.style.removeProperty('--inspector-width');
+  }
+
+  private stopDragging(): void {
+    this.dragController?.abort();
+    this.dragController = null;
+  }
+
+  private handleResizerPointerDown(e: PointerEvent): void {
+    if (e.button !== 0) return;
+    e.preventDefault();
+
+    this.stopDragging();
+
+    const { pointerId } = e;
+    const resizer = e.currentTarget instanceof HTMLElement ? e.currentTarget : null;
+    const startX = e.clientX;
+    const rect = this.opts.container.getBoundingClientRect();
+    const startWidth = rect.width > 0 ? rect.width : InspectorDrawer.DEFAULT_WIDTH;
+    const parentWidth = this.opts.container.parentElement?.clientWidth ?? window.innerWidth;
+    const maxWidth = Math.max(
+      InspectorDrawer.MIN_WIDTH,
+      parentWidth - InspectorDrawer.VIEWPORT_MARGIN,
+    );
+
+    this.opts.container.classList.add('resizing');
+    resizer?.classList.add('dragging');
+
+    const prevUserSelect = document.body.style.userSelect;
+    const prevCursor = document.body.style.cursor;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
+    const ac = new AbortController();
+    this.dragController = ac;
+
+    const cleanup = (): void => {
+      this.opts.container.classList.remove('resizing');
+      resizer?.classList.remove('dragging');
+      document.body.style.userSelect = prevUserSelect;
+      document.body.style.cursor = prevCursor;
+      if (this.dragController === ac) {
+        this.dragController = null;
+      }
+    };
+
+    ac.signal.addEventListener('abort', cleanup, { once: true });
+
+    const finish = (finishEv: PointerEvent): void => {
+      if (finishEv.pointerId !== pointerId) return;
+      ac.abort();
+    };
+
+    window.addEventListener(
+      'pointermove',
+      (moveEv: PointerEvent): void => {
+        if (moveEv.pointerId !== pointerId) return;
+        const deltaX = startX - moveEv.clientX;
+        const newWidth = Math.max(
+          InspectorDrawer.MIN_WIDTH,
+          Math.min(maxWidth, Math.round(startWidth + deltaX)),
+        );
+
+        this.opts.container.style.setProperty('--inspector-width', `${newWidth}px`);
+      },
+      { signal: ac.signal },
+    );
+
+    window.addEventListener('pointerup', finish, { signal: ac.signal });
+    window.addEventListener('pointercancel', finish, { signal: ac.signal });
   }
 
   private copyNodeId(): void {
@@ -121,6 +201,13 @@ export class InspectorDrawer extends Disposable {
 
     render(
       html`
+        <div
+          class="inspector-resizer"
+          id="inspector-resizer"
+          title="Drag to resize inspector (double-click to reset)"
+          @pointerdown=${(e: PointerEvent) => this.handleResizerPointerDown(e)}
+          @dblclick=${() => this.resetWidth()}
+        ></div>
         ${this.renderHeader(title)}
         <div class="inspector-body" id="inspector-content">${this.renderBody()}</div>
       `,
