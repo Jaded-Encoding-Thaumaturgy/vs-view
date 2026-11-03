@@ -134,9 +134,9 @@ export function formatShortcut(rule: KeybindingRule): string {
 
 /** Test whether a KeyboardEvent matches a preconfigured keybinding rule. */
 export function matchesKey(event: KeyboardEvent, rule: KeybindingRule): boolean {
-  const eventCtrl = event.ctrlKey || event.metaKey;
-  if (rule.ctrl !== eventCtrl) return false;
+  if (rule.ctrl !== event.ctrlKey) return false;
   if (rule.alt !== event.altKey) return false;
+  if (rule.meta !== event.metaKey) return false;
 
   // For navigateUp and navigateDown without explicit Shift in the shortcut,
   // allow event.shiftKey so Shift+Arrow can pass cycle = true.

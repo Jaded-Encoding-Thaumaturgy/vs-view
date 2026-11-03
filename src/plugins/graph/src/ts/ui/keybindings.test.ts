@@ -39,9 +39,10 @@ function makeRule(
 }
 
 describe('matchesKey', () => {
-  it('matches case-insensitively and enforces modifier combinations (including metaKey as Ctrl)', () => {
+  it('matches case-insensitively and enforces ctrl, alt, shift, and meta modifiers', () => {
     const plainRule = makeRule({ action: 'fit', key: 'F' });
     const ctrlShiftRule = makeRule({ action: 'resetView', key: 'Z', ctrl: true, shift: true });
+    const metaRule = makeRule({ action: 'reload', key: 'R', meta: true });
 
     expect(matchesKey(new KeyboardEvent('keydown', { key: 'f' }), plainRule)).toBe(true);
     expect(matchesKey(new KeyboardEvent('keydown', { key: 'F' }), plainRule)).toBe(true);
@@ -52,6 +53,9 @@ describe('matchesKey', () => {
       false,
     );
     expect(matchesKey(new KeyboardEvent('keydown', { key: 'f', shiftKey: true }), plainRule)).toBe(
+      false,
+    );
+    expect(matchesKey(new KeyboardEvent('keydown', { key: 'f', metaKey: true }), plainRule)).toBe(
       false,
     );
 
@@ -66,13 +70,21 @@ describe('matchesKey', () => {
         new KeyboardEvent('keydown', { key: 'z', metaKey: true, shiftKey: true }),
         ctrlShiftRule,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       matchesKey(
         new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: false }),
         ctrlShiftRule,
       ),
     ).toBe(false);
+
+    expect(matchesKey(new KeyboardEvent('keydown', { key: 'r', metaKey: true }), metaRule)).toBe(
+      true,
+    );
+    expect(matchesKey(new KeyboardEvent('keydown', { key: 'r', ctrlKey: true }), metaRule)).toBe(
+      false,
+    );
+    expect(matchesKey(new KeyboardEvent('keydown', { key: 'r' }), metaRule)).toBe(false);
   });
 
   it('handles directional navigation aliases (ArrowLeft/ArrowRight) and permits Shift for cycling', () => {
