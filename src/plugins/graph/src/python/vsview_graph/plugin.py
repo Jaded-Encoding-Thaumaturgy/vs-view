@@ -95,6 +95,8 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
             act = save_menu.addAction(f"{fmt.label}…")
             act.triggered.connect(partial(self._export_graph, fmt, clipboard=False))
 
+        self.addActions([self.fit_act, self.reset_act, self.reload_act])
+
         self.api.globalSettingsChanged.connect(self._sync_web_options)
         self.api.globalSettingsChanged.connect(self._sync_keybindings)
         self.api.register_on_destroy(self.on_destroy)
