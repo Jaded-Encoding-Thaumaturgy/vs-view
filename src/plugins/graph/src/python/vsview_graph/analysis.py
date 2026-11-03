@@ -22,22 +22,30 @@ class WarningCode(StrEnum):
     FRAME_STATE = (
         "framestate",
         "Frame-state serialization",
-        "Serializes frame requests across filter calls, bypassing parallelism.",
+        "Serializes the entire frame lifecycle to one frame at a time, bypassing parallelism.",
     )
     UNORDERED = (
         "unordered",
-        "Unordered access",
-        "Output order is not guaranteed by the filter.",
+        "Single-threaded execution (Unordered)",
+        "Only one thread can execute the filter's getFrame at a time, with calls in arbitrary order.",
     )
     NO_FRAME_REUSE = (
         "no-frame-reuse",
-        "Frame reuse disabled",
-        "Disables frame reuse (caching) between consecutive filters.",
+        "No input frame reuse",
+        "Requests each upstream frame at most once, disabling the upstream cache when it has a single consumer.",
     )
     STRICT_SPATIAL = (
         "strict-spatial",
-        "Strictly spatial requests",
-        "Filter performs spatial requests and skips the frame cache.",
+        "Strict 1:1 frame requests (Strict spatial)",
+        "Only requests input frame n for output frame n, disabling the upstream cache when it has a single consumer.",
+    )
+    FRAME_REUSE_LAST_ONLY = (
+        "frame-reuse-last-only",
+        "Last-frame reuse only",
+        (
+            "Requests each upstream frame at most once except the last frame, "
+            "caching only the last frame when it has a single consumer."
+        ),
     )
 
     wtitle: str
@@ -63,7 +71,6 @@ class WarningGroup(TypedDict):
 class GraphWarning(TypedDict):
     code: WarningCode
     severity: Severity
-    message: str
     nodeId: str
     edgeId: NotRequired[str]
 
@@ -184,19 +191,9 @@ def collect_warnings(graph: vsgraph.Graph[Any]) -> list[GraphWarning]:
 
     for node in graph.nodes:
         if node.filter_mode is vs.FilterMode.FRAME_STATE:
-            w = GraphWarning(
-                code=WarningCode.FRAME_STATE,
-                severity="warning",
-                nodeId=node.id,
-                message=f"{node.name} uses frame-state access, which serializes frame requests.",
-            )
+            w = GraphWarning(code=WarningCode.FRAME_STATE, severity="warning", nodeId=node.id)
         elif node.filter_mode is vs.FilterMode.UNORDERED:
-            w = GraphWarning(
-                code=WarningCode.UNORDERED,
-                severity="info",
-                nodeId=node.id,
-                message=f"{node.name} uses unordered access, so its output order is not guaranteed.",
-            )
+            w = GraphWarning(code=WarningCode.UNORDERED, severity="info", nodeId=node.id)
         else:
             continue
         unique.setdefault((w["code"], w["nodeId"], ""), w)
@@ -204,26 +201,14 @@ def collect_warnings(graph: vsgraph.Graph[Any]) -> list[GraphWarning]:
     for i, edge in enumerate(graph.edges):
         edge_id = format_edge_id(i, edge.source, edge.target)
         if edge.pattern is vsgraph.RequestPattern.NO_FRAME_REUSE:
-            w = GraphWarning(
-                code=WarningCode.NO_FRAME_REUSE,
-                severity="warning",
-                edgeId=edge_id,
-                nodeId=edge.target,
-                message="This request disables frame reuse (caching) between the two filters.",
-            )
+            w = GraphWarning(code=WarningCode.NO_FRAME_REUSE, severity="warning", edgeId=edge_id, nodeId=edge.target)
         elif edge.pattern is vsgraph.RequestPattern.STRICT_SPATIAL:
-            w = GraphWarning(
-                code=WarningCode.STRICT_SPATIAL,
-                severity="info",
-                edgeId=edge_id,
-                nodeId=edge.target,
-                message="This request is strictly spatial, so the filter skips the frame cache.",
-            )
+            w = GraphWarning(code=WarningCode.STRICT_SPATIAL, severity="info", edgeId=edge_id, nodeId=edge.target)
         else:
             continue
         unique.setdefault((w["code"], w["nodeId"], w.get("edgeId", "")), w)
 
-    return sorted(unique.values(), key=lambda w: (SEVERITY_ORDER[w["severity"]], w["message"]))
+    return sorted(unique.values(), key=lambda w: SEVERITY_ORDER[w["severity"]])
 
 
 def compute_depth(graph: vsgraph.Graph[Any]) -> int:

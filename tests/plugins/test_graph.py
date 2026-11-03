@@ -987,10 +987,9 @@ def test_collect_and_group_warnings() -> None:
     ]
 
     groups = group_warnings(warnings)
-    assert [g["code"] for g in groups] == ["no-frame-reuse", "framestate", "strict-spatial", "unordered"]
-    assert groups[0]["title"] == "Frame reuse disabled"
-    assert groups[1]["title"] == "Frame-state serialization"
-    assert groups[1]["nodeIds"] == ["n_state"]
+    assert [g["code"] for g in groups] == ["framestate", "no-frame-reuse", "unordered", "strict-spatial"]
+    assert groups[0]["title"] == "Frame-state serialization"
+    assert groups[1]["title"] == "No input frame reuse"
 
 
 def test_enrich_cytoscape_payload(graph_env: ManagedEnvironment) -> None:

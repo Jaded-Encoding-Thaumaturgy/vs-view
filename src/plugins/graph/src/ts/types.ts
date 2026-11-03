@@ -32,7 +32,6 @@ interface CountedName {
 interface GraphWarning {
   code: WarningCode;
   severity: WarningSeverity;
-  message: string;
   nodeId?: string;
   edgeId?: string;
 }

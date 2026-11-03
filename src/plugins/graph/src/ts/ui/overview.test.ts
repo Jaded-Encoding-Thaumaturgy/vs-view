@@ -130,12 +130,12 @@ describe('OverviewPanel', () => {
           code: 'framestate',
           severity: 'warning',
           title: 'Frame-state serialization',
-          description: 'Serializes frame requests across filter calls, bypassing parallelism.',
+          description:
+            'Serializes the entire frame lifecycle to one frame at a time, bypassing parallelism.',
           warnings: stateNodes.map((n) => ({
             code: 'framestate',
             severity: 'warning',
             nodeId: n.id,
-            message: `${n.name} uses frame-state access, which serializes frame requests.`,
           })),
           nodeIds,
         },
