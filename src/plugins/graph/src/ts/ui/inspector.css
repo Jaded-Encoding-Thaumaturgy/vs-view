@@ -1,0 +1,399 @@
+/* Inspector Drawer */
+.inspector-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--inspector-width, 400px);
+  min-width: 280px;
+  max-width: calc(100% - 80px);
+  background: color-mix(in srgb, var(--surface-color) 96%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-left: 1px solid var(--border-color);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.6);
+  z-index: 200;
+  transform: translateX(100%);
+  transition:
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s 0.25s;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.inspector-drawer.open {
+  transform: translateX(0);
+  pointer-events: auto;
+  visibility: visible;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.inspector-drawer.resizing {
+  transition: none;
+  user-select: none;
+}
+
+.inspector-resizer {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 10;
+  touch-action: none;
+}
+
+.inspector-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.inspector-resizer:hover::after,
+.inspector-resizer.dragging::after {
+  background: var(--accent);
+}
+
+.inspector-header {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-color);
+}
+
+.inspector-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.inspector-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inspector-header-btn {
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  cursor: pointer;
+  line-height: 1.4;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.inspector-header-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.inspector-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.inspector-close-btn:hover {
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+.inspector-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+.badge-mono {
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  border: 1px solid var(--border-color);
+}
+
+.badge-mono.badge-clickable {
+  font-family: var(--font-mono);
+}
+
+.badge-amber {
+  background: color-mix(in srgb, var(--accent-amber) 15%, transparent);
+  color: var(--accent-amber);
+  border: 1px solid var(--accent-amber);
+}
+
+.badge-mode {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.badge-clickable {
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  user-select: none;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.badge-clickable:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.badge-input {
+  background: color-mix(in srgb, var(--accent-emerald) 15%, transparent);
+  color: var(--accent-emerald);
+  border: 1px solid var(--accent-emerald);
+}
+
+.badge-input:hover {
+  background: color-mix(in srgb, var(--accent-emerald) 25%, transparent);
+  border-color: var(--accent-emerald);
+  color: var(--accent-emerald);
+}
+
+.badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.arg-val-id {
+  opacity: 0.65;
+}
+
+.inspector-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.inspector-card {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.card-action-btn {
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.card-action-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.specs-grid {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  row-gap: 6px;
+  column-gap: 8px;
+  font-size: 12px;
+}
+
+.spec-label {
+  color: var(--text-muted);
+}
+
+.spec-value {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.card-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Call Stack Accordion */
+.accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.accordion-item {
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--surface-color);
+}
+
+.accordion-header-row {
+  display: flex;
+  align-items: center;
+  background: var(--surface-elevated);
+}
+
+.accordion-header-row:hover {
+  background: var(--surface-hover);
+}
+
+.accordion-header {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+.accordion-copy-btn {
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.accordion-arrow {
+  font-size: 9px;
+  color: var(--text-secondary);
+  width: 10px;
+}
+
+.accordion-frame-lvl {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-weight: bold;
+}
+
+.accordion-frame-func {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.accordion-plugin-id {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 130px;
+}
+
+.accordion-body {
+  display: none;
+  padding: 8px 10px;
+  background: var(--surface-color);
+  font-size: 11px;
+}
+
+.accordion-item.active .accordion-body {
+  display: block;
+}
+
+.args-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.args-table th {
+  text-align: left;
+  color: var(--text-muted);
+  padding: 4px;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: normal;
+}
+
+.args-table td {
+  padding: 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  vertical-align: top;
+}
+
+.arg-key {
+  color: var(--accent-amber);
+  width: 35%;
+}
+
+.arg-val {
+  color: var(--text-primary);
+  word-break: normal;
+}
+
+.no-args {
+  color: var(--text-muted);
+  font-style: italic;
+}

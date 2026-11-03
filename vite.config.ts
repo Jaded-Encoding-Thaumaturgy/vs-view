@@ -51,6 +51,7 @@ export default defineConfig({
       'eslint/no-shadow': 'off',
       'import/consistent-type-specifier-style': ['warn', 'prefer-top-level-if-only-type-imports'],
       'import/default': 'off',
+      'import/no-unassigned-import': ['error', { allow: ['**/*.css'] }],
       'no-empty': ['error', { allowEmptyCatch: false }],
       'no-unsafe-optional-chaining': 'error',
       'no-var': 'error',

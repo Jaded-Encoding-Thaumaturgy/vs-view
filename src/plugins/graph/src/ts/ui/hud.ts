@@ -1,3 +1,4 @@
+import './hud.css';
 import { type TemplateResult, html, render } from 'lit-html';
 import { classMap } from 'lit-html/directives/class-map.js';
 import { live } from 'lit-html/directives/live.js';

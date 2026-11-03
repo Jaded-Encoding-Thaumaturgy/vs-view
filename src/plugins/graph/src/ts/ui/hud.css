@@ -1,0 +1,137 @@
+/* Floating HUD */
+.hud-container {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.hud-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--surface-color) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 5px 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+}
+
+.hud-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hud-separator {
+  width: 1px;
+  height: 18px;
+  background: var(--border-color);
+  margin: 0 4px;
+}
+
+.hud-select {
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  outline: none;
+}
+
+.hud-select:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.hud-btn {
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.hud-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.hud-btn:active {
+  transform: translateY(1px);
+}
+
+.hud-btn.active {
+  background: color-mix(in srgb, var(--accent-amber) 22%, var(--surface-elevated));
+  border-color: var(--accent-amber);
+  color: var(--text-primary);
+  font-weight: bold;
+}
+
+.hud-search-group {
+  position: relative;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 2px 6px;
+  gap: 4px;
+}
+
+.hud-search-group:focus-within {
+  border-color: var(--accent);
+}
+
+.hud-search-icon {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.hud-search-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  width: 130px;
+}
+
+.hud-search-input.invalid {
+  color: var(--danger);
+}
+
+.hud-search-count {
+  font-size: 10px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  min-width: 24px;
+  text-align: right;
+}
+
+.hud-search-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 3px;
+}
+
+.hud-search-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.hud-search-btn:not(:disabled):hover {
+  color: var(--accent);
+}

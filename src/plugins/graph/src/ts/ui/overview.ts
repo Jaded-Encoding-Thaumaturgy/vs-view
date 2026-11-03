@@ -1,3 +1,4 @@
+import './overview.css';
 import { type TemplateResult, html, nothing, render } from 'lit-html';
 import { classMap } from 'lit-html/directives/class-map.js';
 import { repeat } from 'lit-html/directives/repeat.js';

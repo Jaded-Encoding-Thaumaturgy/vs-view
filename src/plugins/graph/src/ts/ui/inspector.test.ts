@@ -323,9 +323,7 @@ describe('InspectorDrawer', () => {
         );
         expect(container.style.getPropertyValue('--inspector-width')).toBe('');
 
-        window.dispatchEvent(
-          new PointerEvent('pointerup', { pointerId: 2, bubbles: true }),
-        );
+        window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2, bubbles: true }));
         expect(container.classList.contains('resizing')).toBe(true);
 
         // Drag left to clientX = 500 (delta +100 -> 400 + 100 = 500)
