@@ -20,6 +20,7 @@ import { BridgeService } from '../bridge/python';
 import { findExistingModel } from './models';
 
 export class DiskFileSystemProvider implements IFileSystemProviderWithFileReadWriteCapability {
+  // oxlint-disable-next-line typescript/no-unsafe-enum-assignment
   public readonly capabilities =
     FileSystemProviderCapabilities.FileReadWrite |
     (isLinux ? FileSystemProviderCapabilities.PathCaseSensitive : 0);

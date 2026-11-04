@@ -12,6 +12,7 @@ import {
   Keybinding,
   ScanCodeChord,
 } from '@codingame/monaco-vscode-api/vscode/vs/base/common/keybindings';
+import type { ScanCode } from '@codingame/monaco-vscode-api/vscode/vs/base/common/keyCodes';
 import {
   IMMUTABLE_CODE_TO_KEY_CODE,
   KeyCode,
@@ -81,7 +82,8 @@ if (origResolveKeyboardEvent) {
     keyboardEvent: IKeyboardEvent,
   ): WindowsNativeResolvedKeybinding {
     const base = origResolveKeyboardEvent.call(this, keyboardEvent);
-    const scanCode = ScanCodeUtils.toEnum(keyboardEvent.code);
+    // oxlint-disable-next-line typescript/no-unsafe-enum-assignment
+    const scanCode = ScanCodeUtils.toEnum(keyboardEvent.code) as ScanCode;
     if (IMMUTABLE_CODE_TO_KEY_CODE[scanCode] === KeyCode.DependsOnKbLayout) {
       const [chord] = base.getChords();
       if (chord) {
@@ -138,7 +140,9 @@ export async function initVscodeServices(): Promise<Result<void>> {
         }),
       ),
     );
+    // oxlint-disable-next-line typescript/no-unsafe-enum-assignment
     registerFileSystemOverlay(1, fsProvider);
+    // oxlint-disable-next-line typescript/no-unsafe-enum-assignment
     registerFileSystemOverlay(-1, new DiskFileSystemProvider());
   });
 
