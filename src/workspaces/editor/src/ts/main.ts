@@ -13,7 +13,9 @@ async function main(): Promise<void> {
     return;
   }
   const manager = new MonacoManager();
-  window.addEventListener('unload', () => manager.dispose(), { once: true });
+  const shutdown = () => manager.dispose();
+  window.addEventListener('pagehide', shutdown, { once: true });
+  window.addEventListener('unload', shutdown, { once: true });
 }
 
 void main().catch(console.error);

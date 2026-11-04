@@ -77,6 +77,7 @@ interface LspClientSession {
   client: BaseLanguageClient;
   socket: WebSocket;
   disposables: DisposableStore;
+  lifecycle: { closing: boolean };
 }
 
 /**
@@ -135,6 +136,8 @@ export class LspService implements vscode.Disposable {
       const reader = new WebSocketMessageReader(webSocket);
       const writer = new WebSocketMessageWriter(webSocket);
       const sessionDisposables = new DisposableStore();
+      const lifecycle = { closing: true };
+      const isClosing = () => lifecycle.closing;
 
       const synchronizeOptions: NonNullable<LanguageClientOptions['synchronize']> = {};
       if (config.fileEventsPattern) {
@@ -151,6 +154,7 @@ export class LspService implements vscode.Disposable {
         synchronize: synchronizeOptions,
         middleware: {
           didOpen: async (document, next) => {
+            if (isClosing()) return;
             const key = canonicalUriKey(document.uri);
             if (syncedUris.has(key)) {
               return;
@@ -161,7 +165,14 @@ export class LspService implements vscode.Disposable {
           didClose: async (document, next) => {
             const key = canonicalUriKey(document.uri);
             syncedUris.delete(key);
+            if (isClosing()) return;
             await next(document);
+          },
+          provideDiagnostics: async (document, previousResultId, token, next) => {
+            if (isClosing()) {
+              return undefined;
+            }
+            return next(document, previousResultId, token);
           },
           provideDefinition: async (document, position, token, next) => {
             if (window.ENV?.VSVIEW_DEBUG) {
@@ -298,7 +309,9 @@ export class LspService implements vscode.Disposable {
         }
       }
 
-      this.sessions.set(config.id, { client, socket: webSocket, disposables: sessionDisposables });
+      const session = { client, socket: webSocket, disposables: sessionDisposables, lifecycle };
+      lifecycle.closing = false;
+      this.sessions.set(config.id, session);
       void client.start();
       console.debug(`Native VS Code Language Client '${config.id}' started`);
     };
@@ -312,6 +325,7 @@ export class LspService implements vscode.Disposable {
       const session = this.sessions.get(config.id);
       if (session && session.socket === webSocket) {
         this.sessions.delete(config.id);
+        session.lifecycle.closing = true;
         session.disposables.dispose();
         void session.client.dispose();
       }
@@ -334,14 +348,15 @@ export class LspService implements vscode.Disposable {
       const session = this.sessions.get(id);
       if (session) {
         this.sessions.delete(id);
+        session.lifecycle.closing = true;
+        session.disposables.dispose();
+        await session.client.dispose();
         if (
           session.socket.readyState === WebSocket.OPEN ||
           session.socket.readyState === WebSocket.CONNECTING
         ) {
           session.socket.close();
         }
-        session.disposables.dispose();
-        await session.client.dispose();
       }
     } else {
       for (const [pendingId, socket] of this.pendingSockets.entries()) {
@@ -356,7 +371,14 @@ export class LspService implements vscode.Disposable {
     }
   }
 
+  public beginShutdown(): void {
+    for (const session of this.sessions.values()) {
+      session.lifecycle.closing = true;
+    }
+  }
+
   public dispose(): void {
+    this.beginShutdown();
     void this.disconnect();
   }
 

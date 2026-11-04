@@ -56,6 +56,7 @@ interface MockEditorServiceFixture {
   service: EditorService;
   getValue: ReturnType<typeof vi.fn>;
   getMainValue: ReturnType<typeof vi.fn>;
+  getSessionState: ReturnType<typeof vi.fn>;
   setValue: ReturnType<typeof vi.fn>;
   setTheme: ReturnType<typeof vi.fn>;
   toggleWordWrap: ReturnType<typeof vi.fn>;
@@ -90,6 +91,16 @@ function createMockEditorService(): MockEditorServiceFixture {
 
   const getValue = vi.fn().mockReturnValue('active content');
   const getMainValue = vi.fn().mockReturnValue('main content');
+  const getSessionState = vi.fn().mockReturnValue([
+    {
+      uri: 'file:///workspace/script.py',
+      title: 'script.py',
+      isMain: true,
+      isDirty: true,
+      language: 'python',
+      content: 'main content',
+    },
+  ]);
   const setValue = vi.fn();
   const setTheme = vi.fn();
   const toggleWordWrap = vi.fn();
@@ -106,6 +117,7 @@ function createMockEditorService(): MockEditorServiceFixture {
   const service = {
     getValue,
     getMainValue,
+    getSessionState,
     setValue,
     setTheme,
     toggleWordWrap,
@@ -137,6 +149,7 @@ function createMockEditorService(): MockEditorServiceFixture {
     service,
     getValue,
     getMainValue,
+    getSessionState,
     setValue,
     setTheme,
     toggleWordWrap,
@@ -245,6 +258,7 @@ function createMockPythonBridge(): MockPythonBridgeFixture {
     onCursorPositionChanged: vi.fn(),
     onActiveTabChanged: vi.fn(),
     onTabStateChanged: vi.fn(),
+    onSessionStateChanged: vi.fn(),
     onMainTabChanged: vi.fn(),
     requestSave: vi.fn(),
     requestSaveAs: vi.fn(),
@@ -810,6 +824,17 @@ describe('BridgeService', () => {
       expect(bridge.onContentChanged).toHaveBeenCalledWith('active content');
       expect(bridge.onMainContentChanged).toHaveBeenCalledOnce();
       expect(bridge.onMainContentChanged).toHaveBeenCalledWith('main content');
+      expect(bridge.onSessionStateChanged).toHaveBeenCalledOnce();
+      expect(bridge.onSessionStateChanged).toHaveBeenCalledWith([
+        {
+          uri: 'file:///workspace/script.py',
+          title: 'script.py',
+          isMain: true,
+          isDirty: true,
+          language: 'python',
+          content: 'main content',
+        },
+      ]);
     });
 
     it('flushes pending content changes immediately on tab changes', () => {

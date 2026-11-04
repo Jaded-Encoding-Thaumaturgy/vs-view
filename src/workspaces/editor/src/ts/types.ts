@@ -27,6 +27,9 @@ export interface PythonBridge {
   /** Notify Python of open tabs state metadata. */
   onTabStateChanged(tabs: TabInfo[]): void;
 
+  /** Persist a complete tab session so Python can restore it after a page reload. */
+  onSessionStateChanged(tabs: TabInfo[]): void;
+
   /** Notify Python that the Main script tab's URI has changed. */
   onMainTabChanged(uri: string): void;
 

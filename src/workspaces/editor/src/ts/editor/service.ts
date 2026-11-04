@@ -473,14 +473,7 @@ export class EditorService implements vscode.Disposable {
   }
 
   public updateTabBar(): void {
-    const tabInfos: TabInfo[] = Array.from(this.tabs.values()).map((t) => ({
-      uri: t.uriString,
-      title: t.title,
-      isMain: t.isMain,
-      isDirty: t.isDirty,
-      language: t.model.getLanguageId(),
-      content: t.isDirty ? t.model.getValue() : undefined,
-    }));
+    const tabInfos = this.getTabState(false);
 
     // Ensure Main tab is rendered first
     tabInfos.sort((a, b) => (a.isMain ? -1 : b.isMain ? 1 : 0));
@@ -488,6 +481,10 @@ export class EditorService implements vscode.Disposable {
     this.tabBarView.render(tabInfos, this.activeUri);
 
     BridgeService.active.unwrapOr(undefined)?.onTabStateChanged(tabInfos);
+  }
+
+  public getSessionState(): TabInfo[] {
+    return this.getTabState(true);
   }
 
   public requestSave(): void {
@@ -551,6 +548,17 @@ export class EditorService implements vscode.Disposable {
     await updateUserConfiguration(JSON.stringify({ 'workbench.colorTheme': themeId }));
     const conf = vscode.workspace.getConfiguration();
     await conf.update('workbench.colorTheme', themeId, vscode.ConfigurationTarget.Workspace);
+  }
+
+  private getTabState(includeContent: boolean): TabInfo[] {
+    return Array.from(this.tabs.values()).map((t) => ({
+      uri: t.uriString,
+      title: t.title,
+      isMain: t.isMain,
+      isDirty: t.isDirty,
+      language: t.model.getLanguageId(),
+      content: includeContent || t.isDirty ? t.model.getValue() : undefined,
+    }));
   }
 
   private renameTabInternal(oldUriString: string, newUriString: string): void {

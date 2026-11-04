@@ -94,6 +94,9 @@ export class BridgeService implements vscode.Disposable {
     });
   }
 
+  public flushState(): void {
+    this.flushContentChanged();
+  }
   public dispose(): void {
     if (BridgeService.activeInstance === this) {
       BridgeService.activeInstance = null;
@@ -172,6 +175,7 @@ export class BridgeService implements vscode.Disposable {
     }
     this.bridge?.onContentChanged(this.editorService.getValue());
     this.bridge?.onMainContentChanged(this.editorService.getMainValue());
+    this.bridge?.onSessionStateChanged(this.editorService.getSessionState());
     this.editorService.updateTabBar();
   }
 
@@ -292,15 +296,15 @@ export class BridgeService implements vscode.Disposable {
         }
       },
       'editor.triggerSave': () => {
-        this.flushContentChanged();
+        this.flushState();
         this.editorService.requestSave();
       },
       'editor.triggerSaveAs': () => {
-        this.flushContentChanged();
+        this.flushState();
         this.editorService.requestSaveAs();
       },
       'editor.triggerFormat': () => {
-        this.flushContentChanged();
+        this.flushState();
         this.editorService.requestFormat();
       },
     };

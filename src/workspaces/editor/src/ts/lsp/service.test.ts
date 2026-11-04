@@ -87,6 +87,12 @@ const {
         token: unknown,
         next: (doc: unknown, pos: unknown, token: unknown) => Promise<unknown>,
       ) => Promise<unknown>;
+      provideDiagnostics?: (
+        doc: unknown,
+        previousResultId: unknown,
+        token: unknown,
+        next: (doc: unknown, previousResultId: unknown, token: unknown) => Promise<unknown>,
+      ) => Promise<unknown>;
     };
   }
 
@@ -697,6 +703,44 @@ describe('LspService and Language Client Lifecycle', () => {
       // Re-open document: should invoke next again
       await middleware!.didOpen!(doc, nextSpy);
       expect(nextSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not forward document notifications after disconnect begins', async () => {
+      const config: LspServerConfig = {
+        id: 'pyright',
+        name: 'Pyright',
+        port: 9000,
+        language: 'python',
+      };
+      await service.connect(config);
+      const ws = lspState.createdSockets[0] as MockWebSocket;
+      ws.simulateOpen();
+
+      const middleware = lspState.createdClients[0]!.instance.clientOptions.middleware;
+      const doc = {
+        uri: {
+          scheme: 'file',
+          fsPath: 'D:/project/main.py',
+          toString: () => 'file:///D:/project/main.py',
+        },
+      };
+      const nextSpy = vi.fn().mockResolvedValue(undefined);
+
+      service.beginShutdown();
+      await middleware!.didClose!(doc, nextSpy);
+
+      expect(nextSpy).not.toHaveBeenCalled();
+
+      const diagnosticsNextSpy = vi.fn().mockResolvedValue({ kind: 'full', items: [] });
+      const diagnostics = await middleware!.provideDiagnostics!(
+        doc,
+        undefined,
+        {},
+        diagnosticsNextSpy,
+      );
+
+      expect(diagnostics).toBeUndefined();
+      expect(diagnosticsNextSpy).not.toHaveBeenCalled();
     });
 
     it('provideDefinition pre-loads target document for file URI results', async () => {

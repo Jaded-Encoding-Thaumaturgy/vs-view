@@ -217,6 +217,7 @@ describe('ConsolePanelService', () => {
       onCursorPositionChanged: vi.fn(),
       onActiveTabChanged: vi.fn(),
       onTabStateChanged: vi.fn(),
+      onSessionStateChanged: vi.fn(),
       onMainTabChanged: vi.fn(),
       requestSave: vi.fn(),
       requestSaveAs: vi.fn(),

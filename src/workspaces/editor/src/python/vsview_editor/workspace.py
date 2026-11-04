@@ -89,7 +89,6 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self._main_filepath: Path | None = None
         self._main_tab_uri: str | None = None
         self._default_content = get_default_script()
-        self._initial_content_set = False
         self._open_tabs = list[TabInfo]()
 
         self.editor = MonacoEditorWidget(self)
@@ -97,6 +96,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self.editor.bridge.cursorPositionChanged.connect(self._on_cursor_changed)
         self.editor.bridge.activeTabChanged.connect(lambda uri: self._on_tab_changed(uri, "active"))
         self.editor.bridge.tabStateChanged.connect(self._on_tab_state_changed)
+        self.editor.bridge.sessionStateChanged.connect(self._on_session_state_changed)
         self.editor.bridge.mainTabChanged.connect(lambda uri: self._on_tab_changed(uri, "main"))
         self.editor.bridge.saveRequested.connect(self._on_save_clicked)
         self.editor.bridge.saveAsRequested.connect(self._on_save_as_clicked)
@@ -323,14 +323,23 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     @Slot()
     def _on_editor_ready(self) -> None:
         """Initialize script and start LSP bridge when Monaco is ready."""
-        if not self._initial_content_set:
+        if self._open_tabs:
+            for tab in self._open_tabs:
+                self.editor.bridge.open_tab(
+                    tab["uri"],
+                    tab.get("content", ""),
+                    language=tab.get("language", "python"),
+                    is_main=tab.get("isMain", False),
+                )
+            if self._active_tab_uri:
+                self.editor.bridge.select_tab(self._active_tab_uri)
+        else:
             self.editor.bridge.open_tab(
                 "file:///workspace/script.py",
                 self._default_content,
                 language="python",
                 is_main=True,
             )
-            self._initial_content_set = True
             logger.debug("Default script loaded into Monaco editor")
 
         self._on_settings_changed()
@@ -343,6 +352,13 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
     @Slot(list)
     def _on_tab_state_changed(self, tabs: list[TabInfo]) -> None:
+        content_by_uri = {tab["uri"]: tab.get("content", "") for tab in self._open_tabs}
+        self._open_tabs = [
+            TabInfo({**tab, "content": tab.get("content", content_by_uri.get(tab["uri"], ""))}) for tab in tabs
+        ]
+
+    @Slot(list)
+    def _on_session_state_changed(self, tabs: list[TabInfo]) -> None:
         self._open_tabs = tabs
 
     @Slot(str)

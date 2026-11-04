@@ -15,7 +15,7 @@ from pytestqt.qtbot import QtBot
 from vsview_editor.console import IN_LOGGING, ConsoleStreamRedirector, GlobalConsoleHub
 from vsview_editor.lsp import LSPConfig, LSPProcessManager, LSPProcessServer
 from vsview_editor.utils import ContentPath, SafeSlot, WorkspaceUri, extract_supported_script_files
-from vsview_editor.web import MonacoBridge, MonacoEditorWidget
+from vsview_editor.web import MonacoBridge, MonacoEditorWidget, TabInfo
 from vsview_editor.workspace import EditorShortcut, EditorWorkspace, MonacoEditorDock, StackDock
 
 pytestmark = [pytest.mark.integration, pytest.mark.qt]
@@ -231,6 +231,25 @@ class TestEditorShortcuts:
         bridge.restartLspRequested.connect(_on_restart)
         bridge.requestRestartLsp()
         assert called
+
+    def test_monaco_bridge_session_state_signal(self) -> None:
+        bridge = MonacoBridge()
+        received: list[list[TabInfo]] = []
+        session: list[TabInfo] = [
+            {
+                "uri": "file:///workspace/script.py",
+                "title": "script.py",
+                "isMain": True,
+                "isDirty": True,
+                "language": "python",
+                "content": "clip = core.std.BlankClip()\n",
+            }
+        ]
+        bridge.sessionStateChanged.connect(received.append)
+
+        bridge.onSessionStateChanged(session)
+
+        assert received == [session]
 
     def test_workspace_shortcuts_contain_all_definitions(self) -> None:
         workspace_defs = {str(s) for s in EditorWorkspace.shortcuts}

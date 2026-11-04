@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping
 from logging import DEBUG, ERROR, WARNING, getLogger
 from pathlib import Path
-from typing import Any, TypedDict, override
+from typing import Any, NotRequired, TypedDict, override
 
 from jetpytools import CustomNotImplementedError, copy_signature
 from PySide6.QtCore import QEvent, QObject, QUrl, Signal, Slot
@@ -43,6 +43,8 @@ class MonacoBridge(QObject):
     """Called when the active tab in Monaco changes."""
     tabStateChanged = Signal(list)
     """Called when open tabs state metadata is updated from JavaScript."""
+    sessionStateChanged = Signal(list)
+    """Called when complete editor session state is updated from JavaScript."""
     mainTabChanged = Signal(str)
     """Called when the Main script tab in Monaco changes."""
     saveRequested = Signal()
@@ -183,6 +185,10 @@ class MonacoBridge(QObject):
     @Slot(list)
     def onTabStateChanged(self, tabs: list[TabInfo]) -> None:
         self.tabStateChanged.emit(tabs)
+
+    @Slot(list)
+    def onSessionStateChanged(self, tabs: list[TabInfo]) -> None:
+        self.sessionStateChanged.emit(tabs)
 
     @Slot(str)
     def onMainTabChanged(self, uri: str) -> None:
@@ -346,10 +352,10 @@ class MonacoEditorWidget(QWebEngineView):
         event.ignore()
 
 
-class TabInfo(TypedDict, total=False):
+class TabInfo(TypedDict):
     uri: str
     title: str
     isMain: bool
     isDirty: bool
     language: str
-    content: str
+    content: NotRequired[str]
