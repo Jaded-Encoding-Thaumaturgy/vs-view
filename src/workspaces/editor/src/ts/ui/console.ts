@@ -1,5 +1,10 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { type ITheme, Terminal } from '@xterm/xterm';
+import { type TemplateResult, html, render } from 'lit-html';
+import { choose } from 'lit-html/directives/choose.js';
+import { classMap } from 'lit-html/directives/class-map.js';
+import { repeat } from 'lit-html/directives/repeat.js';
+import { styleMap } from 'lit-html/directives/style-map.js';
 import * as vscode from 'vscode';
 import { DisposableStore, Result, toDisposable } from 'vsview-shared';
 
@@ -7,11 +12,43 @@ import { BridgeService } from '../bridge/python';
 import { getInitialTheme, getThemeDefinition } from '../utils/theme';
 import { DOM_IDS } from './constants';
 
-type MenuItem =
-  | { label: string; shortcut: string; action: () => void; disabled?: boolean }
-  | 'separator';
+interface MenuActionItem {
+  id: string;
+  kind: 'action';
+  label: string;
+  shortcut: string;
+  action: () => void;
+  disabled?: boolean;
+}
+
+interface MenuSeparatorItem {
+  id: string;
+  kind: 'separator';
+}
+
+type MenuItem = MenuActionItem | MenuSeparatorItem;
+type CssPropertyLookup = (...names: string[]) => string | undefined;
 
 export class ConsolePanelService implements vscode.Disposable {
+  private static readonly ANSI_COLOR_KEYS = [
+    'black',
+    'red',
+    'green',
+    'yellow',
+    'blue',
+    'magenta',
+    'cyan',
+    'white',
+    'brightBlack',
+    'brightRed',
+    'brightGreen',
+    'brightYellow',
+    'brightBlue',
+    'brightMagenta',
+    'brightCyan',
+    'brightWhite',
+  ] as const;
+
   public readonly onDidToggle: vscode.Event<boolean>;
   public readonly onDidResize: vscode.Event<number>;
 
@@ -133,10 +170,6 @@ export class ConsolePanelService implements vscode.Disposable {
 
   public updateTerminalTheme(): void {
     const styles = getComputedStyle(document.body);
-
-    /**
-     * Helper to safely extract non-empty CSS variable values
-     */
     const getProp = (...names: string[]): string | undefined => {
       for (const name of names) {
         const val = styles.getPropertyValue(name).trim();
@@ -145,66 +178,9 @@ export class ConsolePanelService implements vscode.Disposable {
       return undefined;
     };
 
-    // Font Options
-    const fontFamily = getProp('--console-font-family');
-    const fontSizeStr = getProp('--console-font-size');
-    const fontSize = fontSizeStr ? Number.parseFloat(fontSizeStr) : undefined;
-
-    if (fontFamily) this.terminal.options.fontFamily = fontFamily;
-    if (fontSize && !Number.isNaN(fontSize)) this.terminal.options.fontSize = fontSize;
-
-    const bg = getProp(
-      '--vscode-terminal-background',
-      '--vscode-panel-background',
-      '--vscode-editor-background',
-    );
-    const fg = getProp('--vscode-terminal-foreground', '--vscode-foreground');
-    const cursor =
-      getProp('--vscode-terminalCursor-foreground', '--vscode-editorCursor-foreground') ?? fg;
-    const selectionBackground = getProp(
-      '--vscode-terminal-selectionBackground',
-      '--vscode-editor-selectionBackground',
-    );
-
-    const themeObj: ITheme = {};
-    if (bg) themeObj.background = bg;
-    if (fg) themeObj.foreground = fg;
-    if (cursor) themeObj.cursor = cursor;
-    if (selectionBackground) themeObj.selectionBackground = selectionBackground;
-
-    // 16 Standard ANSI Colors Mapping
-    const colorKeys = [
-      'black',
-      'red',
-      'green',
-      'yellow',
-      'blue',
-      'magenta',
-      'cyan',
-      'white',
-      'brightBlack',
-      'brightRed',
-      'brightGreen',
-      'brightYellow',
-      'brightBlue',
-      'brightMagenta',
-      'brightCyan',
-      'brightWhite',
-    ] as const;
-
-    for (const key of colorKeys) {
-      // Capitalize first letter to build VS Code variable name: --vscode-terminal-ansiXxx
-      const val = getProp(`--vscode-terminal-ansi${key.charAt(0).toUpperCase()}${key.slice(1)}`);
-      if (val) themeObj[key] = val;
-    }
-
-    this.terminal.options.theme = themeObj;
-
-    if (this.fitFrameId !== null) cancelAnimationFrame(this.fitFrameId);
-    this.fitFrameId = requestAnimationFrame(() => {
-      this.fitFrameId = null;
-      this.fit();
-    });
+    this.applyTerminalFontOptions(getProp);
+    this.terminal.options.theme = this.buildTerminalTheme(getProp);
+    this.scheduleFit();
   }
 
   public dispose(): void {
@@ -224,7 +200,59 @@ export class ConsolePanelService implements vscode.Disposable {
     this.dispose();
   }
 
+  private applyTerminalFontOptions(getProp: CssPropertyLookup): void {
+    const fontFamily = getProp('--console-font-family');
+    const fontSizeStr = getProp('--console-font-size');
+    const fontSize = fontSizeStr ? Number.parseFloat(fontSizeStr) : undefined;
+
+    if (fontFamily) this.terminal.options.fontFamily = fontFamily;
+    if (fontSize && !Number.isNaN(fontSize)) this.terminal.options.fontSize = fontSize;
+  }
+
+  private buildTerminalTheme(getProp: CssPropertyLookup): ITheme {
+    const bg = getProp(
+      '--vscode-terminal-background',
+      '--vscode-panel-background',
+      '--vscode-editor-background',
+    );
+    const fg = getProp('--vscode-terminal-foreground', '--vscode-foreground');
+    const cursor =
+      getProp('--vscode-terminalCursor-foreground', '--vscode-editorCursor-foreground') ?? fg;
+    const selectionBackground = getProp(
+      '--vscode-terminal-selectionBackground',
+      '--vscode-editor-selectionBackground',
+    );
+
+    const themeObj: ITheme = {};
+    if (bg) themeObj.background = bg;
+    if (fg) themeObj.foreground = fg;
+    if (cursor) themeObj.cursor = cursor;
+    if (selectionBackground) themeObj.selectionBackground = selectionBackground;
+
+    for (const key of ConsolePanelService.ANSI_COLOR_KEYS) {
+      const val = getProp(`--vscode-terminal-ansi${key.charAt(0).toUpperCase()}${key.slice(1)}`);
+      if (val) themeObj[key] = val;
+    }
+
+    return themeObj;
+  }
+
+  private scheduleFit(): void {
+    if (this.fitFrameId !== null) cancelAnimationFrame(this.fitFrameId);
+    this.fitFrameId = requestAnimationFrame(() => {
+      this.fitFrameId = null;
+      this.fit();
+    });
+  }
+
   private setupUIListeners(): void {
+    this.setupKeyboardShortcuts();
+    this.setupMouseAndContextMenuListeners();
+    this.setupHeaderButtonListeners();
+    this.setupResizerDragListeners();
+  }
+
+  private setupKeyboardShortcuts(): void {
     this.terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       if (event.type === 'keydown') {
         const isModifier = event.ctrlKey || event.metaKey;
@@ -245,7 +273,9 @@ export class ConsolePanelService implements vscode.Disposable {
       }
       return true;
     });
+  }
 
+  private setupMouseAndContextMenuListeners(): void {
     const handleMouseEvents = (e: MouseEvent) => {
       if (e.button === 2) e.stopPropagation();
     };
@@ -269,7 +299,9 @@ export class ConsolePanelService implements vscode.Disposable {
     this.disposables.add(
       toDisposable(() => this.xtermContainer.removeEventListener('contextmenu', handleContextMenu)),
     );
+  }
 
+  private setupHeaderButtonListeners(): void {
     const clearBtn = document.getElementById(DOM_IDS.CONSOLE_CLEAR_BTN);
     if (clearBtn) {
       const handleClear = () => this.clear();
@@ -287,7 +319,9 @@ export class ConsolePanelService implements vscode.Disposable {
     } else {
       console.warn("Can't find closeBtn");
     }
+  }
 
+  private setupResizerDragListeners(): void {
     const cleanupDrag = () => {
       if (this.isDragging) {
         this.isDragging = false;
@@ -319,7 +353,6 @@ export class ConsolePanelService implements vscode.Disposable {
     const onMouseDown = (e: MouseEvent) => {
       this.isDragging = true;
       this.startY = e.clientY;
-
       this.startHeight = this.panelElement.getBoundingClientRect().height;
 
       this.resizerElement.classList.add('dragging');
@@ -342,88 +375,111 @@ export class ConsolePanelService implements vscode.Disposable {
     this.disposables.add(toDisposable(() => window.removeEventListener('resize', onWindowResize)));
   }
 
-  private showContextMenu(x: number, y: number): void {
-    this.closeContextMenu();
-
-    this.contextMenuDisposables = new DisposableStore();
-    const menu = document.createElement('div');
-    menu.id = DOM_IDS.CONSOLE_CONTEXT_MENU;
-    menu.className = 'console-context-menu';
-
-    const items: MenuItem[] = [
+  private getContextMenuItems(): MenuItem[] {
+    return [
       {
+        id: 'copy',
+        kind: 'action',
         label: 'Copy',
         shortcut: 'Ctrl+C',
         action: () => this.copySelection(),
         disabled: !this.terminal.hasSelection(),
       },
-      'separator',
+      { id: 'sep-1', kind: 'separator' },
       {
+        id: 'select-all',
+        kind: 'action',
         label: 'Select All',
         shortcut: 'Ctrl+A',
         action: () => this.terminal.selectAll(),
       },
-      'separator',
+      { id: 'sep-2', kind: 'separator' },
       {
+        id: 'clear',
+        kind: 'action',
         label: 'Clear Console',
         shortcut: 'Ctrl+K',
         action: () => this.clear(),
       },
     ];
+  }
 
-    for (const item of items) {
-      if (item === 'separator') {
-        const separator = document.createElement('div');
-        separator.className = 'console-context-menu-separator';
-        menu.appendChild(separator);
-        continue;
-      }
+  private showContextMenu(x: number, y: number): void {
+    this.closeContextMenu();
 
-      const itemEl = document.createElement('div');
-      itemEl.className = 'console-context-menu-item';
-      if (item.disabled) itemEl.classList.add('disabled');
+    const fragment = document.createDocumentFragment();
+    render(this.renderContextMenu(x, y, this.getContextMenuItems()), fragment);
+    document.body.appendChild(fragment);
 
-      const labelSpan = document.createElement('span');
-      labelSpan.className = 'console-context-menu-label';
-      labelSpan.textContent = item.label;
-      itemEl.appendChild(labelSpan);
-
-      const shortcutSpan = document.createElement('span');
-      shortcutSpan.className = 'console-context-menu-shortcut';
-      shortcutSpan.textContent = item.shortcut;
-      itemEl.appendChild(shortcutSpan);
-
-      const onItemClick = (e: MouseEvent) => {
-        e.stopPropagation();
-        if (!item.disabled) {
-          this.closeContextMenu();
-          item.action();
-        }
-      };
-      itemEl.addEventListener('click', onItemClick);
-      this.contextMenuDisposables.add(
-        toDisposable(() => itemEl.removeEventListener('click', onItemClick)),
-      );
-
-      menu.appendChild(itemEl);
+    const menu = document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU);
+    if (menu) {
+      this.clampContextMenuPosition(menu, x, y);
     }
 
-    document.body.appendChild(menu);
+    this.bindContextMenuDismissListeners();
+  }
 
+  private renderContextMenu(x: number, y: number, items: MenuItem[]): TemplateResult {
+    return html`
+      <div
+        id=${DOM_IDS.CONSOLE_CONTEXT_MENU}
+        class="console-context-menu"
+        style=${styleMap({ left: `${x}px`, top: `${y}px` })}
+      >
+        ${repeat(
+          items,
+          (item) => item.id,
+          (item) => this.renderContextMenuEntry(item),
+        )}
+      </div>
+    `;
+  }
+
+  private renderContextMenuEntry(item: MenuItem): TemplateResult {
+    return html`${choose(item.kind, [
+      ['separator', () => html`<div class="console-context-menu-separator"></div>`],
+      ['action', () => this.renderContextMenuAction(item as MenuActionItem)],
+    ])}`;
+  }
+
+  private renderContextMenuAction(item: MenuActionItem): TemplateResult {
+    const classes = {
+      'console-context-menu-item': true,
+      disabled: Boolean(item.disabled),
+    };
+
+    return html`
+      <div
+        class=${classMap(classes)}
+        @click=${(e: MouseEvent) => this.handleContextMenuItemClick(e, item)}
+      >
+        <span class="console-context-menu-label">${item.label}</span>
+        <span class="console-context-menu-shortcut">${item.shortcut}</span>
+      </div>
+    `;
+  }
+
+  private handleContextMenuItemClick(e: MouseEvent, item: MenuActionItem): void {
+    e.stopPropagation();
+    if (!item.disabled) {
+      this.closeContextMenu();
+      item.action();
+    }
+  }
+
+  private clampContextMenuPosition(menu: HTMLElement, x: number, y: number): void {
     const rect = menu.getBoundingClientRect();
-
-    let finalX = x;
-    let finalY = y;
-
-    if (x + rect.width > window.innerWidth) {
-      finalX = Math.max(0, window.innerWidth - rect.width - 4);
-    }
-    if (y + rect.height > window.innerHeight) {
-      finalY = Math.max(0, window.innerHeight - rect.height - 4);
-    }
+    const finalX =
+      x + rect.width > window.innerWidth ? Math.max(0, window.innerWidth - rect.width - 4) : x;
+    const finalY =
+      y + rect.height > window.innerHeight ? Math.max(0, window.innerHeight - rect.height - 4) : y;
 
     menu.style.left = `${finalX}px`;
     menu.style.top = `${finalY}px`;
+  }
+
+  private bindContextMenuDismissListeners(): void {
+    this.contextMenuDisposables = new DisposableStore();
 
     const onWindowClick = () => this.closeContextMenu();
     const onKeyDown = (e: KeyboardEvent) => {

@@ -1,3 +1,8 @@
+import { type TemplateResult, html, nothing, render } from 'lit-html';
+import { classMap } from 'lit-html/directives/class-map.js';
+import { repeat } from 'lit-html/directives/repeat.js';
+import { styleMap } from 'lit-html/directives/style-map.js';
+import { when } from 'lit-html/directives/when.js';
 import type * as vscode from 'vscode';
 import { DisposableStore, toDisposable } from 'vsview-shared';
 
@@ -22,77 +27,19 @@ export class TabBarView implements vscode.Disposable {
   public render(tabs: TabInfo[], activeUri: string | null): void {
     this.closeContextMenu();
 
-    const fragment = document.createDocumentFragment();
-
-    for (const tab of tabs) {
-      const tabEl = document.createElement('div');
-      tabEl.className = 'tab';
-      if (tab.uri === activeUri) {
-        tabEl.classList.add('active');
-      }
-      if (tab.isMain) {
-        tabEl.classList.add('main');
-      }
-      if (tab.isDirty) {
-        tabEl.classList.add('dirty');
-      }
-
-      // Main Badge
-      if (tab.isMain) {
-        const mainBadge = document.createElement('span');
-        mainBadge.className = 'tab-main-badge';
-        mainBadge.textContent = 'MAIN';
-        tabEl.appendChild(mainBadge);
-      }
-
-      // Title
-      const titleEl = document.createElement('span');
-      titleEl.className = 'tab-title';
-      titleEl.textContent = tab.title;
-      titleEl.title = tab.uri;
-      tabEl.appendChild(titleEl);
-
-      // Indicator Container (Dirty dot / Close button)
-      const indicatorEl = document.createElement('span');
-      indicatorEl.className = 'tab-indicator';
-
-      if (tab.isDirty) {
-        const dirtyDot = document.createElement('span');
-        dirtyDot.className = 'tab-dirty-dot';
-        indicatorEl.appendChild(dirtyDot);
-      }
-
-      const closeBtn = document.createElement('span');
-      closeBtn.className = 'tab-close';
-      closeBtn.textContent = '\u00D7';
-      closeBtn.title = 'Close tab';
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.callbacks.onCloseTab(tab.uri);
-      });
-      indicatorEl.appendChild(closeBtn);
-
-      tabEl.appendChild(indicatorEl);
-
-      // Click to select tab
-      tabEl.addEventListener('click', () => {
-        this.callbacks.onSelectTab(tab.uri);
-      });
-
-      // Context menu for "Set as Main Script"
-      tabEl.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        if (!tab.isMain) {
-          this.showContextMenu(e.clientX, e.clientY, tab.uri);
-        }
-      });
-      fragment.appendChild(tabEl);
-    }
-    this.container.replaceChildren(fragment);
+    render(
+      repeat(
+        tabs,
+        (tab) => tab.uri,
+        (tab) => this.renderTab(tab, activeUri),
+      ),
+      this.container,
+    );
   }
 
   public dispose(): void {
     this.closeContextMenu();
+    render(nothing, this.container);
     this.disposables.dispose();
   }
 
@@ -100,32 +47,95 @@ export class TabBarView implements vscode.Disposable {
     this.dispose();
   }
 
+  private renderTab(tab: TabInfo, activeUri: string | null): TemplateResult {
+    const classes = {
+      tab: true,
+      active: tab.uri === activeUri,
+      main: tab.isMain,
+      dirty: tab.isDirty,
+    };
+
+    return html`
+      <div
+        class=${classMap(classes)}
+        @click=${() => this.callbacks.onSelectTab(tab.uri)}
+        @contextmenu=${(e: MouseEvent) => this.handleTabContextMenu(e, tab)}
+      >
+        ${when(tab.isMain, () => this.renderMainBadge())}${this.renderTabTitle(
+          tab,
+        )}${this.renderTabIndicator(tab)}
+      </div>
+    `;
+  }
+
+  private renderMainBadge(): TemplateResult {
+    return html`<span class="tab-main-badge">MAIN</span>`;
+  }
+
+  private renderTabTitle(tab: TabInfo): TemplateResult {
+    return html`<span class="tab-title" title=${tab.uri}>${tab.title}</span>`;
+  }
+
+  private renderTabIndicator(tab: TabInfo): TemplateResult {
+    return html`
+      <span class="tab-indicator">
+        ${when(tab.isDirty, () => html`<span class="tab-dirty-dot"></span>`)}
+        <span
+          class="tab-close"
+          title="Close tab"
+          @click=${(e: MouseEvent) => this.handleCloseClick(e, tab.uri)}
+          >${'\u00D7'}</span
+        >
+      </span>
+    `;
+  }
+
+  private handleCloseClick(e: MouseEvent, uri: string): void {
+    e.stopPropagation();
+    this.callbacks.onCloseTab(uri);
+  }
+
+  private handleTabContextMenu(e: MouseEvent, tab: TabInfo): void {
+    e.preventDefault();
+    if (!tab.isMain) {
+      this.showContextMenu(e.clientX, e.clientY, tab.uri);
+    }
+  }
+
+  private handleSetMainClick(uri: string): void {
+    this.callbacks.onSetMainTab(uri);
+    this.closeContextMenu();
+  }
+
   private showContextMenu(x: number, y: number, uri: string): void {
     this.closeContextMenu();
 
+    const fragment = document.createDocumentFragment();
+    render(this.renderContextMenu(x, y, uri), fragment);
+    document.body.appendChild(fragment);
+
+    this.bindContextMenuDismissListeners();
+  }
+
+  private renderContextMenu(x: number, y: number, uri: string): TemplateResult {
+    return html`
+      <div
+        id=${DOM_IDS.TAB_CONTEXT_MENU}
+        class="tab-context-menu"
+        style=${styleMap({ left: `${x}px`, top: `${y}px` })}
+      >
+        ${this.renderContextMenuItem(uri)}
+      </div>
+    `;
+  }
+
+  private renderContextMenuItem(uri: string): TemplateResult {
+    const onClick = () => this.handleSetMainClick(uri);
+    return html`<div class="tab-context-menu-item" @click=${onClick}>⚡ Set as Main Script</div>`;
+  }
+
+  private bindContextMenuDismissListeners(): void {
     this.contextMenuDisposables = new DisposableStore();
-
-    const menu = document.createElement('div');
-    menu.id = DOM_IDS.TAB_CONTEXT_MENU;
-    menu.className = 'tab-context-menu';
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
-
-    const item = document.createElement('div');
-    item.className = 'tab-context-menu-item';
-    item.textContent = '⚡ Set as Main Script';
-
-    const onItemClick = () => {
-      this.callbacks.onSetMainTab(uri);
-      this.closeContextMenu();
-    };
-    item.addEventListener('click', onItemClick);
-    this.contextMenuDisposables.add(
-      toDisposable(() => item.removeEventListener('click', onItemClick)),
-    );
-
-    menu.appendChild(item);
-    document.body.appendChild(menu);
 
     const onWindowClick = () => this.closeContextMenu();
     const onKeyDown = (e: KeyboardEvent) => {
