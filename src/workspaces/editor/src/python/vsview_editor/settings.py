@@ -46,8 +46,8 @@ class Theme(StrEnum):
         return obj
 
 
-class BasedpyrightSettings(BaseModel):
-    __section__ = "BasedPyright"
+class PyreflySettings(BaseModel):
+    __section__ = "Pyrefly"
     model_config = ConfigDict(validate_by_name=True, validate_by_alias=True)
 
     type_checking_mode: Annotated[
@@ -55,24 +55,25 @@ class BasedpyrightSettings(BaseModel):
         Dropdown(
             label="Type Checking Mode",
             items=[
+                ("Auto", "auto"),
                 ("Off", "off"),
                 ("Basic", "basic"),
-                ("Standard", "standard"),
+                ("Legacy", "legacy"),
+                ("Default", "default"),
                 ("Strict", "strict"),
-                ("Recommended", "recommended"),
                 ("All", "all"),
             ],
-            tooltip="Analysis mode for Basedpyright type checking",
+            tooltip="Analysis mode for Pyrefly type checking",
         ),
-    ] = Field(default="standard", alias="basedpyright.analysis.typeCheckingMode")
+    ] = Field(default="default", alias="python.pyrefly.typeCheckingMode")
     disable_language_service: Annotated[
         bool,
         Checkbox(
             label="Disable Language Service",
             text="",
-            tooltip="Disables the BasedPyright language service",
+            tooltip="Disables the Pyrefly language service",
         ),
-    ] = Field(default=False, alias="basedpyright.disableLanguageServices")
+    ] = Field(default=False, alias="python.pyrefly.disableLanguageServices")
     auto_import_completions: Annotated[
         bool,
         Checkbox(
@@ -80,7 +81,7 @@ class BasedpyrightSettings(BaseModel):
             text="Offer auto-import completions",
             tooltip="Offer auto-import completions for unimported symbols",
         ),
-    ] = Field(default=True, alias="basedpyright.analysis.autoImportCompletions")
+    ] = Field(default=True, alias="python.analysis.autoImportCompletions")
     inlay_hints_variable_types: Annotated[
         bool,
         Checkbox(
@@ -88,15 +89,19 @@ class BasedpyrightSettings(BaseModel):
             text="Show variable type hints",
             tooltip="Show inlay hints for variable types in the editor",
         ),
-    ] = Field(default=True, alias="basedpyright.analysis.inlayHints.variableTypes")
+    ] = Field(default=True, alias="python.analysis.inlayHints.variableTypes")
     inlay_hints_call_argument_names: Annotated[
-        bool,
-        Checkbox(
+        str,
+        Dropdown(
             label="Inlay Hints: Call Argument Names",
-            text="Show argument names type hints",
+            items=[
+                ("Off", "off"),
+                ("All", "all"),
+                ("Partial", "partial"),
+            ],
             tooltip="Show inlay hints for call argument names in the editor",
         ),
-    ] = Field(default=True, alias="basedpyright.analysis.inlayHints.callArgumentNames")
+    ] = Field(default="all", alias="python.analysis.inlayHints.callArgumentNames")
     inlay_hints_function_return_types: Annotated[
         bool,
         Checkbox(
@@ -104,17 +109,11 @@ class BasedpyrightSettings(BaseModel):
             text="Show function return type hints",
             tooltip="Show inlay hints for function return types in the editor",
         ),
-    ] = Field(default=True, alias="basedpyright.analysis.inlayHints.functionReturnTypes")
-    inlay_hints_generic_types: Annotated[
-        bool,
-        Checkbox(
-            label="Inlay Hints: Generic Types",
-            text="Show generic type hints",
-            tooltip="Show inlay hints for generic types in the editor",
-        ),
-    ] = Field(default=True, alias="basedpyright.analysis.inlayHints.genericTypes")
-    diagnostic_mode: str = Field(default="workspace", alias="basedpyright.analysis.diagnosticMode")
-    extra_paths: list[Path] = Field(default_factory=lambda: [get_stubs_dir()], alias="basedpyright.analysis.extraPaths")
+    ] = Field(default=True, alias="python.analysis.inlayHints.functionReturnTypes")
+    diagnostic_mode: str = Field(default="workspace", alias="python.pyrefly.diagnosticMode")
+    extra_search_paths: list[Path] = Field(
+        default_factory=lambda: [get_stubs_dir()], alias="python.pyrefly.extraSearchPaths"
+    )
 
 
 class EditorOptionsSettings(BaseModel):
@@ -243,7 +242,7 @@ class GlobalSettings(BaseModel):
     model_config = ConfigDict(validate_by_name=True, validate_by_alias=True)
 
     options: EditorOptionsSettings = Field(default_factory=EditorOptionsSettings)
-    basedpyright: BasedpyrightSettings = Field(default_factory=BasedpyrightSettings)
+    pyrefly: PyreflySettings = Field(default_factory=PyreflySettings)
 
 
 class LocalSettings(LocalSettingsModel):

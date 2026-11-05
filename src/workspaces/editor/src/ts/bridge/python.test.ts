@@ -484,10 +484,10 @@ describe('BridgeService', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
-      const settings = { 'basedpyright.analysis.typeCheckingMode': 'strict' };
+      const settings = { 'python.pyrefly.typeCheckingMode': 'strict' };
       mockBridgeFixture.emitCommand(
         'editor.updateLspSettings',
-        JSON.stringify({ section: 'basedpyright', settingsJson: JSON.stringify(settings) }),
+        JSON.stringify({ section: 'pyrefly', settingsJson: JSON.stringify(settings) }),
       );
 
       // Allow async promise chain to run
@@ -495,7 +495,7 @@ describe('BridgeService', () => {
       await Promise.resolve();
 
       expect(mockWorkspaceConfig.update).toHaveBeenCalledWith(
-        'basedpyright.analysis.typeCheckingMode',
+        'python.pyrefly.typeCheckingMode',
         'strict',
         2,
       );
@@ -508,12 +508,12 @@ describe('BridgeService', () => {
 
       mockBridgeFixture.emitCommand(
         'editor.updateLspSettings',
-        JSON.stringify({ section: 'basedpyright', settingsJson: '{bad_json' }),
+        JSON.stringify({ section: 'pyrefly', settingsJson: '{bad_json' }),
       );
 
       await Promise.resolve();
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Failed to parse LSP settings for section 'basedpyright'"),
+        expect.stringContaining("Failed to parse LSP settings for section 'pyrefly'"),
         expect.any(Error),
       );
     });
@@ -542,23 +542,23 @@ describe('BridgeService', () => {
       mockBridgeFixture.emitCommand(
         'lsp.connect',
         JSON.stringify({
-          id: 'basedpyright',
-          name: 'Basedpyright Server',
+          id: 'pyrefly',
+          name: 'Pyrefly Server',
           port: 9000,
           language: 'python',
           fileEventsPattern: '**/*.py',
-          configurationSection: 'basedpyright',
+          configurationSection: 'pyrefly',
           progressNotifications: [{ begin: 'startProgress', end: 'endProgress' }],
         }),
       );
 
       expect(mockLsp.connect).toHaveBeenCalledWith({
-        id: 'basedpyright',
-        name: 'Basedpyright Server',
+        id: 'pyrefly',
+        name: 'Pyrefly Server',
         port: 9000,
         language: 'python',
         fileEventsPattern: '**/*.py',
-        configurationSection: 'basedpyright',
+        configurationSection: 'pyrefly',
         progressNotifications: [{ begin: 'startProgress', end: 'endProgress' }],
       });
 
@@ -598,8 +598,8 @@ describe('BridgeService', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
-      mockBridgeFixture.emitCommand('lsp.disconnect', JSON.stringify({ id: 'basedpyright' }));
-      expect(mockLsp.disconnect).toHaveBeenCalledWith('basedpyright');
+      mockBridgeFixture.emitCommand('lsp.disconnect', JSON.stringify({ id: 'pyrefly' }));
+      expect(mockLsp.disconnect).toHaveBeenCalledWith('pyrefly');
 
       mockBridgeFixture.emitCommand('lsp.disconnect', '{}');
       expect(mockLsp.disconnect).toHaveBeenCalledWith(undefined);

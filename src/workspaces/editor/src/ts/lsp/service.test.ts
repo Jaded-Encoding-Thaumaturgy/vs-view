@@ -290,8 +290,8 @@ describe('LspService and Language Client Lifecycle', () => {
   describe('LspService.connect(config)', () => {
     it('creates WebSocket connection to ws://127.0.0.1:<port>', async () => {
       const config: LspServerConfig = {
-        id: 'basedpyright',
-        name: 'BasedPyright',
+        id: 'pyrefly',
+        name: 'Pyrefly',
         port: 9005,
         language: 'python',
       };
@@ -305,8 +305,8 @@ describe('LspService and Language Client Lifecycle', () => {
 
     it('creates and starts WebSocketLanguageClient on websocket open', async () => {
       const config: LspServerConfig = {
-        id: 'basedpyright',
-        name: 'BasedPyright',
+        id: 'pyrefly',
+        name: 'Pyrefly',
         port: 9005,
         language: 'python',
       };
@@ -320,8 +320,8 @@ describe('LspService and Language Client Lifecycle', () => {
 
       expect(lspState.createdClients).toHaveLength(1);
       const clientRecord = lspState.createdClients[0]!;
-      expect(clientRecord.id).toBe('basedpyright');
-      expect(clientRecord.name).toBe('BasedPyright');
+      expect(clientRecord.id).toBe('pyrefly');
+      expect(clientRecord.name).toBe('Pyrefly');
 
       const client = clientRecord.instance;
       expect(client.start).toHaveBeenCalled();
@@ -527,11 +527,11 @@ describe('LspService and Language Client Lifecycle', () => {
 
     it('emits workspace/didChangeConfiguration for any matching section in array configurationSection', async () => {
       const config: LspServerConfig = {
-        id: 'pyright',
-        name: 'Pyright',
+        id: 'pyrefly',
+        name: 'Pyrefly',
         port: 9000,
         language: 'python',
-        configurationSection: ['python', 'basedpyright'],
+        configurationSection: ['python', 'pyrefly'],
       };
 
       await service.connect(config);
@@ -540,10 +540,10 @@ describe('LspService and Language Client Lifecycle', () => {
 
       const client = lspState.createdClients[0]!.instance;
 
-      // Trigger change for 'basedpyright'
+      // Trigger change for 'pyrefly'
       for (const listener of vscodeWorkspaceMock.configChangeListeners) {
         listener({
-          affectsConfiguration: (sec) => sec === 'basedpyright',
+          affectsConfiguration: (sec) => sec === 'pyrefly',
         });
       }
 

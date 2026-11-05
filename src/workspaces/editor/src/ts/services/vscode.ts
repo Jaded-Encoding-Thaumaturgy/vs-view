@@ -225,8 +225,8 @@ function registerMainExtension(): RegisterLocalProcessExtensionResult {
       main: './extension.js',
       contributes: {
         configuration: {
-          title: 'Basedpyright',
-          properties: config.BASED_PYRIGHT_SETTINGS_DEFS,
+          title: 'Pyrefly',
+          properties: config.PYREFLY_SETTINGS_DEFS,
         },
       },
     },

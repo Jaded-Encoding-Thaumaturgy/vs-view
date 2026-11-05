@@ -36,14 +36,13 @@ export const defaultEditorOptions: monaco.editor.IStandaloneEditorConstructionOp
   language: 'python',
 };
 
-export const BASED_PYRIGHT_SETTINGS_DEFS: NonNullable<IConfigurationNode['properties']> = {
-  'basedpyright.analysis.typeCheckingMode': {},
-  'basedpyright.disableLanguageServices': {},
-  'basedpyright.analysis.autoImportCompletions': {},
-  'basedpyright.analysis.inlayHints.variableTypes': {},
-  'basedpyright.analysis.inlayHints.callArgumentNames': {},
-  'basedpyright.analysis.inlayHints.functionReturnTypes': {},
-  'basedpyright.analysis.inlayHints.genericTypes': {},
-  'basedpyright.analysis.diagnosticMode': {},
-  'basedpyright.analysis.extraPaths': {},
+export const PYREFLY_SETTINGS_DEFS: NonNullable<IConfigurationNode['properties']> = {
+  'python.pyrefly.typeCheckingMode': {},
+  'python.pyrefly.disableLanguageServices': {},
+  'python.analysis.autoImportCompletions': {},
+  'python.analysis.inlayHints.variableTypes': {},
+  'python.analysis.inlayHints.callArgumentNames': {},
+  'python.analysis.inlayHints.functionReturnTypes': {},
+  'python.pyrefly.diagnosticMode': {},
+  'python.pyrefly.extraSearchPaths': {},
 };

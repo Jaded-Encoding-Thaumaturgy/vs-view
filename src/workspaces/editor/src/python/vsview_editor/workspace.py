@@ -45,7 +45,7 @@ from vsview.env import getenv_bool
 from vsview.vsenv import QtEventLoop, create_environment
 
 from .console import GlobalConsoleHub
-from .lsp import LSP_BASEDPYRIGHT_CONFIG, LSPProcessManager
+from .lsp import LSP_PYREFLY_CONFIG, LSPProcessManager
 from .settings import GlobalSettings, LocalSettings
 from .stubs import get_stubs_dir
 from .utils import ContentPath, WorkspaceUri, extract_supported_script_files
@@ -313,12 +313,12 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
     @Slot()
     def restart_lsp(self) -> None:
-        logger.info("Restarting Basedpyright language server...")
-        self._send_pyright_settings()
+        logger.info("Restarting Pyrefly language server...")
+        self._send_pyrefly_settings()
         script_dir = self._active_filepath.parent if self._active_filepath else Path.cwd()
-        port = self.lsp_manager.restart_server(config=LSP_BASEDPYRIGHT_CONFIG, workspace_dir=script_dir)
+        port = self.lsp_manager.restart_server(config=LSP_PYREFLY_CONFIG, workspace_dir=script_dir)
         if port > 0:
-            self.editor.bridge.connect_lsp(port, LSP_BASEDPYRIGHT_CONFIG)
+            self.editor.bridge.connect_lsp(port, LSP_PYREFLY_CONFIG)
 
     @Slot()
     def _on_editor_ready(self) -> None:
@@ -478,7 +478,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
     @Slot()
     def _on_settings_changed(self) -> None:
-        self._send_pyright_settings()
+        self._send_pyrefly_settings()
         self._send_editor_options()
         self.editor.bridge.set_theme(self.settings.global_.options.theme)
 
@@ -499,14 +499,14 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             except Exception:
                 logger.exception("Failed to generate VapourSynth stubs:")
 
-        self.loop.from_thread(self._send_pyright_settings)
+        self.loop.from_thread(self._send_pyrefly_settings)
 
-    def _send_pyright_settings(self) -> None:
-        settings = self.settings.global_.basedpyright
-        if (stubs_path := get_stubs_dir()) not in settings.extra_paths:
-            settings.extra_paths.append(stubs_path)
+    def _send_pyrefly_settings(self) -> None:
+        settings = self.settings.global_.pyrefly
+        if (stubs_path := get_stubs_dir()) not in settings.extra_search_paths:
+            settings.extra_search_paths.append(stubs_path)
 
-        self.editor.bridge.update_lsp_settings("basedpyright", settings.model_dump_json(by_alias=True))
+        self.editor.bridge.update_lsp_settings("pyrefly", settings.model_dump_json(by_alias=True))
 
     def _send_editor_options(self) -> None:
         self.editor.bridge.update_editor_options(self.settings.global_.options.model_dump_json(by_alias=True))

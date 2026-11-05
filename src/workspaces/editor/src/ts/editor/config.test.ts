@@ -1,6 +1,6 @@
 import { describe, expect, it, test } from 'vite-plus/test';
 
-import { BASED_PYRIGHT_SETTINGS_DEFS, defaultEditorOptions } from './config';
+import { PYREFLY_SETTINGS_DEFS, defaultEditorOptions } from './config';
 
 describe('Editor configuration', () => {
   describe('defaultEditorOptions', () => {
@@ -52,33 +52,32 @@ describe('Editor configuration', () => {
     });
   });
 
-  describe('BASED_PYRIGHT_SETTINGS_DEFS', () => {
+  describe('PYREFLY_SETTINGS_DEFS', () => {
     const expectedKeys = [
-      'basedpyright.analysis.typeCheckingMode',
-      'basedpyright.disableLanguageServices',
-      'basedpyright.analysis.autoImportCompletions',
-      'basedpyright.analysis.inlayHints.variableTypes',
-      'basedpyright.analysis.inlayHints.callArgumentNames',
-      'basedpyright.analysis.inlayHints.functionReturnTypes',
-      'basedpyright.analysis.inlayHints.genericTypes',
-      'basedpyright.analysis.diagnosticMode',
-      'basedpyright.analysis.extraPaths',
+      'python.pyrefly.typeCheckingMode',
+      'python.pyrefly.disableLanguageServices',
+      'python.analysis.autoImportCompletions',
+      'python.analysis.inlayHints.variableTypes',
+      'python.analysis.inlayHints.callArgumentNames',
+      'python.analysis.inlayHints.functionReturnTypes',
+      'python.pyrefly.diagnosticMode',
+      'python.pyrefly.extraSearchPaths',
     ] as const;
 
     test.each(expectedKeys)("defines configuration property '%s'", (settingKey) => {
-      expect(BASED_PYRIGHT_SETTINGS_DEFS).toHaveProperty(settingKey);
-      expect(BASED_PYRIGHT_SETTINGS_DEFS[settingKey]).toEqual({});
+      expect(PYREFLY_SETTINGS_DEFS).toHaveProperty(settingKey);
+      expect(PYREFLY_SETTINGS_DEFS[settingKey]).toEqual({});
     });
 
-    it('contains exactly the expected set of Basedpyright configuration keys', () => {
-      const actualKeys = Object.keys(BASED_PYRIGHT_SETTINGS_DEFS);
+    it('contains exactly the expected set of Pyrefly configuration keys', () => {
+      const actualKeys = Object.keys(PYREFLY_SETTINGS_DEFS);
       expect(actualKeys.length).toBe(expectedKeys.length);
       expect(new Set(actualKeys)).toEqual(new Set(expectedKeys));
     });
 
-    it("prefixes all configuration keys with 'basedpyright.'", () => {
-      for (const key of Object.keys(BASED_PYRIGHT_SETTINGS_DEFS)) {
-        expect(key.startsWith('basedpyright.')).toBe(true);
+    it("prefixes all configuration keys with 'python.'", () => {
+      for (const key of Object.keys(PYREFLY_SETTINGS_DEFS)) {
+        expect(key.startsWith('python.')).toBe(true);
       }
     });
   });

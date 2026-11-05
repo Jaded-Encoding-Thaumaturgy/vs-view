@@ -88,8 +88,8 @@ export class EditorService implements vscode.Disposable {
 
     this.disposables.add(
       this.editor.addAction({
-        id: 'basedpyright.restartserver',
-        label: 'Basedpyright: Restart Language Server',
+        id: 'pyrefly.restartserver',
+        label: 'Pyrefly: Restart Language Server',
         run: () => BridgeService.active.unwrapOr(undefined)?.requestRestartLsp(),
       }),
     );

@@ -36,14 +36,14 @@ class LSPConfig:
             raise CustomValueError("LSP config %r has an empty command list.", self.id)
 
 
-LSP_BASEDPYRIGHT_CONFIG = LSPConfig(
-    id="basedpyright",
-    name="Basedpyright Language Server",
-    command=["basedpyright-langserver", "--stdio"],
+LSP_PYREFLY_CONFIG = LSPConfig(
+    id="pyrefly",
+    name="Pyrefly Language Server",
+    command=["pyrefly", "lsp"],
     language="python",
     file_events_pattern="**/*.py",
-    configuration_section=["basedpyright", "python"],
-    progress_notifications=[{"begin": "pyright/beginAnalysis", "end": "pyright/endAnalysis"}],
+    configuration_section=["pyrefly", "python"],
+    progress_notifications=None,
 )
 
 CLIENT_VIRTUAL_PATTERN = re.compile(
