@@ -1540,15 +1540,18 @@ class ProbabilityCurveWidget(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragged_index = None
             self.update()
-        elif event.button() == Qt.MouseButton.RightButton:
-            if (idx := self.find_point_near(event)) is not None and 0 < idx < len(self._points) - 1:
-                self._points.pop(idx)
-                if self._hovered_index == idx:
-                    self._hovered_index = None
-                self.curveChanged.emit()
-                self.update()
-                event.accept()
-                return
+        elif (
+            event.button() == Qt.MouseButton.RightButton
+            and (idx := self.find_point_near(event)) is not None
+            and 0 < idx < len(self._points) - 1
+        ):
+            self._points.pop(idx)
+            if self._hovered_index == idx:
+                self._hovered_index = None
+            self.curveChanged.emit()
+            self.update()
+            event.accept()
+            return
 
         super().mouseReleaseEvent(event)
 
