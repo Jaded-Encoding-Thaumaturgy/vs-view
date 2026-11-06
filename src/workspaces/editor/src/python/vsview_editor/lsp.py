@@ -251,7 +251,7 @@ class LSPProcessServer(QObject):
 
     @Slot()
     def _on_stderr_ready(self) -> None:
-        if not self.process:
+        if not self.process or not logger.isEnabledFor(DEBUG):
             return
         output = bytes(self.process.readAllStandardError().data()).decode("utf-8", errors="replace").strip()
         if output:
