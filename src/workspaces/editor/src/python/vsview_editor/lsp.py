@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from logging import DEBUG, getLogger
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from jetpytools import CustomValueError
 from PySide6.QtCore import QObject, QProcess, QUrl, Slot
@@ -17,6 +18,9 @@ from PySide6.QtNetwork import QHostAddress
 from PySide6.QtWebSockets import QWebSocket, QWebSocketServer
 
 from vsview.api import QObjectSet
+
+if TYPE_CHECKING:
+    from .web import LspConnectPayload
 
 logger = getLogger(__name__)
 
@@ -34,6 +38,20 @@ class LSPConfig:
     def __post_init__(self) -> None:
         if not self.command:
             raise CustomValueError("LSP config %r has an empty command list.", self.id)
+
+    def to_payload(self, port: int) -> LspConnectPayload:
+        payload: LspConnectPayload = {
+            "id": self.id,
+            "name": self.name,
+            "port": port,
+            "language": self.language,
+            "fileEventsPattern": self.file_events_pattern,
+        }
+        if self.configuration_section is not None:
+            payload["configurationSection"] = self.configuration_section
+        if self.progress_notifications is not None:
+            payload["progressNotifications"] = [dict(pair) for pair in self.progress_notifications]
+        return payload
 
 
 LSP_PYREFLY_CONFIG = LSPConfig(

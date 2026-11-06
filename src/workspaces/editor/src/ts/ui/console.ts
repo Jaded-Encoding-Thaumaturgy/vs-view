@@ -122,7 +122,7 @@ export class ConsolePanelService implements vscode.Disposable {
   public copySelection(): void {
     const selection = this.terminal.getSelection();
     if (!selection) return;
-    BridgeService.active.unwrapOr(undefined)?.copyToClipboard(selection);
+    BridgeService.active.unwrapOr(undefined)?.sendEvent('clipboard.copy', { text: selection });
   }
 
   public toggle(forceState?: boolean): void {
@@ -143,7 +143,10 @@ export class ConsolePanelService implements vscode.Disposable {
   public fit(): void {
     if (this.isVisible) {
       Result.fromThrowable(() => this.fitAddon.fit()).match({
-        ok: () => BridgeService.active.unwrapOr(undefined)?.onConsoleResized(this.terminal.cols),
+        ok: () =>
+          void BridgeService.active
+            .unwrapOr(undefined)
+            ?.sendEvent('console.resized', { cols: this.terminal.cols }),
         err: (e) => console.warn('Failed to fit xterm viewport:', e),
       });
     }

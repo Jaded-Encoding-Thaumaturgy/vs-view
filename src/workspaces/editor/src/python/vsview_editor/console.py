@@ -16,7 +16,7 @@ from rich.text import Text
 
 from vsview.api import QObjectSet, get_console_level
 
-from .web import MonacoBridge
+from .web import ConsoleAppendPayload, MonacoBridge, PyToJsCommand
 
 logger = getLogger(__name__)
 
@@ -151,15 +151,15 @@ class GlobalConsoleHub(Singleton):
             EXECUTION_BRIDGE.reset(token)
 
     @inject_self
-    def dispatch(self, payload: dict[str, str], target_bridge: MonacoBridge | None = None) -> None:
+    def dispatch(self, payload: ConsoleAppendPayload, target_bridge: MonacoBridge | None = None) -> None:
         dest_bridge = target_bridge or EXECUTION_BRIDGE.get()
         if dest_bridge is not None:
-            dest_bridge.dispatch("console.append", payload)
+            dest_bridge.dispatch(PyToJsCommand.CONSOLE_APPEND, payload)
         else:
             with self._lock:
                 bridges = list(self._bridges)
             for bridge in bridges:
-                bridge.dispatch("console.append", payload)
+                bridge.dispatch(PyToJsCommand.CONSOLE_APPEND, payload)
 
     def _install_global_hooks(self) -> None:
         self._stdout_redirector.install()

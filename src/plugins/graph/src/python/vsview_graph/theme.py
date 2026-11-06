@@ -1,9 +1,9 @@
-from typing import Any
-
 from PySide6.QtGui import QPalette
 
+from .bridge import ThemeTokens
 
-def extract_theme_tokens(palette: QPalette) -> dict[str, Any]:
+
+def extract_theme_tokens(palette: QPalette) -> ThemeTokens:
     window_color = palette.color(QPalette.ColorRole.Window)
     is_dark = window_color.lightnessF() < 0.5
 

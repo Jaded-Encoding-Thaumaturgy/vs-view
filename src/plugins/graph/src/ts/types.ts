@@ -248,7 +248,6 @@ export interface PyToJsCommandMap {
  * Outbound command mapping (JavaScript -> Python)
  */
 export interface JsToPyCommandMap {
-  'graph.ready': Record<string, never>;
   'graph.reload': Record<string, never>;
   'output.select': { index: number };
   'node.select': { id: string };
@@ -262,32 +261,4 @@ export interface JsToPyCommandMap {
     path?: string;
   };
   'contextmenu.request': Record<string, never>;
-}
-
-export interface QWebSignal<T extends (...args: never[]) => void> {
-  connect(callback: T): void;
-  disconnect(callback: T): void;
-}
-
-export interface PythonBridge {
-  dispatchCommandSignal: QWebSignal<(command: string, payloadJson: string) => void>;
-  dispatchFromJs(command: string, payloadJson: string): void;
-  onWebReady(): void;
-}
-
-declare global {
-  interface Window {
-    ENV?: {
-      VSVIEW?: boolean;
-      VSVIEW_DEBUG?: boolean;
-      [key: string]: unknown;
-    };
-    qt?: {
-      webChannelTransport: unknown;
-    };
-    QWebChannel: new (
-      transport: unknown,
-      callback: (channel: { objects: Record<string, unknown> }) => void,
-    ) => void;
-  }
 }

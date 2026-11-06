@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from enum import StrEnum
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Literal, Self, override
+from typing import Any, Literal, Self, assert_never, override
 from uuid import uuid4
 
 from jetpytools import SPath, fallback
@@ -49,7 +49,7 @@ from .lsp import LSP_PYREFLY_CONFIG, LSPProcessManager
 from .settings import GlobalSettings, LocalSettings
 from .stubs import get_stubs_dir
 from .utils import ContentPath, WorkspaceUri, extract_supported_script_files
-from .web import MonacoEditorWidget, TabInfo
+from .web import JsToPyCommand, MonacoEditorWidget, PyToJsCommand, TabInfo
 
 logger = getLogger(__name__)
 
@@ -92,19 +92,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self._open_tabs = list[TabInfo]()
 
         self.editor = MonacoEditorWidget(self)
-        self.editor.bridge.editorReady.connect(self._on_editor_ready)
-        self.editor.bridge.cursorPositionChanged.connect(self._on_cursor_changed)
-        self.editor.bridge.activeTabChanged.connect(lambda uri: self._on_tab_changed(uri, "active"))
-        self.editor.bridge.tabStateChanged.connect(self._on_tab_state_changed)
-        self.editor.bridge.sessionStateChanged.connect(self._on_session_state_changed)
-        self.editor.bridge.mainTabChanged.connect(lambda uri: self._on_tab_changed(uri, "main"))
-        self.editor.bridge.saveRequested.connect(self._on_save_clicked)
-        self.editor.bridge.saveAsRequested.connect(self._on_save_as_clicked)
-        self.editor.bridge.formatRequested.connect(self._on_format_clicked)
-        self.editor.bridge.generateStubsRequested.connect(lambda: self._generate_stubs(force=True))
-        self.editor.bridge.restartLspRequested.connect(self.restart_lsp)
-        self.editor.bridge.consoleResized.connect(self._on_console_resized)
-        self.editor.bridge.contentChanged.connect(self._on_content_changed)
+        self.editor.bridge.webReady.connect(self._on_editor_ready)
+        self.editor.bridge.commandReceived.connect(self._on_command_received)
         self.editor.filesDropped.connect(self.open_files)
 
         query = QUrlQuery()
@@ -157,7 +146,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             icon_size=self.ICON_SIZE,
             color_role=self.ICON_COLOR,
         )
-        self.save_btn.clicked.connect(self.editor.bridge.trigger_save)
+        self.save_btn.clicked.connect(lambda: self.editor.bridge.dispatch(PyToJsCommand.TRIGGER_SAVE))
 
         self.save_as_btn = self.make_tool_button(
             IconName.FILE_EXPORT,
@@ -166,7 +155,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             icon_size=self.ICON_SIZE,
             color_role=self.ICON_COLOR,
         )
-        self.save_as_btn.clicked.connect(self.editor.bridge.trigger_save_as)
+        self.save_as_btn.clicked.connect(lambda: self.editor.bridge.dispatch(PyToJsCommand.TRIGGER_SAVE_AS))
 
         # Code Tools Group
         self.format_btn = self.make_tool_button(
@@ -176,7 +165,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             icon_size=self.ICON_SIZE,
             color_role=self.ICON_COLOR,
         )
-        self.format_btn.clicked.connect(self.editor.bridge.trigger_format)
+        self.format_btn.clicked.connect(lambda: self.editor.bridge.dispatch(PyToJsCommand.TRIGGER_FORMAT))
 
         self.wrap_btn = self.make_tool_button(
             IconName.TEXT_ALIGN_LEFT,
@@ -185,7 +174,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             icon_size=self.ICON_SIZE,
             color_role=self.ICON_COLOR,
         )
-        self.wrap_btn.clicked.connect(self.editor.bridge.toggle_word_wrap)
+        self.wrap_btn.clicked.connect(lambda: self.editor.bridge.dispatch(PyToJsCommand.TOGGLE_WORD_WRAP))
 
         self.console_btn = self.make_tool_button(
             IconName.TERMINAL,
@@ -194,7 +183,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             icon_size=self.ICON_SIZE,
             color_role=self.ICON_COLOR,
         )
-        self.console_btn.clicked.connect(self.editor.bridge.toggle_console)
+        self.console_btn.clicked.connect(lambda: self.editor.bridge.dispatch(PyToJsCommand.CONSOLE_TOGGLE))
 
         # Execution Group
         self.run_btn = self.make_tool_button(
@@ -245,9 +234,9 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     def _setup_shortcuts(self) -> None:
         self.api.register_shortcut(EditorShortcut.NEW_SCRIPT.definition, self.new_btn.click, self)
         self.api.register_shortcut(EditorShortcut.OPEN_SCRIPT.definition, self.open_btn.click, self)
-        self.api.register_shortcut(EditorShortcut.SAVE_SCRIPT.definition, self.editor.bridge.trigger_save, self)
-        self.api.register_shortcut(EditorShortcut.SAVE_SCRIPT_AS.definition, self.editor.bridge.trigger_save_as, self)
-        self.api.register_shortcut(EditorShortcut.FORMAT_DOCUMENT.definition, self.editor.bridge.trigger_format, self)
+        self.api.register_shortcut(EditorShortcut.SAVE_SCRIPT.definition, self.save_btn.click, self)
+        self.api.register_shortcut(EditorShortcut.SAVE_SCRIPT_AS.definition, self.save_as_btn.click, self)
+        self.api.register_shortcut(EditorShortcut.FORMAT_DOCUMENT.definition, self.format_btn.click, self)
         self.api.register_shortcut(EditorShortcut.TOGGLE_WORD_WRAP.definition, self.wrap_btn.click, self)
         self.api.register_shortcut(EditorShortcut.TOGGLE_CONSOLE.definition, self.console_btn.click, self)
         self.api.register_shortcut(EditorShortcut.RUN_SCRIPT.definition, self.run_btn.click, self)
@@ -305,7 +294,10 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             resolved = filepath.resolve()
             content = resolved.read_text(encoding="utf-8")
             self._active_filepath = resolved
-            self.editor.bridge.open_tab(resolved.as_uri(), content, language="python", is_main=False)
+            self.editor.bridge.dispatch(
+                PyToJsCommand.OPEN_TAB,
+                {"uri": resolved.as_uri(), "content": content, "language": "python", "isMain": False},
+            )
             return True
         except Exception:
             logger.exception("Error opening script from %s:", filepath)
@@ -318,27 +310,33 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         script_dir = self._active_filepath.parent if self._active_filepath else Path.cwd()
         port = self.lsp_manager.restart_server(config=LSP_PYREFLY_CONFIG, workspace_dir=script_dir)
         if port > 0:
-            self.editor.bridge.connect_lsp(port, LSP_PYREFLY_CONFIG)
+            self.editor.bridge.dispatch(PyToJsCommand.LSP_CONNECT, LSP_PYREFLY_CONFIG.to_payload(port))
 
     @Slot()
     def _on_editor_ready(self) -> None:
         """Initialize script and start LSP bridge when Monaco is ready."""
         if self._open_tabs:
             for tab in self._open_tabs:
-                self.editor.bridge.open_tab(
-                    tab["uri"],
-                    tab.get("content", ""),
-                    language=tab.get("language", "python"),
-                    is_main=tab.get("isMain", False),
+                self.editor.bridge.dispatch(
+                    PyToJsCommand.OPEN_TAB,
+                    {
+                        "uri": tab["uri"],
+                        "content": tab.get("content", ""),
+                        "language": tab.get("language", "python"),
+                        "isMain": tab.get("isMain", False),
+                    },
                 )
             if self._active_tab_uri:
-                self.editor.bridge.select_tab(self._active_tab_uri)
+                self.editor.bridge.dispatch(PyToJsCommand.SELECT_TAB, {"uri": self._active_tab_uri})
         else:
-            self.editor.bridge.open_tab(
-                "file:///workspace/script.py",
-                self._default_content,
-                language="python",
-                is_main=True,
+            self.editor.bridge.dispatch(
+                PyToJsCommand.OPEN_TAB,
+                {
+                    "uri": "file:///workspace/script.py",
+                    "content": self._default_content,
+                    "language": "python",
+                    "isMain": True,
+                },
             )
             logger.debug("Default script loaded into Monaco editor")
 
@@ -346,22 +344,52 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self._generate_stubs(force=False)
         self.restart_lsp()
 
-    @Slot(int, int)
+    @Slot(str, dict)
+    def _on_command_received(self, command: JsToPyCommand, payload: dict[str, Any]) -> None:
+        match command:
+            case JsToPyCommand.CONTENT_CHANGED:
+                self._on_content_changed(str(payload["content"]))
+            case JsToPyCommand.MAIN_CONTENT_CHANGED | JsToPyCommand.COPY_TO_CLIPBOARD:
+                ...
+            case JsToPyCommand.CURSOR_POSITION_CHANGED:
+                self._on_cursor_changed(int(payload["line"]), int(payload["column"]))
+            case JsToPyCommand.ACTIVE_TAB_CHANGED:
+                self._on_tab_changed(str(payload["uri"]), "active")
+            case JsToPyCommand.MAIN_TAB_CHANGED:
+                self._on_tab_changed(str(payload["uri"]), "main")
+            case JsToPyCommand.TAB_STATE_CHANGED:
+                if isinstance(tabs := payload["tabs"], list):
+                    self._on_tab_state_changed(tabs)
+            case JsToPyCommand.SESSION_STATE_CHANGED:
+                if isinstance(tabs := payload["tabs"], list):
+                    self._on_session_state_changed(tabs)
+            case JsToPyCommand.SAVE_REQUESTED:
+                self._on_save_clicked()
+            case JsToPyCommand.SAVE_AS_REQUESTED:
+                self._on_save_as_clicked()
+            case JsToPyCommand.FORMAT_REQUESTED:
+                self._on_format_clicked()
+            case JsToPyCommand.GENERATE_STUBS_REQUESTED:
+                self._generate_stubs(force=True)
+            case JsToPyCommand.RESTART_LSP_REQUESTED:
+                self.restart_lsp()
+            case JsToPyCommand.CONSOLE_RESIZED:
+                self._on_console_resized(int(payload["cols"]))
+            case _:
+                assert_never(command)
+
     def _on_cursor_changed(self, line: int, col: int) -> None:
         self.cursor_label.setText(f"Ln {line}, Col {col}")
 
-    @Slot(list)
     def _on_tab_state_changed(self, tabs: list[TabInfo]) -> None:
         content_by_uri = {tab["uri"]: tab.get("content", "") for tab in self._open_tabs}
         self._open_tabs = [
             TabInfo({**tab, "content": tab.get("content", content_by_uri.get(tab["uri"], ""))}) for tab in tabs
         ]
 
-    @Slot(list)
     def _on_session_state_changed(self, tabs: list[TabInfo]) -> None:
         self._open_tabs = tabs
 
-    @Slot(str)
     def _on_content_changed(self, content: str) -> None:
         if not (uri := self._active_tab_uri):
             return
@@ -384,14 +412,12 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         if kind == "main":
             self.mainFileChanged.emit(self._main_filepath)
 
-    @Slot()
     def _on_save_clicked(self) -> None:
         if self._active_filepath:
             self.save_script(self._active_filepath, self.editor.bridge.content)
         else:
             self._on_save_as_clicked()
 
-    @Slot()
     def _on_save_as_clicked(self) -> None:
         filepath, _ = QFileDialog.getSaveFileName(
             self,
@@ -403,7 +429,6 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             self._active_filepath = Path(filepath)
             self.save_script(self._active_filepath, self.editor.bridge.content)
 
-    @Slot()
     def _on_format_clicked(self) -> None:
         self.format_btn.setDisabled(True)
 
@@ -437,11 +462,14 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     @Slot()
     def _on_new_clicked(self) -> None:
         self._active_filepath = None
-        self.editor.bridge.open_tab(
-            f"file:///workspace/untitled_{uuid4().hex[:4]}.py",
-            get_default_script(),
-            language="python",
-            is_main=False,
+        self.editor.bridge.dispatch(
+            PyToJsCommand.OPEN_TAB,
+            {
+                "uri": f"file:///workspace/untitled_{uuid4().hex[:4]}.py",
+                "content": get_default_script(),
+                "language": "python",
+                "isMain": False,
+            },
         )
 
     @Slot(list)
@@ -468,11 +496,15 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             filepath.write_text(content, encoding="utf-8")
             self.statusSavingScriptFinished.emit("Saved")
             target_uri = tab_uri or self._active_tab_uri or filepath.as_uri()
-            self.loop.from_thread(self.editor.bridge.tab_saved, filepath.as_uri(), target_uri).result()
+            self.loop.from_thread(
+                lambda: self.editor.bridge.dispatch(
+                    PyToJsCommand.TAB_SAVED,
+                    {"uri": filepath.as_uri(), "oldUri": target_uri},
+                )
+            ).result()
         except Exception:
             logger.exception("Error saving script:")
 
-    @Slot(int)
     def _on_console_resized(self, width: int) -> None:
         GlobalConsoleHub.set_width(self.editor.bridge, width)
 
@@ -480,7 +512,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     def _on_settings_changed(self) -> None:
         self._send_pyrefly_settings()
         self._send_editor_options()
-        self.editor.bridge.set_theme(self.settings.global_.options.theme)
+        self.editor.bridge.dispatch(PyToJsCommand.SET_THEME, {"theme": self.settings.global_.options.theme})
 
     @run_in_background(name="GenerateStubs")
     def _generate_stubs(self, force: bool = False) -> None:
@@ -506,10 +538,16 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         if (stubs_path := get_stubs_dir()) not in settings.extra_search_paths:
             settings.extra_search_paths.append(stubs_path)
 
-        self.editor.bridge.update_lsp_settings("pyrefly", settings.model_dump_json(by_alias=True))
+        self.editor.bridge.dispatch(
+            PyToJsCommand.UPDATE_LSP_SETTINGS,
+            {"section": "pyrefly", "settingsJson": settings.model_dump_json(by_alias=True)},
+        )
 
     def _send_editor_options(self) -> None:
-        self.editor.bridge.update_editor_options(self.settings.global_.options.model_dump_json(by_alias=True))
+        self.editor.bridge.dispatch(
+            PyToJsCommand.UPDATE_OPTIONS,
+            {"optionsJson": self.settings.global_.options.model_dump_json(by_alias=True)},
+        )
 
 
 class EditorShortcut(StrEnum):
@@ -647,7 +685,7 @@ class EditorWorkspace(
     @override
     def deleteLater(self) -> None:
         GlobalConsoleHub.unregister(self.code_dock.editor.bridge)
-        self.code_dock.editor.bridge.disconnect_lsp()
+        self.code_dock.editor.bridge.dispatch(PyToJsCommand.LSP_DISCONNECT)
         self.code_dock.lsp_manager.stop()
         self.code_dock.deleteLater()
         linecache.cache.pop(self.content.filename, None)
@@ -681,7 +719,7 @@ class EditorWorkspace(
             uri = tab.get("uri", "")
             title = tab.get("title", "Untitled")
 
-            self.code_dock.editor.bridge.select_tab(uri)
+            self.code_dock.editor.bridge.dispatch(PyToJsCommand.SELECT_TAB, {"uri": uri})
 
             reply = QMessageBox.question(
                 self,

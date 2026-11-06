@@ -151,7 +151,7 @@ describe('BridgeService', () => {
     const service = new BridgeService();
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const uninitResult = service.sendEvent('graph.ready');
+    const uninitResult = service.sendEvent('graph.reload');
     expect(uninitResult.ok).toBe(false);
     expect(uninitResult.match({ ok: () => '', err: (e) => e.message })).toContain(
       'Bridge not ready',

@@ -119,7 +119,6 @@ export class GraphManager extends Disposable {
     (await this.bridge.initBridge()).match({
       ok: () => {
         console.debug('Bridge initialized successfully');
-        this.bridge.sendEvent('graph.ready');
       },
       err: (err) => {
         console.warn('Bridge initialization failed (standalone browser mode?):', err);

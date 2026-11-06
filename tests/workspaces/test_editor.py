@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import sys
 import threading
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from jetpytools import CustomValueError
@@ -14,8 +16,15 @@ from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsview_editor.console import IN_LOGGING, ConsoleStreamRedirector, GlobalConsoleHub
 from vsview_editor.lsp import LSPConfig, LSPProcessManager, LSPProcessServer
-from vsview_editor.utils import ContentPath, SafeSlot, WorkspaceUri, extract_supported_script_files
-from vsview_editor.web import MonacoBridge, MonacoEditorWidget, TabInfo
+from vsview_editor.utils import ContentPath, WorkspaceUri, extract_supported_script_files
+from vsview_editor.web import (
+    ConsoleAppendPayload,
+    JsToPyCommand,
+    MonacoBridge,
+    MonacoEditorWidget,
+    PyToJsCommand,
+    TabInfo,
+)
 from vsview_editor.workspace import EditorShortcut, EditorWorkspace, MonacoEditorDock, StackDock
 
 pytestmark = [pytest.mark.integration, pytest.mark.qt]
@@ -67,29 +76,6 @@ class TestContentPath:
         cp = ContentPath("line1\nline2\r\nline3", "test.py")
         assert cp.splitlines() == ["line1", "line2", "line3"]
         assert cp.splitlines(keepends=True) == ["line1\n", "line2\r\n", "line3"]
-
-
-class TestSafeSlot:
-    def test_safe_slot_success(self) -> None:
-        @SafeSlot(int, result=int, fallback=-1)
-        def multiply(x: int) -> int:
-            return x * 2
-
-        assert multiply(5) == 10
-
-    def test_safe_slot_catches_exception_and_returns_fallback(self) -> None:
-        @SafeSlot(result=str, fallback="error_fallback")
-        def failing() -> str:
-            raise RuntimeError("Something broke")
-
-        assert failing() == "error_fallback"
-
-    def test_safe_slot_default_fallback_is_none(self) -> None:
-        @SafeSlot()
-        def failing_default() -> str:
-            raise ValueError("Invalid")
-
-        assert failing_default() is None
 
 
 class TestLSPConfigAndServer:
@@ -222,19 +208,14 @@ class TestEditorShortcuts:
 
     def test_monaco_bridge_restart_lsp_signal(self) -> None:
         bridge = MonacoBridge()
-        called = False
-
-        def _on_restart() -> None:
-            nonlocal called
-            called = True
-
-        bridge.restartLspRequested.connect(_on_restart)
-        bridge.requestRestartLsp()
-        assert called
+        received: list[tuple[JsToPyCommand, dict[str, Any]]] = []
+        bridge.commandReceived.connect(lambda cmd, payload: received.append((cmd, payload)))
+        bridge.dispatchFromJs(JsToPyCommand.RESTART_LSP_REQUESTED, "{}")
+        assert received == [(JsToPyCommand.RESTART_LSP_REQUESTED, {})]
 
     def test_monaco_bridge_session_state_signal(self) -> None:
         bridge = MonacoBridge()
-        received: list[list[TabInfo]] = []
+        received: list[tuple[JsToPyCommand, dict[str, Any]]] = []
         session: list[TabInfo] = [
             {
                 "uri": "file:///workspace/script.py",
@@ -245,11 +226,22 @@ class TestEditorShortcuts:
                 "content": "clip = core.std.BlankClip()\n",
             }
         ]
-        bridge.sessionStateChanged.connect(received.append)
+        bridge.commandReceived.connect(lambda cmd, payload: received.append((cmd, payload)))
 
-        bridge.onSessionStateChanged(session)
+        bridge.dispatchFromJs(JsToPyCommand.SESSION_STATE_CHANGED, json.dumps({"tabs": session}))
 
-        assert received == [session]
+        assert received == [(JsToPyCommand.SESSION_STATE_CHANGED, {"tabs": session})]
+
+    def test_monaco_bridge_content_state_tracking(self) -> None:
+        bridge = MonacoBridge()
+        assert bridge.content == ""
+        assert bridge.main_content == ""
+
+        bridge.dispatchFromJs(JsToPyCommand.CONTENT_CHANGED, json.dumps({"content": "active = 1"}))
+        bridge.dispatchFromJs(JsToPyCommand.MAIN_CONTENT_CHANGED, json.dumps({"content": "main = 2"}))
+
+        assert bridge.content == "active = 1"
+        assert bridge.main_content == "main = 2"
 
     def test_workspace_shortcuts_contain_all_definitions(self) -> None:
         workspace_defs = {str(s) for s in EditorWorkspace.shortcuts}
@@ -266,7 +258,7 @@ class TestGlobalConsoleHub:
         GlobalConsoleHub.set_width(bridge, 120)
         assert GlobalConsoleHub.target_width == 120
 
-        payload = {"stream": "stdout", "text": "test output\n"}
+        payload: ConsoleAppendPayload = {"stream": "stdout", "text": "test output\n"}
         GlobalConsoleHub.dispatch(payload)
         spy_dispatch.assert_called_once_with("console.append", payload)
 
@@ -484,11 +476,17 @@ class TestEditorDragAndDrop:
         script_file = tmp_path / "script.py"
         script_file.write_text("import vapoursynth as vs\n", encoding="utf-8")
 
-        mock_open_tab = mocker.patch.object(editor_dock.editor.bridge, "open_tab")
+        mock_dispatch = mocker.patch.object(editor_dock.editor.bridge, "dispatch")
         assert editor_dock.open_file(script_file) is True
         assert editor_dock._active_filepath == script_file.resolve()
-        mock_open_tab.assert_called_once_with(
-            script_file.resolve().as_uri(), "import vapoursynth as vs\n", language="python", is_main=False
+        mock_dispatch.assert_called_once_with(
+            PyToJsCommand.OPEN_TAB,
+            {
+                "uri": script_file.resolve().as_uri(),
+                "content": "import vapoursynth as vs\n",
+                "language": "python",
+                "isMain": False,
+            },
         )
 
     def test_monaco_dock_open_file_failure(self, editor_dock: MonacoEditorDock, tmp_path: Path) -> None:

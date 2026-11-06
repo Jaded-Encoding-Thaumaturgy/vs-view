@@ -82,7 +82,8 @@ export class EditorService implements vscode.Disposable {
       this.editor.addAction({
         id: 'vsview.generateStubs',
         label: 'VapourSynth: Generate Stubs',
-        run: () => BridgeService.active.unwrapOr(undefined)?.requestGenerateStubs(),
+        run: () =>
+          void BridgeService.active.unwrapOr(undefined)?.sendEvent('editor.generateStubsRequested'),
       }),
     );
 
@@ -90,7 +91,7 @@ export class EditorService implements vscode.Disposable {
       this.editor.addAction({
         id: 'pyrefly.restartserver',
         label: 'Pyrefly: Restart Language Server',
-        run: () => BridgeService.active.unwrapOr(undefined)?.requestRestartLsp(),
+        run: () => void BridgeService.active.unwrapOr(undefined)?.sendEvent('lsp.restartRequested'),
       }),
     );
 
@@ -480,7 +481,9 @@ export class EditorService implements vscode.Disposable {
 
     this.tabBarView.render(tabInfos, this.activeUri);
 
-    BridgeService.active.unwrapOr(undefined)?.onTabStateChanged(tabInfos);
+    BridgeService.active
+      .unwrapOr(undefined)
+      ?.sendEvent('editor.tabStateChanged', { tabs: tabInfos });
   }
 
   public getSessionState(): TabInfo[] {

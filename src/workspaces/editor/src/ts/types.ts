@@ -1,75 +1,15 @@
-/**
- * TypeScript definitions for the Python bridge and global objects.
- */
+import type { BasePythonBridge } from 'vsview-shared';
 
 /**
  * Interface for the Python object exposed via QWebChannel.
  * This should match the MonacoBridge class in web.py.
  */
-export interface PythonBridge {
-  // Slots (Python methods callable from JS)
-
-  /** Notify Python that the Monaco editor is fully initialized. */
-  onEditorReady(): void;
-
-  /** Send current editor content to Python. */
-  onContentChanged(content: string): void;
-
-  /** Send current Main script content to Python. */
-  onMainContentChanged(mainContent: string): void;
-
-  /** Notify Python of cursor position change. */
-  onCursorPositionChanged(line: number, column: number): void;
-
-  /** Notify Python that the active tab's URI has changed. */
-  onActiveTabChanged(uri: string): void;
-
-  /** Notify Python of open tabs state metadata. */
-  onTabStateChanged(tabs: TabInfo[]): void;
-
-  /** Persist a complete tab session so Python can restore it after a page reload. */
-  onSessionStateChanged(tabs: TabInfo[]): void;
-
-  /** Notify Python that the Main script tab's URI has changed. */
-  onMainTabChanged(uri: string): void;
-
-  /** Request Python to save the active document. */
-  requestSave(): void;
-
-  /** Request Python to save the active document as a new file. */
-  requestSaveAs(): void;
-
-  /** Request Python to format the active document. */
-  requestFormat(): void;
-
-  /** Request Python to regenerate VapourSynth stubs. */
-  requestGenerateStubs(): void;
-
-  /** Request Python to restart the language server. */
-  requestRestartLsp(): void;
-
-  /** Notify Python that console viewport width has changed (cols). */
-  onConsoleResized(cols: number): void;
-
-  /** Copy text to system clipboard via Python Qt host. */
-  copyToClipboard(text: string): void;
-
+export interface PythonBridge extends BasePythonBridge {
   /** Get stat metadata for a file on disk. */
   statFile(filepath: string, callback: (res: FileStatResponse | null) => void): void;
 
   /** Read content of a file on disk. */
   readFile(filepath: string, callback: (res: string | null) => void): void;
-
-  // Signals (Python signals we connect to in JS)
-
-  /** Generic command dispatch signal emitted by Python (command_id, json_payload). */
-  dispatchCommandSignal: QWebSignal<(command: string, payloadJson: string) => void>;
-}
-
-/** Utility type for Qt's QWebChannel signals. */
-export interface QWebSignal<T extends (...args: never[]) => void> {
-  connect(callback: T): void;
-  disconnect(callback: T): void;
 }
 
 export interface FileStatResponse {
@@ -102,25 +42,49 @@ export interface EditorOptionsPayload {
   'editor.bracketPairColorization.enabled'?: boolean;
 }
 
-/** Global window extensions for Qt and vsview. */
-declare global {
-  interface Window {
-    /** Injected environment variables via QWebEngineScript. */
-    ENV?: {
-      VSVIEW?: boolean;
-      VSVIEW_DEBUG?: boolean;
-      [key: string]: unknown;
-    };
+export interface LspConnectPayload {
+  id: string;
+  name: string;
+  port: number;
+  language: string;
+  fileEventsPattern?: string | null;
+  configurationSection?: string | string[];
+  progressNotifications?: Array<{ begin: string; end: string }>;
+}
 
-    /** Injected by QWebEngineView when a web channel is present. */
-    qt: {
-      webChannelTransport: unknown;
-    };
+/** Commands dispatched from Python to JavaScript. */
+export interface PyToJsCommandMap {
+  'editor.setValue': { text: string };
+  'editor.setTheme': { theme: string };
+  'editor.toggleWordWrap': Record<string, never>;
+  'editor.updateLspSettings': { section: string; settingsJson: string };
+  'editor.updateOptions': { optionsJson: string };
+  'editor.openTab': { uri: string; content: string; language?: string; isMain?: boolean };
+  'editor.selectTab': { uri: string };
+  'editor.tabSaved': { uri: string; oldUri?: string };
+  'editor.triggerSave': Record<string, never>;
+  'editor.triggerSaveAs': Record<string, never>;
+  'editor.triggerFormat': Record<string, never>;
+  'console.append': { stream?: string; text: string };
+  'console.toggle': { state?: boolean };
+  'lsp.connect': LspConnectPayload;
+  'lsp.disconnect': { id?: string };
+}
 
-    /** The QWebChannel constructor, loaded via <script> tag. */
-    QWebChannel: new (
-      transport: unknown,
-      callback: (channel: { objects: Record<string, unknown> }) => void,
-    ) => void;
-  }
+/** Commands dispatched from JavaScript to Python. */
+export interface JsToPyCommandMap {
+  'editor.contentChanged': { content: string };
+  'editor.mainContentChanged': { content: string };
+  'editor.cursorPositionChanged': { line: number; column: number };
+  'editor.activeTabChanged': { uri: string };
+  'editor.mainTabChanged': { uri: string };
+  'editor.tabStateChanged': { tabs: TabInfo[] };
+  'editor.sessionStateChanged': { tabs: TabInfo[] };
+  'editor.saveRequested': Record<string, never>;
+  'editor.saveAsRequested': Record<string, never>;
+  'editor.formatRequested': Record<string, never>;
+  'editor.generateStubsRequested': Record<string, never>;
+  'lsp.restartRequested': Record<string, never>;
+  'console.resized': { cols: number };
+  'clipboard.copy': { text: string };
 }

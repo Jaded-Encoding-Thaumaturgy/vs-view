@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import json
+from collections.abc import Mapping, Sequence
 from enum import StrEnum
-from logging import getLogger
-from typing import Any, Self
+from typing import Any, Literal, NotRequired, Self, TypedDict, overload, override
 
-from PySide6.QtCore import QObject, Signal, Slot
-
-logger = getLogger(__name__)
+from vsview.api import BaseWebChannelBridge
 
 
 class PyToJsCommand(StrEnum):
@@ -24,7 +21,6 @@ class PyToJsCommand(StrEnum):
 
 
 class JsToPyCommand(StrEnum):
-    READY = "graph.ready"
     RELOAD = "graph.reload"
     EXPORT_GRAPH = "graph.exportGraph"
     SAVE_IMAGE = "graph.saveImage"
@@ -70,43 +66,96 @@ class ExportFormat(StrEnum):
         return obj
 
 
-class GraphBridge(QObject):
-    # Python -> JavaScript command dispatch signal (channel transport)
-    dispatchCommandSignal = Signal(str, str)
-    # Lifecycle signal emitted when web frontend completes initialization
-    webReady = Signal()
-    # Unified signal emitted when any command arrives from JavaScript
-    commandReceived = Signal(JsToPyCommand, dict)
+class OutputItem(TypedDict):
+    index: int
+    name: str
+    isActive: bool
 
-    def __init__(self, parent: QObject | None = None) -> None:
-        super().__init__(parent)
-        self._is_ready = False
 
-    @property
-    def is_ready(self) -> bool:
-        """Whether the frontend web view has completed initialization."""
-        return self._is_ready
+class SetOutputsPayload(TypedDict):
+    outputs: Sequence[OutputItem]
 
-    def dispatch(self, command: PyToJsCommand, payload: Any = None) -> None:
-        payload_str = json.dumps(payload) if payload is not None else ""
-        self.dispatchCommandSignal.emit(command, payload_str)
 
-    @Slot()
-    def onWebReady(self) -> None:
-        """Invoked by JavaScript when the page and QWebChannel are initialized."""
-        logger.debug("Graph web frontend is ready.")
-        self._is_ready = True
-        self.webReady.emit()
+class GraphOptionsPayload(TypedDict):
+    direction: Literal["TB", "LR"]
+    layout: Literal["dagre", "breadthfirst", "concentric", "grid"]
+    rankSep: int
+    nodeSep: int
+    heatmap: bool
+    showTimings: bool
+    timingUnit: Literal["auto", "ms", "ns"]
+    autoFitOnReload: bool
 
-    @Slot(str, str)
-    def dispatchFromJs(self, command: str, payload_json: str) -> None:
-        """Receive an action or event from the JavaScript frontend and forward via commandReceived."""
-        try:
-            command = JsToPyCommand(command)
-            parsed = json.loads(payload_json)
-            payload = parsed if isinstance(parsed, dict) else {"value": parsed}
-        except (json.JSONDecodeError, TypeError, ValueError) as e:
-            logger.error("Failed to decode JSON from JS dispatch '%s': %s", command, e)
-            return
 
-        self.commandReceived.emit(command, payload)
+class NodeTimingUpdate(TypedDict):
+    id: str
+    processing_time_ns: int
+    processing_time_ms: float
+
+
+class UpdateTimingsPayload(TypedDict):
+    timings: Sequence[NodeTimingUpdate]
+
+
+class SelectNodePayload(TypedDict):
+    id: str
+
+
+class KeybindingRule(TypedDict):
+    action: str
+    key: str
+    ctrl: bool
+    shift: bool
+    alt: bool
+    meta: bool
+
+
+class SetKeybindingsPayload(TypedDict):
+    keybindings: Sequence[KeybindingRule]
+
+
+class RequestPngExportPayload(TypedDict):
+    destination: Literal["clipboard", "file"]
+    path: NotRequired[str]
+
+
+class ThemeTokens(TypedDict):
+    isDark: bool
+    bg: str
+    surface: str
+    surfaceElevated: str
+    surfaceHover: str
+    border: str
+    textPrimary: str
+    textSecondary: str
+    textMuted: str
+    accent: str
+    accentAmber: str
+    accentEmerald: str
+    danger: str
+
+
+class GraphBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
+    @overload  # type: ignore[override]
+    def dispatch(self, command: Literal[PyToJsCommand.FIT_VIEW, PyToJsCommand.RESET_VIEW]) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.SET_DATA], payload: Mapping[str, Any]) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.SET_OPTIONS], payload: GraphOptionsPayload) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.UPDATE_TIMINGS], payload: UpdateTimingsPayload) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.SET_OUTPUTS], payload: SetOutputsPayload) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.SELECT_NODE], payload: SelectNodePayload) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.SET_KEYBINDINGS], payload: SetKeybindingsPayload) -> None: ...
+    @overload
+    def dispatch(
+        self, command: Literal[PyToJsCommand.REQUEST_PNG_EXPORT], payload: RequestPngExportPayload
+    ) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.THEME_UPDATE], payload: ThemeTokens) -> None: ...
+    @override
+    def dispatch(self, command: PyToJsCommand, payload: Mapping[str, Any] | None = None) -> None:
+        super().dispatch(command, payload)

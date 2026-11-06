@@ -45,9 +45,11 @@ vi.mock('vscode', () => {
   };
 });
 
+import type { QWebSignal } from 'vsview-shared';
+
 import type { EditorService } from '../editor/service';
 import type { LspService } from '../lsp/service';
-import type { FileStatResponse, PythonBridge, QWebSignal } from '../types';
+import type { FileStatResponse, PythonBridge } from '../types';
 import type { ConsolePanelService } from '../ui/console';
 import { DOM_IDS } from '../ui/constants';
 import { BridgeService } from './python';
@@ -252,21 +254,8 @@ function createMockPythonBridge(): MockPythonBridgeFixture {
   };
 
   const bridge: PythonBridge = {
-    onEditorReady: vi.fn(),
-    onContentChanged: vi.fn(),
-    onMainContentChanged: vi.fn(),
-    onCursorPositionChanged: vi.fn(),
-    onActiveTabChanged: vi.fn(),
-    onTabStateChanged: vi.fn(),
-    onSessionStateChanged: vi.fn(),
-    onMainTabChanged: vi.fn(),
-    requestSave: vi.fn(),
-    requestSaveAs: vi.fn(),
-    requestFormat: vi.fn(),
-    requestGenerateStubs: vi.fn(),
-    requestRestartLsp: vi.fn(),
-    onConsoleResized: vi.fn(),
-    copyToClipboard: vi.fn(),
+    onWebReady: vi.fn(),
+    dispatchFromJs: vi.fn(),
     statFile: vi.fn(),
     readFile: vi.fn(),
     dispatchCommandSignal,
@@ -451,7 +440,10 @@ describe('BridgeService', () => {
 
       mockBridgeFixture.emitCommand('editor.triggerSave', '{}');
       expect(mockEditor.requestSave).toHaveBeenCalledOnce();
-      expect(bridge.onContentChanged).toHaveBeenCalledWith('active content');
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.contentChanged',
+        JSON.stringify({ content: 'active content' }),
+      );
 
       mockBridgeFixture.emitCommand('editor.triggerSaveAs', '{}');
       expect(mockEditor.requestSaveAs).toHaveBeenCalledOnce();
@@ -605,8 +597,8 @@ describe('BridgeService', () => {
       expect(mockLsp.disconnect).toHaveBeenCalledWith(undefined);
     });
 
-    it('logs warning on unrecognized commands without throwing', () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('logs debug message on unrecognized commands without throwing', () => {
+      const consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
@@ -614,8 +606,8 @@ describe('BridgeService', () => {
         mockBridgeFixture.emitCommand('custom.nonexistentAction', '{}');
       }).not.toThrow();
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Unknown bridge command: custom.nonexistentAction',
+      expect(consoleDebugSpy).toHaveBeenCalledWith(
+        'No handler registered for bridge command: custom.nonexistentAction',
       );
     });
   });
@@ -630,12 +622,15 @@ describe('BridgeService', () => {
         mockBridgeFixture.emitCommand('editor.setValue', '{malformed JSON syntax');
       }).not.toThrow();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Error parsing the JSON', expect.any(Error));
-      // Handlers receive empty payload {} on syntax error
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Failed to parse command payload for editor.setValue:',
+        expect.any(Error),
+      );
       expect(mockEditor.setValue).not.toHaveBeenCalled();
     });
 
     it('safely handles non-object JSON payloads (e.g. primitives)', () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
@@ -680,7 +675,7 @@ describe('BridgeService', () => {
 
         const result = BridgeService.active;
         expect(result.ok).toBe(true);
-        expect(result.unwrap()).toBe(mockBridgeFixture.bridge);
+        expect(result.unwrap()).toBe(service);
       });
 
       it('returns err after BridgeService is disposed', () => {
@@ -806,35 +801,42 @@ describe('BridgeService', () => {
       mockEditor.emitContentChange();
 
       // Should not be called immediately
-      expect(bridge.onContentChanged).not.toHaveBeenCalled();
-      expect(bridge.onMainContentChanged).not.toHaveBeenCalled();
+      expect(bridge.dispatchFromJs).not.toHaveBeenCalled();
 
       // Advance by 200ms (still within 300ms window)
       vi.advanceTimersByTime(200);
-      expect(bridge.onContentChanged).not.toHaveBeenCalled();
+      expect(bridge.dispatchFromJs).not.toHaveBeenCalled();
 
       // Trigger another content change to reset debounce
       mockEditor.emitContentChange();
       vi.advanceTimersByTime(200);
-      expect(bridge.onContentChanged).not.toHaveBeenCalled();
+      expect(bridge.dispatchFromJs).not.toHaveBeenCalled();
 
       // Complete the remaining 100ms
       vi.advanceTimersByTime(100);
-      expect(bridge.onContentChanged).toHaveBeenCalledOnce();
-      expect(bridge.onContentChanged).toHaveBeenCalledWith('active content');
-      expect(bridge.onMainContentChanged).toHaveBeenCalledOnce();
-      expect(bridge.onMainContentChanged).toHaveBeenCalledWith('main content');
-      expect(bridge.onSessionStateChanged).toHaveBeenCalledOnce();
-      expect(bridge.onSessionStateChanged).toHaveBeenCalledWith([
-        {
-          uri: 'file:///workspace/script.py',
-          title: 'script.py',
-          isMain: true,
-          isDirty: true,
-          language: 'python',
-          content: 'main content',
-        },
-      ]);
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.contentChanged',
+        JSON.stringify({ content: 'active content' }),
+      );
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.mainContentChanged',
+        JSON.stringify({ content: 'main content' }),
+      );
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.sessionStateChanged',
+        JSON.stringify({
+          tabs: [
+            {
+              uri: 'file:///workspace/script.py',
+              title: 'script.py',
+              isMain: true,
+              isDirty: true,
+              language: 'python',
+              content: 'main content',
+            },
+          ],
+        }),
+      );
     });
 
     it('flushes pending content changes immediately on tab changes', () => {
@@ -844,17 +846,27 @@ describe('BridgeService', () => {
 
       // Start debounce timer
       mockEditor.emitContentChange();
-      expect(bridge.onContentChanged).not.toHaveBeenCalled();
+      expect(bridge.dispatchFromJs).not.toHaveBeenCalled();
 
       // Active tab changed triggers immediate flush
       mockEditor.emitActiveTabChange('file:///new_tab.py');
-      expect(bridge.onActiveTabChanged).toHaveBeenCalledWith('file:///new_tab.py');
-      expect(bridge.onContentChanged).toHaveBeenCalledOnce();
-      expect(bridge.onMainContentChanged).toHaveBeenCalledOnce();
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.activeTabChanged',
+        JSON.stringify({ uri: 'file:///new_tab.py' }),
+      );
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.contentChanged',
+        JSON.stringify({ content: 'active content' }),
+      );
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.mainContentChanged',
+        JSON.stringify({ content: 'main content' }),
+      );
 
       // Timer should have been cleared; advancing 300ms does not fire duplicate call
+      const callCount = vi.mocked(bridge.dispatchFromJs).mock.calls.length;
       vi.advanceTimersByTime(300);
-      expect(bridge.onContentChanged).toHaveBeenCalledOnce();
+      expect(bridge.dispatchFromJs).toHaveBeenCalledTimes(callCount);
     });
 
     it('flushes pending content changes immediately on main tab changes', () => {
@@ -863,15 +875,25 @@ describe('BridgeService', () => {
       void fixture;
 
       mockEditor.emitContentChange();
-      expect(bridge.onContentChanged).not.toHaveBeenCalled();
+      expect(bridge.dispatchFromJs).not.toHaveBeenCalled();
 
       mockEditor.emitMainTabChange('file:///main_script.py');
-      expect(bridge.onMainTabChanged).toHaveBeenCalledWith('file:///main_script.py');
-      expect(bridge.onContentChanged).toHaveBeenCalledOnce();
-      expect(bridge.onMainContentChanged).toHaveBeenCalledOnce();
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.mainTabChanged',
+        JSON.stringify({ uri: 'file:///main_script.py' }),
+      );
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.contentChanged',
+        JSON.stringify({ content: 'active content' }),
+      );
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.mainContentChanged',
+        JSON.stringify({ content: 'main content' }),
+      );
 
+      const callCount = vi.mocked(bridge.dispatchFromJs).mock.calls.length;
       vi.advanceTimersByTime(300);
-      expect(bridge.onContentChanged).toHaveBeenCalledOnce();
+      expect(bridge.dispatchFromJs).toHaveBeenCalledTimes(callCount);
     });
   });
 
@@ -897,7 +919,7 @@ describe('BridgeService', () => {
       bridgeService.initBridge();
 
       expect(readySpy).toHaveBeenCalledWith(mockBridgeFixture.bridge);
-      expect(mockBridgeFixture.bridge.onEditorReady).toHaveBeenCalledOnce();
+      expect(mockBridgeFixture.bridge.onWebReady).toHaveBeenCalledOnce();
       expect(mockBridgeFixture.bridge.dispatchCommandSignal.connect).toHaveBeenCalledOnce();
 
       // Loading overlay removal delayed by 200ms
@@ -939,7 +961,9 @@ describe('BridgeService', () => {
 
       bridgeService.initBridge();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Bridge object not found in channel.');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        new Error('Bridge object not found on Qt WebChannel'),
+      );
       expect(readySpy).not.toHaveBeenCalled();
 
       // Overlay still scheduled for removal
@@ -955,16 +979,19 @@ describe('BridgeService', () => {
       void fixture;
 
       mockEditor.emitCursorPositionChange(42, 10);
-      expect(bridge.onCursorPositionChanged).toHaveBeenCalledWith(42, 10);
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
+        'editor.cursorPositionChanged',
+        JSON.stringify({ line: 42, column: 10 }),
+      );
 
       mockEditor.emitSaveRequest();
-      expect(bridge.requestSave).toHaveBeenCalledOnce();
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith('editor.saveRequested', '{}');
 
       mockEditor.emitSaveAsRequest();
-      expect(bridge.requestSaveAs).toHaveBeenCalledOnce();
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith('editor.saveAsRequested', '{}');
 
       mockEditor.emitFormatRequest();
-      expect(bridge.requestFormat).toHaveBeenCalledOnce();
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith('editor.formatRequested', '{}');
     });
 
     it('forwards console service toggle and resize events to editor layout', () => {
@@ -994,11 +1021,11 @@ describe('BridgeService', () => {
 
       // Debounce timer cancelled, no bridge calls when time advances
       vi.advanceTimersByTime(500);
-      expect(bridge.onContentChanged).not.toHaveBeenCalled();
+      expect(bridge.dispatchFromJs).not.toHaveBeenCalled();
 
       // Events from editor service no longer trigger anything
       mockEditor.emitCursorPositionChange(1, 1);
-      expect(bridge.onCursorPositionChanged).not.toHaveBeenCalled();
+      expect(bridge.dispatchFromJs).not.toHaveBeenCalled();
     });
 
     it('supports Symbol.dispose', () => {

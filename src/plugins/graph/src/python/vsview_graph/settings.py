@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Self, cast
+from typing import Annotated, Literal, Self, cast
 
 from pydantic import BaseModel
 from PySide6.QtCore import QKeyCombination, Qt
@@ -9,6 +9,7 @@ from PySide6.QtGui import QKeySequence
 
 from vsview.api import ActionDefinition, Checkbox, Dropdown, Spin
 
+from .bridge import KeybindingRule
 from .constants import PLUGIN_IDENTIFIER
 
 
@@ -126,7 +127,7 @@ class GraphShortcut(StrEnum):
         parts = self.value.split("_")
         return parts[0] + "".join(p.capitalize() for p in parts[1:])
 
-    def to_rule(self, key_sequence: QKeySequence) -> dict[str, Any] | None:
+    def to_rule(self, key_sequence: QKeySequence) -> KeybindingRule | None:
         """Convert a configured QKeySequence into a preconfigured payload for the TS frontend."""
         if key_sequence.isEmpty():
             return None

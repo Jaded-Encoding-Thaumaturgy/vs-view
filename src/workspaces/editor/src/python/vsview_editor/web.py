@@ -1,70 +1,126 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Mapping
-from logging import DEBUG, ERROR, WARNING, getLogger
+from collections.abc import Mapping, Sequence
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, NotRequired, TypedDict, override
+from typing import Any, ClassVar, Literal, NotRequired, TypedDict, overload, override
 
-from jetpytools import CustomNotImplementedError, copy_signature
-from PySide6.QtCore import QEvent, QObject, QUrl, Signal, Slot
-from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QPalette, Qt
-from PySide6.QtWebChannel import QWebChannel
-from PySide6.QtWebEngineCore import QWebEnginePage
-from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
+from PySide6.QtCore import QObject, QUrl, Signal
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+from PySide6.QtWidgets import QApplication, QWidget
 
-from vsview.api import DefaultWebChannelScript, VSViewEnInjectionScript, setup_web_logger
+from vsview.api import BaseWebChannelBridge, BaseWebEngineView, SafeSlot
 
-from .lsp import LSPConfig
-from .utils import SafeSlot, extract_supported_script_files
-
-logger = getLogger(__name__)
-js_logger = setup_web_logger("vsview_editor_js")
+from .utils import extract_supported_script_files
 
 
-class MonacoBridge(QObject):
+class PyToJsCommand(StrEnum):
+    SET_VALUE = "editor.setValue"
+    SET_THEME = "editor.setTheme"
+    TOGGLE_WORD_WRAP = "editor.toggleWordWrap"
+    UPDATE_LSP_SETTINGS = "editor.updateLspSettings"
+    UPDATE_OPTIONS = "editor.updateOptions"
+    OPEN_TAB = "editor.openTab"
+    SELECT_TAB = "editor.selectTab"
+    TAB_SAVED = "editor.tabSaved"
+    TRIGGER_SAVE = "editor.triggerSave"
+    TRIGGER_SAVE_AS = "editor.triggerSaveAs"
+    TRIGGER_FORMAT = "editor.triggerFormat"
+    CONSOLE_APPEND = "console.append"
+    CONSOLE_TOGGLE = "console.toggle"
+    LSP_CONNECT = "lsp.connect"
+    LSP_DISCONNECT = "lsp.disconnect"
+
+
+class JsToPyCommand(StrEnum):
+    CONTENT_CHANGED = "editor.contentChanged"
+    MAIN_CONTENT_CHANGED = "editor.mainContentChanged"
+    CURSOR_POSITION_CHANGED = "editor.cursorPositionChanged"
+    ACTIVE_TAB_CHANGED = "editor.activeTabChanged"
+    MAIN_TAB_CHANGED = "editor.mainTabChanged"
+    TAB_STATE_CHANGED = "editor.tabStateChanged"
+    SESSION_STATE_CHANGED = "editor.sessionStateChanged"
+    SAVE_REQUESTED = "editor.saveRequested"
+    SAVE_AS_REQUESTED = "editor.saveAsRequested"
+    FORMAT_REQUESTED = "editor.formatRequested"
+    GENERATE_STUBS_REQUESTED = "editor.generateStubsRequested"
+    RESTART_LSP_REQUESTED = "lsp.restartRequested"
+    CONSOLE_RESIZED = "console.resized"
+    COPY_TO_CLIPBOARD = "clipboard.copy"
+
+
+class SetValuePayload(TypedDict):
+    text: str
+
+
+class SetThemePayload(TypedDict):
+    theme: str
+
+
+class UpdateLspSettingsPayload(TypedDict):
+    section: str
+    settingsJson: str
+
+
+class UpdateOptionsPayload(TypedDict):
+    optionsJson: str
+
+
+class OpenTabPayload(TypedDict):
+    uri: str
+    content: str
+    language: NotRequired[str]
+    isMain: NotRequired[bool]
+
+
+class SelectTabPayload(TypedDict):
+    uri: str
+
+
+class TabSavedPayload(TypedDict):
+    uri: str
+    oldUri: NotRequired[str]
+
+
+class ConsoleAppendPayload(TypedDict):
+    stream: NotRequired[str]
+    text: str
+
+
+class ConsoleTogglePayload(TypedDict):
+    state: NotRequired[bool]
+
+
+class LspConnectPayload(TypedDict):
+    id: str
+    name: str
+    port: int
+    language: str
+    fileEventsPattern: NotRequired[str | None]
+    configurationSection: NotRequired[str | Sequence[str]]
+    progressNotifications: NotRequired[Sequence[Mapping[str, str]]]
+
+
+class LspDisconnectPayload(TypedDict):
+    id: NotRequired[str]
+
+
+class TabInfo(TypedDict):
+    uri: str
+    title: str
+    isMain: bool
+    isDirty: bool
+    language: str
+    content: NotRequired[str]
+
+
+class MonacoBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
     """Bridge object registered on QWebChannel for Python <-> JS communication."""
-
-    # Python -> JS dispatch signal
-    dispatchCommandSignal = Signal(str, str)
-    """Dispatch generic command (command_id, payload_json) to JavaScript."""
-
-    # Python-side signals for internal use
-    editorReady = Signal()
-    """Called when Monaco finishes initialization."""
-    contentChanged = Signal(str)
-    """Called when the editor content changes (debounced)."""
-    mainContentChanged = Signal(str)
-    """Called when the Main script content changes (debounced)."""
-    cursorPositionChanged = Signal(int, int)
-    """Called when editor cursor position changes (line, column)."""
-    activeTabChanged = Signal(str)
-    """Called when the active tab in Monaco changes."""
-    tabStateChanged = Signal(list)
-    """Called when open tabs state metadata is updated from JavaScript."""
-    sessionStateChanged = Signal(list)
-    """Called when complete editor session state is updated from JavaScript."""
-    mainTabChanged = Signal(str)
-    """Called when the Main script tab in Monaco changes."""
-    saveRequested = Signal()
-    """Called when Monaco requests saving the current script."""
-    saveAsRequested = Signal()
-    """Called when Monaco requests saving the current script as a new file."""
-    formatRequested = Signal()
-    """Called when Monaco requests formatting the current script."""
-    generateStubsRequested = Signal()
-    """Called when Monaco requests generating VapourSynth stubs."""
-    restartLspRequested = Signal()
-    """Called when Monaco requests restarting the language server."""
-    consoleResized = Signal(int)
-    """Called when console viewport width changes (cols)."""
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._content = ""
         self._main_content = ""
-        self._ready = False
 
     @property
     def content(self) -> str:
@@ -73,155 +129,67 @@ class MonacoBridge(QObject):
     @content.setter
     def content(self, text: str) -> None:
         self._content = text
-        self.dispatch("editor.setValue", {"text": text})
+        self.dispatch(PyToJsCommand.SET_VALUE, {"text": text})
 
     @property
     def main_content(self) -> str:
         return self._main_content or self._content
 
-    @property
-    def ready(self) -> bool:
-        return self._ready
+    @overload  # type: ignore[override]
+    def dispatch(
+        self,
+        command: Literal[
+            PyToJsCommand.TOGGLE_WORD_WRAP,
+            PyToJsCommand.TRIGGER_SAVE,
+            PyToJsCommand.TRIGGER_SAVE_AS,
+            PyToJsCommand.TRIGGER_FORMAT,
+        ],
+    ) -> None: ...
+    @overload
+    def dispatch(
+        self,
+        command: Literal[PyToJsCommand.CONSOLE_TOGGLE],
+        payload: ConsoleTogglePayload | None = None,
+    ) -> None: ...
+    @overload
+    def dispatch(
+        self,
+        command: Literal[PyToJsCommand.LSP_DISCONNECT],
+        payload: LspDisconnectPayload | None = None,
+    ) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.SET_VALUE], payload: SetValuePayload) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.SET_THEME], payload: SetThemePayload) -> None: ...
+    @overload
+    def dispatch(
+        self, command: Literal[PyToJsCommand.UPDATE_LSP_SETTINGS], payload: UpdateLspSettingsPayload
+    ) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.UPDATE_OPTIONS], payload: UpdateOptionsPayload) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.OPEN_TAB], payload: OpenTabPayload) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.SELECT_TAB], payload: SelectTabPayload) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.TAB_SAVED], payload: TabSavedPayload) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.CONSOLE_APPEND], payload: ConsoleAppendPayload) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.LSP_CONNECT], payload: LspConnectPayload) -> None: ...
+    @override
+    def dispatch(self, command: PyToJsCommand, payload: Mapping[str, Any] | None = None) -> None:
+        super().dispatch(command, payload)
 
-    def dispatch(self, command: str, payload_json: Any = None) -> None:
-        """Dispatch a command payload to the JavaScript frontend."""
-        payload_str = json.dumps(payload_json) if payload_json is not None else ""
-        self.dispatchCommandSignal.emit(command, payload_str)
-
-    def set_theme(self, theme: str) -> None:
-        """Change the Monaco editor theme."""
-        self.dispatch("editor.setTheme", {"theme": theme})
-
-    def connect_lsp(self, port: int, config: LSPConfig) -> None:
-        """Notify JS to connect to LSP WebSocket port for a specified LSP configuration."""
-        payload: dict[str, Any] = {
-            "id": config.id,
-            "name": config.name,
-            "port": port,
-            "language": config.language,
-            "fileEventsPattern": config.file_events_pattern,
-        }
-        if config.configuration_section is not None:
-            payload["configurationSection"] = config.configuration_section
-        if config.progress_notifications is not None:
-            payload["progressNotifications"] = [dict(pair) for pair in config.progress_notifications]
-
-        self.dispatch("lsp.connect", payload)
-
-    def disconnect_lsp(self, server_id: str | None = None) -> None:
-        """Notify JS to disconnect an LSP client (or all clients if server_id is None)."""
-        self.dispatch("lsp.disconnect", {"id": server_id} if server_id is not None else {})
-
-    @Slot()
-    def toggle_word_wrap(self) -> None:
-        """Toggle word wrap in Monaco."""
-        self.dispatch("editor.toggleWordWrap")
-
-    @Slot()
-    def toggle_console(self) -> None:
-        """Toggle the output console panel in frontend."""
-        self.dispatch("console.toggle")
-
-    def update_lsp_settings(self, section: str, settings_json: str) -> None:
-        """Push updated LSP settings JSON to Monaco for specified configuration section."""
-        self.dispatch("editor.updateLspSettings", {"section": section, "settingsJson": settings_json})
-
-    def update_editor_options(self, options_json: str) -> None:
-        """Push updated Monaco editor options JSON to JavaScript."""
-        self.dispatch("editor.updateOptions", {"optionsJson": options_json})
-
-    @Slot()
-    def trigger_save(self) -> None:
-        """Notify JS to flush content and trigger save request."""
-        self.dispatch("editor.triggerSave")
-
-    @Slot()
-    def trigger_save_as(self) -> None:
-        """Notify JS to flush content and trigger save-as request."""
-        self.dispatch("editor.triggerSaveAs")
-
-    @Slot()
-    def trigger_format(self) -> None:
-        """Notify JS to flush content and trigger format request."""
-        self.dispatch("editor.triggerFormat")
-
-    def open_tab(self, uri: str, content: str, language: str = "python", is_main: bool = False) -> None:
-        """Open or focus a tab in Monaco."""
-        self.dispatch("editor.openTab", {"uri": uri, "content": content, "language": language, "isMain": is_main})
-
-    def select_tab(self, uri: str) -> None:
-        """Select active tab in Monaco."""
-        self.dispatch("editor.selectTab", {"uri": uri})
-
-    def tab_saved(self, uri: str, old_uri: str = "") -> None:
-        """Notify JS that the tab has been saved."""
-        self.dispatch("editor.tabSaved", {"uri": uri, "oldUri": old_uri})
-
-    # Slots called from JavaScript
-    @Slot()
-    def onEditorReady(self) -> None:
-        logger.debug("Monaco editor is ready (Python)")
-        self._ready = True
-        self.editorReady.emit()
-
-    @Slot(str)
-    def onContentChanged(self, content: str) -> None:
-        self._content = content
-        self.contentChanged.emit(content)
-
-    @Slot(str)
-    def onMainContentChanged(self, main_content: str) -> None:
-        self._main_content = main_content
-        self.mainContentChanged.emit(main_content)
-
-    @Slot(int, int)
-    def onCursorPositionChanged(self, line: int, column: int) -> None:
-        self.cursorPositionChanged.emit(line, column)
-
-    @Slot(str)
-    def onActiveTabChanged(self, uri: str) -> None:
-        self.activeTabChanged.emit(uri)
-
-    @Slot(list)
-    def onTabStateChanged(self, tabs: list[TabInfo]) -> None:
-        self.tabStateChanged.emit(tabs)
-
-    @Slot(list)
-    def onSessionStateChanged(self, tabs: list[TabInfo]) -> None:
-        self.sessionStateChanged.emit(tabs)
-
-    @Slot(str)
-    def onMainTabChanged(self, uri: str) -> None:
-        self.mainTabChanged.emit(uri)
-
-    @Slot()
-    def requestSave(self) -> None:
-        self.saveRequested.emit()
-
-    @Slot()
-    def requestSaveAs(self) -> None:
-        self.saveAsRequested.emit()
-
-    @Slot()
-    def requestFormat(self) -> None:
-        self.formatRequested.emit()
-
-    @Slot()
-    def requestGenerateStubs(self) -> None:
-        self.generateStubsRequested.emit()
-
-    @Slot()
-    def requestRestartLsp(self) -> None:
-        self.restartLspRequested.emit()
-
-    @Slot(int)
-    def onConsoleResized(self, cols: int) -> None:
-        self.consoleResized.emit(cols)
-
-    @Slot(str)
-    def copyToClipboard(self, text: str) -> None:
-        """Copy text to system clipboard via Qt QApplication."""
-        QApplication.clipboard().setText(text)
+    @override
+    def on_command_received(self, command: JsToPyCommand, payload: dict[str, Any]) -> None:
+        match command:
+            case JsToPyCommand.CONTENT_CHANGED:
+                self._content = str(payload.get("content", ""))
+            case JsToPyCommand.MAIN_CONTENT_CHANGED:
+                self._main_content = str(payload.get("content", ""))
+            case JsToPyCommand.COPY_TO_CLIPBOARD:
+                QApplication.clipboard().setText(str(payload.get("text", "")))
 
     @SafeSlot(str, result=dict)
     def statFile(self, filepath: str) -> dict[str, Any] | None:
@@ -245,89 +213,14 @@ class MonacoBridge(QObject):
         return p.read_text(encoding="utf-8", errors="replace") if p.is_file() else None
 
 
-class MonacoWebPage(QWebEnginePage):
-    LOG_LEVELS: Mapping[QWebEnginePage.JavaScriptConsoleMessageLevel, int] = {
-        QWebEnginePage.JavaScriptConsoleMessageLevel.InfoMessageLevel: DEBUG,
-        QWebEnginePage.JavaScriptConsoleMessageLevel.WarningMessageLevel: WARNING,
-        QWebEnginePage.JavaScriptConsoleMessageLevel.ErrorMessageLevel: ERROR,
-    }
+class MonacoEditorWidget(BaseWebEngineView[MonacoBridge]):
+    logger_name: ClassVar[str] = "vsview_editor_js"
 
-    @property
-    def view(self) -> MonacoEditorWidget:
-        if isinstance(view := self.parent(), MonacoEditorWidget):
-            return view
-        raise CustomNotImplementedError
-
-    @override
-    def javaScriptAlert(self, security_origin: QUrl | str, msg: str) -> None:
-        QMessageBox.information(self.view, "Alert", msg, QMessageBox.StandardButton.Ok)
-
-    @override
-    def javaScriptConfirm(self, security_origin: QUrl | str, msg: str) -> bool:
-        result = QMessageBox.question(
-            self.view,
-            "Confirm",
-            msg,
-            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Cancel,
-        )
-        return result == QMessageBox.StandardButton.Ok
-
-    @override
-    def javaScriptConsoleMessage(
-        self,
-        level: QWebEnginePage.JavaScriptConsoleMessageLevel,
-        message: str,
-        line_number: int,
-        source_id: str,
-    ) -> None:
-        js_logger.log(
-            self.LOG_LEVELS.get(level, DEBUG),
-            message,
-            extra={"js_source": source_id, "js_lineno": line_number},
-        )
-
-
-class MonacoEditorWidget(QWebEngineView):
     filesDropped = Signal(list)
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self.setAcceptDrops(True)
-
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-        self.setPage(MonacoWebPage(self, backgroundColor=self.palette().color(QPalette.ColorRole.Window)))
-
-        # Bridge for Python <-> JS communication
-        self.bridge = MonacoBridge(self)
-
-        # Set up QWebChannel
-        channel = QWebChannel(self, propertyUpdateInterval=-1)
-        channel.registerObject("bridge", self.bridge)
-        self.page().setWebChannel(channel)
-
-        # Inject environment configuration into JavaScript before document creation
-        self.page().scripts().insert(DefaultWebChannelScript())
-        self.page().scripts().insert(VSViewEnInjectionScript())
-
-    @override
-    def changeEvent(self, event: QEvent) -> None:
-        super().changeEvent(event)
-        if event.type() == QEvent.Type.PaletteChange:
-            self.page().setBackgroundColor(self.palette().color(QPalette.ColorRole.Window))
-
-    @copy_signature(QWebEngineView.load)
-    @override
-    def load(self, thing: Any, /) -> None:
-        logger.debug("Loading Monaco editor from %s", thing)
-        return super().load(thing)
-
-    @override
-    def deleteLater(self) -> None:
-        self.page().webChannel().deregisterObject(self.bridge)
-        self.page().webChannel().deleteLater()
-        self.page().deleteLater()
-        return super().deleteLater()
 
     @override
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
@@ -350,12 +243,3 @@ class MonacoEditorWidget(QWebEngineView):
             self.filesDropped.emit(files)
             return
         event.ignore()
-
-
-class TabInfo(TypedDict):
-    uri: str
-    title: str
-    isMain: bool
-    isDirty: bool
-    language: str
-    content: NotRequired[str]

@@ -1,103 +1,65 @@
 import * as vscode from 'vscode';
-import { DisposableStore, Result, ResultAsync, toDisposable } from 'vsview-shared';
+import { Result, ResultAsync, WebChannelBridge } from 'vsview-shared';
 
 import type { EditorService } from '../editor/service';
 import type { LspService } from '../lsp/service';
-import type { FileStatResponse, PythonBridge, QWebSignal } from '../types';
+import type { FileStatResponse, JsToPyCommandMap, PyToJsCommandMap, PythonBridge } from '../types';
 import type { ConsolePanelService } from '../ui/console';
 import { DOM_IDS } from '../ui/constants';
 
-export class BridgeService implements vscode.Disposable {
+export class BridgeService
+  extends WebChannelBridge<PyToJsCommandMap, JsToPyCommandMap, PythonBridge>
+  implements vscode.Disposable
+{
   private static activeInstance: BridgeService | null = null;
 
   public readonly onDidReady: vscode.Event<PythonBridge>;
 
-  private readonly disposables = new DisposableStore();
   private readonly onDidReadyEmitter = new vscode.EventEmitter<PythonBridge>();
 
-  private bridge: PythonBridge | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private loadingOverlayTimer: ReturnType<typeof setTimeout> | null = null;
-
-  public static get active(): Result<PythonBridge> {
-    const bridge = BridgeService.activeInstance?.bridge;
-    return bridge
-      ? Result.ok(bridge)
-      : Result.err(new Error('BridgeService instance is not available'));
-  }
-
-  /** Read file content from host via Python bridge. */
-  public static readFile(filePath: string): ResultAsync<string> {
-    return ResultAsync.fromResult(BridgeService.active).andThen((bridge) =>
-      Result.fromPromise(
-        new Promise<string>((resolve, reject) => {
-          bridge.readFile(filePath, (data) => {
-            if (data !== null) {
-              resolve(data);
-            } else {
-              reject(new Error(`Failed to read file: ${filePath}`));
-            }
-          });
-        }),
-      ),
-    );
-  }
-
-  /** Query file metadata from host via Python bridge. */
-  public static statFile(filePath: string): ResultAsync<FileStatResponse> {
-    return ResultAsync.fromResult(BridgeService.active).andThen((bridge) =>
-      Result.fromPromise(
-        new Promise<FileStatResponse>((resolve, reject) => {
-          bridge.statFile(filePath, (data) => {
-            if (data !== null) {
-              resolve(data);
-            } else {
-              reject(new Error(`File not found: ${filePath}`));
-            }
-          });
-        }),
-      ),
-    );
-  }
 
   constructor(
     private readonly editorService: EditorService,
     private readonly lspService: LspService,
     private readonly consoleService: ConsolePanelService,
   ) {
+    super();
     BridgeService.activeInstance = this;
     this.onDidReady = this.onDidReadyEmitter.event;
-    this.disposables.add(this.onDidReadyEmitter);
+    this._disposables.add(this.onDidReadyEmitter);
+    this.setupCommandHandlers();
     this.setupConsoleListeners();
     this.setupEditorListeners();
   }
 
-  public initBridge(): void {
-    new window.QWebChannel(window.qt.webChannelTransport, (channel) => {
-      const pyBridge = channel.objects['bridge'] as PythonBridge | undefined;
+  public static get active(): Result<BridgeService> {
+    const instance = BridgeService.activeInstance;
+    return instance?.bridge
+      ? Result.ok(instance)
+      : Result.err(new Error('BridgeService instance is not available'));
+  }
 
-      if (!pyBridge) {
-        console.error('Bridge object not found in channel.');
-        this.removeLoadingOverlayWithDelay();
-        return;
-      }
+  /** Read file content from host via Python bridge. */
+  public static readFile(filePath: string): ResultAsync<string> {
+    return ResultAsync.fromResult(BridgeService.active).andThen((svc) =>
+      svc.invoke((b, cb) => b.readFile(filePath, cb), `Failed to read file: ${filePath}`),
+    );
+  }
 
-      this.bridge = pyBridge;
-      // Connect Python signals to editor/LSP methods
-      this.connectSignals(pyBridge);
-      // Fire ready event to listeners
-      this.onDidReadyEmitter.fire(pyBridge);
-      // Notify Python that JS editor is ready
-      pyBridge.onEditorReady();
-      // Delay hiding the loading screen to allow Monaco to render its first frames
-      this.removeLoadingOverlayWithDelay();
-    });
+  /** Query file metadata from host via Python bridge. */
+  public static statFile(filePath: string): ResultAsync<FileStatResponse> {
+    return ResultAsync.fromResult(BridgeService.active).andThen((svc) =>
+      svc.invoke((b, cb) => b.statFile(filePath, cb), `File not found: ${filePath}`),
+    );
   }
 
   public flushState(): void {
     this.flushContentChanged();
   }
-  public dispose(): void {
+
+  public override dispose(): void {
     if (BridgeService.activeInstance === this) {
       BridgeService.activeInstance = null;
     }
@@ -109,123 +71,50 @@ export class BridgeService implements vscode.Disposable {
       clearTimeout(this.loadingOverlayTimer);
       this.loadingOverlayTimer = null;
     }
-    this.disposables.dispose();
+    super.dispose();
   }
 
-  public [Symbol.dispose](): void {
-    this.dispose();
+  protected override onBridgeReady(pyBridge: PythonBridge): void {
+    this.onDidReadyEmitter.fire(pyBridge);
+    this.removeLoadingOverlayWithDelay();
   }
 
-  private setupConsoleListeners(): void {
-    this.disposables.add(this.consoleService.onDidToggle(() => this.editorService.layout()));
-    this.disposables.add(this.consoleService.onDidResize(() => this.editorService.layout()));
+  protected override onBridgeError(): void {
+    this.removeLoadingOverlayWithDelay();
   }
 
-  private setupEditorListeners(): void {
-    this.disposables.add(this.editorService.onDidChangeContent(() => this.notifyContentChanged()));
-    this.disposables.add(
-      this.editorService.onDidChangeCursorPosition((e) =>
-        this.bridge?.onCursorPositionChanged(e.position.lineNumber, e.position.column),
-      ),
-    );
-    this.disposables.add(
-      this.editorService.onDidChangeActiveTab((uri) => {
-        this.bridge?.onActiveTabChanged(uri ?? '');
-        this.flushContentChanged();
-      }),
-    );
-    this.disposables.add(
-      this.editorService.onDidChangeMainTab((uri) => {
-        this.bridge?.onMainTabChanged(uri ?? '');
-        this.flushContentChanged();
-      }),
-    );
-    this.disposables.add(this.editorService.onDidRequestSave(() => this.bridge?.requestSave()));
-    this.disposables.add(this.editorService.onDidRequestSaveAs(() => this.bridge?.requestSaveAs()));
-    this.disposables.add(this.editorService.onDidRequestFormat(() => this.bridge?.requestFormat()));
-  }
-
-  private removeLoadingOverlay(): void {
-    const overlay = document.getElementById(DOM_IDS.LOADING_OVERLAY)!;
-    overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
-    overlay.classList.add('fade-out');
-  }
-
-  private removeLoadingOverlayWithDelay(delay: number = 200): void {
-    if (this.loadingOverlayTimer !== null) {
-      clearTimeout(this.loadingOverlayTimer);
-    }
-    this.loadingOverlayTimer = setTimeout(() => {
-      this.loadingOverlayTimer = null;
-      this.removeLoadingOverlay();
-    }, delay);
-  }
-
-  private notifyContentChanged(): void {
-    if (this.debounceTimer !== null) {
-      clearTimeout(this.debounceTimer);
-    }
-    this.debounceTimer = setTimeout(() => this.flushContentChanged(), 300);
-  }
-
-  private flushContentChanged(): void {
-    if (this.debounceTimer !== null) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
-    }
-    this.bridge?.onContentChanged(this.editorService.getValue());
-    this.bridge?.onMainContentChanged(this.editorService.getMainValue());
-    this.bridge?.onSessionStateChanged(this.editorService.getSessionState());
-    this.editorService.updateTabBar();
-  }
-
-  private bindSignal<T extends (...args: never[]) => void>(
-    signal: QWebSignal<T>,
-    handler: T,
-  ): void {
-    signal.connect(handler);
-    this.disposables.add(toDisposable(() => signal.disconnect(handler)));
-  }
-
-  private connectSignals(pyBridge: PythonBridge): void {
-    this.bindSignal(pyBridge.dispatchCommandSignal, (command: string, payloadJson: string) => {
-      if (typeof command === 'string') {
-        let payload: Record<string, unknown> = {};
-        if (payloadJson) {
-          payload = Result.fromThrowable(() => JSON.parse(payloadJson)).match({
-            ok: (val) =>
-              typeof val === 'object' && val !== null ? (val as Record<string, unknown>) : {},
-            err: (e) => {
-              console.error('Error parsing the JSON', e);
-              return {};
-            },
-          });
-        }
-        this.handleCommand(command, payload);
-      }
-    });
-  }
-
-  private handleCommand(command: string, payload: Record<string, unknown>): void {
-    const handlers: Record<string, (p: Record<string, unknown>) => void> = {
-      'editor.setValue': (p) => {
+  private setupCommandHandlers(): void {
+    this._disposables.add(
+      this.onCommand('editor.setValue', (p) => {
         if (typeof p.text === 'string') this.editorService.setValue(p.text);
-      },
-      'editor.setTheme': (p) => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('editor.setTheme', (p) => {
         if (typeof p.theme === 'string') {
           this.editorService.setTheme(p.theme);
           this.consoleService.setTheme(p.theme);
         }
-      },
-      'console.append': (p) => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('console.append', (p) => {
         if (typeof p.text === 'string') this.consoleService.append(p.text);
-      },
-      'console.toggle': (p) => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('console.toggle', (p) => {
         const forceState = typeof p.state === 'boolean' ? p.state : undefined;
         this.consoleService.toggle(forceState);
-      },
-      'editor.toggleWordWrap': () => this.editorService.toggleWordWrap(),
-      'lsp.connect': (p) => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('editor.toggleWordWrap', () => {
+        this.editorService.toggleWordWrap();
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('lsp.connect', (p) => {
         if (
           typeof p.id === 'string' &&
           typeof p.name === 'string' &&
@@ -260,61 +149,164 @@ export class BridgeService implements vscode.Disposable {
             progressNotifications,
           });
         }
-      },
-      'lsp.disconnect': (p) => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('lsp.disconnect', (p) => {
         const id = typeof p.id === 'string' ? p.id : undefined;
         void this.lspService.disconnect(id);
-      },
-      'editor.updateLspSettings': (p) => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('editor.updateLspSettings', (p) => {
         if (typeof p.section === 'string' && typeof p.settingsJson === 'string') {
           void this.applyLspSettings(p.section, p.settingsJson);
         }
-      },
-      'editor.updateOptions': (p) => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('editor.updateOptions', (p) => {
         if (typeof p.optionsJson === 'string') {
-          void Result.fromThrowable(() => JSON.parse(p.optionsJson as string)).tap((parsed) => {
+          void Result.fromThrowable(() => JSON.parse(p.optionsJson) as unknown).tap((parsed) => {
             if (parsed && typeof parsed === 'object') {
-              this.editorService.updateOptionsFromMap(parsed as Record<string, unknown>);
+              this.editorService.updateOptionsFromMap(parsed);
             }
           });
         }
-      },
-      'editor.openTab': (p) => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('editor.openTab', (p) => {
         if (typeof p.uri === 'string' && typeof p.content === 'string') {
           const language = typeof p.language === 'string' ? p.language : 'python';
           const isMain = typeof p.isMain === 'boolean' ? p.isMain : false;
           this.editorService.openTab(p.uri, p.content, language, isMain);
         }
-      },
-      'editor.selectTab': (p) => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('editor.selectTab', (p) => {
         if (typeof p.uri === 'string') this.editorService.selectTab(p.uri);
-      },
-      'editor.tabSaved': (p) => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('editor.tabSaved', (p) => {
         if (typeof p.uri === 'string') {
           const oldUri = typeof p.oldUri === 'string' ? p.oldUri : undefined;
           this.editorService.markTabSaved(p.uri, oldUri);
         }
-      },
-      'editor.triggerSave': () => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('editor.triggerSave', () => {
         this.flushState();
         this.editorService.requestSave();
-      },
-      'editor.triggerSaveAs': () => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('editor.triggerSaveAs', () => {
         this.flushState();
         this.editorService.requestSaveAs();
-      },
-      'editor.triggerFormat': () => {
+      }),
+    );
+    this._disposables.add(
+      this.onCommand('editor.triggerFormat', () => {
         this.flushState();
         this.editorService.requestFormat();
-      },
-    };
+      }),
+    );
+  }
 
-    const handler = handlers[command];
-    if (handler) {
-      handler(payload);
-    } else {
-      console.warn(`Unknown bridge command: ${command}`);
+  private setupConsoleListeners(): void {
+    this._disposables.add(this.consoleService.onDidToggle(() => this.editorService.layout()));
+    this._disposables.add(this.consoleService.onDidResize(() => this.editorService.layout()));
+  }
+
+  private setupEditorListeners(): void {
+    this._disposables.add(this.editorService.onDidChangeContent(() => this.notifyContentChanged()));
+    this._disposables.add(
+      this.editorService.onDidChangeCursorPosition((e) => {
+        if (this.bridge) {
+          this.sendEvent('editor.cursorPositionChanged', {
+            line: e.position.lineNumber,
+            column: e.position.column,
+          });
+        }
+      }),
+    );
+    this._disposables.add(
+      this.editorService.onDidChangeActiveTab((uri) => {
+        if (this.bridge) {
+          this.sendEvent('editor.activeTabChanged', { uri: uri ?? '' });
+        }
+        this.flushContentChanged();
+      }),
+    );
+    this._disposables.add(
+      this.editorService.onDidChangeMainTab((uri) => {
+        if (this.bridge) {
+          this.sendEvent('editor.mainTabChanged', { uri: uri ?? '' });
+        }
+        this.flushContentChanged();
+      }),
+    );
+    this._disposables.add(
+      this.editorService.onDidRequestSave(() => {
+        if (this.bridge) {
+          this.sendEvent('editor.saveRequested');
+        }
+      }),
+    );
+    this._disposables.add(
+      this.editorService.onDidRequestSaveAs(() => {
+        if (this.bridge) {
+          this.sendEvent('editor.saveAsRequested');
+        }
+      }),
+    );
+    this._disposables.add(
+      this.editorService.onDidRequestFormat(() => {
+        if (this.bridge) {
+          this.sendEvent('editor.formatRequested');
+        }
+      }),
+    );
+  }
+
+  private removeLoadingOverlay(): void {
+    const overlay = document.getElementById(DOM_IDS.LOADING_OVERLAY)!;
+    overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
+    overlay.classList.add('fade-out');
+  }
+
+  private removeLoadingOverlayWithDelay(delay: number = 200): void {
+    if (this.loadingOverlayTimer !== null) {
+      clearTimeout(this.loadingOverlayTimer);
     }
+    this.loadingOverlayTimer = setTimeout(() => {
+      this.loadingOverlayTimer = null;
+      this.removeLoadingOverlay();
+    }, delay);
+  }
+
+  private notifyContentChanged(): void {
+    if (this.debounceTimer !== null) {
+      clearTimeout(this.debounceTimer);
+    }
+    this.debounceTimer = setTimeout(() => this.flushContentChanged(), 300);
+  }
+
+  private flushContentChanged(): void {
+    if (this.debounceTimer !== null) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    if (this.bridge) {
+      this.sendEvent('editor.contentChanged', { content: this.editorService.getValue() });
+      this.sendEvent('editor.mainContentChanged', { content: this.editorService.getMainValue() });
+      this.sendEvent('editor.sessionStateChanged', { tabs: this.editorService.getSessionState() });
+    }
+    this.editorService.updateTabBar();
   }
 
   private async applyLspSettings(section: string, jsonSettings: string): Promise<void> {

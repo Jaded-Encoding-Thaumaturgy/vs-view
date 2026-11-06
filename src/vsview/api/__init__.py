@@ -60,7 +60,15 @@ from .info import Context, get_cached, get_reload_count, get_state, is_preview, 
 from .output import catch_output, get_output, get_outputs, set_output
 
 if TYPE_CHECKING:
-    from ..app.views.web import DefaultWebChannelScript, VSViewEnInjectionScript, WebEngineScript
+    from ..app.views.web import (
+        BaseWebChannelBridge,
+        BaseWebEnginePage,
+        BaseWebEngineView,
+        DefaultWebChannelScript,
+        SafeSlot,
+        VSViewEnInjectionScript,
+        WebEngineScript,
+    )
 
 __all__ = [
     "AbstractTableModel",
@@ -69,6 +77,9 @@ __all__ = [
     "AnimatedToggle",
     "AudioOutputProxy",
     "BaseGraphicsView",
+    "BaseWebChannelBridge",
+    "BaseWebEnginePage",
+    "BaseWebEngineView",
     "Checkbox",
     "ColorPicker",
     "ColorPickerInput",
@@ -108,6 +119,7 @@ __all__ = [
     "PluginSettings",
     "QObjectCounter",
     "QObjectSet",
+    "SafeSlot",
     "SecretLineEdit",
     "SegmentedControl",
     "Spin",
@@ -146,7 +158,15 @@ if not TYPE_CHECKING:
     def __getattr__(name: str) -> Any:
         import importlib
 
-        if name in ["DefaultWebChannelScript", "VSViewEnInjectionScript", "WebEngineScript"]:
+        if name in [
+            "BaseWebChannelBridge",
+            "BaseWebEnginePage",
+            "BaseWebEngineView",
+            "DefaultWebChannelScript",
+            "SafeSlot",
+            "VSViewEnInjectionScript",
+            "WebEngineScript",
+        ]:
             mod = importlib.import_module("vsview.app.views.web")
             return getattr(mod, name)
 

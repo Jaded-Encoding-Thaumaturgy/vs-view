@@ -18,7 +18,7 @@ from vsview.api import PluginAPI, VideoOutputProxy, WidgetPluginBase, run_in_bac
 from vsview.env import getenv_bool
 
 from .analysis import enrich_cytoscape_payload
-from .bridge import ExportFormat, JsToPyCommand, NodeCopyTarget, PyToJsCommand
+from .bridge import ExportFormat, JsToPyCommand, NodeCopyTarget, NodeTimingUpdate, OutputItem, PyToJsCommand
 from .call import build_filter_call, build_node_report
 from .constants import PLUGIN_DISPLAY_NAME, PLUGIN_IDENTIFIER
 from .settings import GraphSettings, GraphShortcut
@@ -165,7 +165,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
         voutputs = self.api.voutputs
         current_vs_index = self.api.current_voutput.vs_index
-        outputs = list[dict[str, Any]]()
+        outputs = list[OutputItem]()
 
         for v in voutputs:
             # fmt:off
@@ -198,7 +198,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
         must_send_data = force_layout or key != self._sent_key
 
-        timings = list[dict[str, Any]]()
+        timings = list[NodeTimingUpdate]()
         timings_map = dict[str, int]()
         for n in cached.graph.nodes:
             timings.append(
@@ -243,8 +243,6 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
     @Slot(str, dict)
     def _on_command_received(self, command: JsToPyCommand, payload: dict[str, Any]) -> None:
         match command:
-            case JsToPyCommand.READY:
-                self._on_web_ready()
             case JsToPyCommand.RELOAD:
                 self.update_outputs()
                 self.update_graph(refresh=True)

@@ -3,7 +3,6 @@ import * as vscode from 'vscode';
 import { Result } from 'vsview-shared';
 
 import { BridgeService } from '../bridge/python';
-import type { PythonBridge } from '../types';
 import { DOM_IDS } from './constants';
 
 // Hoisted xterm / FitAddon / vscode mocks
@@ -156,7 +155,7 @@ describe('ConsolePanelService', () => {
   let clearBtnEl: HTMLButtonElement;
   let closeBtnEl: HTMLButtonElement;
 
-  let mockBridge: PythonBridge;
+  let mockBridgeService: { sendEvent: ReturnType<typeof vi.fn> };
   let bridgeActiveSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -210,30 +209,13 @@ describe('ConsolePanelService', () => {
     document.body.appendChild(resizerEl);
     document.body.appendChild(panelEl);
 
-    mockBridge = {
-      onEditorReady: vi.fn(),
-      onContentChanged: vi.fn(),
-      onMainContentChanged: vi.fn(),
-      onCursorPositionChanged: vi.fn(),
-      onActiveTabChanged: vi.fn(),
-      onTabStateChanged: vi.fn(),
-      onSessionStateChanged: vi.fn(),
-      onMainTabChanged: vi.fn(),
-      requestSave: vi.fn(),
-      requestSaveAs: vi.fn(),
-      requestFormat: vi.fn(),
-      requestGenerateStubs: vi.fn(),
-      requestRestartLsp: vi.fn(),
-      onConsoleResized: vi.fn(),
-      copyToClipboard: vi.fn(),
-      statFile: vi.fn(),
-      readFile: vi.fn(),
-      dispatchCommandSignal: { connect: vi.fn(), disconnect: vi.fn() },
+    mockBridgeService = {
+      sendEvent: vi.fn().mockReturnValue(Result.ok(undefined)),
     };
 
     bridgeActiveSpy = vi
       .spyOn(BridgeService, 'active', 'get')
-      .mockReturnValue(Result.ok(mockBridge));
+      .mockReturnValue(Result.ok(mockBridgeService as unknown as BridgeService));
 
     vi.spyOn(window, 'getComputedStyle').mockImplementation(
       () =>
@@ -417,9 +399,9 @@ describe('ConsolePanelService', () => {
       window.dispatchEvent(new Event('resize'));
 
       expect(terminalState.lastCreatedFitAddon.fitCalled).toBe(true);
-      expect(mockBridge.onConsoleResized).toHaveBeenCalledWith(
-        terminalState.lastCreatedTerminal.cols,
-      );
+      expect(mockBridgeService.sendEvent).toHaveBeenCalledWith('console.resized', {
+        cols: terminalState.lastCreatedTerminal.cols,
+      });
     });
   });
 
@@ -438,7 +420,9 @@ describe('ConsolePanelService', () => {
 
       const handled = handler!(ctrlC);
       expect(handled).toBe(false); // prevent default
-      expect(mockBridge.copyToClipboard).toHaveBeenCalledWith('copied text');
+      expect(mockBridgeService.sendEvent).toHaveBeenCalledWith('clipboard.copy', {
+        text: 'copied text',
+      });
     });
 
     it('allows default Ctrl+C when no text is selected', () => {
@@ -454,7 +438,10 @@ describe('ConsolePanelService', () => {
 
       const handled = handler!(ctrlC);
       expect(handled).toBe(true);
-      expect(mockBridge.copyToClipboard).not.toHaveBeenCalled();
+      expect(mockBridgeService.sendEvent).not.toHaveBeenCalledWith(
+        'clipboard.copy',
+        expect.anything(),
+      );
     });
 
     it('handles Ctrl+A by selecting all content', () => {
@@ -548,7 +535,9 @@ describe('ConsolePanelService', () => {
       expect(copyItem.classList.contains('disabled')).toBe(false);
 
       copyItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(mockBridge.copyToClipboard).toHaveBeenCalledWith('active selected text');
+      expect(mockBridgeService.sendEvent).toHaveBeenCalledWith('clipboard.copy', {
+        text: 'active selected text',
+      });
       expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).toBeNull();
     });
 
@@ -630,7 +619,10 @@ describe('ConsolePanelService', () => {
       expect(copyItem.classList.contains('disabled')).toBe(true);
 
       copyItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(mockBridge.copyToClipboard).not.toHaveBeenCalled();
+      expect(mockBridgeService.sendEvent).not.toHaveBeenCalledWith(
+        'clipboard.copy',
+        expect.anything(),
+      );
       expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).not.toBeNull();
     });
 
@@ -674,7 +666,10 @@ describe('ConsolePanelService', () => {
       terminalState.lastCreatedTerminal.selectedText = '';
 
       service.copySelection();
-      expect(mockBridge.copyToClipboard).not.toHaveBeenCalled();
+      expect(mockBridgeService.sendEvent).not.toHaveBeenCalledWith(
+        'clipboard.copy',
+        expect.anything(),
+      );
     });
 
     it('copySelection safely handles bridge unavailability', () => {

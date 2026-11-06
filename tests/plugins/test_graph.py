@@ -301,18 +301,6 @@ def test_graph_plugin_reload_command_updates_timings(
     assert "timings" in received[PyToJsCommand.UPDATE_TIMINGS]
 
 
-def test_graph_plugin_command_ready_routing(
-    populated_harness: tuple[HarnessPluginController, GraphPlugin],
-    mocker: MockerFixture,
-) -> None:
-    """Verify JsToPyCommand.READY routed from JS invokes _on_web_ready."""
-    _, plugin = populated_harness
-    spy = mocker.spy(plugin, "_on_web_ready")
-
-    plugin.view.bridge.dispatchFromJs(JsToPyCommand.READY, "{}")
-    assert spy.call_count == 1
-
-
 # Settings Propagation
 def test_graph_plugin_settings_propagation(
     populated_harness: tuple[HarnessPluginController, GraphPlugin],
