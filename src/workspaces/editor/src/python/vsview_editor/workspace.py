@@ -305,7 +305,6 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
     @Slot()
     def restart_lsp(self) -> None:
-        logger.info("Restarting Pyrefly language server...")
         self._send_pyrefly_settings()
         script_dir = self._active_filepath.parent if self._active_filepath else Path.cwd()
         port = self.lsp_manager.restart_server(config=LSP_PYREFLY_CONFIG, workspace_dir=script_dir)
