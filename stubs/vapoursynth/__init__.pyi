@@ -1732,10 +1732,18 @@ class VideoNode(RawNode):
     akarin: Final[_akarin._VideoNode_bound.Plugin]
     """Akarin's Experimental Filters"""
 # </attribute/VideoNode_bound/akarin>
+# <attribute/VideoNode_bound/awarp>
+    awarp: Final[_awarp._VideoNode_bound.Plugin]
+    """AWarp filter from AWarpSharp2"""
+# </attribute/VideoNode_bound/awarp>
 # <attribute/VideoNode_bound/descale>
     descale: Final[_descale._VideoNode_bound.Plugin]
     """Undo linear interpolation"""
 # </attribute/VideoNode_bound/descale>
+# <attribute/VideoNode_bound/edgemasks>
+    edgemasks: Final[_edgemasks._VideoNode_bound.Plugin]
+    """Creates an edge mask using various operators"""
+# </attribute/VideoNode_bound/edgemasks>
 # <attribute/VideoNode_bound/fftspectrum_rs>
     fftspectrum_rs: Final[_fftspectrum_rs._VideoNode_bound.Plugin]
     """FFT frequency spectrum."""
@@ -1748,6 +1756,10 @@ class VideoNode(RawNode):
     graph: Final[_graph._VideoNode_bound.Plugin]
     """Graph Inspection."""
 # </attribute/VideoNode_bound/graph>
+# <attribute/VideoNode_bound/hysteresis>
+    hysteresis: Final[_hysteresis._VideoNode_bound.Plugin]
+    """Hysteresis filter."""
+# </attribute/VideoNode_bound/hysteresis>
 # <attribute/VideoNode_bound/placebo>
     placebo: Final[_placebo._VideoNode_bound.Plugin]
     """libplacebo plugin for VapourSynth"""
@@ -1764,6 +1776,10 @@ class VideoNode(RawNode):
     std: Final[_std._VideoNode_bound.Plugin]
     """VapourSynth Core Functions"""
 # </attribute/VideoNode_bound/std>
+# <attribute/VideoNode_bound/sub>
+    sub: Final[_sub._VideoNode_bound.Plugin]
+    """A subtitling filter based on libass and FFmpeg."""
+# </attribute/VideoNode_bound/sub>
 # <attribute/VideoNode_bound/text>
     text: Final[_text._VideoNode_bound.Plugin]
     """VapourSynth Text"""
@@ -1772,6 +1788,10 @@ class VideoNode(RawNode):
     vszip: Final[_vszip._VideoNode_bound.Plugin]
     """VapourSynth Zig Image Process"""
 # </attribute/VideoNode_bound/vszip>
+# <attribute/VideoNode_bound/zsmooth>
+    zsmooth: Final[_zsmooth._VideoNode_bound.Plugin]
+    """Smoothing functions in Zig"""
+# </attribute/VideoNode_bound/zsmooth>
 # </plugins/bound/VideoNode>
 
 # Behave like a Sequence
@@ -1904,6 +1924,10 @@ class Core:
     avs: Final[_avs._Core_bound.Plugin]
     """VapourSynth Avisynth Compatibility"""
 # </attribute/Core_bound/avs>
+# <attribute/Core_bound/awarp>
+    awarp: Final[_awarp._Core_bound.Plugin]
+    """AWarp filter from AWarpSharp2"""
+# </attribute/Core_bound/awarp>
 # <attribute/Core_bound/bs>
     bs: Final[_bs._Core_bound.Plugin]
     """Best Source 2"""
@@ -1920,6 +1944,10 @@ class Core:
     dvdsrc2: Final[_dvdsrc2._Core_bound.Plugin]
     """Dvdsrc 2nd tour"""
 # </attribute/Core_bound/dvdsrc2>
+# <attribute/Core_bound/edgemasks>
+    edgemasks: Final[_edgemasks._Core_bound.Plugin]
+    """Creates an edge mask using various operators"""
+# </attribute/Core_bound/edgemasks>
 # <attribute/Core_bound/ffms2>
     ffms2: Final[_ffms2._Core_bound.Plugin]
     """FFmpegSource 2 for VapourSynth"""
@@ -1936,6 +1964,10 @@ class Core:
     graph: Final[_graph._Core_bound.Plugin]
     """Graph Inspection."""
 # </attribute/Core_bound/graph>
+# <attribute/Core_bound/hysteresis>
+    hysteresis: Final[_hysteresis._Core_bound.Plugin]
+    """Hysteresis filter."""
+# </attribute/Core_bound/hysteresis>
 # <attribute/Core_bound/lsmas>
     lsmas: Final[_lsmas._Core_bound.Plugin]
     """LSMASHSource for VapourSynth"""
@@ -1956,6 +1988,10 @@ class Core:
     std: Final[_std._Core_bound.Plugin]
     """VapourSynth Core Functions"""
 # </attribute/Core_bound/std>
+# <attribute/Core_bound/sub>
+    sub: Final[_sub._Core_bound.Plugin]
+    """A subtitling filter based on libass and FFmpeg."""
+# </attribute/Core_bound/sub>
 # <attribute/Core_bound/text>
     text: Final[_text._Core_bound.Plugin]
     """VapourSynth Text"""
@@ -1964,6 +2000,10 @@ class Core:
     vszip: Final[_vszip._Core_bound.Plugin]
     """VapourSynth Zig Image Process"""
 # </attribute/Core_bound/vszip>
+# <attribute/Core_bound/zsmooth>
+    zsmooth: Final[_zsmooth._Core_bound.Plugin]
+    """Smoothing functions in Zig"""
+# </attribute/Core_bound/zsmooth>
 # </plugins/bound/Core>
 
 # _CoreProxy doesn't inherit from Core but __getattr__ returns the attribute from the actual core
@@ -2029,6 +2069,20 @@ class _avs:
             def LoadPlugin(self, /, path: _AnyStr) -> None: ...
 
 # </implementation/avs>
+
+# <implementation/awarp>
+class _awarp:
+    class _Core_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def AWarp(self, /, clip: VideoNode, mask: VideoNode, depth_h: _IntLike | _SequenceLike[_IntLike] | None = None, depth_v: _IntLike | _SequenceLike[_IntLike] | None = None, mask_first_plane: _IntLike | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+
+    class _VideoNode_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def AWarp(self, /, mask: VideoNode, depth_h: _IntLike | _SequenceLike[_IntLike] | None = None, depth_v: _IntLike | _SequenceLike[_IntLike] | None = None, mask_first_plane: _IntLike | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+
+# </implementation/awarp>
 
 # <implementation/bs>
 _ReturnDict_bs_TrackInfo = TypedDict("_ReturnDict_bs_TrackInfo", {"tracktype": int | list[int], "tracktypestr": _AnyStr | list[_AnyStr], "codec": int | list[int], "codecstr": _AnyStr | list[_AnyStr], "disposition": int | list[int], "dispositionstr": _AnyStr | list[_AnyStr]})
@@ -2155,6 +2209,72 @@ class _dvdsrc2:
 
 # </implementation/dvdsrc2>
 
+# <implementation/edgemasks>
+class _edgemasks:
+    class _Core_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def Cross(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def ExKirsch(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def ExPrewitt(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def ExSobel(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def FDoG(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Kirsch(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Kroon(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Prewitt(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def RScharr(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Robinson3(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Robinson5(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Scharr(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Sobel(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Tritical(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+
+    class _VideoNode_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def Cross(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def ExKirsch(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def ExPrewitt(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def ExSobel(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def FDoG(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Kirsch(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Kroon(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Prewitt(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def RScharr(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Robinson3(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Robinson5(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Scharr(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Sobel(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Tritical(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | _SequenceLike[_FloatLike] | None = None, opt: _IntLike | None = None) -> VideoNode: ...
+
+# </implementation/edgemasks>
+
 # <implementation/ffms2>
 class _ffms2:
     class _Core_bound:
@@ -2222,6 +2342,20 @@ class _graph:
             def AudioGraph(self, /, pretty: _IntLike | None = None, reset_timing: _IntLike | None = None) -> _AnyStr: ...
 
 # </implementation/graph>
+
+# <implementation/hysteresis>
+class _hysteresis:
+    class _Core_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def Hysteresis(self, /, clipa: VideoNode, clipb: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+
+    class _VideoNode_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def Hysteresis(self, /, clipb: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+
+# </implementation/hysteresis>
 
 # <implementation/lsmas>
 class _lsmas:
@@ -2687,6 +2821,28 @@ class _std:
 
 # </implementation/std>
 
+# <implementation/sub>
+class _sub:
+    class _Core_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def ImageFile(self, /, clip: VideoNode, file: _AnyStr, id: _IntLike | None = None, palette: _IntLike | _SequenceLike[_IntLike] | None = None, gray: _IntLike | None = None, info: _IntLike | None = None, flatten: _IntLike | None = None, blend: _IntLike | None = None, matrix: _IntLike | None = None, matrix_s: _AnyStr | None = None, transfer: _IntLike | None = None, transfer_s: _AnyStr | None = None, primaries: _IntLike | None = None, primaries_s: _AnyStr | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Subtitle(self, /, clip: VideoNode, text: _AnyStr, start: _IntLike | None = None, end: _IntLike | None = None, debuglevel: _IntLike | None = None, fontdir: _AnyStr | None = None, linespacing: _FloatLike | None = None, margins: _IntLike | _SequenceLike[_IntLike] | None = None, sar: _FloatLike | None = None, style: _AnyStr | None = None, blend: _IntLike | None = None, matrix: _IntLike | None = None, matrix_s: _AnyStr | None = None, transfer: _IntLike | None = None, transfer_s: _AnyStr | None = None, primaries: _IntLike | None = None, primaries_s: _AnyStr | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def TextFile(self, /, clip: VideoNode, file: _AnyStr, charset: _AnyStr | None = None, scale: _FloatLike | None = None, debuglevel: _IntLike | None = None, fontdir: _AnyStr | None = None, linespacing: _FloatLike | None = None, margins: _IntLike | _SequenceLike[_IntLike] | None = None, sar: _FloatLike | None = None, style: _AnyStr | None = None, blend: _IntLike | None = None, matrix: _IntLike | None = None, matrix_s: _AnyStr | None = None, transfer: _IntLike | None = None, transfer_s: _AnyStr | None = None, primaries: _IntLike | None = None, primaries_s: _AnyStr | None = None) -> VideoNode: ...
+
+    class _VideoNode_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def ImageFile(self, /, file: _AnyStr, id: _IntLike | None = None, palette: _IntLike | _SequenceLike[_IntLike] | None = None, gray: _IntLike | None = None, info: _IntLike | None = None, flatten: _IntLike | None = None, blend: _IntLike | None = None, matrix: _IntLike | None = None, matrix_s: _AnyStr | None = None, transfer: _IntLike | None = None, transfer_s: _AnyStr | None = None, primaries: _IntLike | None = None, primaries_s: _AnyStr | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Subtitle(self, /, text: _AnyStr, start: _IntLike | None = None, end: _IntLike | None = None, debuglevel: _IntLike | None = None, fontdir: _AnyStr | None = None, linespacing: _FloatLike | None = None, margins: _IntLike | _SequenceLike[_IntLike] | None = None, sar: _FloatLike | None = None, style: _AnyStr | None = None, blend: _IntLike | None = None, matrix: _IntLike | None = None, matrix_s: _AnyStr | None = None, transfer: _IntLike | None = None, transfer_s: _AnyStr | None = None, primaries: _IntLike | None = None, primaries_s: _AnyStr | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def TextFile(self, /, file: _AnyStr, charset: _AnyStr | None = None, scale: _FloatLike | None = None, debuglevel: _IntLike | None = None, fontdir: _AnyStr | None = None, linespacing: _FloatLike | None = None, margins: _IntLike | _SequenceLike[_IntLike] | None = None, sar: _FloatLike | None = None, style: _AnyStr | None = None, blend: _IntLike | None = None, matrix: _IntLike | None = None, matrix_s: _AnyStr | None = None, transfer: _IntLike | None = None, transfer_s: _AnyStr | None = None, primaries: _IntLike | None = None, primaries_s: _AnyStr | None = None) -> VideoNode: ...
+
+# </implementation/sub>
+
 # <implementation/text>
 class _text:
     class _Core_bound:
@@ -2844,6 +3000,92 @@ class _vszip:
             def XPSNR(self, /, distorted: VideoNode, temporal: _IntLike | None = None, verbose: _IntLike | None = None) -> VideoNode: ...
 
 # </implementation/vszip>
+
+# <implementation/zsmooth>
+class _zsmooth:
+    class _Core_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def BackwardClense(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def CCD(self, /, clip: VideoNode, threshold: _FloatLike | None = None, temporal_radius: _IntLike | None = None, points: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | None = None, ref: VideoNode | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Clense(self, /, clip: VideoNode, previous: VideoNode | None = None, next: VideoNode | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Cnr4(self, /, clip: VideoNode, mode: _AnyStr | None = None, radius: _IntLike | None = None, sense: _IntLike | _SequenceLike[_IntLike] | None = None, str: _IntLike | _SequenceLike[_IntLike] | None = None, pow: _FloatLike | _SequenceLike[_FloatLike] | None = None, tmode: _IntLike | None = None, wmode: _IntLike | None = None, scenechange: _IntLike | None = None, ref: VideoNode | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def DCTFilter(self, /, clip: VideoNode, factors: _FloatLike | _SequenceLike[_FloatLike], planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def DegrainMedian(self, /, clip: VideoNode, limit: _FloatLike | _SequenceLike[_FloatLike] | None = None, mode: _IntLike | _SequenceLike[_IntLike] | None = None, interlaced: _IntLike | None = None, norow: _IntLike | None = None, scalep: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def FluxSmoothST(self, /, clip: VideoNode, temporal_threshold: _FloatLike | _SequenceLike[_FloatLike] | None = None, spatial_threshold: _FloatLike | _SequenceLike[_FloatLike] | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scalep: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def FluxSmoothT(self, /, clip: VideoNode, temporal_threshold: _FloatLike | _SequenceLike[_FloatLike] | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scalep: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def ForwardClense(self, /, clip: VideoNode, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def InterQuartileMean(self, /, clip: VideoNode, radius: _IntLike | _SequenceLike[_IntLike] | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Median(self, /, clip: VideoNode, radius: _IntLike | _SequenceLike[_IntLike] | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def RemoveGrain(self, /, clip: VideoNode, mode: _IntLike | _SequenceLike[_IntLike]) -> VideoNode: ...
+            @_Wrapper.Function
+            def Repair(self, /, clip: VideoNode, repairclip: VideoNode, mode: _IntLike | _SequenceLike[_IntLike]) -> VideoNode: ...
+            @_Wrapper.Function
+            def SmartMedian(self, /, clip: VideoNode, radius: _IntLike | _SequenceLike[_IntLike] | None = None, threshold: _FloatLike | _SequenceLike[_FloatLike] | None = None, scalep: _IntLike | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def TTempSmooth(self, /, clip: VideoNode, maxr: _IntLike | None = None, thresh: _IntLike | _SequenceLike[_IntLike] | None = None, mdiff: _IntLike | _SequenceLike[_IntLike] | None = None, strength: _IntLike | None = None, scthresh: _FloatLike | None = None, fp: _IntLike | None = None, pfclip: VideoNode | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def TemporalMedian(self, /, clip: VideoNode, radius: _IntLike | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scenechange: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def TemporalRepair(self, /, clip: VideoNode, repairclip: VideoNode, mode: _IntLike | _SequenceLike[_IntLike] | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def TemporalSoften(self, /, clip: VideoNode, radius: _IntLike | None = None, threshold: _FloatLike | _SequenceLike[_FloatLike] | None = None, scenechange: _IntLike | None = None, scalep: _IntLike | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def VerticalCleaner(self, /, clip: VideoNode, mode: _IntLike | _SequenceLike[_IntLike]) -> VideoNode: ...
+
+    class _VideoNode_bound:
+        class Plugin(_VSPlugin):
+            @_Wrapper.Function
+            def BackwardClense(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def CCD(self, /, threshold: _FloatLike | None = None, temporal_radius: _IntLike | None = None, points: _IntLike | _SequenceLike[_IntLike] | None = None, scale: _FloatLike | None = None, ref: VideoNode | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Clense(self, /, previous: VideoNode | None = None, next: VideoNode | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Cnr4(self, /, mode: _AnyStr | None = None, radius: _IntLike | None = None, sense: _IntLike | _SequenceLike[_IntLike] | None = None, str: _IntLike | _SequenceLike[_IntLike] | None = None, pow: _FloatLike | _SequenceLike[_FloatLike] | None = None, tmode: _IntLike | None = None, wmode: _IntLike | None = None, scenechange: _IntLike | None = None, ref: VideoNode | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def DCTFilter(self, /, factors: _FloatLike | _SequenceLike[_FloatLike], planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def DegrainMedian(self, /, limit: _FloatLike | _SequenceLike[_FloatLike] | None = None, mode: _IntLike | _SequenceLike[_IntLike] | None = None, interlaced: _IntLike | None = None, norow: _IntLike | None = None, scalep: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def FluxSmoothST(self, /, temporal_threshold: _FloatLike | _SequenceLike[_FloatLike] | None = None, spatial_threshold: _FloatLike | _SequenceLike[_FloatLike] | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scalep: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def FluxSmoothT(self, /, temporal_threshold: _FloatLike | _SequenceLike[_FloatLike] | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scalep: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def ForwardClense(self, /, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def InterQuartileMean(self, /, radius: _IntLike | _SequenceLike[_IntLike] | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def Median(self, /, radius: _IntLike | _SequenceLike[_IntLike] | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def RemoveGrain(self, /, mode: _IntLike | _SequenceLike[_IntLike]) -> VideoNode: ...
+            @_Wrapper.Function
+            def Repair(self, /, repairclip: VideoNode, mode: _IntLike | _SequenceLike[_IntLike]) -> VideoNode: ...
+            @_Wrapper.Function
+            def SmartMedian(self, /, radius: _IntLike | _SequenceLike[_IntLike] | None = None, threshold: _FloatLike | _SequenceLike[_FloatLike] | None = None, scalep: _IntLike | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def TTempSmooth(self, /, maxr: _IntLike | None = None, thresh: _IntLike | _SequenceLike[_IntLike] | None = None, mdiff: _IntLike | _SequenceLike[_IntLike] | None = None, strength: _IntLike | None = None, scthresh: _FloatLike | None = None, fp: _IntLike | None = None, pfclip: VideoNode | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def TemporalMedian(self, /, radius: _IntLike | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None, scenechange: _IntLike | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def TemporalRepair(self, /, repairclip: VideoNode, mode: _IntLike | _SequenceLike[_IntLike] | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def TemporalSoften(self, /, radius: _IntLike | None = None, threshold: _FloatLike | _SequenceLike[_FloatLike] | None = None, scenechange: _IntLike | None = None, scalep: _IntLike | None = None, planes: _IntLike | _SequenceLike[_IntLike] | None = None) -> VideoNode: ...
+            @_Wrapper.Function
+            def VerticalCleaner(self, /, mode: _IntLike | _SequenceLike[_IntLike]) -> VideoNode: ...
+
+# </implementation/zsmooth>
 
 # </plugins/implementations>
 
