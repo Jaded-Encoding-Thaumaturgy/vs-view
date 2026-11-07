@@ -6,7 +6,7 @@ import { DisposableStore, Result } from 'vsview-shared';
 import { BridgeService } from '../bridge/python';
 import { findExistingModel } from '../services/models';
 import type { EditorOptionsPayload, TabInfo } from '../types';
-import { DOM_IDS } from '../ui/constants';
+import { DEFAULT_SCRIPT_URI, DOM_IDS } from '../ui/constants';
 import { TabBarView } from '../ui/tabbar';
 import { getInitialTheme, getThemeDefinition } from '../utils/theme';
 import { isSameResource } from '../utils/uri';
@@ -145,8 +145,15 @@ export class EditorService implements vscode.Disposable {
     );
 
     // Initialize default main tab
-    const defaultMainUri = 'file:///workspace/script.py';
-    this.openTab(defaultMainUri, '', 'python', true);
+    this.openTab(DEFAULT_SCRIPT_URI, '', 'python', true);
+  }
+
+  public getActiveUri(): string | null {
+    return this.activeUri;
+  }
+
+  public getMainUri(): string | null {
+    return this.mainUri;
   }
 
   /** Get the text content of the active tab. */
@@ -278,6 +285,7 @@ export class EditorService implements vscode.Disposable {
     content: string,
     language = 'python',
     isMain = false,
+    replaceUriInput?: string,
   ): Result<string> {
     return Result.fromThrowable(() => {
       const uri = this.normalizeUri(uriInput);
@@ -342,7 +350,26 @@ export class EditorService implements vscode.Disposable {
         }
       }
 
+      let oldTab: TabRecord | undefined;
+      if (replaceUriInput) {
+        const replaceUriString = this.normalizeUri(replaceUriInput).toString();
+        if (replaceUriString !== uriString) {
+          const candidate = this.tabs.get(replaceUriString);
+          if (candidate && !candidate.isDirty) {
+            oldTab = candidate;
+            this.tabs.delete(replaceUriString);
+            if (this.mainUri === replaceUriString) {
+              this.mainUri = null;
+            }
+          }
+        }
+      }
+
       this.selectTabInternal(uriString);
+
+      if (oldTab) {
+        this.disposeTab(oldTab);
+      }
 
       if (isMain || this.tabs.size === 1 || !this.mainUri) {
         this.setMainTabInternal(uriString);
@@ -390,7 +417,7 @@ export class EditorService implements vscode.Disposable {
           this.activeUri = null;
           this.activeTabChangeEmitter.fire(null);
           // Re-create default main tab if all tabs are closed
-          this.openTab('file:///workspace/script.py', '', 'python', true);
+          this.openTab(DEFAULT_SCRIPT_URI, '', 'python', true);
         }
       }
 
@@ -409,12 +436,7 @@ export class EditorService implements vscode.Disposable {
         }
       }
 
-      // Safely dispose tab listeners and model after editor unbinding
-      tab.disposables.dispose();
-      if (tab.ownsModel && !tab.model.isDisposed()) {
-        tab.model.dispose();
-      }
-
+      this.disposeTab(tab);
       this.updateTabBar();
     });
   }
@@ -534,10 +556,7 @@ export class EditorService implements vscode.Disposable {
 
   public dispose(): void {
     for (const tab of this.tabs.values()) {
-      tab.disposables.dispose();
-      if (tab.ownsModel) {
-        tab.model.dispose();
-      }
+      this.disposeTab(tab);
     }
     this.tabs.clear();
     this.disposables.dispose();
@@ -545,6 +564,13 @@ export class EditorService implements vscode.Disposable {
 
   public [Symbol.dispose](): void {
     this.dispose();
+  }
+
+  private disposeTab(tab: TabRecord): void {
+    tab.disposables.dispose();
+    if (tab.ownsModel && !tab.model.isDisposed()) {
+      tab.model.dispose();
+    }
   }
 
   private async persistThemeConfig(themeId: string): Promise<void> {

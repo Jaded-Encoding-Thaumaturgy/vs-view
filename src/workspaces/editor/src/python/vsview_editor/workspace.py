@@ -49,7 +49,7 @@ from .lsp import LSP_PYREFLY_CONFIG, LSPProcessManager
 from .settings import GlobalSettings, LocalSettings
 from .stubs import get_stubs_dir
 from .utils import ContentPath, WorkspaceUri, extract_supported_script_files
-from .web import JsToPyCommand, MonacoEditorWidget, PyToJsCommand, TabInfo
+from .web import JsToPyCommand, MonacoEditorWidget, OpenTabPayload, PyToJsCommand, TabInfo
 
 logger = getLogger(__name__)
 
@@ -58,6 +58,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     # Resolve the dist directory relative to this module
     WEB_DIST_DIR = Path(__file__).parent / "web_dist"
     INDEX_PATH = WEB_DIST_DIR / "index.html"
+
+    DEFAULT_SCRIPT_URI = "file:///workspace/script.py"
 
     ICON_SIZE = QSize(22, 22)
     ICON_COLOR = QPalette.ColorRole.ToolTipText
@@ -88,7 +90,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self._active_tab_uri: str | None = None
         self._main_filepath: Path | None = None
         self._main_tab_uri: str | None = None
-        self._default_content = get_default_script()
+        self._default_content = get_default_script().replace("\r\n", "\n")
         self._open_tabs = list[TabInfo]()
 
         self.editor = MonacoEditorWidget(self)
@@ -279,29 +281,76 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         return self._main_filepath
 
     @property
-    def _env_stubs(self) -> ManagedEnvironment:
-        if not hasattr(self, "_env_stubs_internal"):
-            self._env_stubs_internal = create_environment()
-        return self._env_stubs_internal
+    def active_filepath(self) -> Path | None:
+        return self._active_filepath
+
+    @property
+    def active_tab_uri(self) -> str | None:
+        return self._active_tab_uri
+
+    @property
+    def main_tab_uri(self) -> str | None:
+        return self._main_tab_uri
+
+    @property
+    def default_content(self) -> str:
+        return self._default_content
+
+    @property
+    def open_tabs(self) -> Sequence[TabInfo]:
+        return tuple(self._open_tabs)
 
     @property
     def dirty_tabs(self) -> list[TabInfo]:
         return [t for t in self._open_tabs if t.get("isDirty", False)]
 
+    @property
+    def _env_stubs(self) -> ManagedEnvironment:
+        if not hasattr(self, "_env_stubs_internal"):
+            self._env_stubs_internal = create_environment()
+        return self._env_stubs_internal
+
     def open_file(self, filepath: Path) -> bool:
         """Open a script file in an editor tab."""
         try:
-            resolved = filepath.resolve()
-            content = resolved.read_text(encoding="utf-8")
-            self._active_filepath = resolved
-            self.editor.bridge.dispatch(
-                PyToJsCommand.OPEN_TAB,
-                {"uri": resolved.as_uri(), "content": content, "language": "python", "isMain": False},
-            )
-            return True
+            content = (resolved := filepath.resolve()).read_text(encoding="utf-8")
         except Exception:
             logger.exception("Error opening script from %s:", filepath)
             return False
+
+        uri = resolved.as_uri()
+
+        replace_tab = self._get_replaceable_default_tab()
+        is_main = replace_tab["isMain"] if replace_tab else False
+
+        payload: OpenTabPayload = {"uri": uri, "content": content, "language": "python", "isMain": is_main}
+        if replace_tab:
+            payload["replaceUri"] = replace_tab["uri"]
+            self._open_tabs = [t for t in self._open_tabs if t is not replace_tab]
+
+        self._active_filepath = resolved
+        self._active_tab_uri = uri
+
+        self.editor.bridge.dispatch(PyToJsCommand.OPEN_TAB, payload)
+
+        existing = self._find_tab(uri)
+        if existing:
+            if not existing.get("isDirty", False):
+                existing["content"] = content
+            if is_main:
+                existing["isMain"] = True
+        else:
+            self._open_tabs.append(
+                TabInfo(
+                    uri=uri,
+                    title=resolved.name,
+                    isMain=is_main,
+                    isDirty=False,
+                    language="python",
+                    content=content,
+                )
+            )
+        return True
 
     @Slot()
     def restart_lsp(self) -> None:
@@ -315,23 +364,23 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     def _on_editor_ready(self) -> None:
         """Initialize script and start LSP bridge when Monaco is ready."""
         if self._open_tabs:
-            for tab in self._open_tabs:
-                self.editor.bridge.dispatch(
-                    PyToJsCommand.OPEN_TAB,
-                    {
-                        "uri": tab["uri"],
-                        "content": tab.get("content", ""),
-                        "language": tab.get("language", "python"),
-                        "isMain": tab.get("isMain", False),
-                    },
-                )
+            for i, tab in enumerate(self._open_tabs):
+                payload: OpenTabPayload = {
+                    "uri": tab["uri"],
+                    "content": tab.get("content", ""),
+                    "language": tab.get("language", "python"),
+                    "isMain": tab.get("isMain", False),
+                }
+                if i == 0 and tab["uri"] != self.DEFAULT_SCRIPT_URI:
+                    payload["replaceUri"] = self.DEFAULT_SCRIPT_URI
+                self.editor.bridge.dispatch(PyToJsCommand.OPEN_TAB, payload)
             if self._active_tab_uri:
                 self.editor.bridge.dispatch(PyToJsCommand.SELECT_TAB, {"uri": self._active_tab_uri})
         else:
             self.editor.bridge.dispatch(
                 PyToJsCommand.OPEN_TAB,
                 {
-                    "uri": "file:///workspace/script.py",
+                    "uri": self.DEFAULT_SCRIPT_URI,
                     "content": self._default_content,
                     "language": "python",
                     "isMain": True,
@@ -393,10 +442,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         if not (uri := self._active_tab_uri):
             return
 
-        for tab in self._open_tabs:
-            if tab.get("uri") == uri:
-                tab["content"] = content
-                break
+        if tab := self._find_tab(uri):
+            tab["content"] = content
 
     def _on_tab_changed(self, uri: str, kind: Literal["active", "main"]) -> None:
         setattr(self, f"_{kind}_tab_uri", uri or None)
@@ -547,6 +594,34 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             PyToJsCommand.UPDATE_OPTIONS,
             {"optionsJson": self.settings.global_.options.model_dump_json(by_alias=True)},
         )
+
+    def _is_default_tab(self, tab: TabInfo) -> bool:
+        if tab.get("uri") != self.DEFAULT_SCRIPT_URI or tab.get("isDirty", False):
+            return False
+        if content := tab.get("content"):
+            return content.replace("\r\n", "\n") == self._default_content
+        return True
+
+    def _find_tab(self, uri: str) -> TabInfo | None:
+        target_path = WorkspaceUri(uri).local_path
+        for tab in self._open_tabs:
+            tab_uri = tab.get("uri", "")
+            if target_path is not None:
+                if (p := WorkspaceUri(tab_uri).local_path) is not None and p.resolve() == target_path.resolve():
+                    return tab
+            elif tab_uri == uri:
+                return tab
+        return None
+
+    def _get_replaceable_default_tab(self) -> TabInfo | None:
+        if len(self._open_tabs) == 1 and self._is_default_tab(self._open_tabs[0]):
+            return self._open_tabs[0]
+
+        if self._active_tab_uri:
+            for tab in self._open_tabs:
+                if tab.get("uri") == self._active_tab_uri and self._is_default_tab(tab):
+                    return tab
+        return None
 
 
 class EditorShortcut(StrEnum):

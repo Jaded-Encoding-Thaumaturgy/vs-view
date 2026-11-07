@@ -1,3 +1,5 @@
+export const DEFAULT_SCRIPT_URI = 'file:///workspace/script.py';
+
 export const DOM_IDS = {
   APP: 'app',
   TAB_BAR: 'tab-bar',

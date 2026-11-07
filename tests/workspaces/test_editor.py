@@ -344,6 +344,16 @@ def _make_drop_event(mime_data: QMimeData) -> QDropEvent:
     )
 
 
+def _set_editor_tabs(dock: MonacoEditorDock, tabs: list[TabInfo], active_uri: str | None = None) -> None:
+    dock.editor.bridge.commandReceived.emit(JsToPyCommand.TAB_STATE_CHANGED, {"tabs": tabs})
+    if active_uri is not None:
+        dock.editor.bridge.commandReceived.emit(JsToPyCommand.ACTIVE_TAB_CHANGED, {"uri": active_uri})
+    for tab in tabs:
+        if tab.get("isMain"):
+            dock.editor.bridge.commandReceived.emit(JsToPyCommand.MAIN_TAB_CHANGED, {"uri": tab["uri"]})
+            break
+
+
 class TestEditorDragAndDrop:
     @pytest.fixture
     def editor_widget(self, qtbot: QtBot) -> Generator[MonacoEditorWidget, None, None]:
@@ -478,7 +488,7 @@ class TestEditorDragAndDrop:
 
         mock_dispatch = mocker.patch.object(editor_dock.editor.bridge, "dispatch")
         assert editor_dock.open_file(script_file) is True
-        assert editor_dock._active_filepath == script_file.resolve()
+        assert editor_dock.active_filepath == script_file.resolve()
         mock_dispatch.assert_called_once_with(
             PyToJsCommand.OPEN_TAB,
             {
@@ -486,6 +496,260 @@ class TestEditorDragAndDrop:
                 "content": "import vapoursynth as vs\n",
                 "language": "python",
                 "isMain": False,
+            },
+        )
+
+    def test_monaco_dock_open_file_replaces_default_script_tab(
+        self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        _set_editor_tabs(
+            editor_dock,
+            [
+                TabInfo(
+                    uri="file:///workspace/script.py",
+                    title="script.py",
+                    isMain=True,
+                    isDirty=False,
+                    language="python",
+                    content=editor_dock.default_content,
+                )
+            ],
+            active_uri="file:///workspace/script.py",
+        )
+
+        script_file = tmp_path / "custom.py"
+        script_file.write_text("clip = core.std.BlankClip()\n", encoding="utf-8")
+
+        mock_dispatch = mocker.patch.object(editor_dock.editor.bridge, "dispatch")
+        assert editor_dock.open_file(script_file) is True
+        assert editor_dock.active_filepath == script_file.resolve()
+        mock_dispatch.assert_called_once_with(
+            PyToJsCommand.OPEN_TAB,
+            {
+                "uri": script_file.resolve().as_uri(),
+                "content": "clip = core.std.BlankClip()\n",
+                "language": "python",
+                "isMain": True,
+                "replaceUri": "file:///workspace/script.py",
+            },
+        )
+        assert len(editor_dock.open_tabs) == 1
+        assert editor_dock.open_tabs[0]["uri"] == script_file.resolve().as_uri()
+        assert editor_dock.open_tabs[0]["isMain"] is True
+
+    def test_monaco_dock_open_file_does_not_replace_dirty_default_tab(
+        self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        _set_editor_tabs(
+            editor_dock,
+            [
+                TabInfo(
+                    uri="file:///workspace/script.py",
+                    title="script.py",
+                    isMain=True,
+                    isDirty=True,
+                    language="python",
+                    content="edited content",
+                )
+            ],
+            active_uri="file:///workspace/script.py",
+        )
+
+        script_file = tmp_path / "custom.py"
+        script_file.write_text("new content", encoding="utf-8")
+
+        mock_dispatch = mocker.patch.object(editor_dock.editor.bridge, "dispatch")
+        assert editor_dock.open_file(script_file) is True
+        mock_dispatch.assert_called_once_with(
+            PyToJsCommand.OPEN_TAB,
+            {
+                "uri": script_file.resolve().as_uri(),
+                "content": "new content",
+                "language": "python",
+                "isMain": False,
+            },
+        )
+        assert len(editor_dock.open_tabs) == 2
+        assert editor_dock.open_tabs[0]["uri"] == "file:///workspace/script.py"
+        assert editor_dock.open_tabs[1]["uri"] == script_file.resolve().as_uri()
+
+    def test_monaco_dock_open_files_batch_replaces_default_only_once(
+        self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        _set_editor_tabs(
+            editor_dock,
+            [
+                TabInfo(
+                    uri="file:///workspace/script.py",
+                    title="script.py",
+                    isMain=True,
+                    isDirty=False,
+                    language="python",
+                    content=editor_dock.default_content,
+                )
+            ],
+            active_uri="file:///workspace/script.py",
+        )
+
+        f1 = tmp_path / "first.py"
+        f1.write_text("first", encoding="utf-8")
+        f2 = tmp_path / "second.py"
+        f2.write_text("second", encoding="utf-8")
+
+        mock_dispatch = mocker.patch.object(editor_dock.editor.bridge, "dispatch")
+        editor_dock.open_files([f1, f2])
+
+        assert mock_dispatch.call_count == 2
+        mock_dispatch.assert_any_call(
+            PyToJsCommand.OPEN_TAB,
+            {
+                "uri": f1.resolve().as_uri(),
+                "content": "first",
+                "language": "python",
+                "isMain": True,
+                "replaceUri": "file:///workspace/script.py",
+            },
+        )
+        mock_dispatch.assert_any_call(
+            PyToJsCommand.OPEN_TAB,
+            {
+                "uri": f2.resolve().as_uri(),
+                "content": "second",
+                "language": "python",
+                "isMain": False,
+            },
+        )
+        open_uris = [t["uri"] for t in editor_dock.open_tabs]
+        assert open_uris == [f1.resolve().as_uri(), f2.resolve().as_uri()]
+
+    def test_monaco_dock_open_file_replaces_active_default_tab_when_multiple_tabs_open(
+        self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        other_file = tmp_path / "other.py"
+        _set_editor_tabs(
+            editor_dock,
+            [
+                TabInfo(
+                    uri=other_file.as_uri(),
+                    title="other.py",
+                    isMain=False,
+                    isDirty=False,
+                    language="python",
+                    content="other",
+                ),
+                TabInfo(
+                    uri=MonacoEditorDock.DEFAULT_SCRIPT_URI,
+                    title="script.py",
+                    isMain=True,
+                    isDirty=False,
+                    language="python",
+                    content=editor_dock.default_content,
+                ),
+            ],
+            active_uri=MonacoEditorDock.DEFAULT_SCRIPT_URI,
+        )
+
+        custom_file = tmp_path / "custom.py"
+        custom_file.write_text("custom", encoding="utf-8")
+
+        mock_dispatch = mocker.patch.object(editor_dock.editor.bridge, "dispatch")
+        assert editor_dock.open_file(custom_file) is True
+        mock_dispatch.assert_called_once_with(
+            PyToJsCommand.OPEN_TAB,
+            {
+                "uri": custom_file.resolve().as_uri(),
+                "content": "custom",
+                "language": "python",
+                "isMain": True,
+                "replaceUri": MonacoEditorDock.DEFAULT_SCRIPT_URI,
+            },
+        )
+        uris = [t["uri"] for t in editor_dock.open_tabs]
+        assert uris == [other_file.as_uri(), custom_file.resolve().as_uri()]
+
+    def test_monaco_dock_open_file_preserves_unsaved_content_in_tab_cache(
+        self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        script_file = tmp_path / "existing.py"
+        script_file.write_text("disk content", encoding="utf-8")
+
+        _set_editor_tabs(
+            editor_dock,
+            [
+                TabInfo(
+                    uri=script_file.resolve().as_uri(),
+                    title="existing.py",
+                    isMain=False,
+                    isDirty=True,
+                    language="python",
+                    content="unsaved editor edits",
+                )
+            ],
+        )
+        mocker.patch.object(editor_dock.editor.bridge, "dispatch")
+        assert editor_dock.open_file(script_file) is True
+        assert editor_dock.open_tabs[0].get("content") == "unsaved editor edits"
+
+    def test_monaco_dock_open_file_normalizes_uri_lookup(
+        self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        script_file = tmp_path / "script.py"
+        script_file.write_text("code", encoding="utf-8")
+
+        # Simulate Monaco URI on Windows with percent-encoded drive colon or lower-case drive
+        resolved = script_file.resolve()
+        if resolved.drive:
+            drive_colon = resolved.drive
+            monaco_uri = resolved.as_uri().replace(f"///{drive_colon}", f"///{drive_colon[0].lower()}%3A")
+        else:
+            monaco_uri = resolved.as_uri()
+
+        _set_editor_tabs(
+            editor_dock,
+            [
+                TabInfo(
+                    uri=monaco_uri,
+                    title="script.py",
+                    isMain=False,
+                    isDirty=False,
+                    language="python",
+                    content="code",
+                )
+            ],
+        )
+        mocker.patch.object(editor_dock.editor.bridge, "dispatch")
+        assert editor_dock.open_file(script_file) is True
+        # Must not add duplicate TabInfo
+        assert len(editor_dock.open_tabs) == 1
+
+    def test_monaco_dock_on_editor_ready_replaces_default_tab_on_replay(
+        self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        script_file = tmp_path / "replayed.py"
+        _set_editor_tabs(
+            editor_dock,
+            [
+                TabInfo(
+                    uri=script_file.as_uri(),
+                    title="replayed.py",
+                    isMain=True,
+                    isDirty=False,
+                    language="python",
+                    content="print('replayed')",
+                )
+            ],
+        )
+        mocker.patch.object(editor_dock, "_generate_stubs")
+        mock_dispatch = mocker.patch.object(editor_dock.editor.bridge, "dispatch")
+        editor_dock._on_editor_ready()
+        mock_dispatch.assert_any_call(
+            PyToJsCommand.OPEN_TAB,
+            {
+                "uri": script_file.as_uri(),
+                "content": "print('replayed')",
+                "language": "python",
+                "isMain": True,
+                "replaceUri": MonacoEditorDock.DEFAULT_SCRIPT_URI,
             },
         )
 

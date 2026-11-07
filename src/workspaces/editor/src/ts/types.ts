@@ -59,7 +59,13 @@ export interface PyToJsCommandMap {
   'editor.toggleWordWrap': Record<string, never>;
   'editor.updateLspSettings': { section: string; settingsJson: string };
   'editor.updateOptions': { optionsJson: string };
-  'editor.openTab': { uri: string; content: string; language?: string; isMain?: boolean };
+  'editor.openTab': {
+    uri: string;
+    content: string;
+    language?: string;
+    isMain?: boolean;
+    replaceUri?: string;
+  };
   'editor.selectTab': { uri: string };
   'editor.tabSaved': { uri: string; oldUri?: string };
   'editor.triggerSave': Record<string, never>;

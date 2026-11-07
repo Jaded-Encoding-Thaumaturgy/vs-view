@@ -408,6 +408,24 @@ describe('BridgeService', () => {
         JSON.stringify({ uri: 'file:///script.py' }), // missing content
       );
       expect(mockEditor.openTab).not.toHaveBeenCalled();
+
+      // With replaceUri param
+      mockEditor.openTab.mockClear();
+      mockBridgeFixture.emitCommand(
+        'editor.openTab',
+        JSON.stringify({
+          uri: 'file:///new.py',
+          content: 'y = 2',
+          replaceUri: 'file:///old.py',
+        }),
+      );
+      expect(mockEditor.openTab).toHaveBeenCalledWith(
+        'file:///new.py',
+        'y = 2',
+        'python',
+        false,
+        'file:///old.py',
+      );
     });
 
     it('dispatches editor.tabSaved with and without oldUri', () => {

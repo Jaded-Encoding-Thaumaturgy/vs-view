@@ -432,6 +432,97 @@ describe('EditorService', () => {
       expect(service.getValue()).toBe('version 2');
     });
 
+    it('openTab() with replaceUri removes target tab, disposes its model, and sets new tab as active and main', () => {
+      const sessionBefore = service.getSessionState();
+      expect(sessionBefore.map((t) => t.uri)).toEqual(['file:///workspace/script.py']);
+
+      const oldModel = modelsMap.get('file:///workspace/script.py')!;
+      expect(oldModel.isDisposed()).toBe(false);
+
+      const res = service.openTab(
+        'file:///workspace/replaced.py',
+        'print("hello")',
+        'python',
+        true,
+        'file:///workspace/script.py',
+      );
+      expect(res.ok).toBe(true);
+
+      const sessionAfter = service.getSessionState();
+      expect(sessionAfter.map((t) => t.uri)).toEqual(['file:///workspace/replaced.py']);
+      expect(sessionAfter[0]?.isMain).toBe(true);
+      expect(service.getActiveUri()).toBe('file:///workspace/replaced.py');
+      expect(service.getMainUri()).toBe('file:///workspace/replaced.py');
+      expect(service.getValue()).toBe('print("hello")');
+      expect(oldModel.isDisposed()).toBe(true);
+    });
+
+    it('openTab() with replaceUri does not replace target tab if target tab has unsaved edits', () => {
+      service.openTab('file:///workspace/dirty.py', 'original', 'python', false);
+      service.setValue('modified by user');
+
+      const res = service.openTab(
+        'file:///workspace/new.py',
+        'new code',
+        'python',
+        false,
+        'file:///workspace/dirty.py',
+      );
+      expect(res.ok).toBe(true);
+
+      const session = service.getSessionState();
+      const uris = session.map((t) => t.uri);
+      expect(uris).toContain('file:///workspace/dirty.py');
+      expect(uris).toContain('file:///workspace/new.py');
+    });
+
+    it('openTab() with replaceUri === uri does not delete the opened tab', () => {
+      const res = service.openTab(
+        'file:///workspace/same.py',
+        'code',
+        'python',
+        false,
+        'file:///workspace/same.py',
+      );
+      expect(res.ok).toBe(true);
+
+      const session = service.getSessionState();
+      expect(session.map((t) => t.uri)).toContain('file:///workspace/same.py');
+    });
+
+    it('openTab() with non-existent replaceUri opens new tab without errors', () => {
+      const res = service.openTab(
+        'file:///workspace/fresh.py',
+        'fresh code',
+        'python',
+        false,
+        'file:///workspace/missing.py',
+      );
+      expect(res.ok).toBe(true);
+
+      const session = service.getSessionState();
+      expect(session.map((t) => t.uri)).toContain('file:///workspace/fresh.py');
+    });
+
+    it('openTab() with replaceUri on non-main tab keeps existing main tab', () => {
+      service.openTab('file:///workspace/sub.py', 'sub', 'python', false);
+      expect(service.getMainUri()).toBe('file:///workspace/script.py');
+
+      service.openTab(
+        'file:///workspace/replacement_sub.py',
+        'replacement',
+        'python',
+        false,
+        'file:///workspace/sub.py',
+      );
+
+      expect(service.getMainUri()).toBe('file:///workspace/script.py');
+      const session = service.getSessionState();
+      const uris = session.map((t) => t.uri);
+      expect(uris).toContain('file:///workspace/replacement_sub.py');
+      expect(uris).not.toContain('file:///workspace/sub.py');
+    });
+
     it('openTab() does not overwrite unsaved content when tab is dirty', () => {
       service.openTab('file:///workspace/dirty.py', 'original', 'python', false);
       expect(service.getValue()).toBe('original');

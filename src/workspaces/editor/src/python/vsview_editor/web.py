@@ -71,6 +71,7 @@ class OpenTabPayload(TypedDict):
     content: str
     language: NotRequired[str]
     isMain: NotRequired[bool]
+    replaceUri: NotRequired[str]
 
 
 class SelectTabPayload(TypedDict):

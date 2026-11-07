@@ -180,7 +180,8 @@ export class BridgeService
         if (typeof p.uri === 'string' && typeof p.content === 'string') {
           const language = typeof p.language === 'string' ? p.language : 'python';
           const isMain = typeof p.isMain === 'boolean' ? p.isMain : false;
-          this.editorService.openTab(p.uri, p.content, language, isMain);
+          const replaceUri = typeof p.replaceUri === 'string' ? p.replaceUri : undefined;
+          this.editorService.openTab(p.uri, p.content, language, isMain, replaceUri);
         }
       }),
     );
