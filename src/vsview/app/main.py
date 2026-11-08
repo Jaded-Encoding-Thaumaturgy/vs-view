@@ -3,7 +3,6 @@ from __future__ import annotations
 import ctypes
 import gc
 import sys
-import weakref
 from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from functools import partial
@@ -862,7 +861,7 @@ class WorkspaceToolButton[WorkspaceT: BaseWorkspace](QToolButton, IconReloadMixi
         super().__init__(parent)
         self.workspace: WorkspaceT = workspace
 
-        self.setIcon(self._make_icon(workspace))
+        self._set_icon()
         self.setIconSize(self.ICON_SIZE)
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.setCheckable(True)
@@ -872,8 +871,7 @@ class WorkspaceToolButton[WorkspaceT: BaseWorkspace](QToolButton, IconReloadMixi
 
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
-        weak_wk = weakref.ref(workspace)
-        self.register_icon_callback(lambda: self.setIcon(self._make_icon(ws)) if (ws := weak_wk()) else None)
+        self.register_icon_callback(self._set_icon)
 
         # Drag tracking
         self._drag_start_pos: QPoint | None = None
@@ -906,6 +904,9 @@ class WorkspaceToolButton[WorkspaceT: BaseWorkspace](QToolButton, IconReloadMixi
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         self._drag_start_pos = None
         super().mouseReleaseEvent(event)
+
+    def _set_icon(self) -> None:
+        self.setIcon(self._make_icon(self.workspace))
 
     def _make_icon(self, workspace: BaseWorkspace) -> QIcon:
         palette = self.palette()
