@@ -1126,7 +1126,10 @@ class BaseGraphicsView(QGraphicsView):
         zoom = self.slider_to_zoom(value)
         zoom_text = f"{zoom:.2f}x"
         self.slider.setToolTip(zoom_text)
-        QToolTip.showText(QCursor.pos(), zoom_text, self.slider)
+
+        if self.slider.isVisible() or self.isVisible():
+            QToolTip.showText(QCursor.pos(), zoom_text, self.slider)
+
         self.set_zoom(zoom)
 
     @Slot(int)
