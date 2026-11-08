@@ -84,7 +84,7 @@ cache-keys = [
     { file = "src/ts/**/*.js" },
     { file = "src/ts/assets/**/*.svg" },
     { file = "../../shared/ts/src/**/*.ts" },
-    { file = "src/ts/index.css" },
+    { file = "src/ts/**/*.css" },
     { file = "src/ts/index.html" },
 ]
 

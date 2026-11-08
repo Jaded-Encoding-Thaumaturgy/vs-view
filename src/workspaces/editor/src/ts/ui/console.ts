@@ -1,3 +1,4 @@
+import './console.css';
 import { FitAddon } from '@xterm/addon-fit';
 import { type ITheme, Terminal } from '@xterm/xterm';
 import { type TemplateResult, html, render } from 'lit-html';
