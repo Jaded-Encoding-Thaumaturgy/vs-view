@@ -274,8 +274,9 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
 
         v = self.tab_manager.current_view
         if (z := self.local_settings.view.last_zoom) and z != 1.0:
-            with QSignalBlocker(v):
+            with QSignalBlocker(v.slider):
                 v.slider.setValue(v.zoom_to_slider(z))
+            v.set_zoom(z)
 
         if c := self.local_settings.view.last_center:
             v.update_center(c.toTuple())
