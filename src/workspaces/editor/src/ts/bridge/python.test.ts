@@ -388,6 +388,7 @@ describe('BridgeService', () => {
         'import vapoursynth as vs',
         'python',
         true,
+        undefined,
       );
 
       // Default values when optional params omitted
@@ -399,7 +400,13 @@ describe('BridgeService', () => {
           content: 'x = 1',
         }),
       );
-      expect(mockEditor.openTab).toHaveBeenCalledWith('file:///sub.py', 'x = 1', 'python', false);
+      expect(mockEditor.openTab).toHaveBeenCalledWith(
+        'file:///sub.py',
+        'x = 1',
+        'python',
+        false,
+        undefined,
+      );
 
       // Missing required params ignored
       mockEditor.openTab.mockClear();
