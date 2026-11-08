@@ -198,6 +198,19 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         return output_metadata.get(str(self.content), {})
 
     @override
+    def on_content_loaded(self) -> None:
+        v = self.tab_manager.current_view
+        if (z := self.local_settings.view.last_zoom) and z != 1.0:
+            with QSignalBlocker(v.slider):
+                v.slider.setValue(v.zoom_to_slider(z))
+            v.set_zoom(z)
+
+        super().on_content_loaded()
+
+        if not v.autofit and (c := self.local_settings.view.last_center):
+            v.update_center(c.toTuple())
+
+    @override
     def load_content(
         self,
         content: PathLike,
@@ -210,7 +223,6 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         return (
             super()
             .load_content(content, frame, time, tab_index)
-            .add_loop_callback(self._restore_zoom_center)
             .add_loop_callback(lambda f: self._start_autosave(f, remaining_time))
         )
 
@@ -267,19 +279,6 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
 
         dock_visible = any(not dock.isHidden() for dock in self.docks)
         self.dock_toggle_btn.setChecked(dock_visible)
-
-    def _restore_zoom_center(self, f: Future[int]) -> None:
-        if f.exception() or f.result() > 0:
-            return
-
-        v = self.tab_manager.current_view
-        if (z := self.local_settings.view.last_zoom) and z != 1.0:
-            with QSignalBlocker(v.slider):
-                v.slider.setValue(v.zoom_to_slider(z))
-            v.set_zoom(z)
-
-        if c := self.local_settings.view.last_center:
-            v.update_center(c.toTuple())
 
     @Slot(int, float, bool)
     def _on_playback_settings_changed(self, seek_step: int, speed: float, uncapped: bool) -> None:
