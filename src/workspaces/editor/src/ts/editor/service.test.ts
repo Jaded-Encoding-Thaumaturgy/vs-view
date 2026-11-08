@@ -585,7 +585,37 @@ describe('EditorService', () => {
       expect(service.getMainValue()).toBe('secondary content');
     });
 
-    it("closeTab() when last tab is closed recreates default 'file:///workspace/script.py' main tab", () => {
+    it("closeTab() and closeSavedTabs() on the lone default 'file:///workspace/script.py' tab recreate a fresh default tab and model", () => {
+      const initialModel = modelsMap.get('file:///workspace/script.py')!;
+      expect(initialModel.isDisposed()).toBe(false);
+
+      // 1. closeTab on the only default tab
+      const closeRes = service.closeTab('file:///workspace/script.py');
+      expect(closeRes.ok).toBe(true);
+      expect(initialModel.isDisposed()).toBe(true);
+
+      const secondModel = modelsMap.get('file:///workspace/script.py')!;
+      expect(secondModel).toBeDefined();
+      expect(secondModel).not.toBe(initialModel);
+      expect(secondModel.isDisposed()).toBe(false);
+      expect(service.getActiveUri()).toBe('file:///workspace/script.py');
+      expect(service.getMainUri()).toBe('file:///workspace/script.py');
+      expect(service.getSessionState().map((t) => t.uri)).toEqual(['file:///workspace/script.py']);
+
+      // 2. closeSavedTabs on the only default tab
+      const savedRes = service.closeSavedTabs();
+      expect(savedRes.ok).toBe(true);
+      expect(secondModel.isDisposed()).toBe(true);
+
+      const thirdModel = modelsMap.get('file:///workspace/script.py')!;
+      expect(thirdModel).toBeDefined();
+      expect(thirdModel.isDisposed()).toBe(false);
+      expect(service.getActiveUri()).toBe('file:///workspace/script.py');
+      expect(service.getMainUri()).toBe('file:///workspace/script.py');
+      expect(service.getSessionState().map((t) => t.uri)).toEqual(['file:///workspace/script.py']);
+    });
+
+    it("closeTab() when last custom tab is closed recreates default 'file:///workspace/script.py' main tab", () => {
       // Open a custom tab and close default script.py tab
       service.openTab('file:///workspace/custom.py', 'custom code', 'python', true);
       service.closeTab('file:///workspace/script.py');
@@ -631,7 +661,7 @@ describe('EditorService', () => {
       expect(remainingTitles).not.toContain('dirty.py');
     });
 
-    it('setMainTab() designates tab as main and fires onDidChangeMainTab', () => {
+    it('setMainTab() designates tab as main, preserves tab order, and fires onDidChangeMainTab', () => {
       service.openTab('file:///workspace/tabA.py', 'code A', 'python', false);
       service.openTab('file:///workspace/tabB.py', 'code B', 'python', false);
 
@@ -643,9 +673,55 @@ describe('EditorService', () => {
       expect(mainTabChanges).toContain('file:///workspace/tabB.py');
       expect(service.getMainValue()).toBe('code B');
 
+      const tabBarContainer = document.getElementById(DOM_IDS.TAB_BAR)!;
+      const titles = Array.from(tabBarContainer.children).map(
+        (tab) => tab.querySelector('.tab-title')?.textContent,
+      );
+      expect(titles).toEqual(['script.py', 'tabA.py', 'tabB.py']);
+
       // Setting non-existent tab returns Result.err
       const invalidRes = service.setMainTab('file:///workspace/nonexistent.py');
       expect(invalidRes.ok).toBe(false);
+    });
+
+    it('closeOtherTabs() and closeSavedTabs() batch state transitions and fire events once', () => {
+      service.openTab('file:///workspace/clean1.py', 'c1', 'python', false);
+      service.openTab('file:///workspace/dirty1.py', 'd1', 'python', false);
+      service.setValue('d1 edited');
+      service.openTab('file:///workspace/clean2.py', 'c2', 'python', false);
+
+      const activeChanges: Array<string | null> = [];
+      const mainChanges: Array<string | null> = [];
+      service.onDidChangeActiveTab((u) => activeChanges.push(u));
+      service.onDidChangeMainTab((u) => mainChanges.push(u));
+
+      // Currently active is clean2.py, main is script.py (clean).
+      // closeSavedTabs() closes script.py, clean1.py, clean2.py in one batch -> dirty1.py becomes active and main once!
+      const savedRes = service.closeSavedTabs();
+      expect(savedRes.ok).toBe(true);
+
+      expect(service.getSessionState().map((t) => t.uri)).toEqual(['file:///workspace/dirty1.py']);
+      expect(activeChanges).toEqual(['file:///workspace/dirty1.py']);
+      expect(mainChanges).toEqual(['file:///workspace/dirty1.py']);
+
+      // Open two more tabs, make drop.py dirty and active
+      service.openTab('file:///workspace/keep.py', 'keep', 'python', false);
+      service.openTab('file:///workspace/drop.py', 'drop', 'python', false);
+      service.setValue('drop edited');
+
+      activeChanges.length = 0;
+      mainChanges.length = 0;
+      vi.mocked(window.confirm).mockClear();
+
+      // closeOtherTabs('keep.py') closes dirty1.py and drop.py with a single confirm prompt and single active/main switch
+      const otherRes = service.closeOtherTabs('file:///workspace/keep.py');
+      expect(otherRes.ok).toBe(true);
+      expect(window.confirm).toHaveBeenCalledTimes(1);
+      expect(service.getSessionState().map((t) => t.uri)).toEqual(['file:///workspace/keep.py']);
+      expect(activeChanges).toEqual(['file:///workspace/keep.py']);
+      expect(mainChanges).toEqual(['file:///workspace/keep.py']);
+
+      expect(service.closeOtherTabs('file:///workspace/missing.py').ok).toBe(false);
     });
 
     it('renameTab() renames tab URI, updates model and title, and maintains active/main state', () => {
@@ -672,6 +748,39 @@ describe('EditorService', () => {
       );
       expect(titles).toContain('new_name.py');
       expect(titles).not.toContain('old_name.py');
+
+      // Renaming into an already open active tab URI disposes the collided tab's model and attaches the editor to the renamed tab's model
+      service.openTab('file:///workspace/collided.py', 'old collided', 'python', false);
+      const collidedModel = modelsMap.get('file:///workspace/collided.py')!;
+      expect(collidedModel.isDisposed()).toBe(false);
+      expect(service.getActiveUri()).toBe('file:///workspace/collided.py');
+
+      const overwriteRename = service.renameTab(
+        'file:///workspace/new_name.py',
+        'file:///workspace/collided.py',
+      );
+      expect(overwriteRename.ok).toBe(true);
+      expect(collidedModel.isDisposed()).toBe(true);
+      expect(service.getActiveUri()).toBe('file:///workspace/collided.py');
+      expect(service.getValue()).toBe("print('hello')");
+      expect(editorState.lastCreatedEditor?.currentModel?.isDisposed()).toBe(false);
+
+      // Renaming a non-main tab onto the main tab inherits isMain = true
+      service.openTab('file:///workspace/main_target.py', 'main code', 'python', true);
+      service.openTab('file:///workspace/other.py', 'other code', 'python', false);
+      expect(service.getMainUri()).toBe('file:///workspace/main_target.py');
+
+      const mainOverwrite = service.renameTab(
+        'file:///workspace/other.py',
+        'file:///workspace/main_target.py',
+      );
+      expect(mainOverwrite.ok).toBe(true);
+      expect(service.getMainUri()).toBe('file:///workspace/main_target.py');
+      expect(service.getMainValue()).toBe('other code');
+      const mainState = service
+        .getSessionState()
+        .find((t) => t.uri === 'file:///workspace/main_target.py');
+      expect(mainState?.isMain).toBe(true);
 
       // Renaming non-existent tab returns Result.err
       const invalidRename = service.renameTab(

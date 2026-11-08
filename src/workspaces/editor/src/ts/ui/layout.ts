@@ -1,5 +1,7 @@
 import { type TemplateResult, html, render } from 'lit-html';
+import { unsafeHTML } from 'lit-html/directives/unsafe-html.js';
 
+import xIconSvg from '../assets/icons/lucide/x.svg?raw';
 import { DOM_IDS } from './constants';
 
 export function renderAppLayout(): void {
@@ -37,7 +39,15 @@ function renderConsoleHeader(): TemplateResult {
         <button id=${DOM_IDS.CONSOLE_CLEAR_BTN} class="console-btn" title="Clear Console">
           Clear
         </button>
-        <button id=${DOM_IDS.CONSOLE_CLOSE_BTN} class="console-btn" title="Hide Console">✕</button>
+        <button
+          id=${DOM_IDS.CONSOLE_CLOSE_BTN}
+          type="button"
+          class="console-btn console-close-btn"
+          title="Hide Console"
+          aria-label="Hide Console"
+        >
+          ${unsafeHTML(xIconSvg)}
+        </button>
       </div>
     </div>
   `;

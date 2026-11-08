@@ -51,6 +51,12 @@ export class EditorService implements vscode.Disposable {
           this.selectTab(uri).mapErr((err) => console.error('Failed to select tab:', err)),
         onCloseTab: (uri) =>
           this.closeTab(uri).mapErr((err) => console.error('Failed to close tab:', err)),
+        onCloseOtherTabs: (uri) =>
+          this.closeOtherTabs(uri).mapErr((err) =>
+            console.error('Failed to close other tabs:', err),
+          ),
+        onCloseSavedTabs: () =>
+          this.closeSavedTabs().mapErr((err) => console.error('Failed to close saved tabs:', err)),
         onSetMainTab: (uri) =>
           this.setMainTab(uri).mapErr((err) => console.error('Failed to set main tab:', err)),
       }),
@@ -357,7 +363,7 @@ export class EditorService implements vscode.Disposable {
           const candidate = this.tabs.get(replaceUriString);
           if (candidate && !candidate.isDirty) {
             oldTab = candidate;
-            this.tabs.delete(replaceUriString);
+            this.replaceTabInMap(replaceUriString, uriString, tab);
             if (this.mainUri === replaceUriString) {
               this.mainUri = null;
             }
@@ -394,50 +400,29 @@ export class EditorService implements vscode.Disposable {
   public closeTab(uriInput: string): Result<void> {
     return Result.fromThrowable(() => {
       const uriString = this.normalizeUri(uriInput).toString();
-      const tab = this.tabs.get(uriString);
-      if (!tab) return;
+      this.closeTabs([uriString]);
+    });
+  }
 
-      if (tab.isDirty) {
-        const discard = confirm(`Discard unsaved changes for ${tab.title}?`);
-        if (!discard) return;
+  /** Close all tabs except the specified URI. */
+  public closeOtherTabs(keepUriInput: string): Result<void> {
+    return Result.fromThrowable(() => {
+      const keepUriString = this.normalizeUri(keepUriInput).toString();
+      if (!this.tabs.has(keepUriString)) {
+        throw new Error(`Tab ${keepUriString} does not exist.`);
       }
+      const urisToClose = Array.from(this.tabs.keys()).filter((k) => k !== keepUriString);
+      this.closeTabs(urisToClose);
+    });
+  }
 
-      // Save list before deletion to pick fallback active tab
-      const tabKeys = Array.from(this.tabs.keys());
-      const closedIndex = tabKeys.indexOf(uriString);
-
-      // Switch active tab FIRST if closing current active tab
-      if (this.activeUri === uriString) {
-        const remainingKeys = tabKeys.filter((k) => k !== uriString);
-        if (remainingKeys.length > 0) {
-          const nextIndex = Math.min(closedIndex, remainingKeys.length - 1);
-          const nextKey = remainingKeys[nextIndex]!;
-          this.selectTabInternal(nextKey);
-        } else {
-          this.activeUri = null;
-          this.activeTabChangeEmitter.fire(null);
-          // Re-create default main tab if all tabs are closed
-          this.openTab(DEFAULT_SCRIPT_URI, '', 'python', true);
-        }
-      }
-
-      // Remove tab record
-      this.tabs.delete(uriString);
-
-      // If closed tab was main, reassign main to another tab if available
-      if (tab.isMain) {
-        const [nextMainKey] = this.tabs.keys();
-        if (nextMainKey) {
-          this.setMainTabInternal(nextMainKey);
-        } else {
-          this.mainUri = null;
-          this.mainTabChangeEmitter.fire(null);
-          this.contentChangeEmitter.fire();
-        }
-      }
-
-      this.disposeTab(tab);
-      this.updateTabBar();
+  /** Close all tabs without unsaved changes. */
+  public closeSavedTabs(): Result<void> {
+    return Result.fromThrowable(() => {
+      const urisToClose = Array.from(this.tabs.entries())
+        .filter(([, tab]) => !tab.isDirty)
+        .map(([uriString]) => uriString);
+      this.closeTabs(urisToClose);
     });
   }
 
@@ -497,9 +482,6 @@ export class EditorService implements vscode.Disposable {
 
   public updateTabBar(): void {
     const tabInfos = this.getTabState(false);
-
-    // Ensure Main tab is rendered first
-    tabInfos.sort((a, b) => (a.isMain ? -1 : b.isMain ? 1 : 0));
 
     this.tabBarView.render(tabInfos, this.activeUri);
 
@@ -573,6 +555,119 @@ export class EditorService implements vscode.Disposable {
     }
   }
 
+  private closeTabs(urisToClose: string[]): void {
+    const targets: TabRecord[] = [];
+    const closingSet = new Set<string>();
+    for (const uri of urisToClose) {
+      const tab = this.tabs.get(uri);
+      if (tab && !closingSet.has(uri)) {
+        closingSet.add(uri);
+        targets.push(tab);
+      }
+    }
+    if (targets.length === 0) return;
+
+    const dirtyTargets = targets.filter((t) => t.isDirty);
+    if (dirtyTargets.length > 0) {
+      const message =
+        dirtyTargets.length === 1
+          ? `Discard unsaved changes for ${dirtyTargets[0]!.title}?`
+          : `Discard unsaved changes for ${dirtyTargets.length} tabs (${dirtyTargets.map((t) => t.title).join(', ')})?`;
+      if (!confirm(message)) return;
+    }
+
+    const tabKeys = Array.from(this.tabs.keys());
+    const remainingKeys = tabKeys.filter((k) => !closingSet.has(k));
+    const wasActiveClosing = this.activeUri !== null && closingSet.has(this.activeUri);
+    const wasMainClosing = this.mainUri !== null && closingSet.has(this.mainUri);
+    const closedActiveIndex = this.activeUri ? tabKeys.indexOf(this.activeUri) : 0;
+
+    if (remainingKeys.length === 0) {
+      for (const tab of targets) {
+        this.tabs.delete(tab.uriString);
+        this.disposeTab(tab);
+      }
+      this.activeUri = null;
+      this.mainUri = null;
+      this.openTab(DEFAULT_SCRIPT_URI, '', 'python', true).unwrap();
+      return;
+    }
+
+    let activeChanged = false;
+    if (wasActiveClosing) {
+      let nextKey = remainingKeys[remainingKeys.length - 1]!;
+      for (const k of remainingKeys) {
+        if (tabKeys.indexOf(k) >= closedActiveIndex) {
+          nextKey = k;
+          break;
+        }
+      }
+      const nextTab = this.tabs.get(nextKey);
+      if (nextTab && !nextTab.model.isDisposed()) {
+        this.activeUri = nextKey;
+        this.editor.setModel(nextTab.model);
+        if (nextTab.viewState) {
+          this.editor.restoreViewState(nextTab.viewState);
+        }
+        this.editor.focus();
+      } else {
+        this.activeUri = null;
+      }
+      activeChanged = true;
+    }
+
+    for (const tab of targets) {
+      this.tabs.delete(tab.uriString);
+      this.disposeTab(tab);
+    }
+
+    let mainChanged = false;
+    if (wasMainClosing) {
+      const nextMainKey = remainingKeys[0]!;
+      for (const [key, tab] of this.tabs.entries()) {
+        tab.isMain = key === nextMainKey;
+      }
+      this.mainUri = nextMainKey;
+      mainChanged = true;
+    }
+
+    this.updateTabBar();
+    if (activeChanged || mainChanged) {
+      this.contentChangeEmitter.fire();
+    }
+    if (activeChanged) {
+      this.activeTabChangeEmitter.fire(this.activeUri);
+    }
+    if (mainChanged) {
+      this.mainTabChangeEmitter.fire(this.mainUri);
+    }
+  }
+
+  private replaceTabInMap(oldKey: string, newKey: string, record: TabRecord): void {
+    if (oldKey === newKey) {
+      this.tabs.set(newKey, record);
+      return;
+    }
+    const entries = Array.from(this.tabs.entries());
+    this.tabs.clear();
+    let replaced = false;
+    for (const [k, v] of entries) {
+      if (k === oldKey) {
+        this.tabs.set(newKey, record);
+        replaced = true;
+      } else if (k === newKey) {
+        if (v !== record) {
+          this.disposeTab(v);
+        }
+      } else {
+        this.tabs.set(k, v);
+      }
+    }
+    if (!replaced) {
+      this.tabs.set(newKey, record);
+    }
+  }
+
   private async persistThemeConfig(themeId: string): Promise<void> {
     await updateUserConfiguration(JSON.stringify({ 'workbench.colorTheme': themeId }));
     const conf = vscode.workspace.getConfiguration();
@@ -595,6 +690,18 @@ export class EditorService implements vscode.Disposable {
     const tab = this.tabs.get(oldUriString);
     if (!tab) return;
 
+    const collided = this.tabs.get(newUriString);
+    const inheritsActive =
+      collided !== undefined && collided !== tab && this.activeUri === newUriString;
+    const inheritsMain =
+      collided !== undefined &&
+      collided !== tab &&
+      (collided.isMain || this.mainUri === newUriString);
+    if (collided && collided !== tab) {
+      this.tabs.delete(newUriString);
+      this.disposeTab(collided);
+    }
+
     const newUri = this.normalizeUri(newUriString);
     const newTitle = this.deriveTitle(newUriString);
 
@@ -615,9 +722,8 @@ export class EditorService implements vscode.Disposable {
       }
     }
 
-    if (tab.ownsModel && tab.model !== newModel && !tab.model.isDisposed()) {
-      tab.model.dispose();
-    }
+    const oldModel = tab.model;
+    const oldOwnsModel = tab.ownsModel;
 
     tab.uri = newUri;
     tab.uriString = newUriString;
@@ -626,17 +732,20 @@ export class EditorService implements vscode.Disposable {
     tab.ownsModel = ownsModel;
     tab.viewState = viewState;
 
-    this.tabs.delete(oldUriString);
-    this.tabs.set(newUriString, tab);
+    this.replaceTabInMap(oldUriString, newUriString, tab);
 
-    if (this.activeUri === oldUriString) {
+    if (this.activeUri === oldUriString || inheritsActive) {
       this.activeUri = newUriString;
       this.editor.setModel(newModel);
       if (viewState) {
         this.editor.restoreViewState(viewState);
       }
     }
-    if (this.mainUri === oldUriString) {
+    if (oldOwnsModel && oldModel !== newModel && !oldModel.isDisposed()) {
+      oldModel.dispose();
+    }
+    if (this.mainUri === oldUriString || inheritsMain) {
+      tab.isMain = true;
       this.mainUri = newUriString;
       this.mainTabChangeEmitter.fire(this.mainUri);
     }
