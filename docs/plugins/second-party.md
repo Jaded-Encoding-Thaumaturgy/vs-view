@@ -216,6 +216,10 @@ All `set_output` outputs are available by default. Pass `allow_comp` to explicit
 
 The Dependency Graph dock renders the filter dependency graph of any output using [vsgraph](https://github.com/Ichunjo/vs-graph) and Cytoscape.js.
 
+<figure markdown="span">
+    ![](../assets/graph_plugin.png){ loading=lazy, width="650" }
+</figure>
+
 ### Features
 
 - **Layouts:** Dagre (TB / LR), breadth-first, concentric, and grid.
@@ -363,6 +367,10 @@ Provides per-frame video scopes as tabs inside a single panel.
 
 Plots a per-plane pixel value histogram for the current frame.
 
+<figure markdown="span">
+    ![](../assets/histogram_levels_plugin.png){ loading=lazy, width="650" }
+</figure>
+
 | Control               | Options              | Description                                                                             |
 | :-------------------- | :------------------- | :-------------------------------------------------------------------------------------- |
 | **Bin resolution**    | Auto, 256, 512, 1024 | Number of histogram bins. Auto scales to the panel width.                               |
@@ -371,7 +379,11 @@ Plots a per-plane pixel value histogram for the current frame.
 
 ### Luma
 
-Displays a luma scope using a VapourSynth `ModifyFrame` node, rendered through the standard graphics view.
+Displays a luma scope using rendered through a standard graphics view.
+
+<figure markdown="span">
+    ![](../assets/histogram_luma_plugin.png){ loading=lazy }
+</figure>
 
 | Control               | Options                      | Description                                                         |
 | :-------------------- | :--------------------------- | :------------------------------------------------------------------ |
@@ -383,6 +395,24 @@ Only GRAY and YUV inputs are supported. RGB input shows an error overlay.
 ### Vectorscope
 
 Plots chroma (U/V) distribution on a 2D plane.
+
+=== "Pixel Color"
+
+    <figure markdown="span">
+        ![](../assets/histogram_vectorscope_pixel_color.png){ loading=lazy, width="700" }
+    </figure>
+
+=== "Color Wheel"
+
+    <figure markdown="span">
+        ![](../assets/histogram_vectorscope_color_wheel.png){ loading=lazy, width="700" }
+    </figure>
+
+=== "Density"
+
+    <figure markdown="span">
+        ![](../assets/histogram_vectorscope_density.png){ loading=lazy, width="700" }
+    </figure>
 
 Graticules show 75 % and 100 % saturation circles, a skin-tone reference line, and primary/secondary color targets
 that automatically adjust based on the clip's color matrix (supporting Rec. 601, Rec. 709, Rec. 2020, and ST 240M).
@@ -400,6 +430,10 @@ RGB input is not supported and shows a warning. GRAY input plots all pixels at n
 
 Plots pixel values column-by-column as a waveform. Logarithmic density scaling is applied per-column.
 
+<figure markdown="span">
+    ![](../assets/histogram_waveform.png){ loading=lazy }
+</figure>
+
 | Control          | Options              | Description                                                                                                             |
 | :--------------- | :------------------- | :---------------------------------------------------------------------------------------------------------------------- |
 | **Mode**         | Luma, RGB/YUV Parade | **Luma**: single Y-plane waveform.<br>**Parade**: one waveform per plane side-by-side (R/G/B or Y/U/V, depending on color family). |
@@ -410,7 +444,11 @@ Plots pixel values column-by-column as a waveform. Logarithmic density scaling i
 
 ### CIE Chromaticity
 
-Plots the chromaticity coordinates of the frame pixels onto a standard CIE chromaticity diagram (CIE 1931 xy or CIE 1976 u'v'). This allows visualizing the gamut coverage and color distribution of the video.
+Plots the chromaticity coordinates of the frame pixels onto a standard CIE chromaticity diagram (CIE 1931 xy or CIE 1976 u'v').
+
+<figure markdown="span">
+    ![](../assets/histogram_cie.png){ loading=lazy, width=750 }
+</figure>
 
 Graticules show the boundary triangles for common color gamuts (**Rec. 709**, **Rec. 601**, **DCI-P3**, and **Rec. 2020**) and a reference crosshair for the **D65** white point.
 
@@ -452,6 +490,10 @@ This plugin adds more categories and formatters to the built-in [Frame Propertie
     ```
 
 Split Planes splits a video clip into its individual planes for inspection.
+
+<figure markdown="span">
+    ![](../assets/split_planes_plugin.png){ loading=lazy, width=750 }
+</figure>
 
 ### Features
 - Extends the Graphics View's default context menu to provide a way to offset chroma plane values.
