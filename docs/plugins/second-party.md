@@ -82,13 +82,13 @@ Second-party plugins are officially maintained but distributed as separate packa
 
 ## Installation
 
-Second-party plugins are officially maintained but distributed as separate Python packages. Note that many of these also require specific **native VapourSynth plugins** to be installed in your VapourSynth environment.
+Second-party plugins are officially maintained but distributed as separate Python packages.
 
 You can install plugins individually or choose one of the pre-configured bundles.
 
 !!! tip "Optional: Recommended & Full Bundles"
-    * The **recommended** bundle includes **Split Planes**, **FrameProps Extended**, and **Comparison**.
-    * The **full** bundle includes everything in the **recommended** bundle, plus **Histogram**, **Editor**, and the third-party [**Native Resolution**](third-party.md#native-resolution) plugin.
+    * The **recommended** bundle includes **Split Planes**, **FrameProps Extended**, **FFT Spectrum**, and **Comparison**.
+    * The **full** bundle includes all first, second and third-party plugins.
 
     === "pip"
         ```bash title="Install recommended bundle"
