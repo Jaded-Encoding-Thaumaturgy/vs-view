@@ -262,3 +262,15 @@ The Frame Strip dock displays previous and next frames around the current frame 
 - **Context Menu:** Right-click a slot to save or copy its frame, or to configure **Neighbors** (`1`–`5`), **Step**, and **Show current frame**.
 
 Default values can also be configured in **Settings** -> **Plugin - Frame Strip**.
+
+=== "Vertical view"
+
+    <figure markdown="span">
+        ![](../assets/frame_strip_vertical.png)
+    </figure>
+
+=== "Horizontal view"
+
+    <figure markdown="span">
+        ![](../assets/frame_strip_horizontal.png)
+    </figure>
