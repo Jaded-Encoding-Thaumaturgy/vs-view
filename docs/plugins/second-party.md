@@ -360,9 +360,6 @@ Provides per-frame video scopes as tabs inside a single panel.
 - Updates are paused during playback and resume on the active tab when playback stops.
 - Right-click any plot to copy or save the view.
 
-!!! note
-    The Luma tab uses [Numba](https://numba.pydata.org/) JIT compilation. A background pre-warm runs at startup; the tab is inactive until it completes.
-
 ### Levels
 
 Plots a per-plane pixel value histogram for the current frame.
