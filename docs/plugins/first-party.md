@@ -29,7 +29,7 @@ First-party plugins are official components integrated directly into the **VSVie
 
     ---
 
-    Access frame properties attached by VapourSynth filters.
+    Inspect and filter frame properties attached by VapourSynth filters.
 
     [:lucide-move-right: Explore Frame Properties](#frame-properties)
 
@@ -40,7 +40,7 @@ First-party plugins are official components integrated directly into the **VSVie
     Create, manage, and export scene ranges or video clips. Supports custom parsers and serializers.
 
     [:lucide-move-right: Explore Scening](#scening)
-    
+
 - :lucide-scan: **Region Selector**
 
     ---
@@ -102,10 +102,11 @@ The Frame Properties panel displays metadata attached to each frame by VapourSyn
 
 ### Features
 - **Categorization:** Properties are grouped into logical categories (e.g., Video, Metrics, Field).
+- **Filtering:** Search box in the toolbar to filter properties in real-time by key or value across both categorized and raw views.
 - **Formatters:** Values are automatically formatted into readable strings based on their type.
 - **Context Menu:** Right-click a property to display a context menu with options to copy the property value or its key.
 
-!!! Abstract "Extended Functionality"
+!!! abstract "Extended Functionality"
     For additional property categories and formatters, see [FrameProps Extended](second-party.md#frameprops-extended).
 
 !!! warning "Performance & Display Limits"
