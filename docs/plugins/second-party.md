@@ -376,7 +376,7 @@ Plots a per-plane pixel value histogram for the current frame.
 
 ### Luma
 
-Displays a luma scope using rendered through a standard graphics view.
+Displays a luma scope rendered through a standard graphics view.
 
 <figure markdown="span">
     ![](../assets/histogram_luma_plugin.png){ loading=lazy }
