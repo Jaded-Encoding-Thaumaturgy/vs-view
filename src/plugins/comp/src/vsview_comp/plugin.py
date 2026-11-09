@@ -138,6 +138,7 @@ class GlobalSettings(BaseModel):
             label="Brightness candidates",
             min=0,
             max=9999,
+            min_text="Auto",
             tooltip=(
                 "The number of candidate frames to analyze for finding dark/light frames.\n"
                 "0 will automatically calculate a value based on the clip length."
