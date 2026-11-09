@@ -502,7 +502,7 @@ class Accordion(QFrame):
     HEADER_STYLE = """
     QToolButton {
         border: none;
-        padding: 8px 12px;
+        padding: 6px 6px;
         font-weight: bold;
         text-align: left;
     }
@@ -538,8 +538,8 @@ class Accordion(QFrame):
 
         self.content = QWidget(self)
         self.content_layout = QVBoxLayout(self.content)
-        self.content_layout.setContentsMargins(12, 8, 12, 12)
-        self.content_layout.setSpacing(8)
+        self.content_layout.setContentsMargins(12, 8, 12, 8)
+        self.content_layout.setSpacing(6)
         self.main_layout.addWidget(self.content)
 
         self.animation = QParallelAnimationGroup(self)
