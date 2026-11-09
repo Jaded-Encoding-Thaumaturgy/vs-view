@@ -124,7 +124,10 @@ Detailed installation for individual packages can be found in their respective s
 
 The Comparison plugin provides an integrated workflow for extracting frames and uploading them directly to [Slow.pics](https://slow.pics/).
 
-It features automated frame selection, filtering by picture type, and integration with TMDB.
+<figure markdown="span">
+    ![](../assets/comp_plugin.png){ loading=lazy }
+</figure>
+
 
 ### Features
 - **Frame Selection**:
@@ -165,13 +168,9 @@ Double-clicking any thumbnail in the list seeks the playback directly to that fr
 
 Click **Curve...** (next to the random frame count) to open the curve editor and bias where in the timeline random frames are sampled from.
 
-| Action                                   | Effect                                         |
-| :--------------------------------------- | :--------------------------------------------- |
-| Double-click on the graph                | Add a control point                            |
-| Drag a point                             | Adjust its position and weight (Y-axis, 0 – 5) |
-| Double-click on a point                  | Open popover to set exact frame and weight     |
-| Right-click / ++delete++ / ++backspace++ | Remove the point                               |
-| **Reset**                                | Restore flat uniform distribution              |
+<figure markdown="span">
+    ![](../assets/comp_curve_plugin.png){ loading=lazy }
+</figure>
 
 The boundary points (start/end frame) are fixed horizontally but their weights are editable. Y = 1 everywhere gives uniform sampling.
 
