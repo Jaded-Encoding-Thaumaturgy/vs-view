@@ -408,7 +408,6 @@ class MainWindow(QMainWindow):
         if Shiboken.isValid(btn.workspace):
             btn.workspace.deleteLater()
 
-        del btn.workspace
         btn.deleteLater()
 
         if not self.nav_container.buttons:
@@ -906,7 +905,8 @@ class WorkspaceToolButton[WorkspaceT: BaseWorkspace](QToolButton, IconReloadMixi
         super().mouseReleaseEvent(event)
 
     def _set_icon(self) -> None:
-        self.setIcon(self._make_icon(self.workspace))
+        if Shiboken.isValid(self.workspace):
+            self.setIcon(self._make_icon(self.workspace))
 
     def _make_icon(self, workspace: BaseWorkspace) -> QIcon:
         palette = self.palette()
