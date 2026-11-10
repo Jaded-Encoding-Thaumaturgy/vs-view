@@ -107,7 +107,7 @@ class Application(QApplication):
         self.setWindowIcon(app_icon())
 
         if sys.platform == "linux":
-            self.setDesktopFileName("vsview.desktop")
+            self.setDesktopFileName("vsview")
 
     def setup_subsystems(self, /, no_settings: bool = False) -> None:
         SettingsManager(noop=no_settings)
