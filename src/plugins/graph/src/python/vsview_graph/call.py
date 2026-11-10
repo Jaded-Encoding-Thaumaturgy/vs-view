@@ -59,7 +59,11 @@ def build_filter_call(node: vsgraph.Node[Any], frame_idx: int = 0) -> str:
 
     for key, value in frame.to_dict()["arguments"].items():
         if is_clip_reference(value):
-            positional.append(next(clip_names))
+            # Arguments are in signature order: once a keyword was emitted, a positional clip would bind to it.
+            if keyword:
+                keyword.append(f"{key}={next(clip_names)}")
+            else:
+                positional.append(next(clip_names))
         elif isinstance(value, list) and value and all(map(is_clip_reference, value)):
             names = ", ".join(islice(clip_names, len(value)))
             keyword.append(f"{key}=[{names}]")
