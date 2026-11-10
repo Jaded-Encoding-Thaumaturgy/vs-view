@@ -380,3 +380,4 @@ docs/assets/raws
 
 # Local AGENTS.md
 AGENTS.md
+.vitest/

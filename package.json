@@ -3,9 +3,7 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "oxlint-tsgolint": "catalog:",
-    "vite-plus": "catalog:",
-    "vitest": "catalog:"
+    "vite-plus": "catalog:"
   },
   "devEngines": {
     "packageManager": {
