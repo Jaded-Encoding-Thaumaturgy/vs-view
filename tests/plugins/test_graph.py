@@ -273,6 +273,7 @@ def test_graph_plugin_initial_sync_on_web_ready(
     assert received_dispatches[PyToJsCommand.SET_OUTPUTS]["outputs"] == [
         {"index": 0, "name": "Clip 0", "isActive": True}
     ]
+    assert received_dispatches[PyToJsCommand.SET_OUTPUTS]["following"] is True
 
     # Keybindings rules dispatched
     assert PyToJsCommand.SET_KEYBINDINGS in received_dispatches
@@ -413,6 +414,74 @@ def test_graph_plugin_playback_suppression(
     assert PyToJsCommand.SET_DATA not in dispatched
 
 
+def test_graph_plugin_initial_load_deferred_until_playback_stops(
+    populated_harness: tuple[HarnessPluginController, GraphPlugin],
+    qtbot: QtBot,
+) -> None:
+    """A frontend that becomes ready during playback receives the graph once playback stops."""
+    harness, plugin = populated_harness
+    dispatched = list[str]()
+    plugin.view.bridge.dispatchCommandSignal.connect(lambda cmd, _: dispatched.append(cmd))
+
+    harness.playback_proxy._state.is_playing = True
+    plugin.view.bridge.onWebReady()
+    qtbot.waitUntil(lambda: getattr(plugin, "_is_dirty") is True, timeout=2000)
+    assert PyToJsCommand.SET_DATA not in dispatched
+
+    harness.playback_proxy._state.is_playing = False
+    plugin.on_playback_stopped()
+    qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in dispatched, timeout=2000)
+    assert getattr(plugin, "_is_dirty") is False
+
+
+def test_graph_plugin_reports_extraction_failure_to_frontend(
+    populated_harness: tuple[HarnessPluginController, GraphPlugin],
+    mocker: MockerFixture,
+    qtbot: QtBot,
+) -> None:
+    """A failed graph extraction is surfaced to the frontend instead of leaving it on the loading screen."""
+    _, plugin = populated_harness
+    mocker.patch.object(vsgraph, "get_graph", side_effect=RuntimeError("graph plugin missing"))
+
+    received = dict[str, Any]()
+    plugin.view.bridge.dispatchCommandSignal.connect(
+        lambda cmd, payload_str: received.update({cmd: json.loads(payload_str) if payload_str else None})
+    )
+
+    plugin.view.bridge.onWebReady()
+    qtbot.waitUntil(lambda: PyToJsCommand.SET_ERROR in received, timeout=2000)
+    assert "output 0" in received[PyToJsCommand.SET_ERROR]["message"]
+    assert PyToJsCommand.SET_DATA not in received
+
+
+def test_graph_plugin_discards_graph_extracted_across_reload(
+    populated_harness: tuple[HarnessPluginController, GraphPlugin],
+    mocker: MockerFixture,
+    qtbot: QtBot,
+) -> None:
+    """A graph whose extraction straddles a workspace reload is neither cached nor sent."""
+    _, plugin = populated_harness
+    dispatched = list[str]()
+    plugin.view.bridge.dispatchCommandSignal.connect(lambda cmd, _: dispatched.append(cmd))
+
+    plugin.view.bridge.onWebReady()
+    qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in dispatched, timeout=2000)
+    dispatched.clear()
+
+    real_get_graph = vsgraph.get_graph
+
+    def get_graph_during_reload(clip: vs.VideoNode) -> vsgraph.Graph[Any]:
+        plugin.on_destroy()
+        return real_get_graph(clip)
+
+    mocker.patch.object(vsgraph, "get_graph", side_effect=get_graph_during_reload)
+
+    fut = plugin.update_graph(force_layout=True, refresh=True)
+    qtbot.waitUntil(fut.done, timeout=2000)
+    assert PyToJsCommand.SET_DATA not in dispatched
+    assert getattr(plugin, "_graph_cache") == {}
+
+
 # Node Selection Persistence & Invalidation
 def test_graph_plugin_node_selection_lifecycle(
     populated_harness: tuple[HarnessPluginController, GraphPlugin],
@@ -503,6 +572,7 @@ def test_graph_plugin_output_selection_and_follow_mode(
 
     outputs_v1 = {item["index"]: item["isActive"] for item in received_dispatches[PyToJsCommand.SET_OUTPUTS]["outputs"]}
     assert outputs_v1 == {0: False, 1: True}
+    assert received_dispatches[PyToJsCommand.SET_OUTPUTS]["following"] is False
 
     # While locked to output 1, workspace current output changes do not switch inspected graph
     received_dispatches.clear()
@@ -522,6 +592,56 @@ def test_graph_plugin_output_selection_and_follow_mode(
     assert getattr(plugin, "selected_output_index") == 1
     plugin.view.bridge.dispatchFromJs(JsToPyCommand.OUTPUT_SELECT, json.dumps({"index": -1}))
     assert getattr(plugin, "selected_output_index") is None
+
+
+def test_graph_plugin_output_change_during_extraction_resends_data(
+    qtbot: QtBot,
+    tmp_path: Path,
+    graph_env: ManagedEnvironment,
+    mocker: MockerFixture,
+) -> None:
+    """The sent key tracks the extracted output, so a switch during extraction is followed by a full resend."""
+    with graph_env.use():
+        clip0 = graph_env.core.std.BlankClip(width=64, height=64, length=10, format=vs.RGB24)
+        clip1 = graph_env.core.std.BlankClip(width=128, height=128, length=10, format=vs.RGB24)
+        clip1 = graph_env.core.std.Invert(clip1)
+        voutput0 = make_video_output(clip0, index=0)
+        voutput1 = make_video_output(clip1, index=1)
+
+    harness = HarnessPluginController(qtbot, tmp_path, env=graph_env)
+    harness.set_current_voutput(voutput1)
+    harness.set_current_voutput(voutput0)
+
+    plugin = harness.create_plugin(GraphPlugin)
+    qtbot.addWidget(plugin)
+    plugin.show()
+
+    received = dict[str, Any]()
+    plugin.view.bridge.dispatchCommandSignal.connect(
+        lambda cmd, payload_str: received.update({cmd: json.loads(payload_str) if payload_str else None})
+    )
+
+    plugin.view.bridge.onWebReady()
+    qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in received, timeout=2000)
+    assert len(received[PyToJsCommand.SET_DATA]["nodes"]) == 1
+
+    real_get_graph = vsgraph.get_graph
+
+    def get_graph_with_output_switch(clip: vs.VideoNode) -> vsgraph.Graph[Any]:
+        setattr(plugin, "_selected_idx", 1)
+        return real_get_graph(clip)
+
+    mocker.patch.object(vsgraph, "get_graph", side_effect=get_graph_with_output_switch)
+
+    received.clear()
+    fut = plugin.update_graph(force_layout=True, refresh=True)
+    qtbot.waitUntil(fut.done, timeout=2000)
+    assert len(received[PyToJsCommand.SET_DATA]["nodes"]) == 1
+
+    received.clear()
+    fut = plugin.update_graph()
+    qtbot.waitUntil(fut.done, timeout=2000)
+    assert len(received[PyToJsCommand.SET_DATA]["nodes"]) == 2
 
 
 # Export & Image Operations
@@ -813,6 +933,27 @@ def test_build_filter_call_variations(graph_env: ManagedEnvironment) -> None:
             ]
         )
         assert build_filter_call(splice_node) == "core.std.Splice(clips=[clip, clip2], mismatch=True)"
+
+        trailing_clip_node = _make_graph_node(
+            call_stack=[
+                vsgraph.CallFrame(
+                    level=0,
+                    id="frame_1",
+                    plugin_id="com.vapoursynth.std",
+                    plugin_ns="std",
+                    function="FrameEval",
+                    arguments={
+                        "clip": vsgraph.VideoNodeRef(id="1"),
+                        "eval": vsgraph.FuncRef(id="fn_1"),
+                        "prop_src": vsgraph.VideoNodeRef(id="2"),
+                    },
+                )
+            ]
+        )
+        assert (
+            build_filter_call(trailing_clip_node)
+            == 'core.std.FrameEval(clip, eval={"id": "fn_1", "type": "func"}, prop_src=clip2)'
+        )
 
         empty_node = _make_graph_node(node_id="node_9", name="Mystery", call_stack=[])
         assert build_filter_call(empty_node) == "# Mystery [node_9]: no call frame recorded"
