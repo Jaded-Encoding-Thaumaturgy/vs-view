@@ -99,6 +99,24 @@ class GraphSettings(BaseModel):
     ] = "auto"
 
 
+# Qt PortableText key names that differ from DOM `KeyboardEvent.key` values.
+QT_TO_DOM_KEYS = {
+    "Return": "Enter",
+    "Up": "ArrowUp",
+    "Down": "ArrowDown",
+    "Left": "ArrowLeft",
+    "Right": "ArrowRight",
+    "Space": " ",
+    "Esc": "Escape",
+    "Del": "Delete",
+    "Ins": "Insert",
+    "PgUp": "PageUp",
+    "PgDown": "PageDown",
+    "Print": "PrintScreen",
+    "Menu": "ContextMenu",
+}
+
+
 class GraphShortcut(StrEnum):
     definition: ActionDefinition
 
@@ -136,17 +154,9 @@ class GraphShortcut(StrEnum):
         mods = combo.keyboardModifiers()
         key_text = QKeySequence(combo.key()).toString(QKeySequence.SequenceFormat.PortableText)
 
-        dom_key = {
-            "Return": "Enter",
-            "Up": "ArrowUp",
-            "Down": "ArrowDown",
-            "Left": "ArrowLeft",
-            "Right": "ArrowRight",
-        }.get(key_text, key_text)
-
         return {
             "action": self.action_name,
-            "key": dom_key,
+            "key": QT_TO_DOM_KEYS.get(key_text, key_text),
             "ctrl": bool(mods & Qt.KeyboardModifier.ControlModifier),
             "shift": bool(mods & Qt.KeyboardModifier.ShiftModifier),
             "alt": bool(mods & Qt.KeyboardModifier.AltModifier),

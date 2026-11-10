@@ -78,6 +78,19 @@ describe('matchesKey', () => {
       ),
     ).toBe(false);
 
+    // Symbols typed with Shift on the active layout still match an unshifted rule; letters do not
+    const slashRule = makeRule({ action: 'focusSearch', key: '/' });
+    expect(matchesKey(new KeyboardEvent('keydown', { key: '/', shiftKey: true }), slashRule)).toBe(
+      true,
+    );
+    expect(matchesKey(new KeyboardEvent('keydown', { key: 'F', shiftKey: true }), plainRule)).toBe(
+      false,
+    );
+    const spaceRule = makeRule({ action: 'fit', key: ' ' });
+    expect(matchesKey(new KeyboardEvent('keydown', { key: ' ', shiftKey: true }), spaceRule)).toBe(
+      false,
+    );
+
     expect(matchesKey(new KeyboardEvent('keydown', { key: 'r', metaKey: true }), metaRule)).toBe(
       true,
     );

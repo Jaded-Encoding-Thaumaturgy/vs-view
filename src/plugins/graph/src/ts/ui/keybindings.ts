@@ -141,9 +141,11 @@ export function matchesKey(event: KeyboardEvent, rule: KeybindingRule): boolean 
   // For navigateUp and navigateDown without explicit Shift in the shortcut,
   // allow event.shiftKey so Shift+Arrow can pass cycle = true.
   const isNavAction = rule.action === 'navigateUp' || rule.action === 'navigateDown';
+  // Symbols that need Shift on the active layout (e.g. '/' on AZERTY) report shiftKey even when the rule has none.
+  const isSymbolKey = event.key.length === 1 && !/[\p{L}\p{N}\s]/u.test(event.key);
   if (rule.shift) {
     if (!event.shiftKey) return false;
-  } else if (!isNavAction && event.shiftKey) {
+  } else if (event.shiftKey && !isNavAction && !isSymbolKey) {
     return false;
   }
 

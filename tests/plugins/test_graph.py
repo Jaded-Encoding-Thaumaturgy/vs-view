@@ -168,6 +168,28 @@ def test_graph_bridge_dispatch_and_slots(qtbot: QtBot) -> None:
                 "meta": False,
             },
         ),
+        (
+            GraphShortcut.FIT,
+            "Space",
+            {"action": "fit", "key": " ", "ctrl": False, "shift": False, "alt": False, "meta": False},
+        ),
+        (
+            GraphShortcut.RELOAD,
+            "Ctrl+Del",
+            {"action": "reload", "key": "Delete", "ctrl": True, "shift": False, "alt": False, "meta": False},
+        ),
+        (
+            GraphShortcut.SELECT_DEEPEST_LEAF,
+            "PgDown",
+            {
+                "action": "selectDeepestLeaf",
+                "key": "PageDown",
+                "ctrl": False,
+                "shift": False,
+                "alt": False,
+                "meta": False,
+            },
+        ),
     ],
 )
 def test_graph_shortcut_to_rule_valid(
