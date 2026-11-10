@@ -136,6 +136,7 @@ class LevelsChartView(QChartView):
         self.safe_max_coord: float | None = None
         self.max_val = 255.0
         self.show_unsafe = True
+        self.is_limited = True
         self.is_float = False
         self.is_chroma = False
         self.is_y = False
@@ -147,6 +148,7 @@ class LevelsChartView(QChartView):
         self._raw_hist: npt.NDArray[np.intp] | None = None
         self._total_pixels = np.intp(0)
         self._step = 1
+        self._scale = 1.0
         self._last_snap_idx = np.intp(-1)
         self._last_hover_pos: QPointF | None = None
 
@@ -250,11 +252,12 @@ class LevelsChartView(QChartView):
         self.chart().setPlotAreaBackgroundVisible(True)
         self.chart().setBackgroundBrush(Qt.GlobalColor.transparent)
 
-    def configure(self, fmt: vs._VideoFormatDict, plane_idx: int, show_unsafe: bool) -> None:
+    def configure(self, fmt: vs._VideoFormatDict, plane_idx: int, show_unsafe: bool, is_limited: bool = True) -> None:
         self.is_float = fmt["sample_type"] == vs.FLOAT
         self.is_chroma = fmt["color_family"] == vs.YUV and plane_idx > 0
         self.is_y = fmt["color_family"] in (vs.YUV, vs.GRAY) and plane_idx == 0
         self.show_unsafe = show_unsafe
+        self.is_limited = is_limited
 
         # Configure background gradient
         self.set_gradient_background(fmt["color_family"], plane_idx)
@@ -302,17 +305,40 @@ class LevelsChartView(QChartView):
 
         M = N // step  # noqa: N806
 
-        downsampled = (raw_hist.reshape(M, step).sum(axis=1) if step > 1 else raw_hist).astype(np.float64)
-        total_pixels = raw_hist.sum()
-        if clamp_factor < 100.0 and total_pixels > 0:
-            downsampled = downsampled.clip(0.0, max(1.0, float(int(total_pixels * clamp_factor / 100.0))))
+        if step > 1:
+            reshaped = raw_hist.reshape(M, step)
+            # Sum the sub-bins so bucket weights stay consistent across bit depths.
+            # X gets pinned to the tallest sub-bin, so spikes at the edges (0, N-1) and comb peaks line up exactly.
+            idx = reshaped.argmax(axis=1)
+            downsampled = reshaped.sum(axis=1, dtype=np.float64)
+            x_coords = np.arange(M, dtype=np.float64) * step + np.where(downsampled > 0, idx, (step - 1) / 2.0)
+        else:
+            downsampled = raw_hist.astype(np.float64)
+            x_coords = np.arange(M, dtype=np.float64)
 
-        # Setup X-axis coordinates centered on the downsampled bin ranges
-        x_coords = np.arange(M, dtype=np.float64) * step + (step - 1) / 2.0
+        # Clamp after downsampling so the cap applies to what you actually see on screen,
+        # whether the raw histogram has 256 or 65536 bins.
+        if (total_pixels := raw_hist.sum()) > 0 and clamp_factor < 100.0:
+            downsampled = downsampled.clip(0.0, max(1.0, total_pixels * clamp_factor / 100.0))
+
         if self.is_float:
-            x_coords /= N - 1
-            if self.is_chroma:
-                x_coords -= 0.5
+            # Float planes get digitized into [0, N-1], with limited-range YUV mapped to [safe_min, safe_max].
+            # Here we scale back to the native float range ([0, 1], or [-0.5, 0.5] for chroma).
+            low = self.safe_min if (self.is_limited and self.safe_min is not None) else 0.0
+            high = self.safe_max if (self.is_limited and self.safe_max is not None) else N - 1
+            scale = high - low
+            offset = 0.5 if self.is_chroma else 0.0
+
+            x_coords = (x_coords - low) / scale - offset
+            x_min = -low / scale - offset
+            x_max = (N - 1 - low) / scale - offset
+        else:
+            low = 0.0
+            scale = 1.0
+            offset = 0.0
+            x_min = 0.0
+            x_max = N - 1
+
         self.line_series.replaceNp(x_coords, downsampled)  # type: ignore[arg-type]
 
         self._raw_hist = raw_hist
@@ -320,28 +346,24 @@ class LevelsChartView(QChartView):
         self._downsampled_x = x_coords
         self._downsampled_y = downsampled
         self._step = step
+        self._scale = scale
         self._last_snap_idx = np.intp(-1)
 
-        # Update axis ranges
         if self.is_float:
-            if self.is_chroma:
-                self.axis_x.setRange(-0.5, 0.5)
-            else:
-                self.axis_x.setRange(0.0, 1.0)
+            self.axis_x.setRange(x_min, x_max)
+            self.axis_x.setTickAnchor(0.0)
+            self.axis_x.setTickInterval(0.5)
+            self.axis_x.setTickType(QValueAxis.TickType.TicksDynamic)
             self.axis_x.setLabelFormat("%.1f")
         else:
-            self.axis_x.setRange(0, N - 1)
+            self.axis_x.setTickType(QValueAxis.TickType.TicksFixed)
+            self.axis_x.setRange(x_min, x_max)
             self.axis_x.setLabelFormat("%d")
         self.axis_y.setRange(0, max_y if (max_y := downsampled.max()) > 0 else 1.0)
 
         if self.safe_min is not None and self.safe_max is not None:
-            if self.is_float:
-                offset = 0.5 if self.is_chroma else 0.0
-                self.safe_min_coord = self.safe_min / (N - 1) - offset
-                self.safe_max_coord = self.safe_max / (N - 1) - offset
-            else:
-                self.safe_min_coord = self.safe_min
-                self.safe_max_coord = self.safe_max
+            self.safe_min_coord = (self.safe_min - low) / scale - offset
+            self.safe_max_coord = (self.safe_max - low) / scale - offset
         else:
             self.safe_min_coord = None
             self.safe_max_coord = None
@@ -364,8 +386,6 @@ class LevelsChartView(QChartView):
             self.unsafe_right_series.setVisible(True)
 
             axis_max_y = self.axis_y.max()
-            x_min = -0.5 if (self.is_float and self.is_chroma) else 0.0
-            x_max = 0.5 if (self.is_float and self.is_chroma) else (1.0 if self.is_float else self.max_val)
 
             self.unsafe_left_line.replace([QPointF(x_min, axis_max_y), QPointF(self.safe_min_coord, axis_max_y)])
             self.unsafe_left_line_y.replace([QPointF(x_min, axis_max_y), QPointF(self.safe_min_coord, axis_max_y)])
@@ -469,7 +489,7 @@ class LevelsChartView(QChartView):
             f"<b>Weight:</b> {bin_count:,} ({pct:.2f}%)",
         ]
 
-        half_bin = (self._step - 1) / (2.0 * (len(self._raw_hist) - 1) if self.is_float else 2.0)
+        half_bin = 0.0 if snap_y > 0 else (self._step - 1) / (2.0 * self._scale)
         if (
             self.show_unsafe
             and self.safe_min_coord is not None

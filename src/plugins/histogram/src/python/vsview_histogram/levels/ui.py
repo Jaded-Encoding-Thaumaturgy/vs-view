@@ -38,8 +38,10 @@ class HistogramContainerWidget(QFrame):
         self._fmt["num_planes"] = frame.format.num_planes
         self.setup_layout()
 
+        is_limited = Range.from_video(frame).is_limited
+
         for i in range(self._fmt["num_planes"]):
-            self.charts[i].configure(self._fmt, i, self.settings.global_.levels.show_unsafe)
+            self.charts[i].configure(self._fmt, i, self.settings.global_.levels.show_unsafe, is_limited)
 
         for p in range(frame.format.num_planes):
             self.charts[p].update_data(

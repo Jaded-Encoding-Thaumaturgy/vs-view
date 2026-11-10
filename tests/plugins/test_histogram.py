@@ -98,7 +98,10 @@ def test_histogram_plugin_instantiation_and_tabs(populated_controller: HarnessPl
 
 
 # Levels Tab Across Formats
-@pytest.mark.parametrize("preset_format", [vs.RGB24, vs.YUV420P8, vs.YUV420P10, vs.GRAY8, vs.RGBS])
+@pytest.mark.parametrize(
+    "preset_format",
+    [vs.RGB24, vs.RGB48, vs.YUV420P8, vs.YUV420P10, vs.GRAY8, vs.RGBS, vs.GRAYS, vs.YUV420PS],
+)
 def test_levels_tab_across_formats(
     populated_controller: HarnessPluginController, qtbot: QtBot, preset_format: vs.PresetVideoFormat
 ) -> None:
@@ -123,6 +126,23 @@ def test_levels_tab_across_formats(
 
     plugin.levels_factor_spin.setValue(50.0)
     assert plugin.settings.global_.levels.factor == pytest.approx(50.0)
+
+
+def test_levels_float_to_int16_transition(populated_controller: HarnessPluginController, qtbot: QtBot) -> None:
+    populated_controller.set_current_voutput(make_video_output(vs.RGBS))
+
+    plugin = populated_controller.create_plugin(HistogramPlugin)
+    qtbot.addWidget(plugin)
+    plugin.show()
+
+    plugin.tab_widget.setCurrentIndex(0)
+    plugin.update_histogram(0).result()
+
+    populated_controller.set_current_voutput(make_video_output(vs.RGB48))
+    plugin.update_histogram(0).result()
+
+    chart = plugin.levels_container.charts[0]
+    assert chart.axis_x.max() == pytest.approx(65535.0)
 
 
 def test_levels_crosshair(populated_controller: HarnessPluginController, qtbot: QtBot) -> None:
