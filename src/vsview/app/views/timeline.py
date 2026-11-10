@@ -218,6 +218,16 @@ class TimelineHoverPopup(QWidget):
             self._draw_indicators(painter)
 
     def update_state(self, hover_x: int) -> None:
+        # Explitly set the windows handler since this popup doesn't have any parent.
+        if not self.windowHandle():
+            self.createWinId()
+        if (
+            (wh := self.windowHandle())
+            and (top_wh := self._timeline.window().windowHandle())
+            and wh.transientParent() is not top_wh
+        ):
+            wh.setTransientParent(top_wh)
+
         self.zoom_factor = SettingsManager.global_settings.timeline.hover_zoom_factor
         self.radius = SettingsManager.global_settings.timeline.hover_zoom_radius
         self.hover_x = hover_x

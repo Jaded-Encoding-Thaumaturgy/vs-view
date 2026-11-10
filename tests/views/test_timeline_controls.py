@@ -208,6 +208,18 @@ def test_hover_popup_update_state(timeline_control_bar: TimelineControlBar) -> N
     assert popup.width() == 160  # radius * 2
 
 
+def test_hover_popup_transient_parent(timeline_control_bar: TimelineControlBar) -> None:
+    timeline_control_bar.show()
+
+    popup = timeline_control_bar.timeline.hover_popup
+    popup.update_state(250)
+    popup.show()
+
+    assert popup.windowHandle() is not None
+    assert popup.windowHandle().transientParent() is not None
+    assert popup.windowHandle().transientParent() == timeline_control_bar.window().windowHandle()
+
+
 def test_hover_popup_notch_label_and_value_display(
     timeline_control_bar: TimelineControlBar, mocker: MockerFixture
 ) -> None:
