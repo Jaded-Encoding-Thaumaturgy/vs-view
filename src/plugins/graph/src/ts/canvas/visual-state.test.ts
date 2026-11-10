@@ -36,11 +36,15 @@ describe('VisualState', () => {
     expect(cy.$('#e1').hasClass('highlighted-upstream')).toBe(true);
     expect(cy.$('#e2').hasClass('highlighted-downstream')).toBe(true);
 
+    expect(cy.$('#b').hasClass('selected')).toBe(true);
+    expect(cy.$('#a').hasClass('selected')).toBe(false);
+
     // Heatmap mode keeps every node fully visible without discarding the current selection.
     state.apply(cy, { showLineage: false });
     expect(cy.$('#a').hasClass('highlighted-upstream')).toBe(false);
     expect(cy.$('#c').hasClass('highlighted-downstream')).toBe(false);
     expect(cy.$('#d').hasClass('dimmed')).toBe(false);
+    expect(cy.$('#b').hasClass('selected')).toBe(true);
 
     // Disabling heatmap restores the still-active lineage treatment.
     state.apply(cy);
@@ -53,6 +57,7 @@ describe('VisualState', () => {
     state.apply(cy);
     expect(cy.$('#a').hasClass('highlighted-upstream')).toBe(false);
     expect(cy.$('#d').hasClass('dimmed')).toBe(false);
+    expect(cy.$('#b').hasClass('selected')).toBe(false);
   });
 
   it('highlights search matches, dims non-matches, and keeps edges between two matched nodes undimmed', () => {

@@ -3,7 +3,7 @@ import type cytoscape from 'cytoscape';
 import type { FilterModeName } from '../types';
 
 const NODE_TRANSIENT_CLASSES =
-  'dimmed highlighted-upstream highlighted-downstream search-matched' as const;
+  'selected dimmed highlighted-upstream highlighted-downstream search-matched' as const;
 const EDGE_TRANSIENT_CLASSES = 'dimmed highlighted-upstream highlighted-downstream' as const;
 
 /**
@@ -76,6 +76,10 @@ export class VisualState {
         const isSelected = id === this.selectedId;
         const isUpstream = this.upstream.has(id);
         const isDownstream = this.downstream.has(id);
+
+        if (isSelected) {
+          node.addClass('selected');
+        }
 
         if (lineageActive) {
           if (!isSelected && isUpstream) {
