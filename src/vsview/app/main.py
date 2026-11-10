@@ -84,15 +84,22 @@ logger = getLogger(__name__)
 
 
 class Application(QApplication):
-    def __init__(self, arguments: Sequence[str], /, no_settings: bool, **kwargs: Any) -> None:
-        if sys.platform == "win32":
-            try:
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("jet.vsview")
-            except Exception:
-                logger.exception("Can't register app ID")
-
+    def __init__(
+        self,
+        arguments: Sequence[str],
+        /,
+        no_settings: bool = False,
+        init_subsystems: bool = True,
+        **kwargs: Any,
+    ) -> None:
+        self.register_app_user_model_id()
         super().__init__(arguments, **kwargs)
+        self.configure_metadata()
 
+        if init_subsystems:
+            self.setup_subsystems(no_settings=no_settings)
+
+    def configure_metadata(self) -> None:
         self.setApplicationName("vsview")
         self.setApplicationDisplayName("VS View")
         self.setOrganizationName("Jaded Encoding Thaumaturgy")
@@ -102,6 +109,7 @@ class Application(QApplication):
         if sys.platform == "linux":
             self.setDesktopFileName("vsview.desktop")
 
+    def setup_subsystems(self, /, no_settings: bool = False) -> None:
         SettingsManager(noop=no_settings)
         loop = QtEventLoop(self)
         set_loop(loop)
@@ -117,11 +125,20 @@ class Application(QApplication):
 
         # Appearance & Themes
         AppearanceManager.apply_all(SettingsManager.global_settings.appearance)
-
         SettingsManager.signals.globalChanged.connect(self._on_global_settings_changed)
 
         if sys.platform == "win32":
             loop.to_thread_scoped(self, "WarmupCJK", self._warmup_cjk_fallback, self.font())
+
+    @staticmethod
+    def register_app_user_model_id() -> bool:
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("jet.vsview")
+                return True
+            except Exception:
+                logger.exception("Can't register app ID")
+        return False
 
     @Slot()
     def _on_global_settings_changed(self) -> None:

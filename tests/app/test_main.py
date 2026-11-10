@@ -11,7 +11,7 @@ from PySide6.QtGui import QCloseEvent, QDesktopServices, QKeyEvent
 from PySide6.QtWidgets import QApplication, QMenu
 from pytestqt.qtbot import QtBot
 
-from vsview.app.main import MainWindow, WorkspaceToolButton
+from vsview.app.main import Application, MainWindow, WorkspaceToolButton
 from vsview.app.settings.dialog import ShortcutEditor
 from vsview.app.settings.manager import SettingsManager
 from vsview.app.settings.models import WindowGeometry
@@ -252,3 +252,14 @@ def test_help_menu_urls_availability(main_window: MainWindow) -> None:
                 raise
 
         assert status_code == 200, f"URL for '{action_text}' returned status {status_code}: {url}"
+
+
+def test_application_metadata_configuration(qapp: QApplication) -> None:
+    assert isinstance(qapp, Application)
+    qapp.configure_metadata()
+
+    assert qapp.applicationName() == "vsview"
+    assert qapp.applicationDisplayName() == "VS View"
+    assert qapp.organizationName() == "Jaded Encoding Thaumaturgy"
+    assert qapp.organizationDomain() == "jet.guide"
+    assert not qapp.windowIcon().isNull()

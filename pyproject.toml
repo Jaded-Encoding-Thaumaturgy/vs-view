@@ -192,6 +192,7 @@ vsview-editor = { workspace = true }
 vsview-remote = { workspace = true }
 
 [tool.pytest]
+qt_qapp_name = "vsview"
 testpaths = ["tests"]
 env = [
     "QT_QPA_PLATFORM=offscreen",

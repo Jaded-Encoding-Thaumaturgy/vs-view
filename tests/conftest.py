@@ -4,7 +4,7 @@ import logging
 import sys
 import threading
 import warnings
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import Future
 from contextlib import suppress
 from pathlib import Path
@@ -43,6 +43,7 @@ from vsengine.loops import NO_LOOP, set_loop
 from vsengine.policy import ManagedEnvironment
 
 from tests.harness import HarnessPluginController, MockQObject
+from vsview.app.main import Application
 from vsview.app.outputs.audio import AudioOutput
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.packing import Packer
@@ -315,6 +316,17 @@ def warn_qt_thread_affinity() -> Generator[None]:
         sys.monitoring.set_events(tool_id, 0)
         sys.monitoring.register_callback(tool_id, sys.monitoring.events.CALL, None)
         sys.monitoring.free_tool_id(tool_id)
+
+
+@pytest.fixture(scope="session")
+def qapp_cls() -> type[QApplication]:
+    """Provide the VSView Application subclass for the session qapp instance."""
+
+    class TestApplication(Application):
+        def __init__(self, arguments: Sequence[str], **kwargs: Any) -> None:
+            super().__init__(arguments, no_settings=True, init_subsystems=False, **kwargs)
+
+    return TestApplication
 
 
 @pytest.fixture
