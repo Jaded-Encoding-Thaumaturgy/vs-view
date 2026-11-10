@@ -34,8 +34,6 @@ class HistogramContainerWidget(QFrame):
 
     def update_histogram(self, frame: vs.VideoFrame) -> None:
         self._fmt = frame.format._as_dict()
-        # FIXME: _as_dict doesn't pass num_planes in R77
-        self._fmt["num_planes"] = frame.format.num_planes
         self.setup_layout()
 
         is_limited = Range.from_video(frame).is_limited
