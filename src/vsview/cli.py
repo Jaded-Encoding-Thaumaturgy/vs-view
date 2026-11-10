@@ -262,6 +262,11 @@ def main(
     os.environ["PYDANTIC_ERRORS_INCLUDE_URL"] = "false"
     # Fixes the window flicker (https://qt-project.atlassian.net/browse/QTBUG-136743).
     os.environ.setdefault("QT_WIDGETS_RHI", "1")
+
+    if "WSL_DISTRO_NAME" in os.environ:
+        os.environ.setdefault("MESA_LOG_LEVEL", "error")
+        os.environ.setdefault("GALLIUM_DRIVER", "d3d12")
+
     if hdr:
         os.environ.setdefault("QSG_RHI_HDR", "p3" if sys.platform == "darwin" else "scrgb")
         os.environ.setdefault("QSG_INFO", "1")
