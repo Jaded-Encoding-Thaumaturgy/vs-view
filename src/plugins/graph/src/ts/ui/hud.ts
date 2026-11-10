@@ -203,15 +203,22 @@ export class HudController extends Disposable {
       `,
       this.opts.container,
     );
+    this.syncOutputSelection();
+  }
+
+  private syncOutputSelection(): void {
+    const select = this.opts.container.querySelector<HTMLSelectElement>('#hud-output-select');
+    if (!select) return;
+
+    const active = this.outputs.find((out) => out.isActive);
+    select.value = this.following || !active ? '-1' : String(active.index);
   }
 
   private renderOutputSelect(): TemplateResult {
     function renderOutputOption(out: OutputItem): TemplateResult {
-      return html`
-        <option value=${String(out.index)} ?selected=${out.isActive}>
-          [${out.index}] ${out.name || 'Video'}
-        </option>
-      `;
+      return html`<option value=${String(out.index)}>
+        [${out.index}] ${out.name || 'Video'}
+      </option>`;
     }
 
     return html`
@@ -226,12 +233,14 @@ export class HudController extends Disposable {
           ${when(
             this.outputs.length === 0,
             () => html`<option value="-1">No outputs</option>`,
-            () =>
-              repeat(
+            () => html`
+              <option value="-1">Follow active output</option>
+              ${repeat(
                 this.outputs,
                 (out) => out.index,
                 (out) => renderOutputOption(out),
-              ),
+              )}
+            `,
           )}
         </select>
       </div>

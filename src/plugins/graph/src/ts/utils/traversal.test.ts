@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import { makeEdge, makeNode } from './test-helpers';
-import { findSlowestLeafNode, getNextNeighborNode } from './traversal';
+import { NeighborNavigator, findSlowestLeafNode, getNextNeighborNode } from './traversal';
 
 describe('findSlowestLeafNode', () => {
   it('returns null for empty node list', () => {
@@ -63,5 +63,49 @@ describe('getNextNeighborNode', () => {
     expect(getNextNeighborNode('c', 'up', true, [nodeA, nodeB, nodeC], edges, cursor)).toBe('b');
     expect(getNextNeighborNode('c', 'up', true, [nodeA, nodeB, nodeC], edges, cursor)).toBe('a');
     expect(getNextNeighborNode('c', 'up', true, [nodeA, nodeB, nodeC], edges, cursor)).toBe('b');
+  });
+});
+
+describe('NeighborNavigator', () => {
+  const nodeA = makeNode({ id: 'a', processing_time_ns: 100_000 });
+  const nodeB = makeNode({ id: 'b', processing_time_ns: 300_000 });
+  const nodeC = makeNode({ id: 'c', is_root: true, processing_time_ns: 50_000 });
+  const nodes = [nodeA, nodeB, nodeC];
+
+  const edges = [
+    makeEdge({ id: 'e1', source: 'a', target: 'c' }),
+    makeEdge({ id: 'e2', source: 'b', target: 'c' }),
+  ];
+
+  it('cycles between siblings while the selection follows each step', () => {
+    const navigator = new NeighborNavigator();
+    let selected: string | null = 'c';
+
+    selected = navigator.next(selected, 'up', true, nodes, edges);
+    expect(selected).toBe('b');
+    selected = navigator.next(selected, 'up', true, nodes, edges);
+    expect(selected).toBe('a');
+    selected = navigator.next(selected, 'up', true, nodes, edges);
+    expect(selected).toBe('b');
+  });
+
+  it('continues a plain step with cycling and starts a new walk when the direction changes', () => {
+    const navigator = new NeighborNavigator();
+
+    expect(navigator.next('c', 'up', false, nodes, edges)).toBe('b');
+    expect(navigator.next('b', 'up', true, nodes, edges)).toBe('a');
+
+    expect(navigator.next('c', 'down', true, nodes, edges)).toBeNull();
+    expect(navigator.next('a', 'down', true, nodes, edges)).toBe('c');
+  });
+
+  it('starts from the root without a selection and forgets the walk on reset', () => {
+    const navigator = new NeighborNavigator();
+
+    expect(navigator.next(null, 'up', true, nodes, edges)).toBe('c');
+    expect(navigator.next('c', 'up', true, nodes, edges)).toBe('b');
+
+    navigator.reset();
+    expect(navigator.next('b', 'up', true, nodes, edges)).toBeNull();
   });
 });

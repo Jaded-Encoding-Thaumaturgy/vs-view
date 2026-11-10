@@ -64,3 +64,38 @@ export function getNextNeighborNode(
 
   return sorted[index] ?? null;
 }
+
+/**
+ * Stateful keyboard walk over the graph.
+ */
+export class NeighborNavigator {
+  private readonly cursor = new Map<string, number>();
+  private lastStep: { anchor: string; direction: 'up' | 'down'; target: string } | null = null;
+
+  public next(
+    selectedId: string | null,
+    direction: 'up' | 'down',
+    cycle: boolean,
+    nodes: readonly NodeData[],
+    edges: readonly EdgeData[],
+  ): string | null {
+    const last = this.lastStep;
+    const anchor =
+      cycle && last !== null && last.direction === direction && last.target === selectedId
+        ? last.anchor
+        : selectedId;
+
+    const target = getNextNeighborNode(anchor, direction, cycle, nodes, edges, this.cursor);
+
+    if (target !== null) {
+      this.lastStep = anchor !== null ? { anchor, direction, target } : null;
+    }
+
+    return target;
+  }
+
+  public reset(): void {
+    this.cursor.clear();
+    this.lastStep = null;
+  }
+}
