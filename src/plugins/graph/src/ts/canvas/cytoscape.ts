@@ -449,8 +449,8 @@ export class CytoscapeCanvas implements IDisposable {
 
   public reset(): void {
     if (!this.cy) return;
-    this.cy.reset();
-    this.fit();
+    this.cy.zoom(1);
+    this.cy.center();
   }
 
   public selectNodeById(id: string): CanvasNodeData | null {

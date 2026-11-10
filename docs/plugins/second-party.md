@@ -301,7 +301,7 @@ Right-click the canvas:
 | Action              | Description                                         |
 | :------------------ | :---------------------------------------------------|
 | **Fit to View**     | Fit graph into viewport (++f++).                    |
-| **Reset View**      | Reset zoom to 100% (++0++).                         |
+| **Reset View**      | Reset zoom to 100% (++ctrl+0++).                    |
 | **Reload Graph**    | Re-inspect active output and update timings (++r++).|
 | **Copy Graph as →** | Copy as PNG Image, DOT, Mermaid, ASCII, or JSON.    |
 | **Save Graph as →** | Save as PNG Image, DOT, Mermaid, ASCII, or JSON.    |
@@ -320,7 +320,7 @@ Press the refresh button to re-inspect the current output.
 | `Home` / `End`          | Jump to the root / deepest leaf        |
 | `Enter`                 | Center the selected node               |
 | `Esc`                   | Clear the selection                    |
-| `0`                     | Reset zoom                             |
+| `Ctrl` + `0`            | Reset zoom to 100%                     |
 | `F`                     | Fit the graph                          |
 | `H`                     | Toggle the profiling heatmap           |
 | `P`                     | Toggle request-pattern labels          |
