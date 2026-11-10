@@ -5,6 +5,7 @@ from collections.abc import Callable, Generator
 import numpy as np
 import pytest
 import vapoursynth as vs
+from PySide6.QtCore import QEvent, QPoint, QPointF
 from PySide6.QtGui import QImage
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
@@ -122,6 +123,47 @@ def test_levels_tab_across_formats(
 
     plugin.levels_factor_spin.setValue(50.0)
     assert plugin.settings.global_.levels.factor == pytest.approx(50.0)
+
+
+def test_levels_crosshair(populated_controller: HarnessPluginController, qtbot: QtBot) -> None:
+    populated_controller.set_current_voutput(make_video_output(vs.YUV420P8))
+
+    plugin = populated_controller.create_plugin(HistogramPlugin)
+    qtbot.addWidget(plugin)
+    plugin.show()
+
+    plugin.tab_widget.setCurrentIndex(0)
+    plugin.update_histogram(0).result()
+
+    chart = plugin.levels_container.charts[0]
+    assert chart.v_line.isVisible() is False
+    assert chart.h_line.isVisible() is False
+    assert chart.label.isVisible() is False
+
+    area = chart.chart().plotArea()
+    viewport = chart.viewport()
+    center = area.center().toPoint()
+
+    qtbot.mouseMove(viewport, center)
+    assert chart.v_line.isVisible() is True
+    assert chart.h_line.isVisible() is True
+    assert chart.label.isVisible() is True
+    assert "Y:" in chart.label.toHtml()
+    assert "Weight:" in chart.label.toHtml()
+
+    unsafe_x = round(chart.chart().mapToPosition(QPointF(5.0, 0.0), chart.area_series).x())
+    qtbot.mouseMove(viewport, QPoint(unsafe_x, center.y()))
+    assert "Unsafe Broadcast Range" in chart.label.toHtml()
+
+    qtbot.mouseMove(viewport, QPoint(round(area.left()) - 20, round(area.top()) - 20))
+    assert chart.v_line.isVisible() is False
+
+    qtbot.mouseMove(viewport, center)
+    assert chart.v_line.isVisible() is True
+    chart.leaveEvent(QEvent(QEvent.Type.Leave))
+    assert chart.v_line.isVisible() is False
+    assert chart.h_line.isVisible() is False
+    assert chart.label.isVisible() is False
 
 
 # Luma Tab Controls & Lifecycle

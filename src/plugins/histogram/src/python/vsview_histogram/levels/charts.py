@@ -9,20 +9,24 @@ import numpy.typing as npt
 import vapoursynth as vs
 from jetpytools import clamp
 from PySide6.QtCharts import QAreaSeries, QChart, QChartView, QLineSeries, QValueAxis
-from PySide6.QtCore import QMargins, QPointF, QRectF, Qt
+from PySide6.QtCore import QEvent, QMargins, QPointF, QRectF, Qt
 from PySide6.QtGui import (
     QBrush,
     QColor,
     QContextMenuEvent,
     QGradient,
+    QHideEvent,
     QImage,
     QLinearGradient,
+    QMouseEvent,
     QPainter,
+    QPalette,
     QPen,
+    QPixmap,
     QResizeEvent,
     QTransform,
 )
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsLineItem, QGraphicsTextItem, QStyleOptionGraphicsItem, QWidget
 
 from vsview.api import PluginAPI
 
@@ -55,8 +59,9 @@ class LevelsChartView(QChartView):
         super().__init__(chart, parent)
         self.api = api
 
-        self.context_menu = CustomContextMenu(self, self.api)
+        self.context_menu = CustomContextMenu(self, self.api, self._capture_chart)
         self.setMaximumHeight(512)
+        self.setMouseTracking(True)
 
         # Series (unsafe zones are added first to render in the background)
         self.unsafe_left_line = QLineSeries(self)
@@ -109,15 +114,41 @@ class LevelsChartView(QChartView):
         self.axis_x.setGridLinePen(self.GRID_PEN)
         self.axis_y.setGridLinePen(self.GRID_PEN)
 
+        cross_pen = self._make_cross_pen()
+
+        self.v_line = QGraphicsLineItem(self.chart())
+        self.v_line.setPen(cross_pen)
+        self.v_line.setZValue(10)
+
+        self.h_line = QGraphicsLineItem(self.chart())
+        self.h_line.setPen(cross_pen)
+        self.h_line.setZValue(10)
+
+        self.label = LabelText(self.chart())
+        self.label.setZValue(11)
+
+        self.set_overlays_visible(False)
+
         # State fields
         self.safe_min: float | None = None
         self.safe_max: float | None = None
+        self.safe_min_coord: float | None = None
+        self.safe_max_coord: float | None = None
         self.max_val = 255.0
         self.show_unsafe = True
         self.is_float = False
         self.is_chroma = False
         self.is_y = False
+        self.plane_name = ""
+
         self._dithered_brush: QBrush | None = None
+        self._downsampled_x: npt.NDArray[np.float64] | None = None
+        self._downsampled_y: npt.NDArray[np.float64] | None = None
+        self._raw_hist: npt.NDArray[np.intp] | None = None
+        self._total_pixels = np.intp(0)
+        self._step = 1
+        self._last_snap_idx = np.intp(-1)
+        self._last_hover_pos: QPointF | None = None
 
         self.chart().plotAreaChanged.connect(self.update_brush_transform)
 
@@ -127,6 +158,41 @@ class LevelsChartView(QChartView):
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         self.update_brush_transform()
+        self.set_overlays_visible(False)
+        self._last_snap_idx = np.intp(-1)
+        self._last_hover_pos = None
+
+    @override
+    def hideEvent(self, event: QHideEvent) -> None:
+        self.set_overlays_visible(False)
+        self._last_snap_idx = np.intp(-1)
+        self._last_hover_pos = None
+        super().hideEvent(event)
+
+    @override
+    def leaveEvent(self, event: QEvent) -> None:
+        self.set_overlays_visible(False)
+        self._last_snap_idx = np.intp(-1)
+        self._last_hover_pos = None
+        super().leaveEvent(event)
+
+    @override
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.PaletteChange:
+            self.axis_x.setLabelsColor(self.palette().buttonText().color())
+            cross_pen = self._make_cross_pen()
+            self.v_line.setPen(cross_pen)
+            self.h_line.setPen(cross_pen)
+            if self._last_hover_pos is not None:
+                self._last_snap_idx = np.intp(-1)
+                self._update_crosshair(self._last_hover_pos)
+
+    @override
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        self._last_hover_pos = event.position()
+        self._update_crosshair(self._last_hover_pos)
+        super().mouseMoveEvent(event)
 
     @override
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
@@ -194,10 +260,7 @@ class LevelsChartView(QChartView):
         self.set_gradient_background(fmt["color_family"], plane_idx)
 
         # Calculate safe ranges and max_val
-        if fmt["color_family"] == vs.RGB:
-            self.safe_min = None
-            self.safe_max = None
-        else:
+        if fmt["color_family"] in (vs.YUV, vs.GRAY):
             if fmt["sample_type"] == vs.INTEGER:
                 scale_shift = fmt["bits_per_sample"] - 8
                 self.safe_min = 16 << scale_shift
@@ -205,11 +268,25 @@ class LevelsChartView(QChartView):
             else:
                 self.safe_min = 4096
                 self.safe_max = 60160 if plane_idx == 0 else 61440
+        else:
+            self.safe_min = None
+            self.safe_max = None
+
+        if fmt["color_family"] == vs.GRAY:
+            self.plane_name = "Y"
+        else:
+            self.plane_name = fmt["color_family"].name[plane_idx]
 
         self.max_val = 1 << fmt["bits_per_sample"] if fmt["sample_type"] == vs.INTEGER else 1024
 
-    def update_data(self, hist: npt.NDArray[np.intp], target_w: int, setting_val: int) -> None:
-        N = len(hist)  # noqa: N806
+    def update_data(
+        self,
+        raw_hist: npt.NDArray[np.intp],
+        target_w: int,
+        setting_val: int,
+        clamp_factor: float = 100.0,
+    ) -> None:
+        N = len(raw_hist)  # noqa: N806
 
         if N > 256:
             self.setRenderHint(QPainter.RenderHint.Antialiasing, False)
@@ -225,8 +302,11 @@ class LevelsChartView(QChartView):
 
         M = N // step  # noqa: N806
 
-        # Downsample using Maximum value pooling
-        downsampled = (hist.reshape(M, step).max(axis=1) if step > 1 else hist).astype(np.float64)
+        downsampled = (raw_hist.reshape(M, step).sum(axis=1) if step > 1 else raw_hist).astype(np.float64)
+        total_pixels = raw_hist.sum()
+        if clamp_factor < 100.0 and total_pixels > 0:
+            downsampled = downsampled.clip(0.0, max(1.0, float(int(total_pixels * clamp_factor / 100.0))))
+
         # Setup X-axis coordinates centered on the downsampled bin ranges
         x_coords = np.arange(M, dtype=np.float64) * step + (step - 1) / 2.0
         if self.is_float:
@@ -234,6 +314,13 @@ class LevelsChartView(QChartView):
             if self.is_chroma:
                 x_coords -= 0.5
         self.line_series.replaceNp(x_coords, downsampled)  # type: ignore[arg-type]
+
+        self._raw_hist = raw_hist
+        self._total_pixels = total_pixels
+        self._downsampled_x = x_coords
+        self._downsampled_y = downsampled
+        self._step = step
+        self._last_snap_idx = np.intp(-1)
 
         # Update axis ranges
         if self.is_float:
@@ -247,8 +334,26 @@ class LevelsChartView(QChartView):
             self.axis_x.setLabelFormat("%d")
         self.axis_y.setRange(0, max_y if (max_y := downsampled.max()) > 0 else 1.0)
 
+        if self.safe_min is not None and self.safe_max is not None:
+            if self.is_float:
+                offset = 0.5 if self.is_chroma else 0.0
+                self.safe_min_coord = self.safe_min / (N - 1) - offset
+                self.safe_max_coord = self.safe_max / (N - 1) - offset
+            else:
+                self.safe_min_coord = self.safe_min
+                self.safe_max_coord = self.safe_max
+        else:
+            self.safe_min_coord = None
+            self.safe_max_coord = None
+
         # Update unsafe zones shading if active
-        if self.show_unsafe and self.safe_min is not None and self.safe_max is not None:
+        if (
+            self.show_unsafe
+            and self.safe_min is not None
+            and self.safe_max is not None
+            and self.safe_min_coord is not None
+            and self.safe_max_coord is not None
+        ):
             if self.is_y:
                 self.unsafe_left_series_y.setVisible(True)
                 self.unsafe_left_series.setVisible(False)
@@ -259,23 +364,12 @@ class LevelsChartView(QChartView):
             self.unsafe_right_series.setVisible(True)
 
             axis_max_y = self.axis_y.max()
-            if self.is_float:
-                if self.is_chroma:
-                    safe_min_val = self.safe_min / (N - 1) - 0.5
-                    safe_max_val = self.safe_max / (N - 1) - 0.5
-                    self.unsafe_left_line.replace([QPointF(-0.5, axis_max_y), QPointF(safe_min_val, axis_max_y)])
-                    self.unsafe_left_line_y.replace([QPointF(-0.5, axis_max_y), QPointF(safe_min_val, axis_max_y)])
-                    self.unsafe_right_line.replace([QPointF(safe_max_val, axis_max_y), QPointF(0.5, axis_max_y)])
-                else:
-                    safe_min_val = self.safe_min / (N - 1)
-                    safe_max_val = self.safe_max / (N - 1)
-                    self.unsafe_left_line.replace([QPointF(0.0, axis_max_y), QPointF(safe_min_val, axis_max_y)])
-                    self.unsafe_left_line_y.replace([QPointF(0.0, axis_max_y), QPointF(safe_min_val, axis_max_y)])
-                    self.unsafe_right_line.replace([QPointF(safe_max_val, axis_max_y), QPointF(1.0, axis_max_y)])
-            else:
-                self.unsafe_left_line.replace([QPointF(0, axis_max_y), QPointF(self.safe_min, axis_max_y)])
-                self.unsafe_left_line_y.replace([QPointF(0, axis_max_y), QPointF(self.safe_min, axis_max_y)])
-                self.unsafe_right_line.replace([QPointF(self.safe_max, axis_max_y), QPointF(self.max_val, axis_max_y)])
+            x_min = -0.5 if (self.is_float and self.is_chroma) else 0.0
+            x_max = 0.5 if (self.is_float and self.is_chroma) else (1.0 if self.is_float else self.max_val)
+
+            self.unsafe_left_line.replace([QPointF(x_min, axis_max_y), QPointF(self.safe_min_coord, axis_max_y)])
+            self.unsafe_left_line_y.replace([QPointF(x_min, axis_max_y), QPointF(self.safe_min_coord, axis_max_y)])
+            self.unsafe_right_line.replace([QPointF(self.safe_max_coord, axis_max_y), QPointF(x_max, axis_max_y)])
 
             # Apply gradient to highlight unsafe zones on the series
             # ObjectMode maps 0.0 to 1.0 across the plot area (value 0 to N - 1)
@@ -302,6 +396,132 @@ class LevelsChartView(QChartView):
             self.unsafe_right_series.setVisible(False)
             self.area_series.setBrush(self.SERIES_COLOR)
             self.line_series.setPen(QPen(self.SERIES_COLOR, 1))
+
+        if self._last_hover_pos is not None and self.underMouse():
+            self._update_crosshair(self._last_hover_pos)
+        else:
+            self._last_hover_pos = None
+            self.set_overlays_visible(False)
+
+    def set_overlays_visible(self, visible: bool) -> None:
+        self.v_line.setVisible(visible)
+        self.h_line.setVisible(visible)
+        self.label.setVisible(visible)
+
+    def _make_cross_pen(self) -> QPen:
+        cross_color = self.palette().color(QPalette.ColorRole.ToolTipText)
+        cross_color.setAlphaF(0.8)
+        return QPen(cross_color, 1, Qt.PenStyle.DashLine)
+
+    def _update_crosshair(self, pos: QPointF) -> None:
+        area = self.chart().plotArea()
+
+        if (
+            not area.contains(pos)
+            or self._downsampled_x is None
+            or self._downsampled_y is None
+            or self._raw_hist is None
+            or self._total_pixels == 0
+        ):
+            self.set_overlays_visible(False)
+            return
+
+        val = self.chart().mapToValue(pos, self.area_series)
+
+        idx = np.searchsorted(self._downsampled_x, val.x())
+        idx = np.clip(idx, 0, len(self._downsampled_x) - 1)
+        if idx > 0 and abs(self._downsampled_x[idx - 1] - val.x()) < abs(self._downsampled_x[idx] - val.x()):
+            idx -= 1
+
+        if idx == self._last_snap_idx and self.v_line.isVisible():
+            return
+
+        self._last_snap_idx = idx
+
+        snap_x = self._downsampled_x[idx]
+        snap_y = self._downsampled_y[idx]
+
+        point = self.chart().mapToPosition(QPointF(snap_x, snap_y), self.area_series)
+
+        self.v_line.setLine(point.x(), area.top(), point.x(), area.bottom())
+        self.h_line.setLine(area.left(), point.y(), area.right(), point.y())
+
+        if self._step == 1:
+            bin_count = int(self._raw_hist[idx])
+        else:
+            start_raw = idx * self._step
+            end_raw = min(len(self._raw_hist), (idx + 1) * self._step)
+            bin_count = self._raw_hist[start_raw:end_raw].sum()
+
+        pct = bin_count / self._total_pixels * 100.0
+
+        if self.is_float:
+            val_str = f"{snap_x:.4f}"
+        elif self._step == 1:
+            val_str = f"{round(snap_x)}"
+        else:
+            start_val = idx * self._step
+            end_val = min(len(self._raw_hist) - 1, (idx + 1) * self._step - 1)
+            val_str = f"{start_val} - {end_val}"
+
+        lines = [
+            f"<b>{self.plane_name}:</b> {val_str}",
+            f"<b>Weight:</b> {bin_count:,} ({pct:.2f}%)",
+        ]
+
+        half_bin = (self._step - 1) / (2.0 * (len(self._raw_hist) - 1) if self.is_float else 2.0)
+        if (
+            self.show_unsafe
+            and self.safe_min_coord is not None
+            and self.safe_max_coord is not None
+            and (snap_x + half_bin < self.safe_min_coord or snap_x - half_bin > self.safe_max_coord)
+        ):
+            lines.append(
+                f"<span style='color: {self.SERIES_UNSAFE_COLOR.name()};'><b>[Unsafe Broadcast Range]</b></span>"
+            )
+
+        self.label.set_html_text("<br>".join(lines), self.palette())
+
+        label_rect = self.label.boundingRect()
+        lx = point.x() + 15
+        ly = point.y() - label_rect.height() - 10
+        if lx + label_rect.width() > area.right():
+            lx = point.x() - label_rect.width() - 15
+        if ly < area.top():
+            ly = point.y() + 15
+        lx = clamp(lx, area.left() + 5, max(area.left() + 5, area.right() - label_rect.width() - 5))
+        ly = clamp(ly, area.top() + 5, max(area.top() + 5, area.bottom() - label_rect.height() - 5))
+
+        self.label.setPos(lx, ly)
+        self.set_overlays_visible(True)
+
+    def _capture_chart(self) -> QPixmap:
+        self.set_overlays_visible(False)
+        return self.grab()
+
+
+class LabelText(QGraphicsTextItem):
+    def __init__(self, parent: QGraphicsItem | None = None) -> None:
+        super().__init__(parent)
+        self._bg_color = QColor()
+        self._border_color = QColor()
+        self.document().setDocumentMargin(6.0)
+
+    def set_html_text(self, text: str, palette: QPalette) -> None:
+        self._bg_color = palette.color(QPalette.ColorRole.ToolTipBase)
+        self._border_color = palette.color(QPalette.ColorRole.Highlight)
+        self.setDefaultTextColor(palette.color(QPalette.ColorRole.ToolTipText))
+        self.setHtml(text)
+
+    @override
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(self._bg_color)
+        painter.setPen(QPen(self._border_color, 1.0))
+        painter.drawRoundedRect(self.boundingRect().adjusted(0.5, 0.5, -0.5, -0.5), 4.0, 4.0)
+        painter.restore()
+        super().paint(painter, option, widget or QWidget())
 
 
 class HashableQColor(QColor):

@@ -41,10 +41,13 @@ class HistogramContainerWidget(QFrame):
         for i in range(self._fmt["num_planes"]):
             self.charts[i].configure(self._fmt, i, self.settings.global_.levels.show_unsafe)
 
-        for plane in range(frame.format.num_planes):
-            hist = compute_histogram(frame, plane, self.settings.global_.levels.factor)
-            chart = self.charts[plane]
-            chart.update_data(hist, self.width(), self.settings.global_.levels.bin_res)
+        for p in range(frame.format.num_planes):
+            self.charts[p].update_data(
+                compute_histogram(frame, p),
+                self.width(),
+                self.settings.global_.levels.bin_res,
+                self.settings.global_.levels.factor,
+            )
 
     def setup_layout(self) -> None:
         from .charts import LevelsChartView
@@ -63,7 +66,7 @@ class HistogramContainerWidget(QFrame):
             self.charts[i].hide()
 
 
-def compute_histogram(frame: vs.VideoFrame, plane: int, clamp_factor: float) -> npt.NDArray[np.intp]:
+def compute_histogram(frame: vs.VideoFrame, plane: int) -> npt.NDArray[np.intp]:
     arr = np.asarray(frame[plane])
 
     # Float format is digitized to 16-bit (65536 bins)
@@ -80,9 +83,7 @@ def compute_histogram(frame: vs.VideoFrame, plane: int, clamp_factor: float) -> 
         bins_count = 1 << frame.format.bits_per_sample
         data_int = arr.astype(np.int32).clip(0, bins_count - 1)
 
-    hist = np.bincount(data_int.ravel(), minlength=bins_count)
-
-    return hist.clip(0, max(1, int(arr.size * clamp_factor / 100.0))) if clamp_factor < 100.0 else hist
+    return np.bincount(data_int.ravel(), minlength=bins_count)
 
 
 def scale_array_float(arr: npt.NDArray[np.float32], frame: vs.VideoFrame, chroma: bool) -> npt.NDArray[np.int32]:
