@@ -220,12 +220,66 @@ describe('CytoscapeCanvas', () => {
     expect(canvas.selectNodeById('n2')?.id).toBe('n2');
     expect(cy.getElementById('n1').hasClass('dimmed')).toBe(false);
     expect(cy.getElementById('n2').hasClass('dimmed')).toBe(false);
+    expect(cy.getElementById('n2').hasClass('selected')).toBe(true);
 
     canvas.clearSelection();
 
     expect(canvas.heatmapActive).toBe(true);
     expect(cy.getElementById('n1').hasClass('dimmed')).toBe(false);
     expect(cy.getElementById('n2').hasClass('dimmed')).toBe(false);
+    expect(cy.getElementById('n2').hasClass('selected')).toBe(false);
+  });
+
+  it('moves the selection marker on programmatic selection instead of relying on tap selection', () => {
+    canvas.init(container);
+    canvas.setGraphData({
+      nodes: [{ data: makeNode({ id: 'n1' }) }, { data: makeNode({ id: 'n2' }) }],
+      edges: [{ data: makeEdge({ id: 'e1', source: 'n1', target: 'n2' }) }],
+      analysis: makeGraphAnalysis({ nodeCount: 2, edgeCount: 1 }),
+    });
+
+    const cy = (canvas as unknown as { cy: cytoscape.Core }).cy;
+    cy.getElementById('n1').emit('tap');
+    expect(canvas.selectedId).toBe('n1');
+    expect(cy.getElementById('n1').hasClass('selected')).toBe(true);
+    expect(cy.$(':selected')).toHaveLength(0);
+
+    canvas.selectNodeById('n2');
+    expect(cy.getElementById('n1').hasClass('selected')).toBe(false);
+    expect(cy.getElementById('n2').hasClass('selected')).toBe(true);
+  });
+
+  it('resets the viewport to 100% zoom instead of fitting', () => {
+    canvas.init(container);
+    canvas.setGraphData({
+      nodes: [{ data: makeNode({ id: 'n1' }) }],
+      edges: [],
+      analysis: makeGraphAnalysis({ nodeCount: 1 }),
+    });
+
+    const cy = (canvas as unknown as { cy: cytoscape.Core }).cy;
+    cy.zoom(3.5);
+    canvas.reset();
+    expect(cy.zoom()).toBe(1);
+  });
+
+  it('resolves edges with their endpoints by id', () => {
+    canvas.init(container);
+    canvas.setGraphData({
+      nodes: [
+        { data: makeNode({ id: 'n1', name: 'Source' }) },
+        { data: makeNode({ id: 'n2', name: 'Crop' }) },
+      ],
+      edges: [{ data: makeEdge({ id: 'e1', source: 'n1', target: 'n2' }) }],
+      analysis: makeGraphAnalysis({ nodeCount: 2, edgeCount: 1 }),
+    });
+
+    const resolved = canvas.getEdgeById('e1');
+    expect(resolved?.edge.id).toBe('e1');
+    expect(resolved?.source.name).toBe('Source');
+    expect(resolved?.target.name).toBe('Crop');
+    expect(canvas.getEdgeById('n1')).toBeNull();
+    expect(canvas.getEdgeById('missing')).toBeNull();
   });
 
   it('sorts incoming connections by edge index and manages edge tooltip on hover', () => {

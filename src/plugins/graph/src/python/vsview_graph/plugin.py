@@ -50,9 +50,10 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
         self._selected_node_id: str | None = None
 
         self._graph_cache = dict[int, CachedGraph]()
-        self._sent_key: int | None = None
+        self._generation = 0
+        self._sent_key: tuple[int, int] | None = None
         self._last_sent_timings = dict[str, int]()
-        self._load_lock = threading.Lock()
+        self._load_lock = threading.RLock()
 
         self._load_ready = False
 
@@ -141,7 +142,13 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
         if self._selected_idx is None:
             self.update_graph(force_layout=False)
 
+    @override
+    def on_playback_stopped(self) -> None:
+        if self._is_dirty:
+            self.update_graph()
+
     def on_destroy(self) -> None:
+        self._generation += 1
         self._selected_idx = None
         self._graph_cache.clear()
         self._sent_key = None
@@ -177,58 +184,73 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
             # fmt:on
             outputs.append({"index": v.vs_index, "name": v.vs_name, "isActive": is_active})
 
-        self.view.bridge.dispatch(PyToJsCommand.SET_OUTPUTS, {"outputs": outputs})
+        self.view.bridge.dispatch(
+            PyToJsCommand.SET_OUTPUTS,
+            {"outputs": outputs, "following": self._selected_idx is None},
+        )
 
     @run_in_background(name="UpdateGraph")
     def update_graph(self, *, force_layout: bool = False, refresh: bool = False) -> None:
-        if not self.view.bridge.is_ready or self.api.is_playing:
+        if not self.view.bridge.is_ready:
             return
 
-        if not force_layout and not vsengine.from_thread(self.isVisible).result():
+        if self.api.is_playing or (not force_layout and not vsengine.from_thread(self.isVisible).result()):
             self._is_dirty = True
             return
 
         self._is_dirty = False
 
-        if (cached := self._load_graph(refresh=refresh)) is None:
-            return
+        with self._load_lock:
+            generation = self._generation
+            key = self._current_output_key()
 
-        key = fallback(self._selected_idx, self.api.current_voutput.vs_index)
-        node_ids = {n.id for n in cached.graph.nodes}
+            cached = self._load_graph(key, refresh=refresh)
 
-        must_send_data = force_layout or key != self._sent_key
+            if generation != self._generation:
+                return
 
-        timings = list[NodeTimingUpdate]()
-        timings_map = dict[str, int]()
-        for n in cached.graph.nodes:
-            timings.append(
-                {"id": n.id, "processing_time_ns": n.processing_time_ns, "processing_time_ms": n.processing_time_ms}
-            )
-            timings_map[n.id] = n.processing_time_ns
+            if cached is None:
+                self.view.bridge.dispatch(
+                    PyToJsCommand.SET_ERROR,
+                    {"message": f"Failed to inspect the dependency graph of output {key}. See the log for details."},
+                )
+                return
 
-        if must_send_data:
-            self._sent_key = key
+            node_ids = {n.id for n in cached.graph.nodes}
+            sent_key = (generation, key)
+            must_send_data = force_layout or sent_key != self._sent_key
 
-            # Drop a selection that no longer exists in the new topology
-            if self._selected_node_id is not None and self._selected_node_id not in node_ids:
-                self._selected_node_id = None
+            timings = list[NodeTimingUpdate]()
+            timings_map = dict[str, int]()
+            for n in cached.graph.nodes:
+                timings.append(
+                    {"id": n.id, "processing_time_ns": n.processing_time_ns, "processing_time_ms": n.processing_time_ms}
+                )
+                timings_map[n.id] = n.processing_time_ns
+
+            if must_send_data:
+                self._sent_key = sent_key
+
+                # Drop a selection that no longer exists in the new topology
+                if self._selected_node_id is not None and self._selected_node_id not in node_ids:
+                    self._selected_node_id = None
+
+                self._last_sent_timings = timings_map
+                self.view.bridge.dispatch(PyToJsCommand.SET_DATA, cached.payload)
+
+                # A freshly loaded page has no selection of its own to restore after setData
+                if self._selected_node_id is not None:
+                    self.view.bridge.dispatch(PyToJsCommand.SELECT_NODE, {"id": self._selected_node_id})
+                return
+
+            timings_changed = timings_map != self._last_sent_timings
+
+            # An explicit refresh always echoes the timings even when the values themselves did not change.
+            if not timings_changed and not refresh:
+                return
 
             self._last_sent_timings = timings_map
-            self.view.bridge.dispatch(PyToJsCommand.SET_DATA, cached.payload)
-
-            # setData rebuilds the frontend elements, so restore the selection explicitly
-            if self._selected_node_id is not None:
-                self.view.bridge.dispatch(PyToJsCommand.SELECT_NODE, {"id": self._selected_node_id})
-            return
-
-        timings_changed = timings_map != self._last_sent_timings
-
-        # An explicit refresh always echoes the timings even when the values themselves did not change.
-        if not timings_changed and not refresh:
-            return
-
-        self._last_sent_timings = timings_map
-        self.view.bridge.dispatch(PyToJsCommand.UPDATE_TIMINGS, {"timings": timings})
+            self.view.bridge.dispatch(PyToJsCommand.UPDATE_TIMINGS, {"timings": timings})
 
     @Slot()
     def _on_web_ready(self) -> None:
@@ -357,7 +379,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
             self.api.statusMessage.emit(f"Copied {target.description}")
             return
 
-        if (cached := self._load_graph()) is None:
+        if (cached := self._load_graph(self._current_output_key())) is None:
             return
 
         if (node := cached.graph.nodes_by_id.get(node_id)) is None:
@@ -378,7 +400,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
     @run_in_background(name="ExportGraph")
     def _export_graph(self, fmt: ExportFormat, clipboard: bool) -> None:
-        if (cached := self._load_graph()) is None:
+        if (cached := self._load_graph(self._current_output_key())) is None:
             return
 
         with self.api.vs_context():
@@ -413,31 +435,36 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
         Path(selected).write_text(text, encoding="utf-8")
         self.api.statusMessage.emit(f"Saved dependency graph to {selected}")
 
-    def _load_graph(self, *, refresh: bool = False) -> CachedGraph | None:
-        with self._load_lock:
-            key = fallback(self._selected_idx, self.api.current_voutput.vs_index)
+    def _current_output_key(self) -> int:
+        return fallback(self._selected_idx, self.api.current_voutput.vs_index)
 
+    def _load_graph(self, key: int, *, refresh: bool = False) -> CachedGraph | None:
+        with self._load_lock:
             if refresh:
                 self._graph_cache.pop(key, None)
 
             if (cached := self._graph_cache.get(key)) is not None:
                 return cached
 
-            clip = next(
-                (v.vs_output.clip for v in self.api.voutputs if v.vs_index == self._selected_idx),
-                self.api.current_voutput.vs_output.clip,
-            )
+            if (voutput := next((v for v in self.api.voutputs if v.vs_index == key), None)) is None:
+                logger.error("Failed to extract graph: output %d does not exist", key)
+                return None
+
+            generation = self._generation
 
             with self.api.vs_context():
                 try:
-                    graph = vsgraph.get_graph(clip)
+                    graph = vsgraph.get_graph(voutput.vs_output.clip)
                     cached = CachedGraph(graph=graph, payload=enrich_cytoscape_payload(graph, graph.to_cytoscape()))
                 except Exception as e:
-                    logger.error("Failed to extract graph from clip: %s", e)
+                    logger.error("Failed to extract graph from output %d: %s", key, e)
                     logger.debug("", exc_info=e)
                     return None
 
             self._graph_cache[key] = cached
+            if generation != self._generation:
+                self._graph_cache.pop(key, None)
+
             return cached
 
     @run_in_background(name="CopyImage")

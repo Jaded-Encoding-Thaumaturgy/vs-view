@@ -9,6 +9,7 @@ import type {
   CallFrame,
   CanvasNodeData,
   EdgeData,
+  EdgeInspection,
   IncomingConnection,
   NodeCopyTarget,
   NodeData,
@@ -20,14 +21,9 @@ interface InspectorDrawerOptions {
   container: HTMLElement;
   onCopyNode: (id: string, target: NodeCopyTarget, frameIdx?: number) => void;
   resolveNode: (id: string) => CanvasNodeData | null;
+  resolveEdge: (id: string) => EdgeInspection | null;
   getIncomingConnections: (id: string) => IncomingConnection[];
   onFocusNode: (id: string) => void;
-}
-
-interface EdgeInspectionState {
-  edge: EdgeData;
-  source: CanvasNodeData;
-  target: CanvasNodeData;
 }
 
 export class InspectorDrawer extends Disposable {
@@ -39,7 +35,7 @@ export class InspectorDrawer extends Disposable {
   private showTimings = true;
   private timingUnit: TimingUnit = 'auto';
   private lastNode: NodeData | null = null;
-  private lastEdge: EdgeInspectionState | null = null;
+  private lastEdge: EdgeInspection | null = null;
   private openFrames = new Set<number>([0]);
   private dragController: AbortController | null = null;
 
@@ -73,6 +69,21 @@ export class InspectorDrawer extends Disposable {
     this.lastEdge = { edge, source, target };
     this.render();
     this.open();
+  }
+
+  public refresh(): void {
+    if (this.lastNode) {
+      this.lastNode = this.opts.resolveNode(this.lastNode.id);
+    } else if (this.lastEdge) {
+      this.lastEdge = this.opts.resolveEdge(this.lastEdge.edge.id);
+    } else {
+      return;
+    }
+
+    if (!this.lastNode && !this.lastEdge) {
+      this.close();
+    }
+    this.render();
   }
 
   public setTimingOptions(show: boolean, unit: TimingUnit): void {

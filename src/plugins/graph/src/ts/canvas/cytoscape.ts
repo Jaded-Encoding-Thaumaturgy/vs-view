@@ -6,6 +6,7 @@ import type {
   CanvasNodeData,
   CytoscapePayload,
   EdgeData,
+  EdgeInspection,
   FilterModeName,
   IncomingConnection,
   LayoutDirection,
@@ -131,7 +132,7 @@ export class CytoscapeCanvas implements IDisposable {
     this.cy = cytoscape({
       container,
       boxSelectionEnabled: false,
-      autounselectify: false,
+      autounselectify: true,
       style: [],
     });
 
@@ -468,6 +469,18 @@ export class CytoscapeCanvas implements IDisposable {
     const node = this.cy.getElementById(id);
     if (node.length === 0) return null;
     return node.data() as CanvasNodeData;
+  }
+
+  public getEdgeById(id: string): EdgeInspection | null {
+    if (!this.cy) return null;
+    const edge = this.cy.getElementById(id);
+    if (edge.empty() || !edge.isEdge()) return null;
+
+    return {
+      edge: edge.data() as EdgeData,
+      source: edge.source().data() as CanvasNodeData,
+      target: edge.target().data() as CanvasNodeData,
+    };
   }
 
   public getIncomingConnections(id: string): IncomingConnection[] {
@@ -831,7 +844,7 @@ export class CytoscapeCanvas implements IDisposable {
         },
       },
       {
-        selector: 'node:selected',
+        selector: 'node.selected',
         style: {
           'border-color': t.accent,
           'border-width': 2.5,

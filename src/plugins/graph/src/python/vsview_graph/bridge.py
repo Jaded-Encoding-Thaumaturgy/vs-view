@@ -17,6 +17,7 @@ class PyToJsCommand(StrEnum):
     FIT_VIEW = "graph.fitView"
     RESET_VIEW = "graph.resetView"
     REQUEST_PNG_EXPORT = "graph.requestPngExport"
+    SET_ERROR = "graph.setError"
     THEME_UPDATE = "theme.update"
 
 
@@ -74,6 +75,7 @@ class OutputItem(TypedDict):
 
 class SetOutputsPayload(TypedDict):
     outputs: Sequence[OutputItem]
+    following: bool
 
 
 class GraphOptionsPayload(TypedDict):
@@ -119,6 +121,10 @@ class RequestPngExportPayload(TypedDict):
     path: NotRequired[str]
 
 
+class SetErrorPayload(TypedDict):
+    message: str
+
+
 class ThemeTokens(TypedDict):
     isDark: bool
     bg: str
@@ -154,6 +160,8 @@ class GraphBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
     def dispatch(
         self, command: Literal[PyToJsCommand.REQUEST_PNG_EXPORT], payload: RequestPngExportPayload
     ) -> None: ...
+    @overload
+    def dispatch(self, command: Literal[PyToJsCommand.SET_ERROR], payload: SetErrorPayload) -> None: ...
     @overload
     def dispatch(self, command: Literal[PyToJsCommand.THEME_UPDATE], payload: ThemeTokens) -> None: ...
     @override

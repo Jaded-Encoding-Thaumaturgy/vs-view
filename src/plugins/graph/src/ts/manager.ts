@@ -7,7 +7,7 @@ import { InspectorDrawer } from './ui/inspector';
 import { KeybindingController } from './ui/keybindings';
 import { OverviewPanel } from './ui/overview';
 import { ThemeManager } from './utils/theme';
-import { findSlowestLeafNode, getNextNeighborNode } from './utils/traversal';
+import { NeighborNavigator, findSlowestLeafNode } from './utils/traversal';
 
 export interface GraphManagerOptions {
   cyContainer: HTMLElement;
@@ -30,7 +30,7 @@ export class GraphManager extends Disposable {
   private readonly loadingOverlay: HTMLElement;
   private readonly errorBanner: HTMLElement;
 
-  private readonly neighborCursor = new Map<string, number>();
+  private readonly navigator = new NeighborNavigator();
 
   constructor(options: GraphManagerOptions) {
     super();
@@ -51,6 +51,7 @@ export class GraphManager extends Disposable {
             frameIdx === undefined ? { id, target } : { id, target, frameIdx },
           ),
         resolveNode: (id) => this.canvas.getNodeById(id),
+        resolveEdge: (id) => this.canvas.getEdgeById(id),
         getIncomingConnections: (id) => this.canvas.getIncomingConnections(id),
         onFocusNode: (id) => this.focusNode(id),
       }),
@@ -127,11 +128,6 @@ export class GraphManager extends Disposable {
     });
   }
 
-  public override dispose(): void {
-    this.neighborCursor.clear();
-    super.dispose();
-  }
-
   private setupSubscriptions(): void {
     // Theme updates -> update canvas styling
     this._disposables.add({
@@ -174,8 +170,9 @@ export class GraphManager extends Disposable {
       this.bridge.onCommand('graph.setData', (payload) => {
         this.hideErrorBanner();
 
-        this.neighborCursor.clear();
+        this.navigator.reset();
         this.canvas.setGraphData(payload, true);
+        this.inspector.refresh();
 
         this.overview.setData(this.canvas.getNodes(), payload.analysis);
         this.hud.refreshSearch(false);
@@ -186,17 +183,23 @@ export class GraphManager extends Disposable {
 
     this._disposables.add(
       this.bridge.onCommand('graph.updateTimings', (payload) => {
+        this.hideErrorBanner();
         this.canvas.updateTimings(payload.timings);
         this.overview.updateTimings(this.canvas.getNodes());
+        this.inspector.refresh();
       }),
     );
 
     this._disposables.add(
-      this.bridge.onCommand('graph.setOutputs', (payload) => this.hud.setOutputs(payload.outputs)),
+      this.bridge.onCommand('graph.setOutputs', (payload) =>
+        this.hud.setOutputs(payload.outputs, payload.following),
+      ),
     );
 
     this._disposables.add(
       this.bridge.onCommand('graph.selectNode', (payload) => {
+        if (this.canvas.selectedId === payload.id) return;
+
         const node = this.canvas.selectNodeById(payload.id);
         if (!node) {
           console.warn(`Cannot select node '${payload.id}': node not found in graph`);
@@ -204,7 +207,13 @@ export class GraphManager extends Disposable {
         }
 
         this.inspector.inspectNode(node);
-        this.canvas.centerNode(payload.id);
+      }),
+    );
+
+    this._disposables.add(
+      this.bridge.onCommand('graph.setError', (payload) => {
+        this.showErrorBanner(payload.message);
+        this.hideLoadingOverlay();
       }),
     );
 
@@ -277,13 +286,12 @@ export class GraphManager extends Disposable {
   }
 
   private navigate(direction: 'up' | 'down', cycle: boolean): void {
-    const target = getNextNeighborNode(
+    const target = this.navigator.next(
       this.canvas.selectedId,
       direction,
       cycle,
       this.canvas.getNodes(),
       this.canvas.getEdges(),
-      this.neighborCursor,
     );
     if (target) this.focusNode(target);
   }
@@ -311,10 +319,18 @@ export class GraphManager extends Disposable {
   }
 
   private hideLoadingOverlay(): void {
+    if (!this.loadingOverlay.isConnected || this.loadingOverlay.classList.contains('fade-out'))
+      return;
+
     this.loadingOverlay.classList.add('fade-out');
     this.loadingOverlay.addEventListener('transitionend', () => this.loadingOverlay.remove(), {
       once: true,
     });
+  }
+
+  private showErrorBanner(message: string): void {
+    this.errorBanner.textContent = message;
+    this.errorBanner.classList.add('visible');
   }
 
   private hideErrorBanner(): void {

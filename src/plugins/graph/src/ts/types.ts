@@ -154,6 +154,12 @@ export interface IncomingConnection {
   source: CanvasNodeData;
 }
 
+export interface EdgeInspection {
+  edge: EdgeData;
+  source: CanvasNodeData;
+  target: CanvasNodeData;
+}
+
 export interface CytoscapeNodeElement {
   data: NodeData;
 }
@@ -176,6 +182,7 @@ export interface OutputItem {
 
 export interface SetOutputsPayload {
   outputs: OutputItem[];
+  following: boolean;
 }
 
 export interface GraphOptionsPayload {
@@ -242,6 +249,7 @@ export interface PyToJsCommandMap {
         destination: 'file';
         path: string;
       };
+  'graph.setError': { message: string };
 }
 
 /**

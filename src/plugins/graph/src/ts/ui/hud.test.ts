@@ -76,19 +76,48 @@ describe('HudController', () => {
     expect(select.disabled).toBe(true);
     expect(select.textContent).toContain('No outputs');
 
-    hud.setOutputs([
+    const outputs = [
       { index: 0, name: 'Source', isActive: false },
       { index: 1, name: 'Filtered', isActive: true },
-    ]);
+    ];
+    hud.setOutputs(outputs, false);
 
     expect(select.disabled).toBe(false);
-    expect(select.options).toHaveLength(2);
-    expect(select.options[1]?.selected).toBe(true);
-    expect(select.options[1]?.textContent.trim()).toBe('[1] Filtered');
+    expect(select.options).toHaveLength(3);
+    expect(select.options[0]?.textContent.trim()).toBe('Follow active output');
+    expect(select.options[2]?.selected).toBe(true);
+    expect(select.options[2]?.textContent.trim()).toBe('[1] Filtered');
 
     select.value = '0';
     select.dispatchEvent(new Event('change'));
     expect(onOutputSelected).toHaveBeenCalledWith(0);
+  });
+
+  it('selects the follow option while following and emits -1 to resume following', () => {
+    const select = container.querySelector<HTMLSelectElement>('#hud-output-select')!;
+    const outputs = [
+      { index: 0, name: 'Source', isActive: true },
+      { index: 1, name: 'Filtered', isActive: false },
+    ];
+
+    hud.setOutputs(outputs, true);
+    expect(select.value).toBe('-1');
+
+    // A user-picked option must still follow later host updates
+    select.value = '1';
+    select.dispatchEvent(new Event('change'));
+    hud.setOutputs(
+      outputs.map((out) => ({ ...out, isActive: out.index === 1 })),
+      false,
+    );
+    expect(select.value).toBe('1');
+
+    select.value = '-1';
+    select.dispatchEvent(new Event('change'));
+    expect(onOutputSelected).toHaveBeenLastCalledWith(-1);
+
+    hud.setOutputs(outputs, true);
+    expect(select.value).toBe('-1');
   });
 
   it('triggers canvas controls, toggles tool actions, and syncs host options', () => {

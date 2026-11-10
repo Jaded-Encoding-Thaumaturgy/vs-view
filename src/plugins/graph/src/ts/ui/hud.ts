@@ -28,6 +28,7 @@ export const DEFAULT_SEARCH_TOOLTIP =
 
 export class HudController extends Disposable {
   private outputs: OutputItem[] = [];
+  private following = true;
   private direction: LayoutDirection = 'TB';
   private heatmap = false;
   private patterns = false;
@@ -42,8 +43,9 @@ export class HudController extends Disposable {
     this.render();
   }
 
-  public setOutputs(outputs: OutputItem[]): void {
+  public setOutputs(outputs: OutputItem[], following: boolean): void {
     this.outputs = outputs;
+    this.following = following;
     this.render();
   }
 

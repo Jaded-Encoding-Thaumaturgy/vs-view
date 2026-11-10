@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { CanvasNodeData, IncomingConnection, NodeCopyTarget } from '../types';
+import type { CanvasNodeData, EdgeInspection, IncomingConnection, NodeCopyTarget } from '../types';
 import { makeCanvasEdge, makeCanvasNode, makeVideoInfo } from '../utils/test-helpers';
 import { InspectorDrawer } from './inspector';
 
 describe('InspectorDrawer', () => {
   let container: HTMLElement;
   let nodeMap: Map<string, CanvasNodeData>;
+  let edgeMap: Map<string, EdgeInspection>;
   let incomingMap: Map<string, IncomingConnection[]>;
   let drawer: InspectorDrawer;
   let focusSpy: ReturnType<typeof vi.fn<(id: string) => void>>;
@@ -21,12 +22,14 @@ describe('InspectorDrawer', () => {
     copyNodeSpy = vi.fn<(id: string, target: NodeCopyTarget, frameIdx?: number) => void>();
     focusSpy = vi.fn<(id: string) => void>();
     nodeMap = new Map();
+    edgeMap = new Map();
     incomingMap = new Map();
 
     drawer = new InspectorDrawer({
       container,
       onCopyNode: copyNodeSpy,
       resolveNode: (id: string) => nodeMap.get(id) ?? null,
+      resolveEdge: (id: string) => edgeMap.get(id) ?? null,
       getIncomingConnections: (id: string) => incomingMap.get(id) ?? [],
       onFocusNode: focusSpy,
     });
@@ -53,6 +56,33 @@ describe('InspectorDrawer', () => {
 
     drawer.dispose();
     expect(container.children).toHaveLength(0);
+  });
+
+  it('refreshes the inspected node and edge from the current graph and closes when they are gone', () => {
+    nodeMap.set('node_1', makeCanvasNode({ id: 'node_1', processing_time_ns: 1_000_000 }));
+    drawer.inspectNode(nodeMap.get('node_1')!);
+    expect(container.textContent).toContain('1.00 ms');
+
+    nodeMap.set('node_1', makeCanvasNode({ id: 'node_1', processing_time_ns: 7_000_000 }));
+    drawer.refresh();
+    expect(container.textContent).toContain('7.00 ms');
+    expect(drawer.opened).toBe(true);
+
+    nodeMap.delete('node_1');
+    drawer.refresh();
+    expect(drawer.opened).toBe(false);
+
+    const source = makeCanvasNode({ id: 'src', name: 'Source' });
+    const target = makeCanvasNode({ id: 'dst', name: 'Target' });
+    const edge = makeCanvasEdge({ id: 'e1', source: 'src', target: 'dst' });
+    edgeMap.set('e1', { edge: { ...edge, media_label: '8→16 bit' }, source, target });
+    drawer.inspectEdge(edge, source, target);
+    drawer.refresh();
+    expect(container.textContent).toContain('8→16 bit');
+
+    edgeMap.delete('e1');
+    drawer.refresh();
+    expect(drawer.opened).toBe(false);
   });
 
   it('renders upstream dependency badges in inputs card or None (Source) for source nodes', () => {
@@ -262,6 +292,7 @@ describe('InspectorDrawer', () => {
       container,
       onCopyNode: copyNodeSpy,
       resolveNode: (id: string) => (id === 'node_1' ? parent1 : id === 'node_2' ? parent2 : null),
+      resolveEdge: () => null,
       getIncomingConnections: () => [
         {
           edge: makeCanvasEdge({ id: 'e_1', source: 'node_2', target: 'node_target', index: 1 }),
