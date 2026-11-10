@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import ctypes
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from logging import getLogger
 
 import numpy as np
 import numpy.typing as npt
 from PySide6.QtCore import Slot
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QWidget
 
 from vsview.api import PluginAPI, run_in_background
@@ -54,9 +54,15 @@ class CustomQImage(QImage):
 
 
 class CustomContextMenu(QMenu):
-    def __init__(self, parent: QWidget, api: PluginAPI) -> None:
+    def __init__(
+        self,
+        parent: QWidget,
+        api: PluginAPI,
+        image_provider: Callable[[], QPixmap] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.api = api
+        self._image_provider = image_provider or parent.grab
 
         self.copy_action = self.addAction("Copy Image to Clipboard")
         self.copy_action.triggered.connect(self._copy_image_to_clipboard)
@@ -64,26 +70,20 @@ class CustomContextMenu(QMenu):
         self.save_action = self.addAction("Save Image to Disk...")
         self.save_action.triggered.connect(self._on_save_image_action)
 
-    @property
-    def safe_parent(self) -> QWidget:
-        if isinstance(p := super().parent(), QWidget):
-            return p
-        raise NotImplementedError
-
     @Slot()
     def _copy_image_to_clipboard(self) -> None:
-        QApplication.clipboard().setPixmap(self.safe_parent.grab())
+        QApplication.clipboard().setPixmap(self._image_provider())
         logger.info("Copied image to clipboard")
         self.api.statusMessage.emit("Copied image to clipboard")
 
     @Slot()
     def _on_save_image_action(self) -> None:
         file_path, _ = QFileDialog.getSaveFileName(
-            self.safe_parent, "Save Image", "", "PNG Files (*.png);;All Files (*)"
+            self.parentWidget(), "Save Image", "", "PNG Files (*.png);;All Files (*)"
         )
         if file_path:
             logger.debug("Saving image to %s", file_path)
-            self._save_image(self.safe_parent.grab().toImage(), file_path)
+            self._save_image(self._image_provider().toImage(), file_path)
 
     @run_in_background(name="SavePlotImage")
     def _save_image(self, image: QImage, file_path: str, fmt: str = "PNG") -> None:
