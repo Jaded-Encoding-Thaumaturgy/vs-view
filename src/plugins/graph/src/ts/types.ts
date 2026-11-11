@@ -116,7 +116,7 @@ export interface FuncRef {
 
 export interface CallFrame {
   level: number;
-  frame_id: string;
+  id: string;
   plugin_id: string;
   plugin_ns: string;
   function: string;

@@ -555,9 +555,9 @@ export class InspectorDrawer extends Disposable {
     return Result.fromThrowable(() => JSON.stringify(val))
       .mapErr((err) => {
         console.warn(`Failed to serialize argument '${key}':`, err);
-        return '[unserializable]';
+        return err;
       })
-      .unwrap();
+      .unwrapOr('[unserializable]');
   }
 }
 

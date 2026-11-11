@@ -13,7 +13,7 @@ describe('computeTimingStats', () => {
         call_stack: [
           {
             level: 0,
-            frame_id: 'f1',
+            id: 'f1',
             plugin_id: 'com.Resize',
             plugin_ns: 'resize',
             function: 'Spline36',
@@ -27,7 +27,7 @@ describe('computeTimingStats', () => {
         call_stack: [
           {
             level: 0,
-            frame_id: 'f2',
+            id: 'f2',
             plugin_id: 'com.Resize',
             plugin_ns: 'resize',
             function: 'Bicubic',

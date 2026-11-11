@@ -129,14 +129,12 @@ export class GraphManager extends Disposable {
   }
 
   private setupSubscriptions(): void {
-    // Theme updates -> update canvas styling
-    this._disposables.add({
-      dispose: this.themeManager.onThemeChanged((tokens) => {
+    this._disposables.add(
+      this.themeManager.onThemeChanged((tokens) => {
         this.canvas.applyTheme(tokens);
       }),
-    });
+    );
 
-    // Canvas node selection -> inspector & python bridge
     this._disposables.add(
       this.canvas.onNodeSelected((node) => {
         this.inspector.inspectNode(node);

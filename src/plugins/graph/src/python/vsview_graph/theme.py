@@ -11,7 +11,6 @@ def extract_theme_tokens(palette: QPalette) -> ThemeTokens:
     text_color = palette.color(QPalette.ColorRole.WindowText)
     highlight_color = palette.color(QPalette.ColorRole.Highlight)
 
-    # Derive surfaces and subtle borders based on luminance
     if is_dark:
         surface = base_color if base_color.name() != window_color.name() else window_color.lighter(115)
         surface_elevated = surface.lighter(115)

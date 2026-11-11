@@ -1,4 +1,4 @@
-import { Disposable, Result } from 'vsview-shared';
+import { Disposable, type IDisposable, Result, toDisposable } from 'vsview-shared';
 
 export interface ThemeTokens {
   isDark: boolean;
@@ -24,14 +24,14 @@ export class ThemeManager extends Disposable {
     return this.currentTokens;
   }
 
-  public onThemeChanged(cb: (tokens: ThemeTokens) => void): () => void {
+  public onThemeChanged(cb: (tokens: ThemeTokens) => void): IDisposable {
     this.listeners.push(cb);
-    return () => {
+    return toDisposable(() => {
       const idx = this.listeners.indexOf(cb);
       if (idx !== -1) {
         this.listeners.splice(idx, 1);
       }
-    };
+    });
   }
 
   public updateTheme(tokens: ThemeTokens): void {

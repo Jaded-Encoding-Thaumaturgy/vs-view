@@ -118,7 +118,7 @@ describe('InspectorDrawer', () => {
       call_stack: [
         {
           level: 0,
-          frame_id: 'frame_1',
+          id: 'frame_1',
           plugin_id: 'com.vapoursynth.std',
           plugin_ns: 'std',
           function: 'Crop',
@@ -126,7 +126,7 @@ describe('InspectorDrawer', () => {
         },
         {
           level: 1,
-          frame_id: 'frame_2',
+          id: 'frame_2',
           plugin_id: 'com.vapoursynth.resize',
           plugin_ns: 'resize',
           function: 'Bicubic',
@@ -190,7 +190,7 @@ describe('InspectorDrawer', () => {
       call_stack: [
         {
           level: 0,
-          frame_id: 'frame_0',
+          id: 'frame_0',
           plugin_id: 'com.vapoursynth.std',
           plugin_ns: 'std',
           function: 'Interleave',
@@ -206,7 +206,7 @@ describe('InspectorDrawer', () => {
         },
         {
           level: 1,
-          frame_id: 'frame_1',
+          id: 'frame_1',
           plugin_id: 'user.script',
           plugin_ns: '',
           function: 'helper',

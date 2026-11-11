@@ -20,6 +20,7 @@ export interface KeybindingActions {
 
 export class KeybindingController implements IDisposable {
   private rules: KeybindingRule[] = [];
+  private readonly boundKeyDown = (event: KeyboardEvent): void => this.handleKeyDown(event);
 
   constructor(private readonly actions: KeybindingActions) {
     window.addEventListener('keydown', this.boundKeyDown);
@@ -99,8 +100,6 @@ export class KeybindingController implements IDisposable {
       }
     }
   }
-
-  private boundKeyDown = (event: KeyboardEvent) => this.handleKeyDown(event);
 }
 
 const KEY_DISPLAY_OVERRIDES: Record<string, string> = {

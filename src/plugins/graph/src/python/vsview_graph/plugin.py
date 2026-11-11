@@ -62,7 +62,6 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
         self.view = GraphWebView(self)
         layout.addWidget(self.view)
-        # Connect Bridge signals
         self.view.bridge.webReady.connect(self._on_web_ready)
         self.view.bridge.commandReceived.connect(self._on_command_received)
 
@@ -76,7 +75,6 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
         self.context_menu.addSeparator()
 
-        # Copy Submenu
         copy_menu = self.context_menu.addMenu("Copy Graph as")
         copy_png_act = copy_menu.addAction("PNG Image")
         copy_png_act.triggered.connect(self._on_copy_png_triggered)
@@ -86,7 +84,6 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
             act = copy_menu.addAction(fmt.label)
             act.triggered.connect(partial(self._export_graph, fmt, clipboard=True))
 
-        # Save Submenu
         save_menu = self.context_menu.addMenu("Save Graph as")
         save_png_act = save_menu.addAction("PNG Image…")
         save_png_act.triggered.connect(self._on_save_png_image)
@@ -160,10 +157,6 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
         self._selected_idx = index if (index is not None and index >= 0) else None
         self.update_outputs()
         self.update_graph(force_layout=True)
-
-    def refresh(self) -> None:
-        self.update_outputs()
-        self.update_graph(refresh=True)
 
     @run_in_loop(return_future=False)
     def update_outputs(self) -> None:
@@ -266,8 +259,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
     def _on_command_received(self, command: JsToPyCommand, payload: dict[str, Any]) -> None:
         match command:
             case JsToPyCommand.RELOAD:
-                self.update_outputs()
-                self.update_graph(refresh=True)
+                self._reload()
             case JsToPyCommand.OUTPUT_SELECT:
                 self.select_output(payload.get("index"))
             case JsToPyCommand.NODE_SELECT:
@@ -303,8 +295,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
     @Slot()
     def _on_reload_graph_triggered(self) -> None:
-        self.update_outputs()
-        self.update_graph(refresh=True)
+        self._reload()
 
     @Slot()
     def _on_copy_png_triggered(self) -> None:
@@ -357,7 +348,6 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
     @run_in_loop(return_future=False)
     def _load_page(self) -> None:
-        url = QUrl.fromLocalFile(GraphPlugin.INDEX_PATH)
         tokens = extract_theme_tokens(self.palette())
         query = QUrlQuery()
         query.addQueryItem("windowColorRole", tokens["bg"])
@@ -434,6 +424,10 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
         Path(selected).write_text(text, encoding="utf-8")
         self.api.statusMessage.emit(f"Saved dependency graph to {selected}")
+
+    def _reload(self) -> None:
+        self.update_outputs()
+        self.update_graph(refresh=True)
 
     def _current_output_key(self) -> int:
         return fallback(self._selected_idx, self.api.current_voutput.vs_index)

@@ -46,7 +46,7 @@ describe('matchesNode', () => {
     call_stack: [
       {
         level: 0,
-        frame_id: 'frame_1',
+        id: 'frame_1',
         plugin_id: 'com.vapoursynth.std',
         plugin_ns: 'std',
         function: 'Crop',

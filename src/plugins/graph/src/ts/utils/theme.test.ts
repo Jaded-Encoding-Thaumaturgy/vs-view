@@ -24,7 +24,7 @@ describe('ThemeManager', () => {
     expect(manager.tokens).toBeNull();
 
     const listener = vi.fn();
-    const unsubscribe = manager.onThemeChanged(listener);
+    const subscription = manager.onThemeChanged(listener);
 
     manager.updateTheme(TOKENS);
 
@@ -34,7 +34,7 @@ describe('ThemeManager', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith(TOKENS);
 
-    unsubscribe();
+    subscription.dispose();
     manager.updateTheme({ ...TOKENS, bg: '#ffffff' });
     expect(listener).toHaveBeenCalledTimes(1);
   });
