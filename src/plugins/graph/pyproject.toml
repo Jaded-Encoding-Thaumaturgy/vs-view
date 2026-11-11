@@ -71,8 +71,9 @@ cache-keys = [
     { file = "src/ts/**/*.ts" },
     { file = "src/ts/**/*.js" },
     { file = "../../shared/ts/src/**/*.ts" },
-    { file = "src/ts/styles.css" },
+    { file = "src/ts/**/*.css" },
     { file = "src/ts/index.html" },
+    { file = "../../../pnpm-lock.yaml" },
 ]
 
 [tool.uv.sources]
