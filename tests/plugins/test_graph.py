@@ -1030,6 +1030,10 @@ def test_build_node_report(graph_env: ManagedEnvironment) -> None:
 
 
 # Static Graph Analysis
+def _edge_ids(graph: vsgraph.Graph[Any]) -> list[str]:
+    return [f"edge-{i}" for i in range(len(graph.edges))]
+
+
 def test_describe_media_delta_and_transitions(graph_env: ManagedEnvironment) -> None:
     """Verify media delta detection, rational FPS equivalence, and transition grouping."""
     with graph_env.use():
@@ -1086,7 +1090,7 @@ def test_describe_media_delta_and_transitions(graph_env: ManagedEnvironment) -> 
                 vsgraph.Edge(source="a", target="missing", pattern=vsgraph.RequestPattern.GENERAL, index=0),
             ],
         )
-        transitions = collect_media_transitions(graph)
+        transitions = collect_media_transitions(graph, _edge_ids(graph))
         assert [t["targetId"] for t in transitions] == ["b", "d"]
 
         groups = group_media_transitions(transitions)
@@ -1141,19 +1145,31 @@ def test_collect_and_group_warnings() -> None:
             vsgraph.Edge(
                 source="n_unordered", target="n_state", pattern=vsgraph.RequestPattern.NO_FRAME_REUSE, index=1
             ),
+            vsgraph.Edge(
+                source="n_unordered", target="n_state", pattern=vsgraph.RequestPattern.FRAME_REUSE_LAST_ONLY, index=2
+            ),
         ],
     )
 
-    warnings = collect_warnings(graph)
+    edge_ids = _edge_ids(graph)
+    warnings = collect_warnings(graph, edge_ids)
     assert [(w["code"], w["severity"]) for w in warnings] == [
         ("framestate", Severity.WARNING),
         ("no-frame-reuse", Severity.WARNING),
+        ("frame-reuse-last-only", Severity.INFO),
         ("strict-spatial", Severity.INFO),
         ("unordered", Severity.INFO),
     ]
+    assert {w.get("edgeId") for w in warnings} == {None, *edge_ids}
 
     groups = group_warnings(warnings)
-    assert [g["code"] for g in groups] == ["framestate", "no-frame-reuse", "unordered", "strict-spatial"]
+    assert [g["code"] for g in groups] == [
+        "framestate",
+        "no-frame-reuse",
+        "frame-reuse-last-only",
+        "unordered",
+        "strict-spatial",
+    ]
     assert groups[0]["title"] == "Frame-state serialization"
     assert groups[1]["title"] == "No input frame reuse"
 

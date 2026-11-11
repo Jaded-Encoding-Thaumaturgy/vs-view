@@ -20,7 +20,12 @@ export type RequestPatternName =
   | 'STRICT_SPATIAL'
   | 'FRAME_REUSE_LAST_ONLY';
 
-type WarningCode = 'framestate' | 'unordered' | 'no-frame-reuse' | 'strict-spatial';
+type WarningCode =
+  | 'framestate'
+  | 'unordered'
+  | 'no-frame-reuse'
+  | 'strict-spatial'
+  | 'frame-reuse-last-only';
 type WarningSeverity = 'warning' | 'info';
 type MediaField = 'format' | 'resolution' | 'fps' | 'frames';
 

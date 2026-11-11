@@ -109,7 +109,8 @@ class NameCount(TypedDict):
 
 
 def enrich_cytoscape_payload(graph: vsgraph.Graph[Any], payload: dict[str, Any]) -> dict[str, Any]:
-    transitions = collect_media_transitions(graph)
+    edge_ids = [edge_elem["data"]["id"] for edge_elem in payload.get("edges", ())]
+    transitions = collect_media_transitions(graph, edge_ids)
     deltas_by_edge_id = {t["edgeId"]: t["delta"] for t in transitions}
 
     for edge_elem in payload.get("edges", ()):
@@ -118,7 +119,7 @@ def enrich_cytoscape_payload(graph: vsgraph.Graph[Any], payload: dict[str, Any])
             edge_data["media_label"] = delta["label"]
             edge_data["media_fields"] = delta["fields"]
 
-    warnings = collect_warnings(graph)
+    warnings = collect_warnings(graph, edge_ids)
 
     payload["analysis"] = {
         "nodeCount": len(graph.nodes),
@@ -136,12 +137,12 @@ def enrich_cytoscape_payload(graph: vsgraph.Graph[Any], payload: dict[str, Any])
     return payload
 
 
-def collect_media_transitions(graph: vsgraph.Graph[Any]) -> list[MediaTransition]:
+def collect_media_transitions(graph: vsgraph.Graph[Any], edge_ids: Sequence[str]) -> list[MediaTransition]:
     """Collect every edge of the graph whose endpoints disagree on media info."""
     by_id = graph.nodes_by_id
     transitions = list[MediaTransition]()
 
-    for i, edge in enumerate(graph.edges):
+    for edge, edge_id in zip(graph.edges, edge_ids, strict=True):
         src_node = by_id.get(edge.source)
         dst_node = by_id.get(edge.target)
 
@@ -152,20 +153,9 @@ def collect_media_transitions(graph: vsgraph.Graph[Any]) -> list[MediaTransition
         if not (delta := describe_media_delta(src_node.media_info, dst_node.media_info)):
             continue
 
-        transitions.append(
-            MediaTransition(
-                edgeId=format_edge_id(i, edge.source, edge.target),
-                sourceId=edge.source,
-                targetId=edge.target,
-                delta=delta,
-            )
-        )
+        transitions.append(MediaTransition(edgeId=edge_id, sourceId=edge.source, targetId=edge.target, delta=delta))
 
     return transitions
-
-
-def format_edge_id(index: int, source: str, target: str) -> str:
-    return f"e{index}_{source}_{target}"
 
 
 def describe_media_delta(from_info: vsgraph.VideoMediaInfo, to_info: vsgraph.VideoMediaInfo) -> MediaDelta | None:
@@ -195,7 +185,8 @@ def describe_media_delta(from_info: vsgraph.VideoMediaInfo, to_info: vsgraph.Vid
     return MediaDelta(fields=list(fields), label=", ".join(labels))
 
 
-def collect_warnings(graph: vsgraph.Graph[Any]) -> list[GraphWarning]:
+def collect_warnings(graph: vsgraph.Graph[Any], edge_ids: Sequence[str]) -> list[GraphWarning]:
+    """Collect concurrency and request-pattern warnings."""
     unique = dict[tuple[str, str, str], GraphWarning]()
 
     for node in graph.nodes:
@@ -207,8 +198,7 @@ def collect_warnings(graph: vsgraph.Graph[Any]) -> list[GraphWarning]:
             continue
         unique.setdefault((w["code"], w["nodeId"], ""), w)
 
-    for i, edge in enumerate(graph.edges):
-        edge_id = format_edge_id(i, edge.source, edge.target)
+    for edge, edge_id in zip(graph.edges, edge_ids, strict=True):
         if edge.pattern is vsgraph.RequestPattern.NO_FRAME_REUSE:
             w = GraphWarning(
                 code=WarningCode.NO_FRAME_REUSE, severity=Severity.WARNING, edgeId=edge_id, nodeId=edge.target
@@ -216,6 +206,10 @@ def collect_warnings(graph: vsgraph.Graph[Any]) -> list[GraphWarning]:
         elif edge.pattern is vsgraph.RequestPattern.STRICT_SPATIAL:
             w = GraphWarning(
                 code=WarningCode.STRICT_SPATIAL, severity=Severity.INFO, edgeId=edge_id, nodeId=edge.target
+            )
+        elif edge.pattern is vsgraph.RequestPattern.FRAME_REUSE_LAST_ONLY:
+            w = GraphWarning(
+                code=WarningCode.FRAME_REUSE_LAST_ONLY, severity=Severity.INFO, edgeId=edge_id, nodeId=edge.target
             )
         else:
             continue
