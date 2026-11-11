@@ -1,5 +1,6 @@
 import type cytoscape from 'cytoscape';
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { Result } from 'vsview-shared';
 
 import { CytoscapeCanvas } from './canvas/cytoscape';
 import { GraphManager, type GraphManagerOptions } from './manager';
@@ -174,6 +175,18 @@ describe('GraphManager', () => {
     expect(sentEvents).toContainEqual({
       command: 'contextmenu.request',
       payload: { direction: 'LR' },
+    });
+  });
+
+  it('never echoes a file path back with exported PNG data', () => {
+    send('graph.setData', PAYLOAD);
+    vi.spyOn(canvas, 'exportPng').mockReturnValue(Result.ok('data:image/png;base64,AAAA'));
+
+    send('graph.requestPngExport', { destination: 'file' });
+
+    expect(sentEvents).toContainEqual({
+      command: 'graph.saveImage',
+      payload: { format: 'png', dataBase64: 'data:image/png;base64,AAAA', destination: 'file' },
     });
   });
 

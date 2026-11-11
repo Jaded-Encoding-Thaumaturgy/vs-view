@@ -247,14 +247,7 @@ export interface PyToJsCommandMap {
   'graph.setKeybindings': SetKeybindingsPayload;
   'graph.fitView': Record<string, never>;
   'graph.resetView': Record<string, never>;
-  'graph.requestPngExport':
-    | {
-        destination: 'clipboard';
-      }
-    | {
-        destination: 'file';
-        path: string;
-      };
+  'graph.requestPngExport': { destination: 'clipboard' | 'file' };
   'graph.setError': { message: string };
 }
 
@@ -272,7 +265,6 @@ export interface JsToPyCommandMap {
     format: 'png';
     dataBase64: string;
     destination: 'file' | 'clipboard';
-    path?: string;
   };
   'contextmenu.request': { direction: LayoutDirection };
 }

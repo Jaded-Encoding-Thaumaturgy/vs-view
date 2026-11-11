@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
-from typing import Any, Literal, NotRequired, Self, TypedDict, overload, override
+from typing import Any, Literal, Self, TypedDict, overload, override
 
 from vsview.api import BaseWebChannelBridge
 
@@ -118,7 +118,6 @@ class SetKeybindingsPayload(TypedDict):
 
 class RequestPngExportPayload(TypedDict):
     destination: Literal["clipboard", "file"]
-    path: NotRequired[str]
 
 
 class SetErrorPayload(TypedDict):

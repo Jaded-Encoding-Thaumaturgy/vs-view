@@ -769,7 +769,7 @@ def test_graph_context_menu_structure_and_actions(
     mocker.patch.object(QFileDialog, "getSaveFileName", return_value=(str(png_path), ""))
     save_action_map["PNG Image…"].trigger()
     assert dispatched[-1][0] == PyToJsCommand.REQUEST_PNG_EXPORT
-    assert json.loads(dispatched[-1][1]) == {"destination": "file", "path": str(png_path)}
+    assert json.loads(dispatched[-1][1]) == {"destination": "file"}
 
     dot_path = tmp_path / "menu_export.dot"
     mocker.patch.object(QFileDialog, "getSaveFileName", return_value=(str(dot_path), ""))
@@ -806,6 +806,44 @@ def test_graph_plugin_canvas_actions_and_png_export(
 
     plugin.reset_act.trigger()
     assert dispatched[-1][0] == PyToJsCommand.RESET_VIEW
+
+
+def test_graph_plugin_save_image_uses_path_chosen_in_python(
+    populated_harness: tuple[HarnessPluginController, GraphPlugin],
+    mocker: MockerFixture,
+    tmp_path: Path,
+    qtbot: QtBot,
+) -> None:
+    """Verify SAVE_IMAGE writes to the dialog path and never to a path supplied by the page."""
+    _, plugin = populated_harness
+    b64_str = "data:image/png;base64," + base64.b64encode(b"png-bytes").decode()
+    page_path = tmp_path / "from_page.png"
+
+    def save_from_page() -> None:
+        plugin.view.bridge.dispatchFromJs(
+            JsToPyCommand.SAVE_IMAGE,
+            json.dumps({"format": "png", "dataBase64": b64_str, "destination": "file", "path": str(page_path)}),
+        )
+
+    # Unsolicited save is ignored
+    save_from_page()
+    QCoreApplication.processEvents()
+    assert not page_path.exists()
+
+    chosen_path = tmp_path / "chosen.png"
+    mocker.patch.object(QFileDialog, "getSaveFileName", return_value=(str(chosen_path), ""))
+    plugin._on_save_png_image()
+    save_from_page()
+
+    qtbot.waitUntil(chosen_path.exists, timeout=2000)
+    assert chosen_path.read_bytes() == b"png-bytes"
+    assert not page_path.exists()
+
+    # The pending path is consumed by the first save
+    chosen_path.unlink()
+    save_from_page()
+    QCoreApplication.processEvents()
+    assert not chosen_path.exists()
 
 
 def test_graph_plugin_dot_export_follows_displayed_direction(

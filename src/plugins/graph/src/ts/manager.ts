@@ -236,7 +236,6 @@ export class GraphManager extends Disposable {
               format: 'png',
               dataBase64: data,
               destination: payload.destination,
-              ...(payload.destination === 'file' ? { path: payload.path } : {}),
             });
           },
           err: (err) => console.error('Failed to export graph as PNG:', err),

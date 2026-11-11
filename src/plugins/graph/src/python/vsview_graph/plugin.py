@@ -67,6 +67,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
         self._sent_options = dict[str, Any]()
         self._view_direction: Literal["TB", "LR"] | None = None
+        self._pending_png_path: str | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -293,7 +294,11 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
                 destination = payload.get("destination")
                 if destination == "clipboard":
                     self._copy_image(payload["dataBase64"])
-                elif destination == "file" and (path := payload.get("path")):
+                elif destination == "file":
+                    if (path := self._pending_png_path) is None:
+                        logger.warning("Ignoring PNG image save that was not requested from the save dialog")
+                        return
+                    self._pending_png_path = None
                     self._save_image(path, payload["dataBase64"])
                 else:
                     logger.error("Malformed Payload")
@@ -327,7 +332,8 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
         if not selected:
             return
 
-        self.view.bridge.dispatch(PyToJsCommand.REQUEST_PNG_EXPORT, {"destination": "file", "path": selected})
+        self._pending_png_path = selected
+        self.view.bridge.dispatch(PyToJsCommand.REQUEST_PNG_EXPORT, {"destination": "file"})
 
     @Slot()
     def _sync_web_options(self) -> None:
