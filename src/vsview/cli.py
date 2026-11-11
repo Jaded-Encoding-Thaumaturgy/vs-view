@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from rich.console import Console, ConsoleOptions, RenderableType
 
 from .env import getenv_bool
-from .logging import IS_GUI_MODE, LOG_PATH, console, init_early_logging, setup_logging
+from .logging import IS_GUI_MODE, LOG_PATH, console, get_console_level, init_early_logging, setup_logging
 
 logger = getLogger(__name__)
 
@@ -263,10 +263,6 @@ def main(
     # Fixes the window flicker (https://qt-project.atlassian.net/browse/QTBUG-136743).
     os.environ.setdefault("QT_WIDGETS_RHI", "1")
 
-    if "WSL_DISTRO_NAME" in os.environ:
-        os.environ.setdefault("MESA_LOG_LEVEL", "error")
-        os.environ.setdefault("GALLIUM_DRIVER", "d3d12")
-
     if hdr:
         os.environ.setdefault("QSG_RHI_HDR", "p3" if sys.platform == "darwin" else "scrgb")
         os.environ.setdefault("QSG_INFO", "1")
@@ -295,6 +291,17 @@ def main(
         log_file=LOG_PATH if file_log or IS_GUI_MODE else None,
         is_gui_mode=IS_GUI_MODE,
     )
+
+    env_var = "QTWEBENGINE_CHROMIUM_FLAGS"
+    if "WSL_DISTRO_NAME" in os.environ:
+        os.environ.setdefault("MESA_LOG_LEVEL", "error")
+        os.environ.setdefault("GALLIUM_DRIVER", "d3d12")
+        # Disable GPU to fallback to software rendering
+        os.environ[env_var] = f"{os.environ.get(env_var, '')} --disable-gpu".strip()
+
+    # Suppress internal Chromium C++ stderr output (LOG_FATAL = 3)
+    if get_console_level() > DEBUG:
+        os.environ[env_var] = " ".join([os.environ.setdefault(env_var, ""), "--log-level=3"]).strip()
 
     # Set signal handler to default to allow Ctrl+C to work
     signal(SIGINT, SIG_DFL)
