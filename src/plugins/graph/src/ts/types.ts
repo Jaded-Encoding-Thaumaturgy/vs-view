@@ -132,6 +132,7 @@ export interface NodeData {
   processing_time_ns: number;
   processing_time_ms: number;
   is_root: boolean;
+  depth: number;
   media_info: MediaInfo;
   call_stack: CallFrame[];
 }

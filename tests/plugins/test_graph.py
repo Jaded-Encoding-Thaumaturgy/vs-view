@@ -21,6 +21,7 @@ from vsview_graph.analysis import (
     collect_media_transitions,
     collect_warnings,
     compute_depth,
+    compute_node_depths,
     describe_media_delta,
     enrich_cytoscape_payload,
     group_media_transitions,
@@ -1130,6 +1131,37 @@ def test_compute_depth() -> None:
     assert compute_depth(cyclic) == 1
 
 
+def test_compute_node_depths() -> None:
+    """Verify per-node longest distance to the output across empty, branching, and cyclic graphs."""
+    assert compute_node_depths(vsgraph.Graph(root_id="", nodes=[], edges=[])) == {}
+
+    # Deep chain a -> b -> c -> root beats the slower-looking shortcut s -> root
+    dag = vsgraph.Graph(
+        root_id="root",
+        nodes=[_make_graph_node(nid) for nid in ("a", "b", "c", "s", "root")],
+        edges=[
+            vsgraph.Edge(source="a", target="b", pattern=vsgraph.RequestPattern.GENERAL, index=0),
+            vsgraph.Edge(source="b", target="c", pattern=vsgraph.RequestPattern.GENERAL, index=0),
+            vsgraph.Edge(source="c", target="root", pattern=vsgraph.RequestPattern.GENERAL, index=0),
+            vsgraph.Edge(source="s", target="root", pattern=vsgraph.RequestPattern.GENERAL, index=1),
+            vsgraph.Edge(source="a", target="root", pattern=vsgraph.RequestPattern.GENERAL, index=2),
+            vsgraph.Edge(source="s", target="missing", pattern=vsgraph.RequestPattern.GENERAL, index=0),
+        ],
+    )
+    assert compute_node_depths(dag) == {"a": 3, "b": 2, "c": 1, "s": 1, "root": 0}
+
+    # Nodes on a cycle keep depth 0 and the walk terminates
+    cyclic = vsgraph.Graph(
+        root_id="b",
+        nodes=[_make_graph_node("a"), _make_graph_node("b")],
+        edges=[
+            vsgraph.Edge(source="a", target="b", pattern=vsgraph.RequestPattern.GENERAL, index=0),
+            vsgraph.Edge(source="b", target="a", pattern=vsgraph.RequestPattern.GENERAL, index=0),
+        ],
+    )
+    assert compute_node_depths(cyclic) == {"a": 0, "b": 0}
+
+
 def test_collect_and_group_warnings() -> None:
     """Verify concurrency and request-pattern warning collection and grouping."""
     graph = vsgraph.Graph(
@@ -1187,6 +1219,7 @@ def test_enrich_cytoscape_payload(graph_env: ManagedEnvironment) -> None:
     assert analysis["nodeCount"] == 2
     assert analysis["edgeCount"] == 1
     assert analysis["depth"] == 2
+    assert {n["data"]["name"]: n["data"]["depth"] for n in payload["nodes"]} == {"BlankClip": 1, "Crop": 0}
     assert analysis["transitionCount"] == 1
     assert analysis["transitionGroups"][0]["signature"] == "128x128→112x128"
     assert payload["edges"][0]["data"]["media_label"] == "128x128→112x128"

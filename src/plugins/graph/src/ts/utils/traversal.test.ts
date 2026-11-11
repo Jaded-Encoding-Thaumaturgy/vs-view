@@ -1,30 +1,48 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import { makeEdge, makeNode } from './test-helpers';
-import { NeighborNavigator, findSlowestLeafNode, getNextNeighborNode } from './traversal';
+import { NeighborNavigator, findDeepestLeafNode, getNextNeighborNode } from './traversal';
 
-describe('findSlowestLeafNode', () => {
+describe('findDeepestLeafNode', () => {
   it('returns null for empty node list', () => {
-    expect(findSlowestLeafNode([], [])).toBeNull();
+    expect(findDeepestLeafNode([], [])).toBeNull();
   });
 
-  it('selects the slowest leaf node (in-degree 0) and falls back to all nodes on cycles', () => {
-    const leafA = makeNode({ id: 'leaf_a', processing_time_ns: 100_000 });
-    const leafB = makeNode({ id: 'leaf_b', processing_time_ns: 500_000 });
+  it('prefers the deepest source over a slower shallow source', () => {
+    const shallow = makeNode({ id: 'shallow', depth: 1, processing_time_ns: 9_000_000 });
+    const deep = makeNode({ id: 'deep', depth: 2, processing_time_ns: 100_000 });
+    const mid = makeNode({ id: 'mid', depth: 1, processing_time_ns: 100_000 });
+    const root = makeNode({ id: 'root', is_root: true });
+
+    const edges = [
+      makeEdge({ id: 'e1', source: 'shallow', target: 'root' }),
+      makeEdge({ id: 'e2', source: 'deep', target: 'mid' }),
+      makeEdge({ id: 'e3', source: 'mid', target: 'root' }),
+    ];
+    expect(findDeepestLeafNode([shallow, deep, mid, root], edges)?.id).toBe('deep');
+  });
+
+  it('breaks depth ties by processing time', () => {
+    const leafA = makeNode({ id: 'leaf_a', depth: 1, processing_time_ns: 100_000 });
+    const leafB = makeNode({ id: 'leaf_b', depth: 1, processing_time_ns: 500_000 });
     const root = makeNode({ id: 'root', is_root: true, processing_time_ns: 1_000_000 });
 
-    const dagEdges = [
+    const edges = [
       makeEdge({ id: 'e1', source: 'leaf_a', target: 'root' }),
       makeEdge({ id: 'e2', source: 'leaf_b', target: 'root' }),
     ];
-    expect(findSlowestLeafNode([leafA, leafB, root], dagEdges)?.id).toBe('leaf_b');
+    expect(findDeepestLeafNode([leafA, leafB, root], edges)?.id).toBe('leaf_b');
+  });
 
-    // When every node is an edge target (cycle), falls back to slowest overall node
-    const cycleEdges = [
-      makeEdge({ id: 'e1', source: 'leaf_a', target: 'root' }),
-      makeEdge({ id: 'e2', source: 'root', target: 'leaf_a' }),
+  it('falls back to the slowest node when every node is part of a cycle', () => {
+    const a = makeNode({ id: 'a', processing_time_ns: 100_000 });
+    const b = makeNode({ id: 'b', processing_time_ns: 1_000_000 });
+
+    const edges = [
+      makeEdge({ id: 'e1', source: 'a', target: 'b' }),
+      makeEdge({ id: 'e2', source: 'b', target: 'a' }),
     ];
-    expect(findSlowestLeafNode([leafA, root], cycleEdges)?.id).toBe('root');
+    expect(findDeepestLeafNode([a, b], edges)?.id).toBe('b');
   });
 });
 

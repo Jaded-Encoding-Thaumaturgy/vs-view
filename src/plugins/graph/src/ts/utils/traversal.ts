@@ -1,10 +1,9 @@
 import type { EdgeData, NodeData } from '../types';
 
 /**
- * Find the slowest leaf node (in-degree 0).
- * Falls back to slowest overall on cycles, or `null` if empty.
+ * Find the deepest leaf node: the source (in-degree 0) with the largest `depth`.
  */
-export function findSlowestLeafNode<T extends NodeData>(
+export function findDeepestLeafNode<T extends NodeData>(
   nodes: readonly T[],
   edges: readonly EdgeData[],
 ): T | null {
@@ -13,10 +12,9 @@ export function findSlowestLeafNode<T extends NodeData>(
   const candidates = leaves.length > 0 ? leaves : nodes;
 
   return candidates.reduce<T | null>((best, node) => {
-    if (!best || node.processing_time_ns > best.processing_time_ns) {
-      return node;
-    }
-    return best;
+    if (!best) return node;
+    if (node.depth !== best.depth) return node.depth > best.depth ? node : best;
+    return node.processing_time_ns > best.processing_time_ns ? node : best;
   }, null);
 }
 

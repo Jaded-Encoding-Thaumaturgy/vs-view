@@ -7,7 +7,7 @@ import { InspectorDrawer } from './ui/inspector';
 import { KeybindingController } from './ui/keybindings';
 import { OverviewPanel } from './ui/overview';
 import { ThemeManager } from './utils/theme';
-import { NeighborNavigator, findSlowestLeafNode } from './utils/traversal';
+import { NeighborNavigator, findDeepestLeafNode } from './utils/traversal';
 
 export interface GraphManagerOptions {
   cyContainer: HTMLElement;
@@ -302,8 +302,8 @@ export class GraphManager extends Disposable {
   }
 
   private selectDeepestLeaf(): void {
-    const slowest = findSlowestLeafNode(this.canvas.getNodes(), this.canvas.getEdges());
-    if (slowest) this.focusNode(slowest.id);
+    const deepest = findDeepestLeafNode(this.canvas.getNodes(), this.canvas.getEdges());
+    if (deepest) this.focusNode(deepest.id);
   }
 
   private toggleHeatmap(): void {

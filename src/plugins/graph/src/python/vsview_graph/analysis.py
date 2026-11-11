@@ -109,6 +109,11 @@ class NameCount(TypedDict):
 
 
 def enrich_cytoscape_payload(graph: vsgraph.Graph[Any], payload: dict[str, Any]) -> dict[str, Any]:
+    node_depths = compute_node_depths(graph)
+    for node_elem in payload.get("nodes", ()):
+        node_data = node_elem["data"]
+        node_data["depth"] = node_depths.get(node_data["id"], 0)
+
     edge_ids = [edge_elem["data"]["id"] for edge_elem in payload.get("edges", ())]
     transitions = collect_media_transitions(graph, edge_ids)
     deltas_by_edge_id = {t["edgeId"]: t["delta"] for t in transitions}
@@ -245,6 +250,31 @@ def compute_depth(graph: vsgraph.Graph[Any]) -> int:
                 queue.append(nxt)
 
     return max(depth.values(), default=0)
+
+
+def compute_node_depths(graph: vsgraph.Graph[Any]) -> dict[str, int]:
+    """Longest path, in edges, from each node down to a sink. Nodes on or upstream of a cycle stay at 0."""
+    ids = {node.id for node in graph.nodes}
+    outdegree = dict.fromkeys(ids, 0)
+    parents: defaultdict[str, list[str]] = defaultdict(list)
+
+    for edge in graph.edges:
+        if edge.source in ids and edge.target in ids:
+            parents[edge.target].append(edge.source)
+            outdegree[edge.source] += 1
+
+    depth = dict.fromkeys(ids, 0)
+    queue = deque(node_id for node_id, degree in outdegree.items() if degree == 0)
+
+    while queue:
+        node_id = queue.popleft()
+        for parent in parents[node_id]:
+            depth[parent] = max(depth[parent], depth[node_id] + 1)
+            outdegree[parent] -= 1
+            if outdegree[parent] == 0:
+                queue.append(parent)
+
+    return depth
 
 
 def count_by(values: Iterable[str]) -> list[NameCount]:

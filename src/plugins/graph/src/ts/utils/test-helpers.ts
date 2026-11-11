@@ -51,6 +51,7 @@ export function makeNode(overrides: Partial<NodeData> = {}): NodeData {
     processing_time_ns: 1_000_000,
     processing_time_ms: 1,
     is_root: false,
+    depth: 0,
     media_info: makeVideoInfo(),
     call_stack: [
       {
