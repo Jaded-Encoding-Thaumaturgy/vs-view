@@ -8,6 +8,7 @@ import type {
   EdgeData,
   EdgeInspection,
   FilterModeName,
+  GraphOptionsPayload,
   IncomingConnection,
   LayoutDirection,
   LayoutKind,
@@ -211,6 +212,45 @@ export class CytoscapeCanvas implements IDisposable {
     });
   }
 
+  public applyOptions(options: Partial<GraphOptionsPayload>): void {
+    let structural = false;
+
+    if (options.direction !== undefined && options.direction !== this.currentDirection) {
+      this.currentDirection = options.direction;
+      structural = true;
+    }
+    if (options.layout !== undefined && options.layout !== this.currentLayout) {
+      this.currentLayout = options.layout;
+      structural = true;
+    }
+    if (options.rankSep !== undefined && options.rankSep !== this.rankSeparation) {
+      this.rankSeparation = options.rankSep;
+      structural = true;
+    }
+    if (options.nodeSep !== undefined && options.nodeSep !== this.nodeSeparation) {
+      this.nodeSeparation = options.nodeSep;
+      structural = true;
+    }
+    if (options.autoFitOnReload !== undefined) {
+      this._autoFitOnReload = options.autoFitOnReload;
+    }
+
+    const resized = this.applyTimingDisplay(
+      options.showTimings ?? this.showTimings,
+      options.timingUnit ?? this.timingUnit,
+    );
+
+    if (options.heatmap !== undefined && options.heatmap !== this._heatmapActive) {
+      this.heatmapActive = options.heatmap;
+    }
+
+    if (structural) {
+      this.runLayout();
+    } else if (resized) {
+      this.runLayout(false);
+    }
+  }
+
   /** Restrict the visible graph to one filter mode, or `null` to show every mode. */
   public setModeFilter(mode: FilterModeName | null): void {
     this.visualState.setModeFilter(mode);
@@ -348,18 +388,18 @@ export class CytoscapeCanvas implements IDisposable {
   }
 
   public updateTimings(timings: NodeTimingsUpdate[]): void {
-    if (!this.cy) return;
+    const cy = this.cy;
+    if (!cy) return;
 
-    this.cy.batch(() => {
+    let resized = false as boolean;
+
+    cy.batch(() => {
       for (const item of timings) {
-        const node = this.cy!.getElementById(item.id);
+        const node = cy.getElementById(item.id);
         if (node.length > 0) {
           node.data('processing_time_ns', item.processing_time_ns);
           node.data('processing_time_ms', item.processing_time_ms);
-
-          // Node labels carry the timing line, so they are rebuilt along with their measured size
-          const data = node.data() as CanvasNodeData;
-          node.data(this.buildLabelData(data.source_label, item.processing_time_ns));
+          resized = this.refreshNodeLabel(node) || resized;
         }
       }
 
@@ -367,14 +407,18 @@ export class CytoscapeCanvas implements IDisposable {
         this.applyHeatmap();
       }
     });
+
+    if (resized) {
+      this.runLayout(false);
+    }
   }
 
-  public runLayout(): void {
+  public runLayout(fit = this.autoFitOnReload): void {
     if (!this.cy) return;
 
     const common = {
       animate: false,
-      fit: this.autoFitOnReload,
+      fit,
       padding: 40,
     };
 
@@ -406,17 +450,9 @@ export class CytoscapeCanvas implements IDisposable {
   }
 
   public setTimingDisplay(show: boolean, unit: TimingUnit): void {
-    if (this.showTimings === show && this.timingUnit === unit) return;
-
-    this.showTimings = show;
-    this.timingUnit = unit;
-
-    if (!this.cy) return;
-
-    this.cy.nodes().forEach((node) => {
-      const data = node.data() as CanvasNodeData;
-      node.data(this.buildLabelData(data.source_label, data.processing_time_ns));
-    });
+    if (this.applyTimingDisplay(show, unit)) {
+      this.runLayout(false);
+    }
   }
 
   public isShowingTimings(): boolean {
@@ -740,6 +776,34 @@ export class CytoscapeCanvas implements IDisposable {
       const color = interpolateHeatmapColor(ratio);
       n.style('background-color', color);
     });
+  }
+
+  /** Returns whether any node changed size. */
+  private applyTimingDisplay(show: boolean, unit: TimingUnit): boolean {
+    if (this.showTimings === show && this.timingUnit === unit) return false;
+
+    this.showTimings = show;
+    this.timingUnit = unit;
+
+    const cy = this.cy;
+    if (!cy) return false;
+
+    let resized = false as boolean;
+    cy.batch(() => {
+      for (const node of cy.nodes()) {
+        resized = this.refreshNodeLabel(node) || resized;
+      }
+    });
+    return resized;
+  }
+
+  /** Node labels carry the timing line, so they are rebuilt along with their measured size. */
+  private refreshNodeLabel(node: cytoscape.NodeSingular): boolean {
+    const data = node.data() as CanvasNodeData;
+    const next = this.buildLabelData(data.source_label, data.processing_time_ns);
+    const resized = next.node_width !== data.node_width || next.node_height !== data.node_height;
+    node.data(next);
+    return resized;
   }
 
   private buildLabelData(

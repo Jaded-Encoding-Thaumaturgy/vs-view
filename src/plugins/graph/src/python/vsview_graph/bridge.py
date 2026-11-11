@@ -78,7 +78,7 @@ class SetOutputsPayload(TypedDict):
     following: bool
 
 
-class GraphOptionsPayload(TypedDict):
+class GraphOptionsPayload(TypedDict, total=False):
     direction: Literal["TB", "LR"]
     layout: Literal["dagre", "breadthfirst", "concentric", "grid"]
     rankSep: int

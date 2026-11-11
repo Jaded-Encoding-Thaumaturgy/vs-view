@@ -239,7 +239,7 @@ export interface ExecActionPayload {
  */
 export interface PyToJsCommandMap {
   'graph.setData': CytoscapePayload;
-  'graph.setOptions': GraphOptionsPayload;
+  'graph.setOptions': Partial<GraphOptionsPayload>; // Only the options that changed since the previous command are sent
   'graph.updateTimings': UpdateTimingsPayload;
   'graph.setOutputs': SetOutputsPayload;
   'graph.selectNode': SelectNodePayload;
@@ -274,5 +274,5 @@ export interface JsToPyCommandMap {
     destination: 'file' | 'clipboard';
     path?: string;
   };
-  'contextmenu.request': Record<string, never>;
+  'contextmenu.request': { direction: LayoutDirection };
 }

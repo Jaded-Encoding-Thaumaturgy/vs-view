@@ -5,7 +5,7 @@ import threading
 from functools import partial
 from logging import getLogger
 from pathlib import Path
-from typing import Any, NamedTuple, assert_never, override
+from typing import Any, Literal, NamedTuple, assert_never, cast, override
 
 import vsengine
 import vsgraph
@@ -18,7 +18,15 @@ from vsview.api import PluginAPI, VideoOutputProxy, WidgetPluginBase, run_in_bac
 from vsview.env import getenv_bool
 
 from .analysis import enrich_cytoscape_payload
-from .bridge import ExportFormat, JsToPyCommand, NodeCopyTarget, NodeTimingUpdate, OutputItem, PyToJsCommand
+from .bridge import (
+    ExportFormat,
+    GraphOptionsPayload,
+    JsToPyCommand,
+    NodeCopyTarget,
+    NodeTimingUpdate,
+    OutputItem,
+    PyToJsCommand,
+)
 from .call import build_filter_call, build_node_report
 from .constants import PLUGIN_DISPLAY_NAME, PLUGIN_IDENTIFIER
 from .settings import GraphSettings, GraphShortcut
@@ -56,6 +64,9 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
         self._load_lock = threading.RLock()
 
         self._load_ready = False
+
+        self._sent_options = dict[str, Any]()
+        self._view_direction: Literal["TB", "LR"] | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -249,6 +260,8 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
     def _on_web_ready(self) -> None:
         self._sent_key = None
         self._last_sent_timings.clear()
+        self._sent_options.clear()
+        self._view_direction = None
         self._sync_web_options()
         self._sync_keybindings()
         self.view.sync_theme()
@@ -271,6 +284,8 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
                     str(payload["id"]), NodeCopyTarget(payload["target"]), int(payload.get("frameIdx", 0))
                 )
             case JsToPyCommand.CONTEXT_MENU:
+                if (direction := payload.get("direction")) in ("TB", "LR"):
+                    self._view_direction = direction
                 self.context_menu.exec(QCursor.pos())
             case JsToPyCommand.EXPORT_GRAPH:
                 self._export_graph(ExportFormat(payload["format"]), clipboard=payload["clipboard"])
@@ -320,19 +335,27 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
             return
 
         settings = self.settings.global_
-        self.view.bridge.dispatch(
-            PyToJsCommand.SET_OPTIONS,
-            {
-                "direction": settings.direction,
-                "layout": settings.layout,
-                "rankSep": settings.rank_sep,
-                "nodeSep": settings.node_sep,
-                "heatmap": settings.heatmap_enabled,
-                "showTimings": settings.show_timings,
-                "timingUnit": settings.timing_unit,
-                "autoFitOnReload": settings.auto_fit_on_reload,
-            },
-        )
+        options: GraphOptionsPayload = {
+            "direction": settings.direction,
+            "layout": settings.layout,
+            "rankSep": settings.rank_sep,
+            "nodeSep": settings.node_sep,
+            "heatmap": settings.heatmap_enabled,
+            "showTimings": settings.show_timings,
+            "timingUnit": settings.timing_unit,
+            "autoFitOnReload": settings.auto_fit_on_reload,
+        }
+
+        # globalSettingsChanged fires for every global save, including other plugins' settings.
+        # Re-sending unchanged values would revert view-only toggles made from the HUD.
+        changed = {key: value for key, value in options.items() if self._sent_options.get(key, ...) != value}
+        if not changed:
+            return
+
+        self._sent_options.update(changed)
+        if "direction" in changed:
+            self._view_direction = None
+        self.view.bridge.dispatch(PyToJsCommand.SET_OPTIONS, cast(GraphOptionsPayload, changed))
 
     @Slot()
     def _sync_keybindings(self) -> None:
@@ -393,10 +416,12 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
         if (cached := self._load_graph(self._current_output_key())) is None:
             return
 
+        direction = fallback(self._view_direction, self.settings.global_.direction)
+
         with self.api.vs_context():
             match fmt:
                 case ExportFormat.DOT:
-                    text = cached.graph.to_dot(direction=self.settings.global_.direction)
+                    text = cached.graph.to_dot(direction=direction)
                 case ExportFormat.MERMAID:
                     text = cached.graph.to_mermaid()
                 case ExportFormat.ASCII:

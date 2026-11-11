@@ -136,6 +136,56 @@ describe('CytoscapeCanvas', () => {
     expect(canvas.getNodeById('n1')?.label).toBe('Crop');
   });
 
+  it('relayouts after a timing update only when a node changes size', () => {
+    canvas.init(container);
+    canvas.setGraphData({
+      nodes: [{ data: makeNode({ id: 'n1', label: 'Crop', processing_time_ns: 0 }) }],
+      edges: [],
+      analysis: makeGraphAnalysis({ nodeCount: 1 }),
+    });
+    const layoutSpy = vi.spyOn(canvas, 'runLayout');
+
+    // First non-zero timing adds a second label line
+    canvas.updateTimings([{ id: 'n1', processing_time_ns: 1_500_000, processing_time_ms: 1.5 }]);
+    expect(layoutSpy).toHaveBeenCalledTimes(1);
+    expect(layoutSpy).toHaveBeenCalledWith(false);
+
+    // Same label width, so the existing layout is kept
+    canvas.updateTimings([{ id: 'n1', processing_time_ns: 2_500_000, processing_time_ms: 2.5 }]);
+    expect(layoutSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies several options with at most one layout', () => {
+    canvas.init(container);
+    canvas.setGraphData({
+      nodes: [{ data: makeNode({ id: 'n1', label: 'Crop', processing_time_ns: 1_000_000 }) }],
+      edges: [],
+      analysis: makeGraphAnalysis({ nodeCount: 1 }),
+    });
+    const layoutSpy = vi.spyOn(canvas, 'runLayout');
+
+    canvas.applyOptions({
+      direction: 'LR',
+      layout: 'breadthfirst',
+      rankSep: 80,
+      nodeSep: 50,
+      showTimings: false,
+      autoFitOnReload: false,
+    });
+    expect(layoutSpy).toHaveBeenCalledTimes(1);
+    expect(canvas.direction).toBe('LR');
+    expect(canvas.layout).toBe('breadthfirst');
+    expect(canvas.rankSep).toBe(80);
+    expect(canvas.nodeSep).toBe(50);
+    expect(canvas.autoFitOnReload).toBe(false);
+    expect(canvas.getNodeById('n1')?.label).toBe('Crop');
+
+    layoutSpy.mockClear();
+    canvas.applyOptions({ direction: 'LR', heatmap: true });
+    expect(layoutSpy).not.toHaveBeenCalled();
+    expect(canvas.heatmapActive).toBe(true);
+  });
+
   it('manages selection, restores selection across graph reloads, and toggles visual states', () => {
     canvas.init(container);
     const payload = {

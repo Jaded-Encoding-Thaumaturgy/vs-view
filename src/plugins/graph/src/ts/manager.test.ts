@@ -149,6 +149,34 @@ describe('GraphManager', () => {
     expect(options.inspectorContainer.textContent).toContain('5.00 ms');
   });
 
+  it('applies partial options without reverting other view state, with a single layout', () => {
+    send('graph.setData', PAYLOAD);
+    canvas.direction = 'LR';
+    canvas.heatmapActive = true;
+
+    const layoutSpy = vi.spyOn(canvas, 'runLayout');
+    send('graph.setOptions', { layout: 'grid', rankSep: 90, nodeSep: 70 });
+
+    expect(layoutSpy).toHaveBeenCalledTimes(1);
+    expect(canvas.layout).toBe('grid');
+    expect(canvas.direction).toBe('LR');
+    expect(canvas.heatmapActive).toBe(true);
+  });
+
+  it('reports the displayed direction with context menu requests', () => {
+    send('graph.setData', PAYLOAD);
+    canvas.direction = 'LR';
+
+    (
+      canvas as unknown as { notifyBackgroundContextMenu(pos: { x: number; y: number }): void }
+    ).notifyBackgroundContextMenu({ x: 0, y: 0 });
+
+    expect(sentEvents).toContainEqual({
+      command: 'contextmenu.request',
+      payload: { direction: 'LR' },
+    });
+  });
+
   it('shows extraction errors and clears them on the next graph', () => {
     send('graph.setError', { message: 'Failed to inspect output 0' });
 

@@ -92,7 +92,9 @@ export class GraphManager extends Disposable {
     this.canvas.init(options.cyContainer);
 
     this._disposables.add(
-      this.canvas.onBackgroundContextMenu(() => this.bridge.sendEvent('contextmenu.request')),
+      this.canvas.onBackgroundContextMenu(() =>
+        this.bridge.sendEvent('contextmenu.request', { direction: this.canvas.direction }),
+      ),
     );
 
     this.hud = this._disposables.add(
@@ -149,17 +151,13 @@ export class GraphManager extends Disposable {
       }),
     );
 
-    // Inbound bridge commands
     this._disposables.add(
       this.bridge.onCommand('graph.setOptions', (payload) => {
-        this.canvas.direction = payload.direction;
-        this.canvas.layout = payload.layout;
-        this.canvas.rankSep = payload.rankSep;
-        this.canvas.nodeSep = payload.nodeSep;
-        this.canvas.heatmapActive = payload.heatmap;
-        this.canvas.autoFitOnReload = payload.autoFitOnReload;
-        this.canvas.setTimingDisplay(payload.showTimings, payload.timingUnit);
-        this.inspector.setTimingOptions(payload.showTimings, payload.timingUnit);
+        this.canvas.applyOptions(payload);
+        this.inspector.setTimingOptions(
+          this.canvas.isShowingTimings(),
+          this.canvas.getTimingUnit(),
+        );
         this.syncHudOptions();
       }),
     );

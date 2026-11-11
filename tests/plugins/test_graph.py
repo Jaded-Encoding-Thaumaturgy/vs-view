@@ -345,6 +345,7 @@ def test_graph_plugin_settings_propagation(
     plugin.view.bridge.onWebReady()
     assert received_dispatches[PyToJsCommand.SET_OPTIONS]["direction"] == "TB"
 
+    received_dispatches.clear()
     plugin.update_global_settings(
         direction="LR",
         heatmap_enabled=True,
@@ -352,19 +353,25 @@ def test_graph_plugin_settings_propagation(
         timing_unit="ms",
         auto_fit_on_reload=False,
     )
-    received_dispatches.clear()
     SettingsManager.signals.globalChanged.emit()
 
+    # Only changed options are sent so view-only HUD state for the others is kept
     assert received_dispatches[PyToJsCommand.SET_OPTIONS] == {
         "direction": "LR",
-        "layout": "dagre",
-        "rankSep": 60,
-        "nodeSep": 40,
         "heatmap": True,
         "showTimings": False,
         "timingUnit": "ms",
         "autoFitOnReload": False,
     }
+
+    # A global save that does not touch the graph settings sends nothing
+    received_dispatches.clear()
+    SettingsManager.signals.globalChanged.emit()
+    assert PyToJsCommand.SET_OPTIONS not in received_dispatches
+
+    # A reloaded page gets the full set again
+    plugin.view.bridge.onWebReady()
+    assert len(received_dispatches[PyToJsCommand.SET_OPTIONS]) == 8
 
 
 # Graph Inspection Caching & Invariants
@@ -799,6 +806,27 @@ def test_graph_plugin_canvas_actions_and_png_export(
 
     plugin.reset_act.trigger()
     assert dispatched[-1][0] == PyToJsCommand.RESET_VIEW
+
+
+def test_graph_plugin_dot_export_follows_displayed_direction(
+    populated_harness: tuple[HarnessPluginController, GraphPlugin],
+    mocker: MockerFixture,
+    qtbot: QtBot,
+) -> None:
+    """Verify the DOT export uses the direction reported by the page with the context menu request."""
+    _, plugin = populated_harness
+    dispatched = list[str]()
+    plugin.view.bridge.dispatchCommandSignal.connect(lambda cmd, _: dispatched.append(cmd))
+    plugin.view.bridge.onWebReady()
+    qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in dispatched, timeout=2000)
+
+    mocker.patch.object(plugin.context_menu, "exec")
+    plugin.view.bridge.dispatchFromJs(JsToPyCommand.CONTEXT_MENU, json.dumps({"direction": "LR"}))
+
+    QApplication.clipboard().clear()
+    plugin.view.bridge.dispatchFromJs(JsToPyCommand.EXPORT_GRAPH, json.dumps({"format": "dot", "clipboard": True}))
+    qtbot.waitUntil(lambda: "digraph" in QApplication.clipboard().text(), timeout=2000)
+    assert 'rankdir="LR"' in QApplication.clipboard().text()
 
 
 def test_graph_plugin_copy_image_to_clipboard(
