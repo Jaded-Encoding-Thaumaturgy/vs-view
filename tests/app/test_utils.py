@@ -3,7 +3,7 @@ from __future__ import annotations
 import gc
 import threading
 import weakref
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures.thread import ThreadPoolExecutor
 
 import pytest
 from PySide6.QtCore import QObject
