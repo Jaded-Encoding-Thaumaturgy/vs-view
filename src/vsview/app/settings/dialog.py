@@ -552,14 +552,14 @@ class SettingsDialog(QDialog, IconReloadMixin):
                         logger.warning("Unsupported combo of dependencies between %s and %s dependency", entry, dep_key)
 
     def _get_global_settings_from_ui(self) -> GlobalSettings:
-        # Build shortcuts from UI editors
-        shortcuts = list[ShortcutConfig]()
+        # Start from the stored configs, so actions without an editor (e.g. from an unloaded plugin) keep theirs
+        shortcuts = {config.action_id: config for config in SettingsManager.global_settings.shortcuts}
         for aid, editor in self._shortcut_widgets.editors.items():
             is_custom = self._shortcut_widgets.is_custom_flags.get(aid, False)
             definition = ShortcutManager.definitions.get(aid)
             default_key = definition.default_key if definition else ""
             key_seq = editor.keySequence() if is_custom else QKeySequence(default_key)
-            shortcuts.append(ShortcutConfig(action_id=aid, key_sequence=key_seq, is_custom=is_custom))
+            shortcuts[aid] = ShortcutConfig(action_id=aid, key_sequence=key_seq, is_custom=is_custom)
 
         # Use existing settings as base to preserve hidden fields
         data = SettingsManager.global_settings.model_dump()
@@ -579,7 +579,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
                 raise
 
         # Add shortcuts (not in registry) and build settings dynamically
-        data["shortcuts"] = shortcuts
+        data["shortcuts"] = list(shortcuts.values())
 
         return GlobalSettings.model_validate(data)
 

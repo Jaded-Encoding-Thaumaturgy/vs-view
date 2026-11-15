@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 from keyring.backends.fail import Keyring as FailKeyring
+from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QDialogButtonBox, QLineEdit, QWidget
 from pytestqt.qtbot import QtBot
 
@@ -13,7 +14,7 @@ from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import SettingsDialog
 from vsview.app.settings.manager import SettingsManager
 from vsview.app.settings.metadata import Dropdown, LineEdit, SecretLineEdit
-from vsview.app.settings.models import SettingEntry
+from vsview.app.settings.models import SettingEntry, ShortcutConfig
 from vsview.app.settings.secrets import SecretsManager
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
@@ -151,3 +152,19 @@ def test_failed_widget_creation_does_not_break_dialog(
 
     assert SettingsManager.global_settings.plugins[PLUGIN_ID] == {"option": "changed", "broken": "kept"}
     assert SettingsManager.get_local_settings(script).plugins[PLUGIN_ID] == {"count": 7, "broken": "kept"}
+
+
+def test_apply_keeps_shortcuts_of_unregistered_actions(qtbot: QtBot, register_entries: RegisterEntries) -> None:
+    register_entries([], [])
+    stored = ShortcutConfig(
+        action_id="missing_plugin.action", key_sequence=QKeySequence("Ctrl+Shift+F9"), is_custom=True
+    )
+    SettingsManager.global_settings.shortcuts.append(stored)
+    dialog = _open_dialog(qtbot)
+
+    _click_apply(dialog)
+
+    kept = SettingsManager.global_settings.get_shortcut_config("missing_plugin.action")
+    assert kept is not None
+    assert kept.key_sequence.toString(QKeySequence.SequenceFormat.PortableText) == "Ctrl+Shift+F9"
+    assert kept.is_custom is True
