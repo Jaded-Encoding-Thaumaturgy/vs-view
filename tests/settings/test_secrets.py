@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 import pytest
+from keyring.backends.fail import Keyring as FailKeyring
 from pydantic import BaseModel
 from PySide6.QtWidgets import QLineEdit
 from pytest_mock import MockerFixture
@@ -361,3 +362,70 @@ def test_secrets_manager_maps_non_keyring_errors(
         operation()
 
     assert isinstance(exc_info.value.__cause__, OSError)
+
+
+def _use_backend(monkeypatch: pytest.MonkeyPatch, backend: object) -> None:
+    monkeypatch.setattr(SecretsManager, "_keyring", property(lambda self: backend))
+
+
+def test_secret_line_edit_unchanged_value_does_not_touch_keyring(qtbot: QtBot, monkeypatch: pytest.MonkeyPatch) -> None:
+    SecretsManager.set("test_ns", "auth", "token", "stored_secret")
+    meta = SecretLineEdit(label="Token", namespace="test_ns", context="auth", key="token")
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+    meta.load_value(widget, None)
+    _use_backend(monkeypatch, FailKeyring())
+
+    result = meta.get_value(widget)
+
+    assert result is None
+
+
+def test_secret_line_edit_failed_load_keeps_stored_secret(
+    isolate_secrets: InMemoryKeyring, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    SecretsManager.set("test_ns", "auth", "token", "stored_secret")
+    meta = SecretLineEdit(label="Token", namespace="test_ns", context="auth", key="token")
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+    _use_backend(monkeypatch, FailKeyring())
+    with pytest.raises(SecretsError, match=r"Failed to read secret from keyring backend\."):
+        meta.load_value(widget, None)
+    _use_backend(monkeypatch, isolate_secrets)
+
+    meta.get_value(widget)
+
+    assert widget.text() == ""
+    assert SecretsManager.get("test_ns", "auth", "token") == "stored_secret"
+
+
+def test_secret_line_edit_without_backend_does_not_raise_on_get_value(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    meta = SecretLineEdit(label="Token", namespace="test_ns", context="auth", key="token")
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+    _use_backend(monkeypatch, FailKeyring())
+    with pytest.raises(SecretsError, match=r"Failed to read secret from keyring backend\."):
+        meta.load_value(widget, None)
+
+    result = meta.get_value(widget)
+
+    assert result is None
+
+
+@pytest.mark.parametrize(
+    ("new_text", "expected"),
+    [("new_secret", "new_secret"), ("  padded_secret  ", "padded_secret"), ("", None)],
+)
+def test_secret_line_edit_changed_value_updates_keyring(qtbot: QtBot, new_text: str, expected: str | None) -> None:
+    SecretsManager.set("test_ns", "auth", "token", "stored_secret")
+    meta = SecretLineEdit(label="Token", namespace="test_ns", context="auth", key="token")
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+    meta.load_value(widget, None)
+    widget.setText(new_text)
+
+    meta.get_value(widget)
+
+    assert SecretsManager.get("test_ns", "auth", "token") == expected
