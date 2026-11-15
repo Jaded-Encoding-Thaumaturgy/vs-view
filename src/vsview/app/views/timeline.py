@@ -360,8 +360,13 @@ class TimelineHoverPopup(QWidget):
             range_prefix = f"[{start_str}, {end_str}]"
             return f"{range_prefix} {base_label}" if base_label else range_prefix
 
-            # Handle format strings in label
-        return base_label.format(self._format_data_value(notch.data)) if "{" in base_label else base_label
+        if "{" not in base_label:
+            return base_label
+
+        try:
+            return base_label.format(self._format_data_value(notch.data))
+        except (KeyError, IndexError, ValueError):
+            return base_label
 
     def _format_data_value(self, data: Frame | Time) -> str:
         match data, self._timeline.mode:
