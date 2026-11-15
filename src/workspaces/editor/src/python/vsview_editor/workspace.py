@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import errno
 import linecache
+import os
 import shutil
 import subprocess
 from collections.abc import Sequence
@@ -26,6 +28,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import Shiboken
 from vsengine import ManagedEnvironment, UnifiedFuture
 
 from vsview.api import (
@@ -68,6 +71,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     mainFileChanged = Signal(object)
     statusSavingScriptStarted = Signal(str)
     statusSavingScriptFinished = Signal(str)
+    statusSavingScriptErrored = Signal(str)
 
     def __init__(
         self,
@@ -311,7 +315,6 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         return self._env_stubs_internal
 
     def open_file(self, filepath: Path) -> bool:
-        """Open a script file in an editor tab."""
         try:
             content = (resolved := filepath.resolve()).read_text(encoding="utf-8")
         except Exception:
@@ -351,6 +354,38 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
                 )
             )
         return True
+
+    def save_script(self, filepath: Path, content: str, tab_uri: str | None = None) -> UnifiedFuture[Path]:
+        old_uri = tab_uri or self._active_tab_uri or filepath.resolve().as_uri()
+        self.statusSavingScriptStarted.emit("Saving script...")
+
+        def on_saved(filepath: Path, old_uri: str) -> None:
+            if not Shiboken.isValid(self):
+                return
+
+            if self._active_tab_uri in (None, old_uri):
+                self._active_filepath = filepath
+                self._active_tab_uri = filepath.as_uri()
+
+            self.statusSavingScriptFinished.emit("Saved")
+            self.editor.bridge.dispatch(PyToJsCommand.TAB_SAVED, {"uri": filepath.as_uri(), "oldUri": old_uri})
+
+        def on_failed(filepath: Path, exc: BaseException | None = None) -> None:
+            if exc is not None:
+                logger.error("Error saving script to %s:", filepath, exc_info=exc)
+
+            if not Shiboken.isValid(self):
+                return
+
+            self.statusSavingScriptErrored.emit("Error while saving script")
+
+        future = self._write_script(filepath, content)
+        future.then(
+            lambda saved_path: on_saved(saved_path, old_uri),
+            lambda exc: on_failed(filepath, exc),
+            cancel_cb=lambda: on_failed(filepath),
+        )
+        return future
 
     @Slot()
     def restart_lsp(self) -> None:
@@ -472,8 +507,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             "VapourSynth Script (*.vpy);;All Files (*)",
         )
         if filepath:
-            self._active_filepath = Path(filepath)
-            self.save_script(self._active_filepath, self.editor.bridge.content)
+            self.save_script(Path(filepath), self.editor.bridge.content)
 
     def _on_format_clicked(self) -> None:
         self.format_btn.setDisabled(True)
@@ -536,20 +570,29 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             self.open_file(Path(filepath))
 
     @run_in_background(name="SaveScript")
-    def save_script(self, filepath: Path, content: str, tab_uri: str | None = None) -> None:
-        self.statusSavingScriptStarted.emit("Saving script...")
+    def _write_script(self, filepath: Path, content: str) -> Path:
+        target = filepath.resolve()
+
+        if target.is_dir():
+            raise IsADirectoryError(errno.EISDIR, "Is a directory", str(filepath))
+
+        # os.replace would silently swap out a read-only file on POSIX, where a plain write fails.
+        if target.exists() and not os.access(target, os.W_OK):
+            raise PermissionError(errno.EACCES, "File is read-only", str(filepath))
+
+        tmp = target.with_name(f".{target.name}.{uuid4().hex[:8]}.tmp")
         try:
-            filepath.write_text(content, encoding="utf-8")
-            self.statusSavingScriptFinished.emit("Saved")
-            target_uri = tab_uri or self._active_tab_uri or filepath.as_uri()
-            self.loop.from_thread(
-                lambda: self.editor.bridge.dispatch(
-                    PyToJsCommand.TAB_SAVED,
-                    {"uri": filepath.as_uri(), "oldUri": target_uri},
-                )
-            ).result()
-        except Exception:
-            logger.exception("Error saving script:")
+            with tmp.open("x", encoding="utf-8", newline="") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            if target.exists():
+                shutil.copymode(target, tmp)
+            os.replace(tmp, target)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+        return target
 
     def _on_console_resized(self, width: int) -> None:
         GlobalConsoleHub.set_width(self.editor.bridge, width)
@@ -718,6 +761,7 @@ class EditorWorkspace(
         self.code_dock.mainFileChanged.connect(self._on_main_file_changed)
         self.code_dock.statusSavingScriptStarted.connect(self.statusLoadingStarted.emit)
         self.code_dock.statusSavingScriptFinished.connect(self.statusLoadingFinished.emit)
+        self.code_dock.statusSavingScriptErrored.connect(self.statusLoadingErrored.emit)
 
         self.stack_dock = StackDock(self, self.stack)
 
@@ -814,9 +858,7 @@ class EditorWorkspace(
                 else:
                     content = tab.get("content") or self.code_dock.editor.bridge.content
 
-                if local_path := WorkspaceUri(uri).local_path:
-                    self.code_dock.save_script(local_path, content, tab_uri=uri).result()
-                else:
+                if not (target := WorkspaceUri(uri).local_path):
                     filepath, _ = QFileDialog.getSaveFileName(
                         self,
                         f"Save {title}",
@@ -825,8 +867,17 @@ class EditorWorkspace(
                     )
                     if not filepath:
                         return False
+                    target = Path(filepath)
 
-                    self.code_dock.save_script(Path(filepath), content, tab_uri=uri).result()
+                try:
+                    self.code_dock.save_script(target, content, tab_uri=uri).result()
+                except (OSError, UnicodeError, ValueError):
+                    QMessageBox.warning(
+                        self,
+                        "Save Failed",
+                        f"'{title}' could not be saved to {target}. See the log for details.",
+                    )
+                    return False
 
         return True
 
