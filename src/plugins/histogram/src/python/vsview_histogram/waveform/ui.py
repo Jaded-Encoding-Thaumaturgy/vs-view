@@ -214,6 +214,14 @@ class WaveformContainerWidget(QFrame):
         self.waveforms = list[WaveformWidget]()
 
     def update_histogram(self, frame: vs.VideoFrame) -> None:
+        if frame.format.sample_type == vs.INTEGER and frame.format.bits_per_sample > 16:
+            self.clear()
+            logger.warning(
+                "Integer formats with >16 bits (%d bits) are not supported by Waveform",
+                frame.format.bits_per_sample,
+            )
+            return
+
         self.setup_layout(frame.format.color_family)
 
         match self.settings.global_.waveform.mode:
@@ -260,3 +268,7 @@ class WaveformContainerWidget(QFrame):
         # Hide extra widgets
         for i in range(num_needed, len(self.waveforms)):
             self.waveforms[i].hide()
+
+    def clear(self) -> None:
+        for waveform in self.waveforms:
+            waveform.clear()

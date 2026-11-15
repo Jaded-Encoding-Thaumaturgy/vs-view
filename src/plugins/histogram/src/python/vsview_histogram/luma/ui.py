@@ -41,6 +41,13 @@ class LumaView(PluginGraphicsView):
             return clip.std.BlankClip(format=vs.GRAY8, keep=True).text.Text(f"{cfam.name} input - no luma data", 5, 4)
 
         bits = clip.format.bits_per_sample
+
+        if clip.format.sample_type == vs.INTEGER and bits > 16:
+            logger.warning("Integer formats with >16 bits (%d bits) are not supported by Luma", bits)
+            return clip.std.BlankClip(format=vs.GRAY8, keep=True).text.Text(
+                f"{bits}-bit integer input is not supported", 5, 4
+            )
+
         shift_in = self.settings.global_.luma.shift
         use_sawtooth = self.settings.global_.luma.sawtooth
         sample_type = clip.format.sample_type

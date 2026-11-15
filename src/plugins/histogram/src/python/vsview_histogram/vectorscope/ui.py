@@ -234,6 +234,14 @@ class VectorscopeWidget(QWidget):
                 logger.warning("%s input — no chroma data", fmt.color_family.name)
             return
 
+        if fmt.sample_type == vs.INTEGER and fmt.bits_per_sample > 16:
+            self.scope_image.fill(0)
+            self.update()
+            logger.warning(
+                "Integer formats with >16 bits (%d bits) are not supported by Vectorscope", fmt.bits_per_sample
+            )
+            return
+
         self.current_matrix = Matrix.from_video(frame, func=self.update_frame)
 
         match render_mode := self.settings.global_.vectorscope.mode:
