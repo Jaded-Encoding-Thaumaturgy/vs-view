@@ -486,7 +486,7 @@ class TMDBWorker(QObject):
                 tg.create_task(self._ensure_genres_loaded(client))
                 movie_task = tg.create_task(client.get("/search/movie", params={"query": query}))
 
-                if query.isnumeric():
+                if query.isdecimal():
                     num_tv_task = tg.create_task(client.get(f"/tv/{query}"))
                     num_movie_task = tg.create_task(client.get(f"/movie/{query}"))
 
