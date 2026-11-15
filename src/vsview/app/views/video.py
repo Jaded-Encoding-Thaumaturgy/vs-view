@@ -1162,15 +1162,21 @@ class BaseGraphicsView(QGraphicsView):
 
         if image.format() == QImage.Format.Format_RGB30:
             image = image.convertToFormat(QImage.Format.Format_RGBA64)
-
         try:
             # The stubs are actually wrong here
-            image.save(file_path, fmt, SettingsManager.global_settings.view.png_compression_level)  # type: ignore[call-overload]
+            saved = image.save(file_path, fmt, SettingsManager.global_settings.view.png_compression_level)  # type: ignore[call-overload]
         except Exception:
             logger.exception("Error saving image:")
-        else:
-            logger.info("Saved image to %r", file_path)
-            self.statusSavingImageFinished.emit("Saved")
+            self.statusSavingImageFinished.emit("Failed to save image")
+            return
+
+        if not saved:
+            logger.error("Failed to save image to %r", file_path)
+            self.statusSavingImageFinished.emit("Failed to save image")
+            return
+
+        logger.info("Saved image to %r", file_path)
+        self.statusSavingImageFinished.emit("Saved")
 
     @Slot()
     def _copy_image_to_clipboard(self) -> None:
