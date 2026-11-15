@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import importlib.metadata
 import logging
 import sys
 import threading
 import warnings
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from concurrent.futures import Future
 from contextlib import suppress
+from importlib.metadata import EntryPoint, EntryPoints
 from pathlib import Path
 from types import CodeType, MethodType, SimpleNamespace
-from typing import Any
+from typing import Any, override
 from unittest.mock import MagicMock
 
 import pytest
@@ -375,6 +377,50 @@ def init_plugin_manager() -> PluginManager:
         f.set_result(None)
         pm._load_future = f
     return pm
+
+
+class _LoadedEntryPoint(EntryPoint):
+    _target: Any
+
+    def __init__(self, name: str, value: str, group: str, target: Any) -> None:
+        super().__init__(name, value, group)
+        vars(self)["_target"] = target
+
+    @override
+    def load(self) -> Any:
+        return self._target
+
+
+@pytest.fixture
+def fake_entry_points(monkeypatch: pytest.MonkeyPatch) -> Callable[[str, Mapping[str, Any]], None]:
+    """
+    Replace installed entry points for selected groups.
+
+    Values may be ``EntryPoint`` instances, dotted import strings (loaded normally),
+    or objects returned directly by ``load()``.
+    """
+    fakes = dict[str, EntryPoints]()
+    real_entry_points = importlib.metadata.entry_points
+
+    def entry_points(**params: Any) -> EntryPoints:
+        if (group := params.get("group")) in fakes:
+            return fakes[group]
+        return real_entry_points(**params)
+
+    monkeypatch.setattr(importlib.metadata, "entry_points", entry_points)
+
+    def set_group(group: str, entries: Mapping[str, Any]) -> None:
+        eps = [
+            entry
+            if isinstance(entry, EntryPoint)
+            else EntryPoint(name=name, value=entry, group=group)
+            if isinstance(entry, str)
+            else _LoadedEntryPoint(name=name, value=f"test:{name}", group=group, target=entry)
+            for name, entry in entries.items()
+        ]
+        fakes[group] = EntryPoints(eps)
+
+    return set_group
 
 
 @pytest.fixture

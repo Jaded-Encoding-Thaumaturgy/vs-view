@@ -21,6 +21,7 @@ from vsengine.loops import EventLoop, get_loop
 from ...vsenv import run_in_background
 from .. import tools
 from . import specs
+from .entrypoints import load_entrypoints
 
 if TYPE_CHECKING:
     from ..settings.models import SettingEntry
@@ -195,12 +196,7 @@ class PluginManager(Singleton):
         first_party_names = first_party_ids.values()
 
         logger.debug("Loading entrypoints...")
-        try:
-            n = self.manager.load_setuptools_entrypoints("vsview")
-        except BaseException:
-            logger.exception("Couldn't load entry points!")
-            n = 0
-
+        n = load_entrypoints(self.manager, "vsview")
         logger.debug("Loaded %d second/third party plugins", n)
         self._entry_points_loaded = True
 

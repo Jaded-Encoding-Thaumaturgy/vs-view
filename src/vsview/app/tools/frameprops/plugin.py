@@ -52,11 +52,12 @@ from vsview.api import (
     run_in_loop,
 )
 
+from ...plugins.entrypoints import collect_hook_results, load_entrypoints
 from . import specs
 from .builtins.field import FIELD_CATEGORY, FIELD_FORMATTERS
 from .builtins.metrics import METRICS_CATEGORY, METRICS_FORMATTERS
 from .builtins.video import VIDEO_CATEGORY, VIDEO_FORMATTERS
-from .categories import CategoryRegistry
+from .categories import CategoryMatcher, CategoryRegistry
 from .formatters import FormatterProperty, FormatterRegistry
 
 # Item roles and types
@@ -71,7 +72,7 @@ logger = getLogger(__name__)
 
 manager = pluggy.PluginManager("vsview.frameprops")
 manager.add_hookspecs(specs)
-manager.load_setuptools_entrypoints("vsview.frameprops")
+load_entrypoints(manager, "vsview.frameprops")
 
 
 class RowData(NamedTuple):
@@ -191,13 +192,13 @@ class FramePropsModel(QStandardItemModel):
             VIDEO_CATEGORY,
             METRICS_CATEGORY,
             FIELD_CATEGORY,
-            manager.hook.vsview_frameprops_register_category_matchers(),
+            collect_hook_results(manager.hook.vsview_frameprops_register_category_matchers, CategoryMatcher),
         )
         FormatterRegistry.register(
             VIDEO_FORMATTERS,
             METRICS_FORMATTERS,
             FIELD_FORMATTERS,
-            manager.hook.vsview_frameprops_register_formatter_properties(),
+            collect_hook_results(manager.hook.vsview_frameprops_register_formatter_properties, FormatterProperty),
         )
 
     def add_prop(self, key: str, value: Any, category: str | None = None) -> None:

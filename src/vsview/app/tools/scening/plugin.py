@@ -8,11 +8,11 @@ from functools import cache
 from itertools import count, cycle, islice
 from logging import getLogger
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, override
+from typing import Annotated, Any, Literal, Self, override
 
 import pluggy
 import vsengine
-from jetpytools import cachedproperty, classproperty, flatten, to_arr
+from jetpytools import cachedproperty, classproperty, to_arr
 from pathvalidate import sanitize_filename
 from pydantic import BaseModel, ConfigDict, Field
 from PySide6.QtCore import QPoint, QSignalBlocker, Qt, Slot
@@ -47,7 +47,9 @@ from vsview.api import (
     run_in_background,
 )
 
+from ...plugins.entrypoints import collect_hook_results, load_entrypoints
 from . import specs
+from .api import Parser, Serializer
 from .constants import PLUGIN_DISPLAY_NAME, PLUGIN_IDENTIFIER
 from .models import AbstractRange, RangeFrame, RangeTime, SceneRow, UnifiedRange
 from .parsers import internal_parsers
@@ -56,19 +58,16 @@ from .ui import Col, RangeCol, RangeTableDelegate, RangeTableModel, SceneTableDe
 from .utils import ColorGenerator, monkey_patch_parser
 from .worker import FFV1_ARGS, H264_ARGS, ExportQueueManager
 
-if TYPE_CHECKING:
-    from .api import Parser, Serializer
-
 logger = getLogger(__name__)
 
 
 manager = pluggy.PluginManager("vsview.scening")
+manager.add_hookspecs(specs)
 
 
 @cache
 def load_plugins() -> None:
-    manager.add_hookspecs(specs)
-    n = manager.load_setuptools_entrypoints("vsview.scening")
+    n = load_entrypoints(manager, "vsview.scening")
     logger.debug("Loaded %d plugins", n)
 
 
@@ -484,7 +483,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
     def on_import_scene(self) -> None:
         load_plugins()
 
-        parsers: list[Parser] = internal_parsers + list(flatten(manager.hook.vsview_scening_register_parser()))
+        parsers = internal_parsers + collect_hook_results(manager.hook.vsview_scening_register_parser, Parser)
 
         filters = {f"{p.filter.label} (*.{' *.'.join(to_arr(p.filter.suffix))})": p for p in parsers}
         files, selected_filter = QFileDialog.getOpenFileNames(
@@ -527,8 +526,8 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
     def on_export_scene(self) -> None:
         load_plugins()
 
-        serializers: list[Serializer] = internal_serializers + list(
-            flatten(manager.hook.vsview_scening_register_serializer())
+        serializers = internal_serializers + collect_hook_results(
+            manager.hook.vsview_scening_register_serializer, Serializer
         )
 
         filters = {f"{p.filter.label} (*.{' *.'.join(to_arr(p.filter.suffix))})": p for p in serializers}

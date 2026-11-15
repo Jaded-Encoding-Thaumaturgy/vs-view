@@ -3,7 +3,7 @@ from __future__ import annotations
 import gc
 import logging
 import weakref
-from collections.abc import Generator
+from collections.abc import Callable, Generator, Mapping
 from concurrent.futures import Future
 from pathlib import Path
 from typing import Annotated, Any
@@ -452,10 +452,10 @@ def test_plugin_identifiers_catches_hook_inspection_exceptions_safely(
 
 
 def test_third_party_collision_unregistered(
-    qt_event_loop: QtEventLoop, caplog: pytest.LogCaptureFixture, mocker: MockerFixture
+    qt_event_loop: QtEventLoop,
+    caplog: pytest.LogCaptureFixture,
+    fake_entry_points: Callable[[str, Mapping[str, Any]], None],
 ) -> None:
-    pm = PluginManager()
-
     class ThirdPartyCollidingPlugin:
         identifier = "jet_vsview_colorpicker"
         display_name = "Colliding Color Picker"
@@ -467,12 +467,8 @@ def test_third_party_collision_unregistered(
             return ThirdPartyCollidingPlugin
 
     colliding_instance = ThirdPartyCollidingPlugin()
-
-    def fake_load_entrypoints(_group: str) -> int:
-        pm.manager.register(colliding_instance, name="third_party_package")
-        return 1
-
-    mocker.patch.object(pm.manager, "load_setuptools_entrypoints", side_effect=fake_load_entrypoints)
+    fake_entry_points("vsview", {"third_party_package": colliding_instance})
+    pm = PluginManager()
 
     with caplog.at_level(logging.WARNING):
         pm.load()
@@ -485,23 +481,38 @@ def test_third_party_collision_unregistered(
     )
 
 
-def test_load_worker_catches_entrypoint_loading_failure(
-    qt_event_loop: QtEventLoop, caplog: pytest.LogCaptureFixture, mocker: MockerFixture
+def test_load_worker_isolates_each_entry_point(
+    qt_event_loop: QtEventLoop,
+    caplog: pytest.LogCaptureFixture,
+    fake_entry_points: Callable[[str, Mapping[str, Any]], None],
 ) -> None:
+    class ThirdPartyTool:
+        identifier = "third_party_tool"
+        display_name = "Third Party Tool"
+        global_settings_model = None
+        local_settings_model = None
+
+        @specs.hookimpl
+        def vsview_register_tooldock(self) -> type[ThirdPartyTool]:
+            return ThirdPartyTool
+
+    fake_entry_points(
+        "vsview",
+        {
+            "broken_tool": "vsview_missing_module:plugin",
+            "third_party_tool": ThirdPartyTool(),
+        },
+    )
     pm = PluginManager()
 
-    mocker.patch.object(
-        pm.manager,
-        "load_setuptools_entrypoints",
-        side_effect=RuntimeError("Disk read error while loading entrypoints"),
-    )
-
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logging.ERROR, logger="vsview.app.plugins.entrypoints"):
         pm.load()
         pm.wait_for_loaded()
 
     assert pm.loaded is True
-    assert "Couldn't load entry points!" in caplog.text
+    assert ThirdPartyTool in pm.tooldocks
+    assert pm.manager.has_plugin("broken_tool") is False
+    assert "Couldn't load entry point 'broken_tool' (vsview_missing_module:plugin) of group 'vsview'" in caplog.text
 
 
 # Shortcut Registration Tests
