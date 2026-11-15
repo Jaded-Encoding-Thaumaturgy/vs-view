@@ -901,6 +901,9 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                     logger.error("Error during frame extraction: %s", exc)
                 return []
 
+            self._extraction_finished = False
+            self._extract_paths = None
+
             worker = ExtractFramesWorker(self.api, self._extract_frames_config, self.progress_bar.update_progress, self)
             self._extract_frames_worker = worker
             self._pending_extract_frames = (

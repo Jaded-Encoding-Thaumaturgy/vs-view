@@ -131,6 +131,9 @@ class ExtractFramesWorker(QObject):
                     raise CancelledError("Extract frames cancelled")
                 wait(workers, timeout=0.1)
 
+            for w in workers:
+                w.result()
+
         return images_paths
 
     @run_in_background(name="ExtractFPNG")
@@ -164,11 +167,15 @@ class ExtractFramesWorker(QObject):
 
             wait(workers)
 
+            for w in workers:
+                w.result()
+
     @run_in_background(name="QtSave")
     def _qt_save(self, qimage: QImage, path: Path) -> None:
         if self.is_cancelled:
             return
-        qimage.save(str(path), "PNG", 75)  # type: ignore[call-overload]
+        if not qimage.save(str(path), "PNG", 75):  # type: ignore[call-overload]
+            raise OSError(f"Could not write the image {path}")
         self.progress_cb(increment=1)
 
 
