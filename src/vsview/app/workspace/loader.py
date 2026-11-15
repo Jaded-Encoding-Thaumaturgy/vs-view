@@ -72,6 +72,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         self.reload_count = 0
         self._is_failed = False
+        self._is_deleting = False
 
         self.stack = QStackedWidget(self)
         self.current_layout.addWidget(self.stack)
@@ -252,6 +253,11 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     @override
     def deleteLater(self) -> None:
+        if self._is_deleting:
+            logger.debug("%s deleteLater already in progress, ignoring", self.__class__.__name__)
+            return None
+        self._is_deleting = True
+
         logger.debug(
             "%s(%r) deleteLater called, cleaning up resources",
             self.__class__.__name__,

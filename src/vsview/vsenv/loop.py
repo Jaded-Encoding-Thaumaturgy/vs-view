@@ -14,7 +14,7 @@ from logging import DEBUG, getLogger
 from typing import Any, Literal, NamedTuple, Protocol, overload, override
 
 from jetpytools import CustomTypeError, clamp
-from PySide6.QtCore import QObject, QRunnable, QThread, QThreadPool, Signal, Slot
+from PySide6.QtCore import QEventLoop, QObject, QRunnable, QThread, QThreadPool, Signal, Slot
 from PySide6.QtWidgets import QApplication
 from vsengine.futures import UnifiedFuture
 from vsengine.loops import Cancelled, EventLoop, get_loop
@@ -267,11 +267,11 @@ class QtEventLoop(QObject, EventLoop):
             wait(targets, timeout=clamp(remaining, 0.0, 0.01))
 
             if is_main_thread:
-                QApplication.processEvents()
+                QApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
 
         if is_main_thread:
             # Final flush to process any signals from threads that just finished
-            QApplication.processEvents()
+            QApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
 
             if owner is None:
                 QThreadPool.globalInstance().waitForDone(10)
