@@ -418,7 +418,7 @@ class PlaybackSettings(BaseModel):
             label="Default Volume",
             suffix=" %",
             from_ui=lambda v: v / 100,
-            to_ui=lambda v: int(v * 100),
+            to_ui=lambda v: round(v * 100),
         ),
     ] = 0.5
 

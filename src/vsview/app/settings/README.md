@@ -69,7 +69,7 @@ drag_timeout: Annotated[
     Spin(
         label="Timeout",
         suffix=" ms",
-        to_ui=lambda v: int(v * 1000),  # seconds -> ms (display)
+        to_ui=lambda v: round(v * 1000),  # seconds -> ms (display)
         from_ui=lambda v: v / 1000.0,  # ms -> seconds (storage)
     ),
 ] = 0.04  # Default in seconds
