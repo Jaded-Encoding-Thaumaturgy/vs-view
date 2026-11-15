@@ -135,11 +135,6 @@ def isolate_secrets(monkeypatch: pytest.MonkeyPatch) -> InMemoryKeyring:
     )
     monkeypatch.setattr(
         SecretsManager,
-        "_KeyringError",
-        property(lambda self: fake_keyring.errors.KeyringError),
-    )
-    monkeypatch.setattr(
-        SecretsManager,
         "_PasswordDeleteError",
         property(lambda self: fake_keyring.errors.PasswordDeleteError),
     )

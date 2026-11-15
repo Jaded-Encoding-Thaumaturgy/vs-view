@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
@@ -217,7 +218,6 @@ def test_secrets_manager_error_handling(mocker: MockerFixture) -> None:
     mock_keyring.set_password.side_effect = Exception("Backend failure")
     mock_keyring.delete_password.side_effect = Exception("Backend failure")
     mocker.patch.object(SecretsManager, "_keyring", mock_keyring)
-    mocker.patch.object(SecretsManager, "_KeyringError", Exception)
     mocker.patch.object(SecretsManager, "_PasswordDeleteError", KeyError)
 
     with pytest.raises(SecretsError, match="Failed to read secret"):
@@ -315,3 +315,49 @@ def test_plugin_secrets_namespaces_calls_to_plugin_identifier() -> None:
 
     assert SecretsManager.get("test_ns", "auth", "token") == "plugin_secret"
     assert secrets.get("auth", "token") == "plugin_secret"
+
+
+def test_secrets_manager_set_keeps_old_secret_on_non_keyring_error(
+    isolate_secrets: InMemoryKeyring, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    SecretsManager.set("test_ns", "auth", "token", "old_secret")
+    real_set_password = isolate_secrets.set_password
+
+    def fail_on_new_secret(svc: str, user: str, pwd: str) -> None:
+        if pwd == "new_secret":
+            raise OSError("CredWrite failed")
+        real_set_password(svc, user, pwd)
+
+    monkeypatch.setattr(isolate_secrets, "set_password", fail_on_new_secret)
+
+    with pytest.raises(SecretsError, match=r"Failed to store secret in keyring backend\.") as exc_info:
+        SecretsManager.set("test_ns", "auth", "token", "new_secret")
+
+    assert isinstance(exc_info.value.__cause__, OSError)
+    assert SecretsManager.get("test_ns", "auth", "token") == "old_secret"
+
+
+@pytest.mark.parametrize(
+    ("backend_method", "operation", "message"),
+    [
+        ("get_password", lambda: SecretsManager.get("test_ns", "auth", "token"), "Failed to read secret"),
+        ("delete_password", lambda: SecretsManager.delete("test_ns", "auth", "token"), "Failed to delete secret"),
+        ("get_credential", lambda: SecretsManager.get_credential("test_ns", "auth"), "Failed to get credential"),
+    ],
+)
+def test_secrets_manager_maps_non_keyring_errors(
+    isolate_secrets: InMemoryKeyring,
+    monkeypatch: pytest.MonkeyPatch,
+    backend_method: str,
+    operation: Callable[[], object],
+    message: str,
+) -> None:
+    def fail(*args: object) -> None:
+        raise OSError("backend exploded")
+
+    monkeypatch.setattr(isolate_secrets, backend_method, fail)
+
+    with pytest.raises(SecretsError, match=message) as exc_info:
+        operation()
+
+    assert isinstance(exc_info.value.__cause__, OSError)
