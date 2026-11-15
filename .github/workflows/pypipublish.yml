@@ -17,6 +17,7 @@ on:
           - editor
           - fftspectrum
           - frameprops-extended
+          - graph
           - histogram
           - remote
           - split-planes
@@ -63,6 +64,7 @@ jobs:
     if: needs.prepare.outputs.build-workflow == 'editor'
     uses: ./.github/workflows/cd-build-vsview-editor.yml
     with:
+      package: ${{ needs.prepare.outputs.package }}
       python-version: ${{ needs.prepare.outputs.python-version }}
 
   # Centralized Publish Job

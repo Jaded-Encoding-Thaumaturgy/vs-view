@@ -1,13 +1,20 @@
-name: Build vsview-editor
+name: Build JS frontend packages
 
 on:
   workflow_call:
     inputs:
+      package:
+        required: true
+        type: string
       python-version:
         required: true
         type: string
   workflow_dispatch:
     inputs:
+      package:
+        required: true
+        type: string
+        default: 'vsview-editor'
       python-version:
         required: false
         type: string
@@ -15,7 +22,7 @@ on:
 
 jobs:
   build:
-    name: Build vsview-editor
+    name: Build ${{ inputs.package }}
     runs-on: ubuntu-latest
 
     steps:
@@ -36,10 +43,12 @@ jobs:
           python-version: ${{ inputs.python-version }}
 
       - name: Build
-        run: uv build --package vsview-editor --sdist --wheel --out-dir dist --clear
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: uv build --package "$PACKAGE" --sdist --wheel --out-dir dist --clear
 
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: dist-vsview-editor
+          name: dist-${{ inputs.package }}
           path: dist/
