@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 from base64 import b64decode, b64encode
@@ -159,6 +160,10 @@ def _get_icon_weights(provider_id: str | None = None) -> list[tuple[str, str]]:
         return []
     provider = ICON_PROVIDERS[provider_id]
     return [(weight.title(), weight) for weight in provider.weights]
+
+
+def _is_valid_zoom_factor(factor: float) -> bool:
+    return math.isfinite(factor) and factor > 0
 
 
 def _get_style() -> list[tuple[str, str]]:
@@ -557,13 +562,13 @@ class ViewSettings(BaseModel):
 
     zoom_factors: Annotated[
         list[float],
-        AfterValidator(lambda v: sorted(x for x in v if x > 0) or [1.0]),
+        AfterValidator(lambda v: sorted(x for x in v if _is_valid_zoom_factor(x)) or [1.0]),
         LineEdit(
             label="Zoom Factors",
             tooltip="Zoom factors for the views.\nSeparate factors with commas.",
             default_value=[1.0],
             to_ui=lambda v: ", ".join(map(str, v)),
-            from_ui=lambda v: [float(x) for x in v.split(",") if x.strip() and float(x) > 0] or [1.0],
+            from_ui=lambda v: [f for x in v.split(",") if x.strip() and _is_valid_zoom_factor(f := float(x))] or [1.0],
         ),
     ] = [0.25, 0.5, 0.75, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
 
