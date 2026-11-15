@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import gc
 import logging
+import sys
 import weakref
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Generator, Mapping, Sequence
 from concurrent.futures import Future
+from importlib.metadata import EntryPoint
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -17,6 +19,7 @@ from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
 from tests.harness import MockQObject
+from vsview.app import tools
 from vsview.app.plugins import specs
 from vsview.app.plugins._controller import PluginWorkspaceController
 from vsview.app.plugins.api import NodeProcessor, PluginGraphicsView, WidgetPluginBase
@@ -75,6 +78,17 @@ def isolate_settings_dialog_registries() -> Generator[None]:
         SettingsDialog.global_settings_registry.extend(orig_global)
         SettingsDialog.local_settings_registry.clear()
         SettingsDialog.local_settings_registry.extend(orig_local)
+
+
+@pytest.fixture
+def extra_tools_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[Path]:
+    """Add a folder of extra first-party tool modules to `vsview.app.tools`."""
+    monkeypatch.setattr(tools, "__path__", [*tools.__path__, str(tmp_path)])
+    try:
+        yield tmp_path
+    finally:
+        for name in [n for n in sys.modules if n.startswith("vsview.app.tools.audit_")]:
+            del sys.modules[name]
 
 
 # Notifier Tests
@@ -515,6 +529,65 @@ def test_load_worker_isolates_each_entry_point(
     assert "Couldn't load entry point 'broken_tool' (vsview_missing_module:plugin) of group 'vsview'" in caplog.text
 
 
+def test_load_worker_isolates_each_first_party_tool(
+    qt_event_loop: QtEventLoop,
+    qtbot: QtBot,
+    caplog: pytest.LogCaptureFixture,
+    fake_entry_points: Callable[[str, Sequence[EntryPoint]], None],
+    extra_tools_dir: Path,
+) -> None:
+    fake_entry_points("vsview", [])
+    (extra_tools_dir / "audit_import_error.py").write_text('raise ImportError("simulated broken tool")\n')
+    (extra_tools_dir / "audit_invalid_hook.py").write_text(
+        "from vsview.api import hookimpl\n\n\n@hookimpl\ndef vsview_register_tooldock(unexpected_arg): ...\n"
+    )
+    pm = PluginManager()
+    holder = DummyCallbackHolder()
+    pm.call_when_loaded(holder.on_notify)
+
+    with caplog.at_level(logging.ERROR, logger="vsview.app.plugins.manager"):
+        pm.load()
+        pm.wait_for_loaded()
+
+    assert pm.loaded is True
+    assert "jet_vsview_colorpicker" in {p.identifier for p in pm.tooldocks}
+    assert [r.getMessage() for r in caplog.records if r.name == "vsview.app.plugins.manager"] == [
+        "Couldn't register first party plugin 'audit_import_error'",
+        "Couldn't register first party plugin 'audit_invalid_hook'",
+    ]
+    qtbot.waitUntil(lambda: holder.invoked, timeout=2000)
+
+
+def test_failed_load_is_not_reported_as_loaded(
+    qt_event_loop: QtEventLoop,
+    qtbot: QtBot,
+    caplog: pytest.LogCaptureFixture,
+    fake_entry_points: Callable[[str, Sequence[EntryPoint]], None],
+    mocker: MockerFixture,
+) -> None:
+    fake_entry_points("vsview", [])
+    pm = PluginManager()
+    mocker.patch.object(pm.manager, "add_hookspecs", side_effect=RuntimeError("simulated load failure"))
+    early = DummyCallbackHolder()
+    pm.call_when_loaded(early.on_notify)
+
+    pm.load()
+    with pytest.raises(RuntimeError, match="simulated load failure"):
+        pm.wait_for_loaded()
+
+    assert pm.loaded is False
+    qtbot.waitUntil(lambda: early.invoked, timeout=2000)
+
+    late = DummyCallbackHolder()
+    with caplog.at_level(logging.WARNING, logger="vsview.app.plugins.manager"):
+        pm.call_when_loaded(late.on_notify)
+
+    qtbot.waitUntil(lambda: late.invoked, timeout=2000)
+    assert [r.getMessage() for r in caplog.records if r.name == "vsview.app.plugins.manager"] == [
+        f"Plugin loading failed (simulated load failure); calling {late.on_notify!r} with the plugins that loaded"
+    ]
+
+
 # Shortcut Registration Tests
 def test_register_shortcuts_valid_prefix(init_plugin_manager: PluginManager, mocker: MockerFixture) -> None:
     action_1 = ActionDefinition("my_plugin.action1", "Action 1", "Ctrl+1")
@@ -782,6 +855,16 @@ def test_plugin_manager_loaded_property() -> None:
 
     fut.set_result(None)
     assert pm.loaded is True
+
+
+def test_plugin_manager_loaded_property_false_after_failure() -> None:
+    pm = PluginManager()
+    fut = Future[None]()
+    pm._load_future = fut
+
+    fut.set_exception(RuntimeError("load failed"))
+
+    assert pm.loaded is False
 
 
 def test_plugin_manager_load_idempotent(mocker: MockerFixture) -> None:

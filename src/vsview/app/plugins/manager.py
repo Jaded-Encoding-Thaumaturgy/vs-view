@@ -148,7 +148,7 @@ class PluginManager(Singleton):
 
     @inject_self.property
     def loaded(self) -> bool:
-        return self._load_future is not None and self._load_future.done()
+        return self._load_future is not None and self._load_future.done() and self._load_future.exception() is None
 
     @inject_self
     def load(self) -> None:
@@ -164,6 +164,9 @@ class PluginManager(Singleton):
 
     @inject_self
     def call_when_loaded(self, cb: Callable[[], Any]) -> None:
+        if self._load_future is not None and self._load_future.done() and (e := self._load_future.exception()):
+            logger.warning("Plugin loading failed (%s); calling %r with the plugins that loaded", e, cb)
+
         self._notifier.register(cb)
 
     @property
@@ -184,13 +187,22 @@ class PluginManager(Singleton):
 
     @run_in_background(name="PluginManagerLoad")
     def _load_worker(self) -> None:
+        try:
+            self._load_plugins()
+        finally:
+            self._notifier.notify()
+
+    def _load_plugins(self) -> None:
         self.manager.add_hookspecs(specs)
 
         for _, name, _ in pkgutil.iter_modules(tools.__path__):
             if name.startswith("_"):
                 continue
             logger.debug("Registering %s first party plugin", name)
-            self.manager.register(import_module(f"vsview.app.tools.{name}"))
+            try:
+                self.manager.register(import_module(f"vsview.app.tools.{name}"))
+            except Exception:
+                logger.exception("Couldn't register first party plugin %r", name)
 
         first_party_ids = self._plugin_identifiers
         first_party_names = first_party_ids.values()
@@ -213,9 +225,6 @@ class PluginManager(Singleton):
         self._construct_settings_registry()
 
         logger.debug("Plugin integration, finalized")
-
-        # Fire signal
-        self._notifier.notify()
 
     def _register_shortcuts(self) -> None:
         from ..settings.shortcuts import ShortcutManager
