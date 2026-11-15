@@ -33,7 +33,7 @@ logger = getLogger(__name__)
 
 class Notifier:
     def __init__(self) -> None:
-        self._callbacks = list[tuple[weakref.ReferenceType[Callable[[], Any]], EventLoop]]()
+        self._callbacks = list[tuple[weakref.WeakMethod[Callable[[], Any]] | Callable[[], Any], EventLoop]]()
         self._ready = False
         self._lock = Lock()
 
@@ -43,9 +43,7 @@ class Notifier:
                 get_loop().from_thread(callback)
                 return
 
-            self._callbacks.append(
-                (weakref.WeakMethod(callback) if ismethod(callback) else weakref.ref(callback), get_loop())
-            )
+            self._callbacks.append((weakref.WeakMethod(callback) if ismethod(callback) else callback, get_loop()))
 
     def notify(self) -> None:
         with self._lock:
@@ -57,7 +55,7 @@ class Notifier:
             self._callbacks.clear()
 
         for ref, loop in current_callbacks:
-            if (cb := ref()) is not None:
+            if (cb := ref() if isinstance(ref, weakref.WeakMethod) else ref) is not None:
                 loop.from_thread(cb)
 
 
