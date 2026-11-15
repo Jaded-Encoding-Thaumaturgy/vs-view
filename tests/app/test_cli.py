@@ -460,23 +460,30 @@ class TestMainCommandRouting:
         with pytest.raises(CoercionError, match=r"Invalid value"):
             app(["-vs-ll", "invalid_level_xyz"], exit_on_error=False)
 
+    @pytest.mark.parametrize(
+        "args",
+        [["-w", "non_existent_workspace_xyz"], ["-w", "script", "-w", "non_existent_workspace_xyz"]],
+        ids=["unknown_only", "valid_and_unknown"],
+    )
     def test_main_unknown_workspace_logs_critical_and_exits(
         self,
         mock_gui_components: tuple[MagicMock, MagicMock],
         capfd: pytest.CaptureFixture[str],
+        args: list[str],
     ) -> None:
-        mock_app, _ = mock_gui_components
-        mock_app.exit.return_value = 1
+        mock_app, mock_window = mock_gui_components
 
         with pytest.raises(SystemExit, match=r"^1$") as exc_info:
-            app(["-w", "non_existent_workspace_xyz"], exit_on_error=False)
+            app(args, exit_on_error=False)
 
         assert exc_info.value.code == 1
         out, err = capfd.readouterr()
         combined = out + err
         assert "non_existent_workspace_xyz" in combined
         assert "doesn't exist" in combined
-        mock_app.exit.assert_called_once_with(1)
+        mock_window.show.assert_not_called()
+        mock_window.add_workspace.assert_not_called()
+        mock_app.exec.assert_not_called()
 
     def test_main_valid_workspace_adds_workspace(self, mock_gui_components: tuple[MagicMock, MagicMock]) -> None:
         _, mock_window = mock_gui_components

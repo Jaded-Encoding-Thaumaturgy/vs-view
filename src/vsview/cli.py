@@ -18,6 +18,8 @@ from cyclopts.help.specs import DefaultStyled, TableSpec, get_default_command_co
 if TYPE_CHECKING:
     from rich.console import Console, ConsoleOptions, RenderableType
 
+    from .app.workspace import BaseWorkspace
+
 from .env import getenv_bool
 from .logging import LOG_PATH, console, get_console_level, init_early_logging, is_gui_mode, setup_logging
 
@@ -255,7 +257,6 @@ def main(
     from .app.main import Application, MainWindow
     from .app.plugins.manager import PluginManager
     from .app.settings import SettingsManager
-    from .app.workspace import BaseWorkspace, PythonScriptWorkspace, QuickScriptWorkspace, VideoFileWorkspace
 
     # Setup env vars
     os.environ["JETPYTOOLS_NO_COLOR"] = "true"
@@ -321,6 +322,7 @@ def main(
 
     PluginManager.load()
 
+    target_workspaces = _resolve_workspaces(workspace, strict=True) if not files and workspace else []
     main_window = MainWindow()
     # Show window first for faster perceived startup
     main_window.show()
@@ -332,39 +334,17 @@ def main(
             else:
                 main_window.load_new_file(file)
     elif workspace or not no_default_workspace:
-        target_workspaces = workspace or SettingsManager.global_settings.default_workspaces
-
-        builtin_workspaces: list[type[BaseWorkspace]] = [
-            PythonScriptWorkspace,
-            VideoFileWorkspace,
-            QuickScriptWorkspace,
-        ]
-        possibles = {w.title.lower().replace(" ", "-"): w for w in builtin_workspaces}
-
-        if any(choice not in possibles for choice in target_workspaces):
-            PluginManager.wait_for_loaded()
-            for w in PluginManager.workspaces:
-                possibles[w.title.lower().replace(" ", "-")] = w
+        if not workspace:
+            target_workspaces = _resolve_workspaces(SettingsManager.global_settings.default_workspaces)
 
         app.processEvents()
-        should_exit = False
 
         with main_window.stack.disable_animation():
-            for choice in target_workspaces:
-                if choice not in possibles:
-                    if workspace:
-                        logger.critical("The %r workspace doesn't exist. Pick from %s", choice, list(possibles))
-                        should_exit = True
-                    else:
-                        logger.warning("The default workspace %r doesn't exist. Pick from %s", choice, list(possibles))
-                    continue
-                main_window.add_workspace(possibles[choice])
+            for target in target_workspaces:
+                main_window.add_workspace(target)
 
             if buttons := main_window.button_group.buttons():
                 buttons[0].click()
-
-        if should_exit:
-            raise SystemExit(app.exit(1))
 
     raise SystemExit(app.exec())
 
@@ -460,3 +440,39 @@ def _populate_path() -> None:
             path_parts.insert(0, str(folder))
 
     os.environ["PATH"] = os.pathsep.join(path_parts)
+
+
+def _resolve_workspaces(choices: Sequence[str], *, strict: bool = False) -> list[type[BaseWorkspace]]:
+    from .app.plugins.manager import PluginManager
+    from .app.workspace import PythonScriptWorkspace, QuickScriptWorkspace, VideoFileWorkspace
+
+    builtin_workspaces: list[type[BaseWorkspace]] = [PythonScriptWorkspace, VideoFileWorkspace, QuickScriptWorkspace]
+    possibles = {w.title.lower().replace(" ", "-"): w for w in builtin_workspaces}
+
+    if any(choice not in possibles for choice in choices):
+        PluginManager.wait_for_loaded()
+        for w in PluginManager.workspaces:
+            possibles[w.title.lower().replace(" ", "-")] = w
+
+    resolved: list[type[BaseWorkspace]] = []
+    unknown: list[str] = []
+
+    for choice in choices:
+        if (workspace_cls := possibles.get(choice)) is None:
+            unknown.append(choice)
+        else:
+            resolved.append(workspace_cls)
+
+    if not unknown:
+        return resolved
+
+    available = list(possibles)
+    if strict:
+        for choice in unknown:
+            logger.critical("The %r workspace doesn't exist. Pick from %s", choice, available)
+        raise SystemExit(1)
+
+    for choice in unknown:
+        logger.warning("The default workspace %r doesn't exist. Pick from %s", choice, available)
+
+    return resolved
