@@ -12,12 +12,12 @@ from typing import Any, Self
 import niquests
 import niquests.cookies
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtWidgets import QLabel, QLineEdit, QWidget
 from pytestqt.qtbot import QtBot
 from vsview_comp.models import ComparisonImage, ComparisonSource, SlowPicsSources, TMDBTitle, TMDBTitleData
 from vsview_comp.plugin import CompPlugin
-from vsview_comp.ui import TMDBListPopup
+from vsview_comp.ui import ProbabilityCurveWidget, TMDBListPopup
 from vsview_comp.utils import LogNiquestsErrors, UploadError
 
 from tests.harness import HarnessPluginController
@@ -230,3 +230,22 @@ def test_tmdb_search_sends_only_decimal_queries_as_ids(
     comp_plugin.tmdb_worker.search(query).result(timeout=10)
 
     assert sorted(url for _, url in requests) == ["/genre/movie/list", "/genre/tv/list", "/search/movie", "/search/tv"]
+
+
+@pytest.mark.parametrize("key", [Qt.Key.Key_Delete, Qt.Key.Key_Backspace])
+def test_curve_editor_key_removes_the_hovered_point(qtbot: QtBot, key: Qt.Key) -> None:
+    host = QWidget()
+    qtbot.addWidget(host)
+    widget = ProbabilityCurveWidget(host, 0, 100)
+    widget.resize(400, 300)
+    host.show()
+    qtbot.waitExposed(host)
+    widget.points = [QPointF(0.0, 1.0), QPointF(0.5, 2.0), QPointF(1.0, 1.0)]
+
+    # Qt drops a move to the position the cursor already has, so leave the point first.
+    qtbot.mouseMove(widget, QPoint(1, 1))
+    qtbot.mouseMove(widget, widget.to_pixels(QPointF(0.5, 2.0)).toPoint())
+    with qtbot.waitSignal(widget.curveChanged, timeout=1000):
+        qtbot.keyClick(widget, key)
+
+    assert [p.toTuple() for p in widget.points] == [(0.0, 1.0), (1.0, 1.0)]

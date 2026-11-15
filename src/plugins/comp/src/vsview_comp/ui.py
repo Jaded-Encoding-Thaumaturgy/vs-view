@@ -1466,9 +1466,9 @@ class ProbabilityCurveWidget(QWidget):
         if (
             event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace)
             and self._hovered_index is not None
-            and 0 < self._hovered_index < len(self.points) - 1
+            and 0 < self._hovered_index < len(self._points) - 1
         ):
-            self.points.pop(self._hovered_index)
+            self._points.pop(self._hovered_index)
             self._hovered_index = None
             self._dragged_index = None
             self.curveChanged.emit()
