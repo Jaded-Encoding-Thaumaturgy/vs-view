@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import weakref
 from bisect import bisect_right
 from collections.abc import Hashable, Sequence
 from copy import deepcopy
@@ -64,6 +65,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QWidgetAction,
 )
+from shiboken6 import Shiboken
 
 from ...assets import IconName
 from ...types import Frame, Time
@@ -190,40 +192,48 @@ class TimelineHoverPopup(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-        self._timeline = timeline
+        self._timeline_ref = weakref.ref(timeline)
         self.radius = 50
         self.zoom_factor = 4.0
         self.hover_x = -1
 
+    @property
+    def _timeline(self) -> Timeline | None:
+        timeline = self._timeline_ref()
+        return timeline if timeline is not None and Shiboken.isValid(timeline) else None
+
     @override
     def paintEvent(self, event: QPaintEvent) -> None:
-        if self.hover_x < 0:
+        if self.hover_x < 0 or (timeline := self._timeline) is None:
             return
 
         popup_rect = QRectF(self.rect())
 
         with QPainter(self) as painter:
-            self._draw_background(painter, popup_rect)
+            self._draw_background(painter, popup_rect, timeline)
 
             # Setup clipping and base transform
             painter.setClipRect(popup_rect)
-            y_offset = self.height() - self._timeline.height()
+            y_offset = self.height() - timeline.height()
             painter.translate(self.radius, y_offset)
             painter.scale(self.zoom_factor, 1.0)
             painter.translate(-self.hover_x, 0)
 
-            self._draw_zoomed_notches(painter)
-            self._draw_scroll_bar(painter)
-            self._draw_custom_notches(painter, popup_rect, y_offset)
-            self._draw_indicators(painter)
+            self._draw_zoomed_notches(painter, timeline)
+            self._draw_scroll_bar(painter, timeline)
+            self._draw_custom_notches(painter, popup_rect, y_offset, timeline)
+            self._draw_indicators(painter, timeline)
 
     def update_state(self, hover_x: int) -> None:
-        # Explitly set the windows handler since this popup doesn't have any parent.
+        if (timeline := self._timeline) is None:
+            return
+
+        # Keep the popup window stacked over the timeline's current top-level window.
         if not self.windowHandle():
             self.createWinId()
         if (
             (wh := self.windowHandle())
-            and (top_wh := self._timeline.window().windowHandle())
+            and (top_wh := timeline.window().windowHandle())
             and wh.transientParent() is not top_wh
         ):
             wh.setTransientParent(top_wh)
@@ -233,9 +243,9 @@ class TimelineHoverPopup(QWidget):
         self.hover_x = hover_x
 
         popup_width = self.radius * 2
-        popup_height = round(self._timeline.height() * (1 + 0.33 * self.NUM_LAYERS))
+        popup_height = round(timeline.height() * (1 + 0.33 * self.NUM_LAYERS))
 
-        global_pos = self._timeline.mapToGlobal(QPoint(hover_x, 0))
+        global_pos = timeline.mapToGlobal(QPoint(hover_x, 0))
 
         # Position popup above the timeline
         x = global_pos.x() - self.radius
@@ -244,14 +254,14 @@ class TimelineHoverPopup(QWidget):
         self.setGeometry(x, y, popup_width, popup_height)
         self.update()
 
-    def _draw_background(self, painter: QPainter, popup_rect: QRectF) -> None:
+    def _draw_background(self, painter: QPainter, popup_rect: QRectF, timeline: Timeline) -> None:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(popup_rect, self._timeline.palette().color(self._timeline.BACKGROUND_COLOR))
-        painter.setPen(QPen(self._timeline.palette().color(self._timeline.TEXT_COLOR), 1))
+        painter.fillRect(popup_rect, timeline.palette().color(timeline.BACKGROUND_COLOR))
+        painter.setPen(QPen(timeline.palette().color(timeline.TEXT_COLOR), 1))
         painter.drawRoundedRect(popup_rect, self.POPUP_CORNER_RADIUS, self.POPUP_CORNER_RADIUS)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, on=False)
 
-    def _draw_zoomed_notches(self, painter: QPainter) -> None:
+    def _draw_zoomed_notches(self, painter: QPainter, timeline: Timeline) -> None:
         # Generate and draw main timeline notches for the zoomed view.
         fm = painter.fontMetrics()
 
@@ -264,14 +274,14 @@ class TimelineHoverPopup(QWidget):
         target_interval_x = self.ZOOMED_NOTCH_SPACING / self.zoom_factor
 
         tmp_notches = list[tuple[int, str]]()
-        if self._timeline.mode == "frame":
-            interval_f = self._timeline.calculate_notch_interval_f(int(target_interval_x))
+        if timeline.mode == "frame":
+            interval_f = timeline.calculate_notch_interval_f(int(target_interval_x))
             # Improved accuracy: clamp and extend by 1 to avoid rounding issues
-            start_f = max(0, self._timeline.x_to_frame(int(view_start_x)) - 1)
+            start_f = max(0, timeline.x_to_frame(int(view_start_x)) - 1)
             curr_f = Frame((start_f // interval_f) * interval_f)
 
-            while curr_f < self._timeline.total_frames:
-                x = self._timeline.cursor_to_x(curr_f)
+            while curr_f < timeline.total_frames:
+                x = timeline.cursor_to_x(curr_f)
                 if x > view_end_x + target_interval_x:
                     break
 
@@ -280,17 +290,17 @@ class TimelineHoverPopup(QWidget):
 
                 curr_f = Frame(curr_f + interval_f)
         else:
-            interval_t = self._timeline.calculate_notch_interval_t(int(target_interval_x))
-            start_t = self._timeline.x_to_time(max(0, int(view_start_x)))
+            interval_t = timeline.calculate_notch_interval_t(int(target_interval_x))
+            start_t = timeline.x_to_time(max(0, int(view_start_x)))
             interval_secs = interval_t.total_seconds()
 
             if interval_secs > 0:
                 curr_secs = max(0, (start_t.total_seconds() // interval_secs) * interval_secs)
                 curr_t = Time(seconds=curr_secs)
-                label_format = generate_label_format(interval_t, self._timeline.total_time)
+                label_format = generate_label_format(interval_t, timeline.total_time)
 
-                while curr_t <= self._timeline.total_time:
-                    x = self._timeline.cursor_to_x(curr_t)
+                while curr_t <= timeline.total_time:
+                    x = timeline.cursor_to_x(curr_t)
                     if x > view_end_x + target_interval_x:
                         break
 
@@ -300,12 +310,12 @@ class TimelineHoverPopup(QWidget):
                     curr_t = Time(seconds=curr_t.total_seconds() + interval_secs)
 
         # Draw notches and labels
-        notch_pen = QPen(self._timeline.palette().color(self._timeline.TEXT_COLOR), 1)
+        notch_pen = QPen(timeline.palette().color(timeline.TEXT_COLOR), 1)
         notch_pen.setCosmetic(True)
         painter.setPen(notch_pen)
 
-        lnotch_y = self._timeline.rect_f.top() + self._timeline.font_height + self._timeline.notch_height + 5
-        lnotch_top = lnotch_y - self._timeline.notch_height
+        lnotch_y = timeline.rect_f.top() + timeline.font_height + timeline.notch_height + 5
+        lnotch_top = lnotch_y - timeline.notch_height
 
         for nx, ntext in tmp_notches:
             painter.drawLine(QLineF(nx, lnotch_y, nx, lnotch_top))
@@ -315,21 +325,21 @@ class TimelineHoverPopup(QWidget):
 
             painter.save()
             painter.resetTransform()
-            painter.setPen(self._timeline.palette().color(self._timeline.TEXT_COLOR))
+            painter.setPen(timeline.palette().color(timeline.TEXT_COLOR))
             text_width = fm.horizontalAdvance(ntext)
             painter.drawText(QPointF(zoomed_pos.x() - text_width / 2, zoomed_pos.y() - fm.descent()), ntext)
             painter.restore()
 
-    def _draw_scroll_bar(self, painter: QPainter) -> None:
-        self._timeline.draw_scroll_bar(painter)
+    def _draw_scroll_bar(self, painter: QPainter, timeline: Timeline) -> None:
+        timeline.draw_scroll_bar(painter)
 
-    def _draw_custom_notches(self, painter: QPainter, popup_rect: QRectF, y_offset: float) -> None:
+    def _draw_custom_notches(self, painter: QPainter, popup_rect: QRectF, y_offset: float, timeline: Timeline) -> None:
         # Draw provider notches (bookmarks, keyframes) with staggered labels.
         fm = painter.fontMetrics()
 
         # Collect labels with range support
         all_labels = list[HoverLabel]()
-        for provider_notches in self._timeline.custom_notches.values():
+        for provider_notches in timeline.custom_notches.values():
             for p_notch in provider_notches:
                 if not (label_text := self._format_notch_label(p_notch)):
                     continue
@@ -343,12 +353,12 @@ class TimelineHoverPopup(QWidget):
 
         # Draw labels with leader lines and pills
         for lbl in staggered_labels:
-            self._draw_label_pill(painter, lbl, popup_rect, y_offset, fm)
+            self._draw_label_pill(painter, lbl, popup_rect, y_offset, fm, timeline)
 
         # Draw notches and range fills in scaled space
-        for provider_notches in self._timeline.custom_notches.values():
+        for provider_notches in timeline.custom_notches.values():
             for p_notch in provider_notches:
-                p_notch.draw(painter, self._timeline.scroll_rect, self.RANGE_FILL_ALPHA, cosmetic=True)
+                p_notch.draw(painter, timeline.scroll_rect, self.RANGE_FILL_ALPHA, cosmetic=True)
 
     def _format_notch_label(self, notch: Notch[Any]) -> str:
         base_label = notch.label
@@ -369,12 +379,15 @@ class TimelineHoverPopup(QWidget):
             return base_label
 
     def _format_data_value(self, data: Frame | Time) -> str:
-        match data, self._timeline.mode:
+        if (timeline := self._timeline) is None:
+            return str(data)
+
+        match data, timeline.mode:
             case Time(), "time":
                 return data.to_ts("{H:02d}:{M:02d}:{S:02d}.{ms:03d}")
             case Time(), "frame":
                 # In frame mode, convert time to frame for display
-                return str(self._timeline.x_to_frame(self._timeline.cursor_to_x(data)))
+                return str(timeline.x_to_frame(timeline.cursor_to_x(data)))
             case _:
                 return str(data)
 
@@ -406,6 +419,7 @@ class TimelineHoverPopup(QWidget):
         popup_rect: QRectF,
         y_offset: float,
         fm: QFontMetrics,
+        timeline: Timeline,
     ) -> None:
         # Draw a single label with leader line and pill background.
         text_width = fm.horizontalAdvance(lbl.text)
@@ -414,7 +428,7 @@ class TimelineHoverPopup(QWidget):
         painter.save()
         painter.resetTransform()
 
-        p_y = self._timeline.scroll_rect.top() + y_offset - text_height - 5 + lbl.y_offset
+        p_y = timeline.scroll_rect.top() + y_offset - text_height - 5 + lbl.y_offset
         t_rect = QRectF(
             lbl.x - text_width / 2 - self.LABEL_PADDING_H,
             p_y - self.LABEL_PADDING_V,
@@ -424,30 +438,30 @@ class TimelineHoverPopup(QWidget):
 
         if popup_rect.intersects(t_rect):
             # Leader line
-            leader_pen = QPen(self._timeline.palette().color(self._timeline.TEXT_COLOR), 1)
+            leader_pen = QPen(timeline.palette().color(timeline.TEXT_COLOR), 1)
             leader_pen.setCosmetic(True)
             painter.setPen(leader_pen)
             painter.setOpacity(0.5)
-            painter.drawLine(QPointF(lbl.x, self._timeline.scroll_rect.top()), QPointF(lbl.x, t_rect.bottom()))
+            painter.drawLine(QPointF(lbl.x, timeline.scroll_rect.top()), QPointF(lbl.x, t_rect.bottom()))
             painter.setOpacity(1.0)
 
             # Pill background
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            bg_color = self._timeline.palette().color(self._timeline.BACKGROUND_COLOR)
+            bg_color = timeline.palette().color(timeline.BACKGROUND_COLOR)
             painter.setBrush(bg_color)
             painter.setPen(QPen(lbl.color, 1))
             painter.drawRoundedRect(t_rect, self.PILL_CORNER_RADIUS, self.PILL_CORNER_RADIUS)
 
             # Label text
-            painter.setPen(self._timeline.palette().color(self._timeline.TEXT_COLOR))
+            painter.setPen(timeline.palette().color(timeline.TEXT_COLOR))
             painter.drawText(t_rect, Qt.AlignmentFlag.AlignCenter, lbl.text)
 
         painter.restore()
 
-    def _draw_indicators(self, painter: QPainter) -> None:
+    def _draw_indicators(self, painter: QPainter, timeline: Timeline) -> None:
         # Draw hover dash and playback cursor.
         hover_pen = QPen(
-            self._timeline.hover_indicator_color,
+            timeline.hover_indicator_color,
             1,
             Qt.PenStyle.DashLine,
         )
@@ -456,21 +470,21 @@ class TimelineHoverPopup(QWidget):
         painter.drawLine(
             QLineF(
                 self.hover_x,
-                self._timeline.scroll_rect.top(),
+                timeline.scroll_rect.top(),
                 self.hover_x,
-                self._timeline.scroll_rect.bottom(),
+                timeline.scroll_rect.bottom(),
             )
         )
 
-        cursor_pen = QPen(self._timeline.cursor_color, 2)
+        cursor_pen = QPen(timeline.cursor_color, 2)
         cursor_pen.setCosmetic(True)
         painter.setPen(cursor_pen)
         painter.drawLine(
             QLineF(
-                self._timeline.cursor_x,
-                self._timeline.scroll_rect.top(),
-                self._timeline.cursor_x,
-                self._timeline.scroll_rect.bottom(),
+                timeline.cursor_x,
+                timeline.scroll_rect.top(),
+                timeline.cursor_x,
+                timeline.scroll_rect.bottom(),
             )
         )
 
@@ -543,6 +557,7 @@ class Timeline(QWidget):
 
         # Hover popup
         self.hover_popup = TimelineHoverPopup(self)
+        self.destroyed.connect(self.hover_popup.deleteLater)
 
         # Context menu for mode switching
         self.context_menu = QMenu(self)
@@ -869,7 +884,7 @@ class Timeline(QWidget):
         super().leaveEvent(event)
         if not self.mousepressed:
             self.hover_x = None
-            self.hover_popup.hide()
+            self._hide_hover_popup()
             self.update()
 
     @override
@@ -878,7 +893,7 @@ class Timeline(QWidget):
             self.mousepressed = False
             if not self.rect().contains(event.position().toPoint()):
                 self.hover_x = None
-                self.hover_popup.hide()
+                self._hide_hover_popup()
                 self.update()
 
     @override
@@ -905,10 +920,11 @@ class Timeline(QWidget):
         self.hover_x = int(clamp(event.position().x(), 0, self.rect_f.width()))
 
         if SettingsManager.global_settings.timeline.view_hover_zoom:
-            self.hover_popup.update_state(self.hover_x)
-            self.hover_popup.show()
+            if Shiboken.isValid(self.hover_popup):
+                self.hover_popup.update_state(self.hover_x)
+                self.hover_popup.show()
         else:
-            self.hover_popup.hide()
+            self._hide_hover_popup()
 
         self.update()
 
@@ -929,7 +945,10 @@ class Timeline(QWidget):
 
     @override
     def deleteLater(self) -> None:
-        self.hover_popup.deleteLater()
+        self._hide_hover_popup()
+        if Shiboken.isValid(self.hover_popup):
+            self.hover_popup.deleteLater()
+        super().deleteLater()
 
     def set_data(self, total_frames: int, cum_durations: Sequence[Time] | None = None) -> None:
         self._total_frames = total_frames
@@ -1057,8 +1076,12 @@ class Timeline(QWidget):
     def reset_interaction(self) -> None:
         self.mousepressed = False
         self.hover_x = None
-        self.hover_popup.hide()
+        self._hide_hover_popup()
         self.update()
+
+    def _hide_hover_popup(self) -> None:
+        if Shiboken.isValid(self.hover_popup):
+            self.hover_popup.hide()
 
     def _init_notches_cache(self) -> dict[Literal["frame", "time"], Notch.CacheEntry[Any]]:
         return {
@@ -1829,7 +1852,8 @@ class TimelineControlBar(QWidget):
     @run_in_loop(return_future=False)
     def disable(self) -> None:
         """Disable the control bar and block timeline events."""
-        self.timeline.hover_popup.hide()
+        if Shiboken.isValid(self.timeline.hover_popup):
+            self.timeline.hover_popup.hide()
         self.setEnabled(False)
         self.timeline.reset_interaction()
         self.timeline.is_events_blocked = True

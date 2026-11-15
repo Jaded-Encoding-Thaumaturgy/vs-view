@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gc
+import weakref
 from typing import Any, NamedTuple
 
 import pytest
@@ -19,9 +21,10 @@ from PySide6.QtGui import (
     QResizeEvent,
     QValidator,
 )
-from PySide6.QtWidgets import QGraphicsDropShadowEffect, QSlider, QToolButton
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QSlider, QToolButton, QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
+from shiboken6 import Shiboken
 
 from vsview.app.outputs.audio import PrettyChannelsLayout
 from vsview.app.settings import SettingsManager
@@ -55,7 +58,6 @@ def timeline_control_bar(qtbot: QtBot) -> TimelineControlBar:
     """Provide a TimelineControlBar with 100 frames initialized."""
     bar = TimelineControlBar()
     qtbot.addWidget(bar)
-    qtbot.addWidget(bar.timeline.hover_popup)
     bar.resize(1000, 33)
     bar.set_data(100)
     return bar
@@ -594,6 +596,69 @@ def test_timeline_set_data_moves_time_notches_when_only_durations_change(qtbot: 
     timeline.grab()
 
     assert notch.line.x1() == 600
+
+
+def test_timeline_delete_later_deletes_timeline_and_hover_popup(qtbot: QtBot) -> None:
+    # Not registered with qtbot: both widgets are deleted inside the test.
+    timeline = Timeline()
+    popup = timeline.hover_popup
+
+    timeline.deleteLater()
+    qtbot.waitUntil(lambda: not Shiboken.isValid(timeline) and not Shiboken.isValid(popup), timeout=1000)
+
+    assert Shiboken.isValid(timeline) is False
+    assert Shiboken.isValid(popup) is False
+
+
+def test_hover_popup_is_deleted_with_the_timeline_parent(qtbot: QtBot) -> None:
+    # Not registered with qtbot: the parent is deleted inside the test.
+    def _create_and_delete() -> tuple[weakref.ref[Timeline], weakref.ref[Any]]:
+        parent = QWidget()
+        timeline = Timeline(parent)
+        timeline.hover_popup.update_state(5)
+        popup = timeline.hover_popup
+
+        tl_ref = weakref.ref(timeline)
+        popup_ref = weakref.ref(popup)
+
+        parent.deleteLater()
+        qtbot.waitUntil(lambda: not Shiboken.isValid(parent) and not Shiboken.isValid(popup), timeout=1000)
+
+        assert Shiboken.isValid(timeline) is False
+        assert Shiboken.isValid(popup) is False
+        return tl_ref, popup_ref
+
+    tl_ref, popup_ref = _create_and_delete()
+    gc.collect()
+
+    assert tl_ref() is None
+    assert popup_ref() is None
+
+
+def test_timeline_and_popup_handle_partial_deletion_safely(qtbot: QtBot, qt_event_loop: QtEventLoop) -> None:
+    bar = TimelineControlBar()
+    qtbot.addWidget(bar)
+    bar.set_data(100)
+    bar.timeline.hover_popup.deleteLater()
+    qtbot.waitUntil(lambda: not Shiboken.isValid(bar.timeline.hover_popup), timeout=1000)
+
+    bar.disable()
+    bar.timeline.hide()
+    bar.timeline.reset_interaction()
+
+    # Guarded no-op when a standalone popup outlives a parent-deleted Timeline.
+    parent = QWidget()
+    orphan_tl = Timeline(parent)
+    orphan_popup = orphan_tl.hover_popup
+    qtbot.addWidget(orphan_popup)
+    orphan_popup.update_state(5)
+    orphan_tl.destroyed.disconnect(orphan_popup.deleteLater)
+    parent.deleteLater()
+    qtbot.waitUntil(lambda: not Shiboken.isValid(orphan_tl), timeout=1000)
+
+    assert Shiboken.isValid(orphan_popup) is True
+    orphan_popup.update_state(10)
+    orphan_popup.paintEvent(QPaintEvent(orphan_popup.rect()))
 
 
 # PlaybackContainer Tests
