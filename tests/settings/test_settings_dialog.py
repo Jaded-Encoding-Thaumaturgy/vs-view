@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from keyring.backends.fail import Keyring as FailKeyring
 from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QDialogButtonBox, QLineEdit, QWidget
+from PySide6.QtWidgets import QComboBox, QDialogButtonBox, QLineEdit, QWidget
 from pytestqt.qtbot import QtBot
 
 from vsview.app.plugins.manager import PluginManager
@@ -168,3 +168,23 @@ def test_apply_keeps_shortcuts_of_unregistered_actions(qtbot: QtBot, register_en
     assert kept is not None
     assert kept.key_sequence.toString(QKeySequence.SequenceFormat.PortableText) == "Ctrl+Shift+F9"
     assert kept.is_custom is True
+
+
+def test_local_dependent_dropdown_is_populated_from_local_settings(
+    qtbot: QtBot, register_entries: RegisterEntries, script: Path
+) -> None:
+    mode = Dropdown(label="Mode", items=[("A", "a"), ("B", "b")], tooltip="local-mode")
+    choice = Dropdown(
+        label="Choice",
+        items=lambda parent: [(f"{parent}-1", f"{parent}-1"), (f"{parent}-2", f"{parent}-2")],
+        depends_on=f"plugins.{PLUGIN_ID}.mode",
+        tooltip="local-choice",
+    )
+    register_entries([], [_entry("mode", mode), _entry("choice", choice)])
+    SettingsManager.get_local_settings(script).plugins[PLUGIN_ID] = {"mode": "b", "choice": "b-2"}
+
+    dialog = _open_dialog(qtbot, script)
+
+    combo = _find_by_tooltip(dialog, QComboBox, "local-choice")
+    assert [combo.itemData(i) for i in range(combo.count())] == ["b-1", "b-2"]
+    assert combo.currentData() == "b-2"

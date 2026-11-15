@@ -36,7 +36,7 @@ from ..icon import IconReloadMixin
 from ..views.components import Accordion
 from .manager import SettingsManager
 from .metadata import Dropdown, SecretWidgetMetadata, WidgetMetadataWithDependency
-from .models import GlobalSettings, LocalSettings, SettingEntry, ShortcutConfig, extract_settings
+from .models import BaseSettings, GlobalSettings, LocalSettings, SettingEntry, ShortcutConfig, extract_settings
 from .shortcuts import KeyboardLayoutMapper, ShortcutManager
 
 # Style for shortcut editors with conflicts
@@ -488,7 +488,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
     def _load_settings_to_ui(self) -> None:
         global_settings = SettingsManager.global_settings
 
-        def populate_if_supported(entry: SettingEntry[Any], widget: QWidget) -> None:
+        def populate_if_supported(entry: SettingEntry[Any], widget: QWidget, settings: BaseSettings) -> None:
             if not (widget_type := entry.metadata.get_widget_type()):
                 logger.warning("The entry %s doesn't expose its widget type", entry)
                 return
@@ -500,13 +500,13 @@ class SettingsDialog(QDialog, IconReloadMixin):
                 elif not entry.metadata.depends_on:
                     logger.warning("The entry %s specifies an empty string", entry)
                 else:
-                    entry.metadata.populate(widget, global_settings.get_nested_value(entry.metadata.depends_on))
+                    entry.metadata.populate(widget, settings.get_nested_value(entry.metadata.depends_on))
 
         # Load registry-driven global settings
         for entry in self.global_settings_registry:
             if (widget := self._global_widgets.get(entry.key)) is None:
                 continue
-            populate_if_supported(entry, widget)
+            populate_if_supported(entry, widget, global_settings)
 
             value = global_settings.get_nested_value(entry.key)
             try:
@@ -520,7 +520,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
             for entry in self.local_settings_registry:
                 if (widget := self._local_widgets.get(entry.key)) is None:
                     continue
-                populate_if_supported(entry, widget)
+                populate_if_supported(entry, widget, local_settings)
 
                 value = local_settings.get_nested_value(entry.key)
                 try:
