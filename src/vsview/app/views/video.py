@@ -777,8 +777,10 @@ class BaseGraphicsView(QGraphicsView):
         Returns:
             The corresponding point in the source image's pixel coordinates.
         """
-        point = point.toPoint() if isinstance(point, QPointF) else point
-        item_pos = self.pixmap_item.mapFromScene(self.mapToScene(point))
+        # PySide6 has no QPointF overload of mapToScene,
+        # and rounding to QPoint loses sub-pixel positions at fractional device pixel ratios.
+        view_to_scene, _ = self.viewportTransform().inverted()
+        item_pos = self.pixmap_item.mapFromScene(view_to_scene.map(QPointF(point)))
 
         scale_x, scale_y = self._image_scale_factors
 
