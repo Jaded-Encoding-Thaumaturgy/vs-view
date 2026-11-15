@@ -753,6 +753,9 @@ class BaseGraphicsView(QGraphicsView):
         self.centerOn(center_x + half_pixel, center_y + half_pixel)
 
     def set_sar(self, sar: float) -> None:
+        if not math.isfinite(sar) or sar <= 0:
+            sar = 1.0
+
         if self._sar == sar:
             return
 
