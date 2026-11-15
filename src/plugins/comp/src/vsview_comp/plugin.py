@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import html
 from collections.abc import Sequence
 from concurrent.futures import CancelledError
 from logging import getLogger
@@ -1164,7 +1165,8 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             def on_upload_success(url: str) -> None:
                 logger.info("Upload complete: %s", url)
                 self._reported_url = url
-                self.url_label.setText(f'<a href="{url}">{url}</a>')
+                escaped_url = html.escape(url)
+                self.url_label.setText(f'<a href="{escaped_url}">{escaped_url}</a>')
                 self.set_url_on_top()
                 if self.settings.global_.auto_copy_slowpics_url:
                     self.url_copy_btn.click()

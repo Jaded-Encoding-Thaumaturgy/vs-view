@@ -740,7 +740,7 @@ class TMDBListPopup(AnchoredListPopup):
     def tool_tip_template(self) -> jinja2.Template:
         return jinja2.Environment(
             loader=jinja2.FileSystemLoader(Path(__file__).parent),
-            autoescape=jinja2.select_autoescape(),
+            autoescape=True,
         ).get_template("tmdb_tooltip.html.jinja")
 
     def show_results(self, results: list[TMDBTitle]) -> None:
@@ -1092,7 +1092,7 @@ class TagsLineEdit(QWidget):
         chip_layout.setContentsMargins(6, 2, 4, 2)
         chip_layout.setSpacing(4)
 
-        chip_label = QLabel(label, chip)
+        chip_label = QLabel(label, chip, textFormat=Qt.TextFormat.PlainText)
         chip_layout.addWidget(chip_label)
 
         remove_btn = QToolButton(chip)

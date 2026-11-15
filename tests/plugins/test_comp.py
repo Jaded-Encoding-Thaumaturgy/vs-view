@@ -10,8 +10,12 @@ from typing import Any, Self
 import niquests
 import niquests.cookies
 import pytest
-from vsview_comp.models import ComparisonImage, ComparisonSource, SlowPicsSources
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel, QLineEdit, QWidget
+from pytestqt.qtbot import QtBot
+from vsview_comp.models import ComparisonImage, ComparisonSource, SlowPicsSources, TMDBTitle, TMDBTitleData
 from vsview_comp.plugin import CompPlugin
+from vsview_comp.ui import TMDBListPopup
 from vsview_comp.utils import UploadError
 
 from tests.harness import HarnessPluginController
@@ -144,3 +148,26 @@ def test_upload_succeeds_when_the_image_is_accepted(
 
     assert fut.result(timeout=10) == "https://slow.pics/c/KEY"
     assert requests.count(("POST", "/upload/image/img-0")) == 1
+
+
+def test_tmdb_tooltip_escapes_server_text(qtbot: QtBot) -> None:
+    host = QWidget()
+    qtbot.addWidget(host)
+    popup = TMDBListPopup(host, QLineEdit(host))
+    data = TMDBTitleData(id=1, name="Tom & <i>Jerry</i>", overview='<img src="file://server/share/a.png">')
+
+    popup.show_results([TMDBTitle(data=data, media_type="tv")])
+    tooltip = popup.item(0).toolTip()
+
+    assert "Tom &amp; &lt;i&gt;Jerry&lt;/i&gt; (0000) [TV]" in tooltip
+    assert "&lt;img src=&#34;file://server/share/a.png&#34;&gt;" in tooltip
+    assert "<img" not in tooltip
+    assert tooltip.lstrip().startswith("<div")
+
+
+def test_tag_chips_show_labels_as_plain_text(comp_plugin: CompPlugin) -> None:
+    comp_plugin.tags.add_tag("bold", "<b>Bold</b>")
+
+    labels = [label for label in comp_plugin.tags.findChildren(QLabel) if label.text() == "<b>Bold</b>"]
+
+    assert [label.textFormat() for label in labels] == [Qt.TextFormat.PlainText]
