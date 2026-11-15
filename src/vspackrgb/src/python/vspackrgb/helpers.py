@@ -35,7 +35,8 @@ def packrgb[V: (vs.VideoNode, vs.VideoFrame)](
         GRAY32, GRAY16, GRAYH, GRAYS clip or frame with packed pixel data.
 
     Raises:
-        ValueError: If format or backend is unsupported or resolution is variable.
+        ValueError: If format or backend is unsupported, resolution is variable,
+            or the alpha format or dimensions do not match the clip.
     """
 
     module: ModuleType
@@ -87,8 +88,8 @@ def packrgb[V: (vs.VideoNode, vs.VideoFrame)](
                 alpha = clip.std.PropToClip("_Alpha")
                 clip = clip.std.RemoveFrameProps("_Alpha")
 
-            if alpha and alpha.format != (afmt := clip.format.replace(color_family=vs.GRAY)):
-                raise ValueError(f"Alpha bit depth must be {afmt!r}")
+            if alpha:
+                _check_alpha(clip, alpha)
 
             return blank.std.ModifyFrame(clip if not alpha else [clip, alpha], pack_fn)
 
@@ -96,8 +97,8 @@ def packrgb[V: (vs.VideoNode, vs.VideoFrame)](
             if alpha is True:
                 alpha = clip.props["_Alpha"]
 
-            if alpha and alpha.format != (afmt := clip.format.replace(color_family=vs.GRAY)):
-                raise ValueError(f"Alpha bit depth must be {afmt!r}")
+            if alpha:
+                _check_alpha(clip, alpha)
 
             out_frame = pack_fn(n=0, f=[clip, alpha] if alpha else clip)
 
@@ -108,6 +109,16 @@ def packrgb[V: (vs.VideoNode, vs.VideoFrame)](
 
         case _:
             raise TypeError("Mismatched types for clip and alpha")
+
+
+def _check_alpha(clip: vs.VideoNode | vs.VideoFrame, alpha: vs.VideoNode | vs.VideoFrame) -> None:
+    if alpha.format != (afmt := clip.format.replace(color_family=vs.GRAY)):
+        raise ValueError(f"Alpha bit depth must be {afmt!r}")
+
+    if (alpha.width, alpha.height) != (clip.width, clip.height):
+        raise ValueError(
+            f"Alpha dimensions must match the clip ({clip.width}x{clip.height}), got {alpha.width}x{alpha.height}"
+        )
 
 
 class _ModifyFrameFunction(Protocol):
