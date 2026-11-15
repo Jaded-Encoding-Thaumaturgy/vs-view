@@ -35,7 +35,7 @@ from ...assets import IconName
 from ..icon import IconReloadMixin
 from ..views.components import Accordion
 from .manager import SettingsManager
-from .metadata import Dropdown, WidgetMetadataWithDependency
+from .metadata import Dropdown, SecretWidgetMetadata, WidgetMetadataWithDependency
 from .models import GlobalSettings, LocalSettings, SettingEntry, ShortcutConfig, extract_settings
 from .shortcuts import KeyboardLayoutMapper, ShortcutManager
 
@@ -565,7 +565,11 @@ class SettingsDialog(QDialog, IconReloadMixin):
         for entry in self.global_settings_registry:
             widget = self._global_widgets[entry.key]
             try:
-                value = entry.metadata.get_value(widget)
+                value = (
+                    entry.metadata.read_value(widget)
+                    if isinstance(entry.metadata, SecretWidgetMetadata)
+                    else entry.metadata.get_value(widget)
+                )
                 GlobalSettings.set_nested_value(data, entry.key, value)
             except Exception:
                 logger.error("Failed to get value for %s", entry.key)
@@ -588,7 +592,11 @@ class SettingsDialog(QDialog, IconReloadMixin):
         for entry in self.local_settings_registry:
             widget = self._local_widgets[entry.key]
             try:
-                value = entry.metadata.get_value(widget)
+                value = (
+                    entry.metadata.read_value(widget)
+                    if isinstance(entry.metadata, SecretWidgetMetadata)
+                    else entry.metadata.get_value(widget)
+                )
                 LocalSettings.set_nested_value(data, entry.key, value)
             except Exception:
                 logger.error("Failed to get value for %s", entry.key)
@@ -603,8 +611,17 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
     @Slot(result=bool)
     def _on_apply(self) -> bool:
+        # Build and validate both models before anything is saved, so a failure leaves no partial Apply
         try:
             global_settings = self._get_global_settings_from_ui()
+            if self._script_path:
+                self._get_local_settings_from_ui()
+        except Exception as e:
+            logger.error("Failed to read the settings with the error: %s", e)
+            logger.debug("Full traceback:", exc_info=e)
+            return False
+
+        try:
             SettingsManager.save_global(global_settings)
         except Exception as e:
             logger.error("Failed to save global settings with the error: %s", e)
@@ -613,13 +630,33 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         if self._script_path:
             try:
+                # Built again from a callable, so changes made by aboutToSaveLocal slots are kept
                 SettingsManager.save_local(self._script_path, self._get_local_settings_from_ui)
             except Exception as e:
                 logger.error("Failed to save local settings with the error: %s", e)
                 logger.debug("Full traceback:", exc_info=e)
                 return False
 
-        return True
+        return self._store_secrets()
+
+    def _store_secrets(self) -> bool:
+        scopes = [(self.global_settings_registry, self._global_widgets)]
+        if self._script_path:
+            scopes.append((self.local_settings_registry, self._local_widgets))
+
+        stored = True
+
+        for registry, widgets in scopes:
+            for entry in registry:
+                if not isinstance(entry.metadata, SecretWidgetMetadata) or (widget := widgets.get(entry.key)) is None:
+                    continue
+                try:
+                    entry.metadata.store_secret(widget)
+                except Exception:
+                    logger.exception("Failed to store the secret of %s", entry.key)
+                    stored = False
+
+        return stored
 
     def _on_shortcut_user_edited(self, aid: str) -> None:
         if not self._updating_shortcuts_ui:

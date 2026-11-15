@@ -148,8 +148,27 @@ class WidgetMetadataWithDependency[W: QWidget](WidgetMetadata[W]):
     def populate(self, widget: W, parent_value: Any | None = None) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
+class SecretWidgetMetadata[W: QWidget](WidgetMetadata[W]):
+    """Base class for widget metadata that keeps its secret in the keyring."""
+
+    @abstractmethod
+    def read_value(self, widget: W) -> Any:
+        """Get the value for the settings model, without touching the keyring."""
+
+    @abstractmethod
+    def store_secret(self, widget: W) -> None:
+        """Write the secret of the widget to the keyring."""
+
+    @override
+    def get_value(self, widget: W) -> Any:
+        value = self.read_value(widget)
+        self.store_secret(widget)
+        return value
+
+
 @dataclass(frozen=True)
-class Login(WidgetMetadata[LoginCredentialsInput]):
+class Login(SecretWidgetMetadata[LoginCredentialsInput]):
     """Login credentials widget metadata."""
 
     namespace: str
@@ -180,7 +199,12 @@ class Login(WidgetMetadata[LoginCredentialsInput]):
         widget.setProperty("_old_username", username or "")
 
     @override
-    def get_value(self, widget: LoginCredentialsInput) -> Any:
+    def read_value(self, widget: LoginCredentialsInput) -> Any:
+        username, _ = widget.credentials
+        return username
+
+    @override
+    def store_secret(self, widget: LoginCredentialsInput) -> None:
         username, password = widget.credentials
         old_username = widget.property("_old_username")
 
@@ -193,11 +217,10 @@ class Login(WidgetMetadata[LoginCredentialsInput]):
             SecretsManager.delete(self.namespace, self.context, username)
 
         widget.setProperty("_old_username", username)
-        return username
 
 
 @dataclass(frozen=True, slots=True)
-class SecretLineEdit(WidgetMetadata[QLineEdit]):
+class SecretLineEdit(SecretWidgetMetadata[QLineEdit]):
     """Secret LineEdit widget metadata stored in SecretsManager."""
 
     namespace: str
@@ -236,17 +259,21 @@ class SecretLineEdit(WidgetMetadata[QLineEdit]):
         widget.setProperty(SecretLineEdit.LOAD_FAILED_PROPERTY, False)
 
     @override
-    def get_value(self, widget: QLineEdit) -> Any:
+    def read_value(self, widget: QLineEdit) -> Any:
+        return None
+
+    @override
+    def store_secret(self, widget: QLineEdit) -> None:
         # After a failed load the field is empty, so writing it would delete the stored secret
         if widget.property(SecretLineEdit.LOAD_FAILED_PROPERTY):
             logger.warning("Skipping the secret %s/%s: it could not be loaded", self.namespace, self.key)
-            return None
+            return
 
         secret = widget.text().strip() if self.strip else widget.text()
 
         # Only touch the keyring on a real change, so Apply keeps working when no backend is available
         if secret == widget.property(SecretLineEdit.LOADED_PROPERTY):
-            return None
+            return
 
         if secret:
             SecretsManager.set(self.namespace, self.context, self.key, secret)
@@ -254,8 +281,6 @@ class SecretLineEdit(WidgetMetadata[QLineEdit]):
             SecretsManager.delete(self.namespace, self.context, self.key)
 
         widget.setProperty(SecretLineEdit.LOADED_PROPERTY, secret)
-
-        return None
 
 
 @dataclass(frozen=True, slots=True)
