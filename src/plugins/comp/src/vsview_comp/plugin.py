@@ -280,6 +280,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self.outputs_dropdown = OutputDropdown(self.clip_section)
         self.outputs_dropdown.setToolTip("Select and rename outputs.")
         self.outputs_dropdown.outputsChanged.connect(self._update_buttons_state)
+        self.outputs_dropdown.outputsChanged.connect(self._refresh_pict_types_supported)
         form.addRow(self.outputs_dropdown)
 
         # Current frames + add remove buttons
@@ -679,6 +680,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         self.outputs_dropdown.shortest_dur_text = f" - {max_total_duration.to_ts()} ({max_total_frames})"
         self.outputs_dropdown.populate(voutputs)
+        self._refresh_pict_types_supported()
         if self.settings.global_.auto_load_frames and self._current_data:
             self._pending_restore_data = list(self._current_data)
         else:
@@ -716,8 +718,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
     @override
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
-        if self.pict_types_supported and not any("_PictType" in props for props in voutput.props.values()):
-            self.pict_types_supported = False
+        self._refresh_pict_types_supported()
 
         if self._pending_restore_data:
             pending, self._pending_restore_data = self._pending_restore_data, None
@@ -1195,6 +1196,12 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self._update_buttons_state()
         if message is not None:
             QMessageBox.critical(self, "Upload Error", str(message))
+
+    @Slot()
+    def _refresh_pict_types_supported(self) -> None:
+        self.pict_types_supported = all(
+            not v.props or any("_PictType" in props for props in v.props.values()) for v in self.selected_voutputs
+        )
 
     @Slot()
     def _update_buttons_state(self) -> None:
