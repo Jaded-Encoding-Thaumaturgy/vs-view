@@ -207,9 +207,9 @@ jobs:
         runner: [ubuntu-26.04, windows-latest, macos-latest]
         include:
           - package: vspackrgb
-            path: src/vspackrgb/src/rust
+            dir: src/vspackrgb
           - package: vsview-histogram
-            path: src/plugins/histogram/src/rust
+            dir: src/plugins/histogram
 
     name: Test Rust (${{ matrix.package }} on ${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
@@ -230,12 +230,22 @@ jobs:
         with:
           filters: |
             changed:
-              - 'src/${{ matrix.package }}/**'
+              - '${{ matrix.dir }}/**'
               - '.github/workflows/ci-test.yml'
+
+      - name: Check formatting
+        if: ${{ inputs.package == matrix.package || steps.filter.outputs.changed == 'true' || github.event_name == 'workflow_dispatch' }}
+        working-directory: ${{ matrix.dir }}
+        run: cargo fmt --check
+
+      - name: Run clippy
+        if: ${{ inputs.package == matrix.package || steps.filter.outputs.changed == 'true' || github.event_name == 'workflow_dispatch' }}
+        working-directory: ${{ matrix.dir }}
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Run cargo test
         if: ${{ inputs.package == matrix.package || steps.filter.outputs.changed == 'true' || github.event_name == 'workflow_dispatch' }}
-        working-directory: ${{ matrix.path }}
+        working-directory: ${{ matrix.dir }}
         run: cargo test -- --nocapture
 
       - name: Post webhook for failure
