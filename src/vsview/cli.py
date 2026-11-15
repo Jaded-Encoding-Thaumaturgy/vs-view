@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from rich.console import Console, ConsoleOptions, RenderableType
 
 from .env import getenv_bool
-from .logging import IS_GUI_MODE, LOG_PATH, console, get_console_level, init_early_logging, setup_logging
+from .logging import LOG_PATH, console, get_console_level, init_early_logging, is_gui_mode, setup_logging
 
 logger = getLogger(__name__)
 
@@ -288,8 +288,8 @@ def main(
         vs_level=vapoursynth_log_level,
         vsengine_level=vsengine_log_level,
         qt_level=qt_log_level,
-        log_file=LOG_PATH if file_log or IS_GUI_MODE else None,
-        is_gui_mode=IS_GUI_MODE,
+        log_file=LOG_PATH if file_log or is_gui_mode() else None,
+        is_gui_mode=is_gui_mode(),
     )
 
     env_var = "QTWEBENGINE_CHROMIUM_FLAGS"

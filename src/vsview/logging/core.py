@@ -40,6 +40,10 @@ LOG_DIR = user_log_path("vsview", appauthor=False)
 LOG_PATH = LOG_DIR / f"vsview_{datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S')}.log"
 
 
+def is_gui_mode() -> bool:
+    return IS_GUI_MODE
+
+
 def init_early_logging() -> None:
     global IS_GUI_MODE
 

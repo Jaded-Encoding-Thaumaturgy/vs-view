@@ -727,10 +727,10 @@ Base64Bytes = Annotated[
 
 
 def _get_default_workspaces() -> list[str]:
-    from ...logging import IS_GUI_MODE
+    from ...logging import is_gui_mode
 
     # Run VSView Editor as default workspace when launched from pythonw and PYAPP environment variable
-    return ["editor"] if IS_GUI_MODE and getenv_bool("PYAPP") else ["script", "file", "quick-script"]
+    return ["editor"] if is_gui_mode() and getenv_bool("PYAPP") else ["script", "file", "quick-script"]
 
 
 def _get_workspace_items() -> list[tuple[str, str]]:

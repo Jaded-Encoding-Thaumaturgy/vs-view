@@ -374,7 +374,7 @@ def test_global_settings_default_workspaces_factory(
     pyapp_env: str,
     expected_default: list[str],
 ) -> None:
-    monkeypatch.setattr(vsview.logging, "IS_GUI_MODE", is_gui)
+    monkeypatch.setattr(vsview.logging.core, "IS_GUI_MODE", is_gui)
     monkeypatch.setenv("PYAPP", pyapp_env)
 
     settings = GlobalSettings()
