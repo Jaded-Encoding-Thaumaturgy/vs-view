@@ -11,7 +11,7 @@ from datetime import time, timedelta
 from logging import getLogger
 from operator import attrgetter
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, NamedTuple, TypeVar, override
+from typing import Annotated, Any, Generic, Literal, NamedTuple, TypeVar, get_args, get_origin, override
 
 import vapoursynth as vs
 from jetpytools import SPath, classproperty
@@ -100,12 +100,24 @@ def extract_settings(
             inner_type = field_info.annotation
             if isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
                 result.extend(extract_settings(inner_type, f"{key}.", model_section, section_prefix))
+            elif _has_nested_widget_metadata(inner_type):
+                logger.warning(
+                    "Ignoring the setting '%s': "  # no format
+                    "its widget metadata must be on the outer Annotated of the field",
+                    key,
+                )
         else:
             if model_section is None:
                 raise ValueError(f"No section defined for setting '{key}'. Add __section__ to the model class.")
             result.append(SettingEntry(key=key, section=model_section, metadata=metadata))
 
     return result
+
+
+def _has_nested_widget_metadata(annotation: Any) -> bool:
+    if get_origin(annotation) is Annotated and any(isinstance(m, WidgetMetadata) for m in annotation.__metadata__):
+        return True
+    return any(_has_nested_widget_metadata(arg) for arg in get_args(annotation))
 
 
 # -----------------------------------------------------------------------------------
