@@ -12,9 +12,18 @@ DATA_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}"
 echo "Installing ${APP_NAME}..."
 echo ""
 
-# Install binary
+# Install binary (the offline archive ships it as VSView-offline)
+if [ -f "${SCRIPT_DIR}/${APP_NAME}" ]; then
+    BIN_SRC="${SCRIPT_DIR}/${APP_NAME}"
+elif [ -f "${SCRIPT_DIR}/${APP_NAME}-offline" ]; then
+    BIN_SRC="${SCRIPT_DIR}/${APP_NAME}-offline"
+else
+    echo "Error: no ${APP_NAME} or ${APP_NAME}-offline binary found in ${SCRIPT_DIR}" >&2
+    exit 1
+fi
+
 mkdir -p "${BIN_DIR}"
-install -m 755 "${SCRIPT_DIR}/${APP_NAME}" "${BIN_DIR}/${APP_NAME}"
+install -m 755 "${BIN_SRC}" "${BIN_DIR}/${APP_NAME}"
 echo "  ✔️  - Binary     → ${BIN_DIR}/${APP_NAME}"
 
 # Install icons
