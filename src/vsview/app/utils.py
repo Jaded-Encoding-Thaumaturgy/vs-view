@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any, Literal, Self, get_origin, override
 
 import vapoursynth as vs
 from jetpytools import inject_self
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, SignalInstance, Slot
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, SignalInstance
 from PySide6.QtWidgets import QApplication
 from shiboken6 import Shiboken
 
@@ -466,6 +466,71 @@ else:
     """Metaclass type of any Shiboken.Object."""
 
 
+class _WeakConnection:
+    __slots__ = ("__weakref__", "_connected", "_signal", "_slot_weak")
+
+    def __init__(
+        self,
+        owner: QObject,
+        signal: SignalInstance,
+        slot: Callable[..., Any],
+        connection_type: Qt.ConnectionType = Qt.ConnectionType.AutoConnection,
+    ) -> None:
+        self._signal = signal
+        self._slot_weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
+        self._connected = True
+
+        # Connect `self` (callable via __call__), not a bound method:
+        # PySide6 retains callable objects strongly until disconnected,
+        # whereas bound methods on non-QObjects are held weakly.
+        signal.connect(self, connection_type)
+        self._watch_receiver(owner, slot)
+
+    def __call__(self, *args: Any) -> None:
+        if (slot := self._resolve_live_slot()) is None:
+            self.disconnect()
+            return
+
+        try:
+            slot(*args)
+        except Exception:
+            logger.exception("")
+
+    def disconnect(self) -> None:
+        if not self._connected:
+            return
+        self._connected = False
+        with suppress(RuntimeError):
+            self._signal.disconnect(self)
+
+    def _resolve_live_slot(self) -> Callable[..., Any] | None:
+        if (slot := self._slot_weak()) is None:
+            return None
+        receiver = getattr(slot, "__self__", None)
+        if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
+            return None
+        return slot
+
+    def _watch_receiver(self, owner: QObject, slot: Callable[..., Any]) -> None:
+        if not isinstance(receiver := getattr(slot, "__self__", None), QObject):
+            return
+
+        if Shiboken.isValid(receiver):
+            self._attach_destroyed(receiver)
+            return
+
+        # Cooperative __init__ chains (e.g. IconReloadMixin) connect before the C++ object exists.
+        receiver_weak = weakref.ref(receiver)
+        QTimer.singleShot(0, owner, lambda: self._attach_destroyed(receiver_weak()))
+
+    def _attach_destroyed(self, receiver: QObject | None) -> None:
+        if receiver is not None and Shiboken.isValid(receiver):
+            # Bound method on a non-QObject is held weakly by PySide6, avoiding a ref cycle.
+            receiver.destroyed.connect(self.disconnect)
+        else:
+            self.disconnect()
+
+
 class WeakableSignals(QObject):
     def _wrap_method_signal(
         self,
@@ -473,23 +538,7 @@ class WeakableSignals(QObject):
         slot: Callable[..., Any],
         type: Qt.ConnectionType = Qt.ConnectionType.AutoConnection,
     ) -> None:
-        slot_weak = weakref.WeakMethod(slot) if ismethod(slot) else weakref.ref(slot)
-
-        @Slot(str)
-        def weak_slot(*args: Any) -> None:
-            if (slot := slot_weak()) is not None:
-                receiver = getattr(slot, "__self__", None)
-                if isinstance(receiver, QObject) and not Shiboken.isValid(receiver):
-                    signal.disconnect(weak_slot)
-                    return
-                try:
-                    slot(*args)
-                except Exception:
-                    logger.exception("")
-            else:
-                signal.disconnect(weak_slot)
-
-        signal.connect(weak_slot, type)
+        _WeakConnection(self, signal, slot, type)
 
 
 class QObjectSet[T: QObject](MutableSet[T]):

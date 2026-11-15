@@ -3,13 +3,17 @@ from __future__ import annotations
 import gc
 import threading
 import weakref
+from collections.abc import Callable
 from concurrent.futures.thread import ThreadPoolExecutor
+from typing import Any
 
 import pytest
-from PySide6.QtCore import QObject
+from PySide6.QtCore import SIGNAL, QObject, Signal
+from PySide6.QtWidgets import QApplication
+from pytestqt.qtbot import QtBot
 from shiboken6 import Shiboken
 
-from vsview.app.utils import QObjectCounter, QObjectSet
+from vsview.app.utils import QObjectCounter, QObjectSet, WeakableSignals
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
 
@@ -157,3 +161,100 @@ def test_qobject_counter_refcounting_and_cleanup() -> None:
     assert counter.count(child) == 0
     assert len(counter) == 0
     assert bool(counter) is False
+
+
+class _WeakSignals(WeakableSignals):
+    changed = Signal()
+
+    def connect_changed_weak(self, slot: Callable[[], Any]) -> None:
+        self._wrap_method_signal(self.changed, slot)
+
+
+class _Receiver(QObject):
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self.calls = 0
+
+    def on_changed(self) -> None:
+        self.calls += 1
+
+
+def test_weakable_signals_disconnect_when_receiver_is_destroyed(qapp: QApplication) -> None:
+    signals = _WeakSignals()
+    receivers = [_Receiver() for _ in range(50)]
+    for receiver in receivers:
+        signals.connect_changed_weak(receiver.on_changed)
+    assert signals.receivers(SIGNAL("changed()")) == 50
+
+    for receiver in receivers:
+        Shiboken.delete(receiver)
+
+    assert signals.receivers(SIGNAL("changed()")) == 0
+
+
+def test_weakable_signals_disconnect_when_receiver_wrapper_is_collected(qapp: QApplication) -> None:
+    signals = _WeakSignals()
+    receiver = _Receiver()
+    signals.connect_changed_weak(receiver.on_changed)
+
+    del receiver
+    gc.collect()
+
+    assert signals.receivers(SIGNAL("changed()")) == 0
+
+
+def test_weakable_signals_keep_calling_live_receivers(qapp: QApplication) -> None:
+    signals = _WeakSignals()
+    alive = _Receiver()
+    dead = _Receiver()
+    signals.connect_changed_weak(alive.on_changed)
+    signals.connect_changed_weak(dead.on_changed)
+    Shiboken.delete(dead)
+
+    signals.changed.emit()
+    signals.changed.emit()
+
+    assert alive.calls == 2
+    assert signals.receivers(SIGNAL("changed()")) == 1
+
+
+def test_weakable_signals_tolerate_receiver_destroyed_after_signals_owner(qapp: QApplication) -> None:
+    signals = _WeakSignals()
+    receiver = _Receiver()
+    signals.connect_changed_weak(receiver.on_changed)
+    Shiboken.delete(signals)
+
+    Shiboken.delete(receiver)
+
+    assert Shiboken.isValid(receiver) is False
+
+
+class _ConnectsDuringInit:
+    signals: _WeakSignals
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.signals.connect_changed_weak(self.on_changed)
+
+    def on_changed(self) -> None: ...
+
+
+@pytest.mark.parametrize("deleted_before_event_loop", [False, True])
+def test_weakable_signals_disconnect_receiver_that_connects_before_qt_init(
+    qtbot: QtBot, deleted_before_event_loop: bool
+) -> None:
+    signals = _WeakSignals()
+
+    class CooperativeReceiver(QObject, _ConnectsDuringInit): ...
+
+    CooperativeReceiver.signals = signals
+    receivers = [CooperativeReceiver() for _ in range(5)]
+    assert signals.receivers(SIGNAL("changed()")) == 5
+    if not deleted_before_event_loop:
+        qtbot.wait(1)
+
+    for receiver in receivers:
+        Shiboken.delete(receiver)
+    qtbot.wait(1)
+
+    assert signals.receivers(SIGNAL("changed()")) == 0
