@@ -12,10 +12,11 @@ from vsview.app.plugins.entrypoints import collect_hook_results, load_entrypoint
 
 pytestmark = [pytest.mark.unit]
 
-type SetEntryPoints = Callable[[str, Mapping[str, Any]], None]
+type SetEntryPoints = Callable[[str, Sequence[EntryPoint]], None]
+type MakeEntryPoint = Callable[[str, object], EntryPoint]
 
-GROUP = "vsview.test_entrypoints"
-ENTRYPOINT_LOGGER = "vsview.app.plugins.entrypoints"
+GROUP = "vsview.audit_test"
+MISSING_MODULE_VALUE = "vsview_audit_missing_module:plugin"
 
 
 class _PlainPlugin: ...
@@ -27,25 +28,37 @@ class _InvalidHookPlugin:
 
 
 @pytest.fixture
+def make_ep(entry_point_target: Callable[[object], str]) -> MakeEntryPoint:
+    def make(name: str, target: object) -> EntryPoint:
+        value = target if isinstance(target, str) else entry_point_target(target)
+        return EntryPoint(name=name, value=value, group=GROUP)
+
+    return make
+
+
+@pytest.fixture
 def manager() -> pluggy.PluginManager:
     pm = pluggy.PluginManager("vsview")
     pm.add_hookspecs(specs)
     return pm
 
 
-def test_load_entrypoints_isolates_failures_and_skips_blocked(
-    manager: pluggy.PluginManager, fake_entry_points: SetEntryPoints, caplog: pytest.LogCaptureFixture
+def test_load_entrypoints_isolates_each_entry_point(
+    manager: pluggy.PluginManager,
+    fake_entry_points: SetEntryPoints,
+    make_ep: MakeEntryPoint,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     plugin_a, plugin_b = _PlainPlugin(), _PlainPlugin()
+    invalid_hook_ep = make_ep("plugin_invalid_hook", _InvalidHookPlugin())
     fake_entry_points(
         GROUP,
-        {
-            "blocked_plugin": _PlainPlugin(),
-            "plugin_a": plugin_a,
-            "plugin_missing_dep": "vsview_missing_module:plugin",
-            "plugin_invalid_hook": _InvalidHookPlugin(),
-            "plugin_b": plugin_b,
-        },
+        [
+            make_ep("plugin_a", plugin_a),
+            make_ep("plugin_missing_dep", MISSING_MODULE_VALUE),
+            invalid_hook_ep,
+            make_ep("plugin_b", plugin_b),
+        ],
     )
     manager.set_blocked("blocked_plugin")
 
@@ -55,22 +68,41 @@ def test_load_entrypoints_isolates_failures_and_skips_blocked(
     assert count == 2
     assert manager.get_plugin("plugin_a") is plugin_a
     assert manager.get_plugin("plugin_b") is plugin_b
-    assert manager.has_plugin("blocked_plugin") is False
     assert manager.has_plugin("plugin_missing_dep") is False
     assert manager.has_plugin("plugin_invalid_hook") is False
-    assert [r.getMessage() for r in caplog.records] == [
-        f"Couldn't load entry point 'plugin_missing_dep' (vsview_missing_module:plugin) of group '{GROUP}'",
-        f"Couldn't load entry point 'plugin_invalid_hook' (test:plugin_invalid_hook) of group '{GROUP}'",
+    messages = [r.getMessage() for r in caplog.records]
+    assert messages == [
+        f"Couldn't load entry point 'plugin_missing_dep' ({MISSING_MODULE_VALUE}) of group '{GROUP}'",
+        f"Couldn't load entry point 'plugin_invalid_hook' ({invalid_hook_ep.value}) of group '{GROUP}'",
     ]
     assert all(r.exc_info is not None for r in caplog.records)
 
 
-def test_load_entrypoints_is_idempotent(manager: pluggy.PluginManager, fake_entry_points: SetEntryPoints) -> None:
+def test_load_entrypoints_is_safe_to_call_again(
+    manager: pluggy.PluginManager, fake_entry_points: SetEntryPoints, make_ep: MakeEntryPoint
+) -> None:
     plugin_a = _PlainPlugin()
-    fake_entry_points(GROUP, {"plugin_a": plugin_a, "plugin_missing_dep": "vsview_missing_module:plugin"})
+    fake_entry_points(GROUP, [make_ep("plugin_a", plugin_a), make_ep("plugin_missing_dep", MISSING_MODULE_VALUE)])
 
-    assert (load_entrypoints(manager, GROUP), load_entrypoints(manager, GROUP)) == (1, 0)
+    first = load_entrypoints(manager, GROUP)
+    second = load_entrypoints(manager, GROUP)
+
+    assert (first, second) == (1, 0)
     assert manager.get_plugin("plugin_a") is plugin_a
+
+
+def test_load_entrypoints_skips_blocked_names(
+    manager: pluggy.PluginManager, fake_entry_points: SetEntryPoints, make_ep: MakeEntryPoint
+) -> None:
+    plugin_a, plugin_b = _PlainPlugin(), _PlainPlugin()
+    fake_entry_points(GROUP, [make_ep("plugin_a", plugin_a), make_ep("plugin_b", plugin_b)])
+    manager.set_blocked("plugin_a")
+
+    count = load_entrypoints(manager, GROUP)
+
+    assert count == 1
+    assert manager.get_plugin("plugin_b") is plugin_b
+    assert manager.is_registered(plugin_a) is False
 
 
 _test_hookspec = pluggy.HookspecMarker("vsview_entrypoints_test")

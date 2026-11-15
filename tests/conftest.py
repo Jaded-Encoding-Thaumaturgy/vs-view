@@ -9,8 +9,9 @@ from collections.abc import Callable, Generator, Mapping, Sequence
 from concurrent.futures import Future
 from contextlib import suppress
 from importlib.metadata import EntryPoint, EntryPoints
+from itertools import count
 from pathlib import Path
-from types import CodeType, MethodType, SimpleNamespace
+from types import CodeType, MethodType, ModuleType, SimpleNamespace
 from typing import Any, override
 from unittest.mock import MagicMock
 
@@ -421,6 +422,21 @@ def fake_entry_points(monkeypatch: pytest.MonkeyPatch) -> Callable[[str, Mapping
         fakes[group] = EntryPoints(eps)
 
     return set_group
+
+
+@pytest.fixture
+def entry_point_target(monkeypatch: pytest.MonkeyPatch) -> Callable[[object], str]:
+    """Return an entry point value (`module:attr`) that loads the given object."""
+    module = ModuleType("vsview_test_entry_point_targets")
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    counter = count()
+
+    def target(obj: object) -> str:
+        attr = f"target_{next(counter)}"
+        setattr(module, attr, obj)
+        return f"{module.__name__}:{attr}"
+
+    return target
 
 
 @pytest.fixture
