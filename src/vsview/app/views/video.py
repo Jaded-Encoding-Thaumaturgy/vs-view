@@ -599,8 +599,8 @@ class BaseGraphicsView(QGraphicsView):
             self.angle_remainder += angle_delta_y
 
             if abs(self.angle_remainder) >= self.WHEEL_STEP:
-                self.wheelScrolled.emit(self.angle_remainder // self.WHEEL_STEP)
-                self.angle_remainder %= self.WHEEL_STEP
+                self.wheelScrolled.emit(math.trunc(self.angle_remainder / self.WHEEL_STEP))
+                self.angle_remainder = int(math.fmod(self.angle_remainder, self.WHEEL_STEP))
             return None
 
         if modifier == Qt.KeyboardModifier.ShiftModifier:
