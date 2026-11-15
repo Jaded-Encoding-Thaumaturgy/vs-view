@@ -461,7 +461,7 @@ class HistogramPlugin(WidgetPluginBase[GlobalSettings]):
                 try:
                     if voutput not in self.cie_nodes:
                         linear = core.resize.Point(clip, format=vs.RGBS, transfer=vs.TRANSFER_LINEAR)
-                        xyz = core.resize.Point(linear, primaries=vs.PRIMARIES_ST428, chromatic_adaptation=True)
+                        xyz = core.resize.Point(linear, primaries=vs.PRIMARIES_ST428, chromatic_adaptation=False)
                         self.cie_nodes[voutput] = (linear, xyz)
 
                     if self.settings.global_.cie.render_mode == RenderMode.PIXEL_COLOR:
