@@ -203,7 +203,6 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             self._setup_upload_settings(main)
             self._setup_actions(main)
 
-        self._current_outputs = self.outputs_dropdown.included_outputs
         self._update_buttons_state()
 
         main_layout.addWidget(main, 1)
@@ -1047,8 +1046,10 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             return
 
         data = self.frames_list.get_data()
+        voutputs = {v.vs_index: v for v in self.selected_voutputs}
+        labels = {o.vs_index: o.label for o in self.outputs_dropdown.included_outputs}
 
-        self._pending_upload = self._prepare_and_upload(data)
+        self._pending_upload = self._prepare_and_upload(data, voutputs, labels)
         self._update_buttons_state()
 
     @Slot()
@@ -1068,6 +1069,20 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
     def _prepare_and_upload(
         self,
         data: list[tuple[Time, dict[int, ThumbnailItem.Metadata], FrameSourceProvider]],
+        voutputs: dict[int, VideoOutputProxy],
+        labels: dict[int, str],
+    ) -> None:
+        try:
+            self._start_upload(data, voutputs, labels)
+        except Exception:
+            logger.exception("Error while preparing the upload")
+            self._on_upload_error()
+
+    def _start_upload(
+        self,
+        data: list[tuple[Time, dict[int, ThumbnailItem.Metadata], FrameSourceProvider]],
+        voutputs: dict[int, VideoOutputProxy],
+        labels: dict[int, str],
     ) -> None:
         if not self._extracted:
             logger.error("No extracted frames to upload")
@@ -1094,11 +1109,10 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         # Build sources from the extracted images on disk
         sources = list[ComparisonSource]()
-        vouputs = {v.vs_index: v for v in self.selected_voutputs}
 
         for extracted in self._extracted:
             images = list[ComparisonImage]()
-            output = vouputs[extracted.vs_index]
+            output = voutputs[extracted.vs_index]
 
             for time, metadata, _ in data:
                 frame = output.time_to_frame(time)
@@ -1111,7 +1125,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
                 images.append(ComparisonImage(image_path, metadata[output.vs_index].pict_type, frame, time.to_ts()))
 
-            sources.append(ComparisonSource(output.vs_name, images))
+            sources.append(ComparisonSource(labels[extracted.vs_index], images))
 
         if not sources or not any(images for _, images in sources):
             logger.error("No images found to upload")
@@ -1191,8 +1205,8 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         can_operate = has_outputs and is_idle
         frames_ready = can_operate and has_frames
 
-        # Needs extraction if it's not finished, OR if the outputs have changed since last time
-        needs_extraction = not self._extraction_finished or (current_outputs != self._current_outputs)
+        extracted_indices = {e.vs_index for e in self._extracted or ()}
+        needs_extraction = not self._extraction_finished or {o.vs_index for o in current_outputs} != extracted_indices
 
         self.select_frames_btn.setEnabled(
             can_operate
@@ -1210,8 +1224,6 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
         # Upload is the exact logical opposite of needing an extraction
         self.upload_btn.setEnabled(frames_ready and not needs_extraction)
-
-        self._current_outputs = current_outputs
 
     def _on_environment_clear(self) -> None:
         vsengine.from_thread(self.on_cancel_clicked, None, manual=True).result()
