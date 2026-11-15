@@ -182,6 +182,27 @@ def path_to_hash(path: str | os.PathLike[str]) -> str:
     return hashlib.md5(str(Path(path).resolve()).encode()).hexdigest()[:16]
 
 
+def atomic_write_text(path: str | os.PathLike[str], data: str, encoding: str = "utf-8") -> None:
+    """
+    Write text to a file so that it holds either the old or the new content, never a partial write.
+
+    The data goes to a temporary file in the same directory, is flushed to disk, and then replaces the target.
+    """
+    path = Path(path)
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+
+    try:
+        with tmp_path.open("x", encoding=encoding) as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except BaseException:
+        with suppress(OSError):
+            tmp_path.unlink()
+        raise
+
+
 class _CheckLeaks:
     def __init__(self, func: Callable[..., Any]) -> None:
         self.func = func

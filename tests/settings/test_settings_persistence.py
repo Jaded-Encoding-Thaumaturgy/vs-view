@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from pytest_mock import MockerFixture
 
 from vsview.app.settings.manager import SettingsManager
 from vsview.app.settings.metadata import LineEdit
@@ -129,3 +131,28 @@ def test_unreadable_local_settings_fall_back_to_defaults_and_are_backed_up(tmp_p
 
     assert settings.model_dump_json() == LocalSettings(source_path=str(script)).model_dump_json()
     assert settings_path.with_name(f"{settings_path.name}.bak").read_bytes() == content
+
+
+def test_failed_global_save_keeps_previous_file(mocker: MockerFixture) -> None:
+    SettingsManager.save_global(GlobalSettings())
+    previous = GlobalSettings.path.read_bytes()
+    changed = GlobalSettings()
+    changed.status_message_timeout += 1
+    mocker.patch.object(os, "replace", side_effect=OSError("disk full"))
+
+    SettingsManager.save_global(changed)
+
+    assert GlobalSettings.path.read_bytes() == previous
+
+
+def test_failed_local_save_keeps_previous_file(tmp_path: Path, mocker: MockerFixture) -> None:
+    script = tmp_path / "script.vpy"
+    script.touch()
+    SettingsManager.save_local(script, LocalSettings(source_path=str(script), last_frame=1))
+    settings_path = SettingsManager.local_settings_path(script)
+    previous = settings_path.read_bytes()
+    mocker.patch.object(os, "replace", side_effect=OSError("disk full"))
+
+    SettingsManager.save_local(script, LocalSettings(source_path=str(script), last_frame=2))
+
+    assert settings_path.read_bytes() == previous
