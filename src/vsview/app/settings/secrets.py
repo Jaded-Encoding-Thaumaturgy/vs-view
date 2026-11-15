@@ -21,17 +21,18 @@ class SecretsError(RuntimeError):
 class SecretsManager(Singleton):
     """Manage secure storage of plugin and application secrets using the OS keyring."""
 
-    prefix_service_name = "jet.vsview"
+    _prefix_service_name = "jet.vsview"
 
     if TYPE_CHECKING:
-        import keyring
+        import keyring as _keyring
         from keyring.credentials import Credential
-        from keyring.errors import KeyringError, PasswordDeleteError
+        from keyring.errors import KeyringError as _KeyringError
+        from keyring.errors import PasswordDeleteError as _PasswordDeleteError
 
     else:
 
         @cachedproperty
-        def keyring(self) -> ModuleType:
+        def _keyring(self) -> ModuleType:
             if find_spec("keyring"):
                 import keyring
 
@@ -40,16 +41,16 @@ class SecretsManager(Singleton):
             raise SecretsError("The 'keyring' dependency is not installed.")
 
         @cachedproperty
-        def KeyringError(self) -> type[Exception]:
-            return self.keyring.errors.KeyringError
+        def _KeyringError(self) -> type[Exception]:
+            return self._keyring.errors.KeyringError
 
         @cachedproperty
-        def PasswordDeleteError(self) -> type[Exception]:
-            return self.keyring.errors.PasswordDeleteError
+        def _PasswordDeleteError(self) -> type[Exception]:
+            return self._keyring.errors.PasswordDeleteError
 
     @classmethod
     def _service_name(cls, namespace: str, context: str) -> str:
-        return f"{cls.prefix_service_name}.{namespace}/{context}"
+        return f"{cls._prefix_service_name}.{namespace}/{context}"
 
     @inject_self
     def get(self, namespace: str, context: str, username: str) -> str | None:
@@ -68,8 +69,8 @@ class SecretsManager(Singleton):
             SecretsError: If reading from the keyring backend fails.
         """
         try:
-            return self.keyring.get_password(self._service_name(namespace, context), username)
-        except self.KeyringError as exc:
+            return self._keyring.get_password(self._service_name(namespace, context), username)
+        except self._KeyringError as exc:
             raise SecretsError("Failed to read secret from keyring backend.") from exc
 
     @inject_self
@@ -94,16 +95,16 @@ class SecretsManager(Singleton):
         # Read existing secret in case writing fails after delete
         old_secret: str | None = None
         with suppress(Exception):
-            old_secret = self.keyring.get_password(self._service_name(namespace, context), username)
+            old_secret = self._keyring.get_password(self._service_name(namespace, context), username)
 
         self.delete(namespace, context, username)
 
         try:
-            self.keyring.set_password(self._service_name(namespace, context), username, password)
-        except self.KeyringError as exc:
+            self._keyring.set_password(self._service_name(namespace, context), username, password)
+        except self._KeyringError as exc:
             if old_secret is not None:
                 with suppress(Exception):
-                    self.keyring.set_password(self._service_name(namespace, context), username, old_secret)
+                    self._keyring.set_password(self._service_name(namespace, context), username, old_secret)
             raise SecretsError("Failed to store secret in keyring backend.") from exc
 
     @inject_self
@@ -120,10 +121,10 @@ class SecretsManager(Singleton):
             SecretsError: If deleting the secret from the keyring backend fails.
         """
         try:
-            self.keyring.delete_password(self._service_name(namespace, context), username)
-        except self.PasswordDeleteError:
+            self._keyring.delete_password(self._service_name(namespace, context), username)
+        except self._PasswordDeleteError:
             logger.debug("No secret exists for %s:%s", namespace, username)
-        except self.KeyringError as exc:
+        except self._KeyringError as exc:
             raise SecretsError("Failed to delete secret from keyring backend.") from exc
 
     @inject_self
@@ -140,8 +141,8 @@ class SecretsManager(Singleton):
             A Credential object if found, otherwise None.
         """
         try:
-            return self.keyring.get_credential(self._service_name(namespace, context), username)
-        except self.KeyringError as exc:
+            return self._keyring.get_credential(self._service_name(namespace, context), username)
+        except self._KeyringError as exc:
             raise SecretsError("Failed to get credential from keyring backend.") from exc
 
     @inject_self

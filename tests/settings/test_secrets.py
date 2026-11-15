@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 import pytest
@@ -8,7 +9,7 @@ from PySide6.QtWidgets import QLineEdit
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
-from vsview.api import Login, SecretLineEdit
+from vsview.api import Login, PluginSecrets, SecretLineEdit
 from vsview.app.settings.models import extract_settings
 from vsview.app.settings.secrets import SecretsError, SecretsManager
 
@@ -166,7 +167,7 @@ def test_model_dump_json_does_not_contain_secrets(mocker: MockerFixture, qtbot: 
 def test_secrets_manager_get(mocker: MockerFixture) -> None:
     mock_keyring = mocker.MagicMock()
     mock_keyring.get_password.return_value = "my_token"
-    mocker.patch.object(SecretsManager, "keyring", mock_keyring)
+    mocker.patch.object(SecretsManager, "_keyring", mock_keyring)
 
     res = SecretsManager.get("test_ns", "auth", "token")
     assert res == "my_token"
@@ -175,7 +176,7 @@ def test_secrets_manager_get(mocker: MockerFixture) -> None:
 
 def test_secrets_manager_set(mocker: MockerFixture) -> None:
     mock_keyring = mocker.MagicMock()
-    mocker.patch.object(SecretsManager, "keyring", mock_keyring)
+    mocker.patch.object(SecretsManager, "_keyring", mock_keyring)
 
     SecretsManager.set("test_ns", "auth", "token", "new_secret")
     mock_keyring.delete_password.assert_called_once_with("jet.vsview.test_ns/auth", "token")
@@ -189,7 +190,7 @@ def test_secrets_manager_set_empty_username_raises() -> None:
 
 def test_secrets_manager_delete(mocker: MockerFixture) -> None:
     mock_keyring = mocker.MagicMock()
-    mocker.patch.object(SecretsManager, "keyring", mock_keyring)
+    mocker.patch.object(SecretsManager, "_keyring", mock_keyring)
 
     SecretsManager.delete("test_ns", "auth", "token")
     mock_keyring.delete_password.assert_called_once_with("jet.vsview.test_ns/auth", "token")
@@ -198,7 +199,7 @@ def test_secrets_manager_delete(mocker: MockerFixture) -> None:
 def test_secrets_manager_json(mocker: MockerFixture) -> None:
     mock_keyring = mocker.MagicMock()
     mock_keyring.get_password.return_value = '{"foo": "bar", "num": 42}'
-    mocker.patch.object(SecretsManager, "keyring", mock_keyring)
+    mocker.patch.object(SecretsManager, "_keyring", mock_keyring)
 
     data = SecretsManager.get_json("test_ns", "auth", "config")
     assert data == {"foo": "bar", "num": 42}
@@ -215,9 +216,9 @@ def test_secrets_manager_error_handling(mocker: MockerFixture) -> None:
     mock_keyring.get_password.side_effect = Exception("Backend failure")
     mock_keyring.set_password.side_effect = Exception("Backend failure")
     mock_keyring.delete_password.side_effect = Exception("Backend failure")
-    mocker.patch.object(SecretsManager, "keyring", mock_keyring)
-    mocker.patch.object(SecretsManager, "KeyringError", Exception)
-    mocker.patch.object(SecretsManager, "PasswordDeleteError", KeyError)
+    mocker.patch.object(SecretsManager, "_keyring", mock_keyring)
+    mocker.patch.object(SecretsManager, "_KeyringError", Exception)
+    mocker.patch.object(SecretsManager, "_PasswordDeleteError", KeyError)
 
     with pytest.raises(SecretsError, match="Failed to read secret"):
         SecretsManager.get("test_ns", "auth", "token")
@@ -305,3 +306,12 @@ def test_secrets_manager_set_rollback_on_write_failure(
 
     assert isolate_secrets.get_password(service, username) == old_secret
     assert SecretsManager.get("test_ns", "auth", username) == old_secret
+
+
+def test_plugin_secrets_namespaces_calls_to_plugin_identifier() -> None:
+    secrets = PluginSecrets(SimpleNamespace(identifier="test_ns"))  # type: ignore[arg-type]
+
+    secrets.set("auth", "token", "plugin_secret")
+
+    assert SecretsManager.get("test_ns", "auth", "token") == "plugin_secret"
+    assert secrets.get("auth", "token") == "plugin_secret"

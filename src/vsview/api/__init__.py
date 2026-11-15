@@ -40,6 +40,7 @@ from ..app.settings.metadata import (
     WidgetMetadata,
     WidgetTimeEdit,
 )
+from ..app.settings.secrets import SecretsError
 from ..app.settings.widgets import (
     ColorPickerInput,
     CustomSpinBox,
@@ -121,6 +122,7 @@ __all__ = [
     "QObjectSet",
     "SafeSlot",
     "SecretLineEdit",
+    "SecretsError",
     "SegmentedControl",
     "Spin",
     "Time",
