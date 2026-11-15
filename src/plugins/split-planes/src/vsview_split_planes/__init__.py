@@ -168,8 +168,7 @@ class SplitPlanesView(PluginGraphicsView):
         # Set initial state from global settings
         self.sync_offset_controls_from_settings()
 
-        if self.settings.local_.autofit:
-            self.autofit_action.trigger()
+        self.set_autofit(fallback(self.settings.local_.autofit, self.settings.global_.autofit))
 
     @override
     def get_node(self, clip: VideoNode) -> VideoNode:
