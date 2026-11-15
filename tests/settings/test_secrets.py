@@ -429,3 +429,17 @@ def test_secret_line_edit_changed_value_updates_keyring(qtbot: QtBot, new_text: 
     meta.get_value(widget)
 
     assert SecretsManager.get("test_ns", "auth", "token") == expected
+
+
+def test_login_clearing_password_deletes_stored_password(qtbot: QtBot) -> None:
+    SecretsManager.set("test_ns", "login", "user@example.com", "stored_pass")
+    meta = Login(label="Login", namespace="test_ns", context="login")
+    widget = meta.create_widget()
+    qtbot.addWidget(widget)
+    meta.load_value(widget, "user@example.com")
+    widget.credentials = ("user@example.com", "")
+
+    result = meta.get_value(widget)
+
+    assert result == "user@example.com"
+    assert SecretsManager.get("test_ns", "login", "user@example.com") is None

@@ -189,6 +189,8 @@ class Login(WidgetMetadata[LoginCredentialsInput]):
 
         if username and password:
             SecretsManager.set(self.namespace, self.context, username, password)
+        elif username:
+            SecretsManager.delete(self.namespace, self.context, username)
 
         widget.setProperty("_old_username", username)
         return username
