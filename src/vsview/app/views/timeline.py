@@ -929,6 +929,8 @@ class Timeline(QWidget):
     def set_data(self, total_frames: int, cum_durations: Sequence[Time] | None = None) -> None:
         self._total_frames = total_frames
         self._cum_durations = cum_durations
+        # The cache key only holds the size and frame count, but time labels and notch positions depend on durations.
+        self.notches_cache = self._init_notches_cache()
         self.update()
 
     def set_sizes(self) -> None:

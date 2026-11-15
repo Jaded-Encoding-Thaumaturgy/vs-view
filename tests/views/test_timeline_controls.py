@@ -556,6 +556,46 @@ def test_timeline_block_events_and_reset_interaction(timeline_control_bar: Timel
         timeline.is_events_blocked = False
 
 
+def _time_labels(timeline: Timeline) -> list[str]:
+    return [text for _, text in timeline.notches_cache["time"].value.rects_to_draw]
+
+
+def _time_mode_timeline(qtbot: QtBot, fps: int) -> Timeline:
+    timeline = Timeline()
+    qtbot.addWidget(timeline)
+    timeline.resize(1000, 40)
+    timeline.mode = "time"
+    timeline.set_data(1000, [Time(seconds=i / fps) for i in range(1, 1001)])
+    return timeline
+
+
+def test_timeline_set_data_refreshes_time_labels_when_only_durations_change(qtbot: QtBot) -> None:
+    timeline = _time_mode_timeline(qtbot, 24)
+    timeline.grab()
+    labels_24fps = _time_labels(timeline)
+    reference = _time_mode_timeline(qtbot, 60)
+    reference.grab()
+
+    timeline.set_data(1000, [Time(seconds=i / 60) for i in range(1, 1001)])
+    timeline.grab()
+
+    assert _time_labels(timeline) == _time_labels(reference)
+    assert _time_labels(timeline) != labels_24fps
+
+
+def test_timeline_set_data_moves_time_notches_when_only_durations_change(qtbot: QtBot) -> None:
+    timeline = _time_mode_timeline(qtbot, 24)
+    timeline.add_notch("bookmarks", Time(seconds=10), label="Ten seconds")
+    timeline.grab()
+    (notch,) = timeline.custom_notches["bookmarks"]
+    assert notch.line.x1() == 240
+
+    timeline.set_data(1000, [Time(seconds=i / 60) for i in range(1, 1001)])
+    timeline.grab()
+
+    assert notch.line.x1() == 600
+
+
 # PlaybackContainer Tests
 def test_playback_container_instantiation_defaults(qtbot: QtBot) -> None:
     container = PlaybackContainer()
