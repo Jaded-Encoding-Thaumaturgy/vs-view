@@ -504,7 +504,8 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         # Load registry-driven global settings
         for entry in self.global_settings_registry:
-            widget = self._global_widgets[entry.key]
+            if (widget := self._global_widgets.get(entry.key)) is None:
+                continue
             populate_if_supported(entry, widget)
 
             value = global_settings.get_nested_value(entry.key)
@@ -517,7 +518,8 @@ class SettingsDialog(QDialog, IconReloadMixin):
         if self._script_path:
             local_settings = SettingsManager.get_local_settings(self._script_path)
             for entry in self.local_settings_registry:
-                widget = self._local_widgets[entry.key]
+                if (widget := self._local_widgets.get(entry.key)) is None:
+                    continue
                 populate_if_supported(entry, widget)
 
                 value = local_settings.get_nested_value(entry.key)
@@ -563,7 +565,8 @@ class SettingsDialog(QDialog, IconReloadMixin):
         data = SettingsManager.global_settings.model_dump()
 
         for entry in self.global_settings_registry:
-            widget = self._global_widgets[entry.key]
+            if (widget := self._global_widgets.get(entry.key)) is None:
+                continue
             try:
                 value = (
                     entry.metadata.read_value(widget)
@@ -590,7 +593,8 @@ class SettingsDialog(QDialog, IconReloadMixin):
         data = local_settings.model_dump()
 
         for entry in self.local_settings_registry:
-            widget = self._local_widgets[entry.key]
+            if (widget := self._local_widgets.get(entry.key)) is None:
+                continue
             try:
                 value = (
                     entry.metadata.read_value(widget)

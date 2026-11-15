@@ -12,7 +12,7 @@ from pytestqt.qtbot import QtBot
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import SettingsDialog
 from vsview.app.settings.manager import SettingsManager
-from vsview.app.settings.metadata import LineEdit, SecretLineEdit
+from vsview.app.settings.metadata import Dropdown, LineEdit, SecretLineEdit
 from vsview.app.settings.models import SettingEntry
 from vsview.app.settings.secrets import SecretsManager
 
@@ -130,3 +130,24 @@ def test_apply_saves_other_settings_when_keyring_write_fails(
     _click_apply(dialog)
 
     assert SettingsManager.global_settings.plugins[PLUGIN_ID] == {"option": "changed", "token": None}
+
+
+BROKEN_DROPDOWN = Dropdown(label="Broken", items=lambda value: [("A", value)])
+
+
+def test_failed_widget_creation_does_not_break_dialog(
+    qtbot: QtBot, register_entries: RegisterEntries, script: Path
+) -> None:
+    register_entries(
+        [_entry("broken", BROKEN_DROPDOWN), GLOBAL_OPTION], [_entry("broken", BROKEN_DROPDOWN), LOCAL_COUNT]
+    )
+    SettingsManager.global_settings.plugins[PLUGIN_ID] = {"option": "original", "broken": "kept"}
+    SettingsManager.get_local_settings(script).plugins[PLUGIN_ID] = {"count": 1, "broken": "kept"}
+    dialog = _open_dialog(qtbot, script)
+    _find_by_tooltip(dialog, QLineEdit, "global-option").setText("changed")
+    _find_by_tooltip(dialog, QLineEdit, "local-count").setText("7")
+
+    _click_apply(dialog)
+
+    assert SettingsManager.global_settings.plugins[PLUGIN_ID] == {"option": "changed", "broken": "kept"}
+    assert SettingsManager.get_local_settings(script).plugins[PLUGIN_ID] == {"count": 7, "broken": "kept"}
