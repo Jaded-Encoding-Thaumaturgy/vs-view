@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import gc
 from collections import deque
 from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, wait
@@ -174,8 +173,6 @@ class FrameBuffer:
             )
 
         del bundles
-        gc.collect()
-
         logger.debug("Buffer cleared")
 
     def _request_bundle(self, n: int) -> FrameBundle:
@@ -291,8 +288,6 @@ class AudioBuffer:
             )
 
         del bundles
-        gc.collect()
-
         logger.debug("Audio buffer cleared")
 
     def _request_bundle(self, n: int) -> AudioBundle:
