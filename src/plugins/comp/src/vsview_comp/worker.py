@@ -506,6 +506,8 @@ class TMDBWorker(QObject):
 
             if num_tv_task and num_movie_task:
                 for res, genre_type in zip([num_tv_task.result(), num_movie_task.result()], ["tv", "movie"]):
+                    if res.status_code != 200:
+                        continue
                     item = TMDBTitleData.validate_logged(res.json(), f"TMDB /{genre_type}/{query}")
                     if item:
                         titles.append(self._create_title(item, genre_type))  # type: ignore[arg-type]

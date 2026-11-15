@@ -6,6 +6,7 @@ import math
 import threading
 from bisect import bisect_right
 from collections.abc import Sequence
+from concurrent.futures import CancelledError
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, suppress
 from functools import cache
 from logging import DEBUG, LogRecord, getLogger
@@ -86,7 +87,7 @@ class LogNiquestsErrors(AbstractContextManager[None], AbstractAsyncContextManage
         return None
 
     def _log_error(self, exc_val: BaseException | None) -> None:
-        if isinstance(exc_val, niquests.HTTPError):
+        if isinstance(exc_val, Exception) and not isinstance(exc_val, CancelledError):
             logger.error("%s failed: %s", self.ctx_message, exc_val, stacklevel=3)
             logger.debug("Full traceback", exc_info=exc_val, stacklevel=3)
 
