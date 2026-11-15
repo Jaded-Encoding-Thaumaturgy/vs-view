@@ -22,6 +22,9 @@ on:
           - remote
           - split-planes
 
+permissions:
+  contents: read
+
 env:
   VSVIEW_PYTHON_VERSION: '3.14'
 
@@ -36,6 +39,8 @@ jobs:
       python-version: ${{ env.VSVIEW_PYTHON_VERSION }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - id: check
         run: python .github/scripts/resolve_package.py
         env:
