@@ -644,8 +644,9 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
             raise NotImplementedError
 
         try:
-            dither_type = attrgetter("settings.view")(self.api)
+            dither_type = attrgetter("settings.global_.view.dither_type")(self.api)
         except AttributeError:
+            logger.debug("Can't determine dither_type, fallback to RANDOM")
             dither_type = DitherType.RANDOM
 
         return ExtractFramesConfig(
