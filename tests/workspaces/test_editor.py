@@ -484,7 +484,7 @@ class TestEditorDragAndDrop:
         self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture
     ) -> None:
         script_file = tmp_path / "script.py"
-        script_file.write_text("import vapoursynth as vs\n", encoding="utf-8")
+        script_file.write_bytes(b"import vapoursynth as vs\n")
 
         mock_dispatch = mocker.patch.object(editor_dock.editor.bridge, "dispatch")
         assert editor_dock.open_file(script_file) is True
@@ -518,7 +518,7 @@ class TestEditorDragAndDrop:
         )
 
         script_file = tmp_path / "custom.py"
-        script_file.write_text("clip = core.std.BlankClip()\n", encoding="utf-8")
+        script_file.write_bytes(b"clip = core.std.BlankClip()\n")
 
         mock_dispatch = mocker.patch.object(editor_dock.editor.bridge, "dispatch")
         assert editor_dock.open_file(script_file) is True

@@ -211,7 +211,11 @@ class MonacoBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
     def readFile(self, filepath: str) -> str | None:
         """Read content of a file on disk (used by Monaco FileSystemProvider)."""
         p = Path(QUrl(filepath).toLocalFile()) if filepath.startswith("file:") else Path(filepath)
-        return p.read_text(encoding="utf-8", errors="replace") if p.is_file() else None
+        if not p.is_file():
+            return None
+
+        with p.open(encoding="utf-8", errors="replace", newline="") as f:
+            return f.read()
 
 
 class MonacoEditorWidget(BaseWebEngineView[MonacoBridge]):

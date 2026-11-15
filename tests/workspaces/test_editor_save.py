@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import stat
 from collections.abc import Generator
 from pathlib import Path
@@ -196,3 +197,62 @@ class TestSaveScript:
             send_from_js(editor_workspace, JsToPyCommand.SAVE_AS_REQUESTED, {})
 
         assert editor_workspace.code_dock.active_filepath is None
+
+
+class TestLineEndings:
+    @pytest.mark.parametrize(
+        "content",
+        [
+            pytest.param("a = 1\nb = 2\n", id="lf"),
+            pytest.param("a = 1\r\nb = 2\r\n", id="crlf"),
+            pytest.param("a = 1\r\nb = 2\nc = 3\r\n", id="mixed"),
+        ],
+    )
+    def test_save_writes_line_endings_verbatim(
+        self, editor_workspace: EditorWorkspace, dispatch: MagicMock, tmp_path: Path, content: str
+    ) -> None:
+        script = tmp_path / "script.vpy"
+
+        saved = editor_workspace.code_dock.save_script(script, content).result(timeout=5)
+
+        assert saved is True
+        assert script.read_bytes() == content.encode()
+
+    def test_open_file_keeps_crlf(self, editor_workspace: EditorWorkspace, dispatch: MagicMock, tmp_path: Path) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"a = 1\r\nb = 2\r\n")
+
+        assert editor_workspace.code_dock.open_file(script) is True
+
+        payload = dispatch.call_args_list[-1].args[1]
+        assert dispatch.call_args_list[-1].args[0] == PyToJsCommand.OPEN_TAB
+        assert payload["content"] == "a = 1\r\nb = 2\r\n"
+
+    def test_read_file_keeps_crlf(self, editor_workspace: EditorWorkspace, tmp_path: Path) -> None:
+        script = tmp_path / "module.py"
+        script.write_bytes(b"a = 1\r\nb = 2\r\n")
+
+        assert editor_workspace.code_dock.editor.bridge.readFile(script.as_uri()) == "a = 1\r\nb = 2\r\n"
+
+    def test_open_then_save_round_trips_bytes(
+        self, editor_workspace: EditorWorkspace, dispatch: MagicMock, tmp_path: Path
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"a = 1\nb = 2\n")
+        editor_workspace.code_dock.open_file(script)
+        content = dispatch.call_args_list[-1].args[1]["content"]
+
+        saved = editor_workspace.code_dock.save_script(script, content).result(timeout=5)
+
+        assert saved is True
+        assert script.read_bytes() == b"a = 1\nb = 2\n"
+
+    @pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff is not on PATH")
+    def test_format_keeps_crlf(self, editor_workspace: EditorWorkspace, dispatch: MagicMock, qtbot: QtBot) -> None:
+        bridge = editor_workspace.code_dock.editor.bridge
+        send_from_js(editor_workspace, JsToPyCommand.CONTENT_CHANGED, {"content": "a=1\r\nb=2\r\n"})
+
+        send_from_js(editor_workspace, JsToPyCommand.FORMAT_REQUESTED, {})
+
+        qtbot.waitUntil(lambda: editor_workspace.code_dock.format_btn.isEnabled(), timeout=10000)
+        assert bridge.content == "a = 1\r\nb = 2\r\n"

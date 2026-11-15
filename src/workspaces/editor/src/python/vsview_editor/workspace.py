@@ -316,7 +316,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
     def open_file(self, filepath: Path) -> bool:
         try:
-            content = (resolved := filepath.resolve()).read_text(encoding="utf-8")
+            with (resolved := filepath.resolve()).open(encoding="utf-8", newline="") as f:
+                content = f.read()
         except Exception:
             logger.exception("Error opening script from %s:", filepath)
             return False
@@ -522,15 +523,14 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         def run_ruff() -> None:
             res = subprocess.run(
                 [ruff_binary, "format", "-"],
-                input=code,
-                text=True,
+                input=code.encode("utf-8"),
                 capture_output=True,
                 check=True,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
 
-            if res.stdout and res.stdout != code:
-                self.loop.from_thread(lambda: setattr(self.editor.bridge, "content", res.stdout)).result(timeout=1.0)
+            if (formatted := res.stdout.decode("utf-8")) and formatted != code:
+                self.loop.from_thread(lambda: setattr(self.editor.bridge, "content", formatted)).result(timeout=1.0)
                 logger.debug("Formatted with Ruff")
 
         (
