@@ -495,18 +495,19 @@ class FrameThumbnailList(QListWidget):
             item.metadata[idx] = ThumbnailItem.Metadata(image, pict_type)
 
             if idx == self.api.current_voutput.vs_index:
-                get_loop().from_thread(item.update_metadata, idx)
+                vsengine.from_thread(item.update_metadata, idx)
 
+        @run_in_loop
         def on_error(e: BaseException, idx: int) -> None:
-            if (row := self.row(item)) != -1:
-                self.takeItem(row)
             logger.warning("Failed to fetch thumbnail for output %d at frame %d: %s", idx, item.frame, e)
+            if Shiboken.isValid(self) and (row := self.row(item)) != -1:
+                self.takeItem(row)
 
         with self.api.blocker(), self.api.vs_context(), self._sema:
             for i, tclip in self.thumbnail_clips.items():
                 s = partial(on_success, idx=i)
                 e = partial(on_error, idx=i)
-                f = vsengine.video.frame(tclip, item.frame).map(s).catch(e, on_loop=True)
+                f = vsengine.video.frame(tclip, item.frame).map(s).catch(e)
                 f.add_done_callback(lambda _: get_loop().next_cycle())
                 f.result()
 

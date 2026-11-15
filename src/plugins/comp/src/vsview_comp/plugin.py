@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from vsengine.futures import UnifiedFuture
+from vsengine.loops import get_loop
 from vstools import DitherType
 
 from vsview.api import (
@@ -57,6 +58,7 @@ from vsview.api import (
     run_in_background,
     run_in_loop,
 )
+from vsview.vsenv import QtEventLoop
 
 from ._metadata import LOGIN_CONTEXT, PLUGIN_DISPLAY, PLUGIN_ID
 from .models import (
@@ -1229,8 +1231,8 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         vsengine.from_thread(self.on_cancel_clicked, None, manual=True).result()
         self.tmdb_debounce_timer.stop()
 
-        if self.frames_list.has_pending_thumbnails():
-            self.frames_list.wait_for_pending_thumbnails().result()
+        if self.frames_list.has_pending_thumbnails() and isinstance(loop := get_loop(), QtEventLoop):
+            loop.wait_for_threads(10_000, names=["FetchThumbnail"])
 
     @Slot()
     def on_cancel_clicked(self, clicked: bool | None = None, manual: bool = False) -> None:
