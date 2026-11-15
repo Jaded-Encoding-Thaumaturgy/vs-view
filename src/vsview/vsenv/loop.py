@@ -90,7 +90,12 @@ class QtEventLoop(QObject, EventLoop):
                 if isinstance(e, (Cancelled, CancelledError, asyncio.CancelledError)):
                     _logger.debug("Task cancelled: %s", e)
                 else:
-                    _logger.debug(e, exc_info=True)
+                    _logger.warning(
+                        "Main-thread call %s failed: %s",
+                        getattr(func, "__qualname__", repr(func)),
+                        e,
+                        exc_info=e,
+                    )
                 fut.set_exception(e)
             else:
                 fut.set_result(result)
@@ -161,7 +166,7 @@ class QtEventLoop(QObject, EventLoop):
                     if isinstance(e, (Cancelled, CancelledError, asyncio.CancelledError)):
                         _logger.debug("Task %r cancelled: %s", name, e)
                     else:
-                        _logger.debug(e, exc_info=True)
+                        _logger.warning("Task %r failed: %s", name, e, exc_info=e)
                     fut.set_exception(e)
                 else:
                     fut.set_result(result)
