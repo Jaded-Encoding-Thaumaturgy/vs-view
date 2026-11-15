@@ -53,7 +53,11 @@ jobs:
       - name: Build
         env:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-cache
-        run: uv build --package "${{ matrix.package }}" ${{ matrix.build_args }} --out-dir dist --clear
+          PACKAGE: ${{ matrix.package }}
+          BUILD_ARGS: ${{ matrix.build_args }}
+        run: |
+          read -ra build_args <<< "$BUILD_ARGS"
+          uv build --package "$PACKAGE" "${build_args[@]}" --out-dir dist --clear
 
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

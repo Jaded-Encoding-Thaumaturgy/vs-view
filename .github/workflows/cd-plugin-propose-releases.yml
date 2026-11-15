@@ -66,24 +66,25 @@ jobs:
       - name: Create release PR
         env:
           GH_TOKEN: ${{ github.token }}
+          PLUGIN: ${{ matrix.plugin }}
         run: |
-          branch="auto/release-${{ matrix.plugin }}"
+          branch="auto/release-${PLUGIN}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git checkout -b "$branch"
-          git commit --allow-empty -m "release: ${{ matrix.plugin }}"
+          git commit --allow-empty -m "release: ${PLUGIN}"
           git push -f origin "$branch"
 
           existing=$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')
 
           if [ -n "$existing" ]; then
             gh pr edit "$existing" \
-              --body-file "release-bodies/${{ matrix.plugin }}.md"
+              --body-file "release-bodies/${PLUGIN}.md"
           else
             gh pr create \
-              --title "release: ${{ matrix.plugin }}" \
-              --body-file "release-bodies/${{ matrix.plugin }}.md" \
+              --title "release: ${PLUGIN}" \
+              --body-file "release-bodies/${PLUGIN}.md" \
               --label release
           fi

@@ -49,23 +49,29 @@ jobs:
 
           # Extract plugin name
           plugin="${tag%%/v*}"
+
+          # Validates the plugin against the discovered packages and the version against PEP 440
+          python .github/scripts/push_release_tags.py "$tag" --notes-file ".github/releases/${plugin}.release.md"
+
           echo "plugin=$plugin" >> "$GITHUB_OUTPUT"
           echo "full_tag=$tag" >> "$GITHUB_OUTPUT"
-
-          python .github/scripts/push_release_tags.py "$tag" --notes-file ".github/releases/${plugin}.release.md"
 
       - name: Trigger publish workflow
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run pypipublish.yml -f package=${{ steps.tag.outputs.plugin }} --ref ${{ steps.tag.outputs.full_tag }}
+          PLUGIN: ${{ steps.tag.outputs.plugin }}
+          FULL_TAG: ${{ steps.tag.outputs.full_tag }}
+        run: gh workflow run pypipublish.yml -f package="$PLUGIN" --ref "$FULL_TAG"
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          PLUGIN: ${{ steps.tag.outputs.plugin }}
+          FULL_TAG: ${{ steps.tag.outputs.full_tag }}
         run: >-
-          gh release create "${{ steps.tag.outputs.full_tag }}"
-          --title "${{ steps.tag.outputs.full_tag }}"
-          --notes-file ".github/releases/${{ steps.tag.outputs.plugin }}.release.md"
+          gh release create "$FULL_TAG"
+          --title "$FULL_TAG"
+          --notes-file ".github/releases/${PLUGIN}.release.md"
           --latest=false
 
       - name: Post webhook for failure

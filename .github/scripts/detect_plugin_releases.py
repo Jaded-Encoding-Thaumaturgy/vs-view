@@ -16,10 +16,13 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import Any
+
+from packaging.version import InvalidVersion, Version
 
 import __main__
 
@@ -35,13 +38,29 @@ def run_git(*args: Any) -> str:
     return result.stdout.strip()
 
 
+def pick_latest_tag(plugin_name: str, tags: Iterable[str]) -> str | None:
+    prefix = f"{plugin_name}/v"
+    versions = dict[str, Version]()
+
+    for tag in tags:
+        if not tag.startswith(prefix):
+            continue
+
+        try:
+            versions[tag] = Version(tag.removeprefix(prefix))
+        except InvalidVersion:
+            continue
+
+    return max(versions, key=versions.__getitem__, default=None)
+
+
 def get_latest_tag(plugin_name: str) -> str | None:
     try:
-        output = run_git("tag", "-l", f"{plugin_name}/v*", "--sort=-v:refname")
+        output = run_git("tag", "-l", f"{plugin_name}/v*")
     except RuntimeError:
         return None
 
-    return tags[0] if (tags := output.splitlines()) else None
+    return pick_latest_tag(plugin_name, output.splitlines())
 
 
 def count_commits(rel_path: Path, since_tag: str | None = None) -> int:

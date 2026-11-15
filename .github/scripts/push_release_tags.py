@@ -9,10 +9,12 @@ Usage:
 import argparse
 import subprocess
 import sys
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
 from packaging.version import InvalidVersion, Version
+from resolve_package import discover_packages
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,6 +26,26 @@ def run_git(*args: Any) -> str:
         raise RuntimeError(f"git {' '.join(map(str, args))} failed: {result.stderr.strip()}")
 
     return result.stdout.strip()
+
+
+def parse_release_tag(tag: str, known: Collection[str]) -> tuple[str, Version]:
+    tag = tag.strip()
+
+    if "/v" not in tag:
+        raise ValueError(f"tag {tag!r} must be in the format <plugin>/v<version>")
+
+    plugin, version = tag.split("/v", 1)
+
+    if not plugin:
+        raise ValueError("plugin name is empty")
+
+    if plugin not in known:
+        raise ValueError(f"unknown package {plugin!r}. Known packages: {sorted(known)}")
+
+    try:
+        return plugin, Version(version)
+    except InvalidVersion:
+        raise ValueError(f"version {version!r} is not a valid PEP 440 version") from None
 
 
 def main() -> None:
@@ -40,20 +62,10 @@ def main() -> None:
 
     tag: str = args.tag.strip()
 
-    if "/v" not in tag:
-        print(f"Error: tag {tag!r} must be in the format <plugin>/v<version>", file=sys.stderr)
-        sys.exit(1)
-
-    plugin, version = tag.split("/v", 1)
-
-    if not plugin:
-        print("Error: plugin name is empty", file=sys.stderr)
-        sys.exit(1)
-
     try:
-        Version(version)
-    except InvalidVersion:
-        print(f"Error: version {version!r} is not a valid PEP 440 version", file=sys.stderr)
+        parse_release_tag(tag, {meta["tag"] for meta in discover_packages().values()})
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Check if tag already exists

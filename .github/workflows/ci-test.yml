@@ -128,20 +128,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --group test --group plugins --no-dev
 
-      - name: Set package argument
-        id: setup-pkg
-        run: |
-          if [ -n "${{ inputs.package }}" ]; then
-            echo "package_arg=--package ${{ inputs.package }}" >> $GITHUB_OUTPUT
-          else
-            echo "package_arg=" >> $GITHUB_OUTPUT
-          fi
-
       - name: Run tests
         env:
           QT_AUDIO_BACKEND: null
           QT_DEBUG_PLUGINS: 1
-        run: uv run ${{ steps.setup-pkg.outputs.package_arg }} pytest -v
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          if [ -n "$PACKAGE" ]; then
+            uv run --package "$PACKAGE" pytest -v
+          else
+            uv run pytest -v
+          fi
 
       - name: Post webhook for failure
         if: failure()
