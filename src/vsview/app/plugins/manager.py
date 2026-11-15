@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, Literal, cast
 
 import pluggy
 from jetpytools import Singleton, inject_self
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from vapoursynth import AudioNode, VideoNode
 from vsengine.loops import EventLoop, get_loop
 
@@ -229,9 +229,9 @@ class PluginManager(Singleton):
     def _register_shortcuts(self) -> None:
         from ..settings.shortcuts import ShortcutManager
 
-        for plugin in self.all_plugins:
+        def register(plugin: type[Any]) -> None:
             if not (shortcuts := getattr(plugin, "shortcuts", ())):
-                continue
+                return
 
             expected_prefix = f"{plugin.identifier}."
             valid_definitions = []
@@ -251,6 +251,8 @@ class PluginManager(Singleton):
             if valid_definitions:
                 ShortcutManager.register_definitions(valid_definitions)
 
+        self._for_each_plugin("registering its shortcuts", register)
+
     def _construct_settings_registry(self) -> None:
         from ..settings.dialog import PLUGIN_PREFIX
         from ..settings.models import SettingEntry, extract_settings
@@ -264,28 +266,53 @@ class PluginManager(Singleton):
         global_entries = list[SettingEntry]()
         local_entries = list[SettingEntry]()
 
-        for plugin in self.all_plugins:
+        def extract(plugin: type[Any]) -> None:
             global_model = plugin.global_settings_model
             local_model = plugin.local_settings_model
             identifier = plugin.identifier
             display_name = plugin.display_name
 
             if global_model is None and local_model is None:
-                continue
+                return
 
             section_prefix = f"{PLUGIN_PREFIX} - {display_name}"
 
-            if global_model is not None:
-                global_entries.extend(extract_plugin_settings(global_model, identifier, section_prefix))
+            plugin_global = (
+                extract_plugin_settings(global_model, identifier, section_prefix) if global_model is not None else []
+            )
+            plugin_local = (
+                extract_plugin_settings(local_model, identifier, section_prefix) if local_model is not None else []
+            )
+            global_entries.extend(plugin_global)
+            local_entries.extend(plugin_local)
 
-            if local_model is not None:
-                local_entries.extend(extract_plugin_settings(local_model, identifier, section_prefix))
+        self._for_each_plugin("extracting its settings", extract)
 
         self._populate_default_settings("global")
         self._plugin_global_settings = global_entries
         self._plugin_local_settings = local_entries
 
         logger.debug("Plugin settings extracted")
+
+    def _for_each_plugin(self, step: str, func: Callable[[type[Any]], None]) -> None:
+        owners = self._plugin_identifiers
+
+        for plugin in self.all_plugins:
+            owner = owners.get(plugin.identifier)
+
+            if owner is not None and not self.manager.has_plugin(owner):
+                continue
+
+            try:
+                func(plugin)
+            except Exception:
+                logger.exception(
+                    "Plugin %r failed while %s. It will be unregistered.",
+                    owner or plugin.identifier,
+                    step,
+                )
+                if owner is not None:
+                    self.manager.unregister(name=owner)
 
     @inject_self
     @ensure_loaded("wait")
@@ -308,11 +335,15 @@ class PluginManager(Singleton):
 
         with self._lock:
             for plugin in self.all_plugins:
-                if (model := getattr(plugin, model_attr)) is None:
-                    continue
+                try:
+                    if (model := getattr(plugin, model_attr)) is None:
+                        continue
 
-                raw = settings_container.plugins.get(plugin.identifier, {})
-                existing = raw.model_dump() if isinstance(raw, BaseModel) else raw
+                    raw = settings_container.plugins.get(plugin.identifier, {})
+                    existing = raw.model_dump() if isinstance(raw, BaseModel) else raw
+                except Exception:
+                    logger.exception("Couldn't read the %s settings of plugin %r", scope, plugin)
+                    continue
 
                 if not (validated := _safe_validate(model, existing, plugin.identifier)):
                     continue
@@ -323,7 +354,7 @@ class PluginManager(Singleton):
 def _safe_validate(model: type[BaseModel], existing: dict[str, Any], identifier: str) -> BaseModel | None:
     try:
         return model.model_validate(existing)
-    except ValidationError as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("The plugin %r has invalid settings: \n%s\n\nTrying default values...", identifier, e)
 
     try:
