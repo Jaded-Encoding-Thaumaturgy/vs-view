@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import sys
 from collections.abc import Callable
 from inspect import Signature
@@ -228,18 +229,20 @@ class SettingsManager(Singleton):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             self._global_settings = GlobalSettings.model_validate(data)
+        except (OSError, ValidationError, json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
+            logger.warning("Global settings file is malformed or unreadable. Using defaults.\nError: %s", e)
+            logger.debug("Full traceback:", exc_info=True)
+            _back_up_unreadable_file(path)
+            return
+        except Exception:
+            logger.exception("Unhandled exception:")
+            return
 
-            # Merge in any new shortcuts that don't exist in the loaded settings
-            self._merge_default_shortcuts()
+        # Merge in any new shortcuts that don't exist in the loaded settings
+        self._merge_default_shortcuts()
 
-            logger.debug("Loaded global settings from %s", path)
-            logger.log(DEBUG - 1, " %s", lambda: pretty_repr(self._global_settings))
-        except ValidationError as e:
-            logger.warning("Global settings file is malformed. Using defaults.\nError: %s", e)
-            logger.debug("Full traceback: %s", exc_info=True)
-        except json.JSONDecodeError:
-            logger.warning("Global settings file is empty or corrupted. Using defaults.")
-            logger.debug("Full traceback: %s", exc_info=True)
+        logger.debug("Loaded global settings from %s", path)
+        logger.log(DEBUG - 1, " %s", lambda: pretty_repr(self._global_settings))
 
     def _merge_default_shortcuts(self) -> None:
         existing_action_ids = {s.action_id for s in self._global_settings.shortcuts}
@@ -284,22 +287,32 @@ class SettingsManager(Singleton):
 
         try:
             data = json.loads(settings_path.read_text(encoding="utf-8"))
-
             self._local_settings[path_hash] = LocalSettings.model_validate(data)
-
-            logger.debug("Loaded local settings for %s", script_path)
-            logger.log(DEBUG - 1, "%s", lambda: pretty_repr(self._local_settings[path_hash]))
-        except ValidationError as e:
+        except (OSError, ValidationError, json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
             logger.error(
-                "Local settings file is malformed for %s. Using defaults.\nFile: %s\nError: %s",
+                "Local settings file is malformed or unreadable for %s. Using defaults.\nFile: %s\nError: %s",
                 script_path,
                 settings_path.resolve(),
                 e,
             )
+            logger.debug("Full traceback:", exc_info=True)
+            _back_up_unreadable_file(settings_path)
             self._local_settings[path_hash] = fallback_settings
-        except json.JSONDecodeError:
-            logger.exception("Failed to parse local settings JSON for %s", script_path)
-            self._local_settings[path_hash] = fallback_settings
+            return
+
+        logger.debug("Loaded local settings for %s", script_path)
+        logger.log(DEBUG - 1, "%s", lambda: pretty_repr(self._local_settings[path_hash]))
+
+
+def _back_up_unreadable_file(path: Path) -> None:
+    backup_path = path.with_name(f"{path.name}.bak")
+
+    try:
+        shutil.copy2(path, backup_path)
+    except OSError:
+        logger.exception("Failed to back up the settings file %s", path)
+    else:
+        logger.warning("Saved a copy of the unreadable settings file to %s", backup_path)
 
 
 def _callable_one_param(obj: object) -> TypeIs[Callable[[LocalSettings], LocalSettings]]:
