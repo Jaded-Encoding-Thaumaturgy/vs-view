@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from enum import StrEnum
 from logging import getLogger
 from pathlib import Path
@@ -32,6 +32,12 @@ class ExtractFramesConfig(NamedTuple):
     frames_data: Sequence[tuple[Time, dict[int, ThumbnailItem.Metadata], FrameSourceProvider]]
     voutputs: Sequence[VideoOutputProxy]
     dither_type: DitherType = DitherType.RANDOM
+
+
+class ExtractedOutput(NamedTuple):
+    vs_index: int
+    directory: Path
+    images: Mapping[int, Path]
 
 
 class SelectFrameConfig(NamedTuple):

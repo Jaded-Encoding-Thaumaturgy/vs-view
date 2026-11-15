@@ -30,6 +30,7 @@ from vsview.api import Packer, PluginAPI, PluginSecrets, PluginSettings, Time, r
 
 from ._metadata import COOKIE_KEY, LOGIN_CONTEXT
 from .models import (
+    ExtractedOutput,
     ExtractFramesConfig,
     FrameSourceProvider,
     SelectFrameConfig,
@@ -84,14 +85,14 @@ class ExtractFramesWorker(QObject):
         return self._cancel_event.is_set()
 
     @run_in_background(name="ExtractFrames")
-    def run(self) -> list[tuple[int, Path]]:
+    def run(self) -> list[ExtractedOutput]:
         with self.api.vs_context(), self.api.blocker():
             return self._extract()
 
     def cancel(self) -> None:
         self._cancel_event.set()
 
-    def _extract(self) -> list[tuple[int, Path]]:
+    def _extract(self) -> list[ExtractedOutput]:
         self.progress_cb(
             range=(0, len(self.cfg.frames_data) * len(self.cfg.voutputs)),
             fmt="Extracting frames %v / %m",
@@ -100,7 +101,7 @@ class ExtractFramesWorker(QObject):
 
         path = self.cfg.storage / datetime.now(tz=UTC).astimezone().strftime("%Y-%m-%d %H-%M-%S")
         workers = list[Future[None]]()
-        images_paths = list[tuple[int, Path]]()
+        extracted = list[ExtractedOutput]()
 
         with self.api.vs_context():
             is_fpng_available = hasattr(core, "fpng")
@@ -111,12 +112,15 @@ class ExtractFramesWorker(QObject):
                 images_path = path / f"({output.vs_index}) ({output.vs_name})"
                 images_path = sanitize_filepath(images_path, replacement_text="_")
                 images_path.mkdir(parents=True, exist_ok=True)
-                images_paths.append((output.vs_index, images_path))
 
                 clip = self.packer.to_rgb_planar(output.vs_output.clip)
                 alpha = depth(a, 8, dither_type=self.cfg.dither_type) if (a := output.vs_output.alpha) else None
                 frames = [output.time_to_frame(t) for t, *_ in self.cfg.frames_data]
-                clip_image_path = images_path / f"%0{ndigits(max(frames))}d.png"
+                name_pattern = f"%0{ndigits(max(frames))}d.png"
+                clip_image_path = images_path / name_pattern
+                extracted.append(
+                    ExtractedOutput(output.vs_index, images_path, {n: images_path / (name_pattern % n) for n in frames})
+                )
 
                 if is_fpng_available:
                     f = self._fpng_extract(clip, alpha, clip_image_path, frames)
@@ -134,7 +138,7 @@ class ExtractFramesWorker(QObject):
             for w in workers:
                 w.result()
 
-        return images_paths
+        return extracted
 
     @run_in_background(name="ExtractFPNG")
     def _fpng_extract(self, clip: VideoNode, alpha: VideoNode | None, path: Path, frames: Sequence[int]) -> None:

@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from concurrent.futures import CancelledError
 from logging import getLogger
 from operator import attrgetter
-from pathlib import Path
 from typing import Annotated, Any, override
 from uuid import uuid4
 
@@ -63,6 +62,7 @@ from ._metadata import LOGIN_CONTEXT, PLUGIN_DISPLAY, PLUGIN_ID
 from .models import (
     ComparisonImage,
     ComparisonSource,
+    ExtractedOutput,
     ExtractFramesConfig,
     FrameSourceProvider,
     SelectFrameConfig,
@@ -179,14 +179,14 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         super().__init__(parent, api)
 
         self._pending_select_frames: UnifiedFuture[Any] | None = None
-        self._pending_extract_frames: UnifiedFuture[list[tuple[int, Path]]] | None = None
+        self._pending_extract_frames: UnifiedFuture[list[ExtractedOutput]] | None = None
         self._pending_upload: UnifiedFuture[str] | UnifiedFuture[None] | None = None
         self._pending_tags: UnifiedFuture[Any] | None = None
         self._select_frames_worker: SelectFrameWorker | None = None
         self._extract_frames_worker: ExtractFramesWorker | None = None
         self._is_upload_cancelled = False
         self._extraction_finished = False
-        self._extract_paths: list[tuple[int, Path]] | None = None
+        self._extracted: list[ExtractedOutput] | None = None
         self._reported_url = ""
         self._collection_name_tmdb: str | None = None
         self._current_data: list[tuple[Time, FrameSourceProvider]] | None = None
@@ -889,12 +889,12 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                 self._pending_extract_frames = None
                 self._extract_frames_worker = None
 
-            def on_success(paths: list[tuple[int, Path]]) -> list[tuple[int, Path]]:
-                self._extract_paths = paths
+            def on_success(extracted: list[ExtractedOutput]) -> list[ExtractedOutput]:
+                self._extracted = extracted
                 self._extraction_finished = True
-                return paths
+                return extracted
 
-            def on_error(exc: BaseException) -> list[tuple[int, Path]]:
+            def on_error(exc: BaseException) -> list[ExtractedOutput]:
                 if isinstance(exc, CancelledError):
                     logger.info("Frame extraction cancelled.")
                 else:
@@ -902,7 +902,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
                 return []
 
             self._extraction_finished = False
-            self._extract_paths = None
+            self._extracted = None
 
             worker = ExtractFramesWorker(self.api, self._extract_frames_config, self.progress_bar.update_progress, self)
             self._extract_frames_worker = worker
@@ -1042,7 +1042,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
 
     @Slot()
     def on_upload_btn_clicked(self) -> None:
-        if not self._extract_paths:
+        if not self._extracted:
             logger.error("No extracted frames to upload")
             return
 
@@ -1069,7 +1069,7 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         self,
         data: list[tuple[Time, dict[int, ThumbnailItem.Metadata], FrameSourceProvider]],
     ) -> None:
-        if not self._extract_paths:
+        if not self._extracted:
             logger.error("No extracted frames to upload")
             self._on_upload_error()
             return
@@ -1096,16 +1096,16 @@ class CompPlugin(WidgetPluginBase[GlobalSettings, None], IconReloadMixin):
         sources = list[ComparisonSource]()
         vouputs = {v.vs_index: v for v in self.selected_voutputs}
 
-        for index, source_dir in self._extract_paths:
+        for extracted in self._extracted:
             images = list[ComparisonImage]()
-            output = vouputs[index]
+            output = vouputs[extracted.vs_index]
 
             for time, metadata, _ in data:
                 frame = output.time_to_frame(time)
-                image_path = next(source_dir.glob(f"*{frame}.png"), None)
+                image_path = extracted.images.get(frame)
 
-                if not image_path:
-                    logger.error("Missing extracted image for frame %s in %s", frame, source_dir)
+                if not image_path or not image_path.is_file():
+                    logger.error("Missing extracted image for frame %s in %s", frame, extracted.directory)
                     self._on_upload_error()
                     return
 
