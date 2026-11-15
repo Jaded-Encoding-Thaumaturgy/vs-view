@@ -4,6 +4,7 @@ from typing import Any
 from vstools import ChromaLocation, Field, FieldBased, Matrix, Primaries, Range, Transfer
 
 from vsview.app.tools.frameprops.api import CategoryMatcher, FormatterProperty, hookimpl
+from vsview.app.tools.frameprops.builtins.video import VIDEO_CATEGORY as BUILTIN_VIDEO_CATEGORY
 
 
 def _handle_na(value: int) -> str:
@@ -40,7 +41,9 @@ VIDEO_CATEGORY = CategoryMatcher(
     name="Video",
     priority=150 + 1,
     order=10,
-    exact_matches={
+    # The registry replaces a category by name, so keep every key of the built-in "Video" category.
+    exact_matches=BUILTIN_VIDEO_CATEGORY.exact_matches
+    | {
         # Colorimetry
         "_ChromaLocation",
         Range.prop_key,
