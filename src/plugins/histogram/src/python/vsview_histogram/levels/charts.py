@@ -134,7 +134,6 @@ class LevelsChartView(QChartView):
         self.safe_max: float | None = None
         self.safe_min_coord: float | None = None
         self.safe_max_coord: float | None = None
-        self.max_val = 255.0
         self.show_unsafe = True
         self.is_limited = True
         self.is_float = False
@@ -262,7 +261,7 @@ class LevelsChartView(QChartView):
         # Configure background gradient
         self.set_gradient_background(fmt["color_family"], plane_idx)
 
-        # Calculate safe ranges and max_val
+        # Calculate safe ranges
         if fmt["color_family"] in (vs.YUV, vs.GRAY):
             if fmt["sample_type"] == vs.INTEGER:
                 scale_shift = fmt["bits_per_sample"] - 8
@@ -279,8 +278,6 @@ class LevelsChartView(QChartView):
             self.plane_name = "Y"
         else:
             self.plane_name = fmt["color_family"].name[plane_idx]
-
-        self.max_val = 1 << fmt["bits_per_sample"] if fmt["sample_type"] == vs.INTEGER else 1024
 
     def update_data(
         self,
