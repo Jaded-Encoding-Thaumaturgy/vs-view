@@ -124,7 +124,7 @@ fn compute_luma_core(
     }
 }
 
-/// Applies sawtooth or triangle wave transformation sequentially across image rows.
+/// Applies sawtooth or triangle wave transformation across image rows, in parallel when `PARALLEL` is true.
 ///
 /// In Python (`process_luma_numba`):
 /// ```python
@@ -153,7 +153,6 @@ fn process_luma_rows<const PARALLEL: bool, T: Copy + Sync + Send, F: Fn(T) -> u3
     let src_plane = Plane::<T>::new(src, width, height, "src")?;
 
     let process_row = |dst_row: &mut [u8], src_row: &[T]| {
-        // let src_row = unsafe { src_plane.row(y) };
         if use_sawtooth {
             // Sawtooth mode: wrap around on overflow
             for (&src_val, dst_val) in src_row.iter().zip(dst_row.iter_mut()) {
