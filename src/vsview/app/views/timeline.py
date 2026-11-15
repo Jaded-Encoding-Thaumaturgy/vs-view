@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import weakref
-from bisect import bisect_right
-from collections.abc import Hashable, Sequence
+from bisect import bisect_left, bisect_right
+from collections.abc import Hashable, Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import cache
 from itertools import chain
 from logging import getLogger
 from math import floor
+from operator import itemgetter
 from typing import Any, Literal, NamedTuple, override
 
 from jetpytools import clamp, complex_hash
@@ -167,11 +168,51 @@ class CustomNotch[T: (Time, Frame)](Notch[T]):
         return self.id == other.id if isinstance(other, CustomNotch) else NotImplemented
 
 
+class NotchSpans:
+    """The custom notches of one provider, sorted by their left edge, for x-range queries."""
+
+    def __init__(self, source: set[CustomNotch[Any]], version: int) -> None:
+        self.source = source
+        self.version = version
+        self.size = len(source)
+
+        entries = list[tuple[float, float, CustomNotch[Any]]]()
+        for notch in source:
+            x1 = notch.line.x1()
+            x2 = notch.end_line.x1() if notch.end_line is not None else x1
+            entries.append((min(x1, x2), max(x1, x2), notch))
+        entries.sort(key=itemgetter(0))
+
+        self.lefts, self.rights, self.notches = zip(*entries)
+        self.max_width = max((right - left for left, right, _ in entries), default=0.0)
+
+    def is_current(self, source: set[CustomNotch[Any]], version: int) -> bool:
+        return self.source is source and self.version == version and self.size == len(source)
+
+    def overlapping(self, left: float, right: float) -> list[CustomNotch[Any]]:
+        start = bisect_left(self.lefts, left - self.max_width)
+        end = bisect_right(self.lefts, right)
+        return [
+            notch for notch, notch_right in zip(self.notches[start:end], self.rights[start:end]) if notch_right >= left
+        ]
+
+
 class HoverLabel(NamedTuple):
     text: str
     x: float
     color: QColor
     y_offset: float = 0.0
+
+
+class HoverLabelIndex(NamedTuple):
+    key: Hashable
+    xs: list[float]
+    texts: list[str]
+    colors: list[QColor]
+    widths: list[int]
+    run_positions: list[int]
+    first_run_end: int
+    max_width: int
 
 
 class TimelineHoverPopup(QWidget):
@@ -183,6 +224,7 @@ class TimelineHoverPopup(QWidget):
     LABEL_PADDING_V = 2
     LABEL_STAGGER_OFFSETS = (0, -20, -40)
     LABEL_SPACING = 10
+    STAGGER_START_X = -9999.0
     ZOOMED_NOTCH_SPACING = 75
     RANGE_FILL_ALPHA = 80
 
@@ -192,10 +234,11 @@ class TimelineHoverPopup(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-        self._timeline_ref = weakref.ref(timeline)
         self.radius = 50
         self.zoom_factor = 4.0
         self.hover_x = -1
+        self._timeline_ref = weakref.ref(timeline)
+        self._label_index: HoverLabelIndex | None = None
 
     @property
     def _timeline(self) -> Timeline | None:
@@ -336,29 +379,80 @@ class TimelineHoverPopup(QWidget):
     def _draw_custom_notches(self, painter: QPainter, popup_rect: QRectF, y_offset: float, timeline: Timeline) -> None:
         # Draw provider notches (bookmarks, keyframes) with staggered labels.
         fm = painter.fontMetrics()
+        to_popup = painter.transform()
+        to_timeline, _ = to_popup.inverted()
+        labels = self._hover_labels(fm, timeline)
 
-        # Collect labels with range support
-        all_labels = list[HoverLabel]()
-        for provider_notches in timeline.custom_notches.values():
-            for p_notch in provider_notches:
-                if not (label_text := self._format_notch_label(p_notch)):
-                    continue
+        if labels.xs:
+            # A pill is centred on its notch, so a notch outside the popup can still show part of its label.
+            margin = labels.max_width / 2 + self.LABEL_PADDING_H + 1
+            start = bisect_left(labels.xs, to_timeline.map(QPointF(popup_rect.left() - margin, 0)).x())
+            end = bisect_right(labels.xs, to_timeline.map(QPointF(popup_rect.right() + margin, 0)).x())
 
-                x_pos = painter.transform().map(QPointF(p_notch.line.x1(), 0)).x()
-                all_labels.append(HoverLabel(text=label_text, x=x_pos, color=p_notch.color))
+            first_x = to_popup.map(QPointF(labels.xs[0], 0)).x()
+            first_run_shift = int(first_x - self.STAGGER_START_X < labels.widths[0] + self.LABEL_SPACING)
 
-        # Sort and stagger
-        all_labels = sorted(all_labels, key=lambda lbl: lbl.x)
-        staggered_labels = self.apply_staggering(all_labels, fm)
-
-        # Draw labels with leader lines and pills
-        for lbl in staggered_labels:
-            self._draw_label_pill(painter, lbl, popup_rect, y_offset, fm, timeline)
+            for i in range(start, end):
+                level = labels.run_positions[i] + (first_run_shift if i < labels.first_run_end else 0)
+                lbl = HoverLabel(
+                    labels.texts[i],
+                    to_popup.map(QPointF(labels.xs[i], 0)).x(),
+                    labels.colors[i],
+                    self.LABEL_STAGGER_OFFSETS[level % len(self.LABEL_STAGGER_OFFSETS)],
+                )
+                self._draw_label_pill(painter, lbl, popup_rect, y_offset, fm, timeline)
 
         # Draw notches and range fills in scaled space
+        visible_notches = timeline.custom_notches_in_range(
+            to_timeline.map(QPointF(popup_rect.left() - 1, 0)).x(),
+            to_timeline.map(QPointF(popup_rect.right() + 1, 0)).x(),
+        )
+        for p_notch in visible_notches:
+            p_notch.draw(painter, timeline.scroll_rect, self.RANGE_FILL_ALPHA, cosmetic=True)
+
+    def _hover_labels(self, fm: QFontMetrics, timeline: Timeline) -> HoverLabelIndex:
+        key = (
+            timeline.notches_state,
+            timeline.mode,
+            timeline.rect_f.width(),
+            timeline.total_frames,
+            id(timeline.cum_durations),
+            self.zoom_factor,
+            self.font().key(),
+        )
+
+        if self._label_index is not None and self._label_index.key == key:
+            return self._label_index
+
+        entries = list[tuple[float, str, QColor]]()
         for provider_notches in timeline.custom_notches.values():
             for p_notch in provider_notches:
-                p_notch.draw(painter, timeline.scroll_rect, self.RANGE_FILL_ALPHA, cosmetic=True)
+                if label_text := self._format_notch_label(p_notch):
+                    entries.append((p_notch.line.x1(), label_text, p_notch.color))
+        entries.sort(key=itemgetter(0))
+
+        xs = [x for x, _, _ in entries]
+        texts = [text for _, text, _ in entries]
+        widths = [fm.horizontalAdvance(text) for text in texts]
+
+        run_positions = list[int]()
+        for i, (x, width) in enumerate(zip(xs, widths)):
+            close = i > 0 and (x - xs[i - 1]) * self.zoom_factor < width + self.LABEL_SPACING
+            run_positions.append(run_positions[-1] + 1 if close else 0)
+
+        first_run_end = next((i for i in range(1, len(xs)) if run_positions[i] == 0), len(xs))
+
+        self._label_index = HoverLabelIndex(
+            key,
+            xs,
+            texts,
+            [color for _, _, color in entries],
+            widths,
+            run_positions,
+            first_run_end,
+            max(widths, default=0),
+        )
+        return self._label_index
 
     def _format_notch_label(self, notch: Notch[Any]) -> str:
         base_label = notch.label
@@ -399,7 +493,7 @@ class TimelineHoverPopup(QWidget):
 
         staggered = list[HoverLabel]()
         level_index = 0
-        last_x = -9999.0
+        last_x = self.STAGGER_START_X
 
         for lbl in labels:
             if lbl.x - last_x < fm.horizontalAdvance(lbl.text) + self.LABEL_SPACING:
@@ -542,6 +636,8 @@ class Timeline(QWidget):
         self._cum_durations: Sequence[Time] | None = None
 
         self.custom_notches = dict[str, set[CustomNotch[Any]]]()
+        self._notches_version = 0
+        self._notch_spans = dict[str, NotchSpans]()
 
         # Optimization attributes
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
@@ -582,6 +678,12 @@ class Timeline(QWidget):
     @property
     def cum_durations(self) -> Sequence[Time] | None:
         return self._cum_durations
+
+    @property
+    def notches_state(self) -> Hashable:
+        # Providers can be removed by popping custom_notches directly, which does not bump the version.
+        providers = tuple((key, id(notches), len(notches)) for key, notches in self.custom_notches.items())
+        return self._notches_version, providers
 
     @property
     def cursor_x(self) -> int:
@@ -792,6 +894,8 @@ class Timeline(QWidget):
                 else:
                     p_notch.end_line = None
 
+            self._notches_version += 1
+
         # Define the cursor line position (contained within scroll_rect)
         cursor_line = QLineF(self.cursor_x, self.scroll_rect.top(), self.cursor_x, self.scroll_rect.bottom())
 
@@ -816,9 +920,8 @@ class Timeline(QWidget):
         self.draw_scroll_bar(painter)
 
         # Draw custom notches from providers (e.g. bookmarks, keyframes)
-        for provider_notches in self.custom_notches.values():
-            for p_notch in provider_notches:
-                p_notch.draw(painter, self.scroll_rect)
+        for p_notch in self.custom_notches_in_range(self.rect_f.left() - 1, self.rect_f.right() + 1):
+            p_notch.draw(painter, self.scroll_rect)
 
         # Draw current frame cursor
         cursor_pen = QPen(self.cursor_color, 2)
@@ -1061,6 +1164,7 @@ class Timeline(QWidget):
                 label,
             )
         )
+        self._notches_version += 1
 
     def discard_notch(
         self, key: str, data: Frame | Time, end_data: Frame | Time | None = None, id: Hashable | None = None
@@ -1072,6 +1176,19 @@ class Timeline(QWidget):
                 end_data,  # pyright: ignore[reportArgumentType]
             )
         )
+        self._notches_version += 1
+
+    def custom_notches_in_range(self, left: float, right: float) -> Iterator[CustomNotch[Any]]:
+        for key in self._notch_spans.keys() - self.custom_notches.keys():
+            del self._notch_spans[key]
+
+        for key, notches in self.custom_notches.items():
+            spans = self._notch_spans.get(key)
+
+            if spans is None or not spans.is_current(notches, self._notches_version):
+                spans = self._notch_spans[key] = NotchSpans(notches, self._notches_version)
+
+            yield from spans.overlapping(left, right)
 
     def reset_interaction(self) -> None:
         self.mousepressed = False

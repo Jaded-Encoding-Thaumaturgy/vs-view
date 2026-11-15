@@ -39,6 +39,7 @@ from vsview.app.views.timeline import (
     TimeEdit,
     Timeline,
     TimelineControlBar,
+    TimelineHoverPopup,
     generate_label_format,
 )
 from vsview.types import Frame, Time
@@ -227,8 +228,12 @@ def test_hover_popup_notch_label_and_value_display(
 ) -> None:
     timeline = timeline_control_bar.timeline
     timeline_control_bar.set_data(100, [(i + 1) / 25.0 for i in range(100)])
+    timeline.rect_f = QRectF(0, 0, 1000, 33)
+    # Zoom out so the whole bar fits in the popup and every label is on screen.
+    SettingsManager.global_settings.timeline.hover_zoom_factor = 1.0
+    SettingsManager.global_settings.timeline.hover_zoom_radius = 500
     popup = timeline.hover_popup
-    popup.update_state(200)
+    popup.update_state(500)
 
     # Static label point notch
     timeline.add_notch("bookmarks", Frame(10), label="Cut Scene")
@@ -659,6 +664,131 @@ def test_timeline_and_popup_handle_partial_deletion_safely(qtbot: QtBot, qt_even
     assert Shiboken.isValid(orphan_popup) is True
     orphan_popup.update_state(10)
     orphan_popup.paintEvent(QPaintEvent(orphan_popup.rect()))
+
+
+def _add_spread_notches(timeline: Timeline, count: int, step_frames: int) -> None:
+    timeline.set_data(100_000)
+    timeline.rect_f = QRectF(0, 0, 1000, 33)
+    for i in range(count):
+        timeline.add_notch("keyframes", Frame(i * step_frames), label=f"k{i}" + "x" * (i % 7))
+
+
+def _set_hover_zoom(zoom: float, radius: int) -> None:
+    SettingsManager.global_settings.timeline.hover_zoom_factor = zoom
+    SettingsManager.global_settings.timeline.hover_zoom_radius = radius
+
+
+def test_hover_popup_draws_only_notches_in_the_zoomed_range(
+    timeline_control_bar: TimelineControlBar, mocker: MockerFixture
+) -> None:
+    timeline = timeline_control_bar.timeline
+    _add_spread_notches(timeline, 2000, 50)
+    _set_hover_zoom(4.0, 50)
+    popup = timeline.hover_popup
+    popup.update_state(500)
+    draw_spy = mocker.spy(Notch, "draw")
+
+    popup.grab()
+
+    drawn = sorted(call.args[0].label for call in draw_spy.call_args_list)
+    visible = sorted(n.label for n in timeline.custom_notches["keyframes"] if 488 <= n.line.x1() <= 512)
+    assert len(visible) == 50
+    assert drawn == visible
+
+
+@pytest.mark.parametrize(
+    ("count", "step_frames", "zoom", "hover_x"),
+    [
+        (2000, 50, 4.0, 500),
+        (2000, 50, 1.0, 300),
+        (2000, 50, 20.0, 990),
+        (300, 300, 20.0, 450),
+        (300, 300, 20.0, 880),
+    ],
+)
+def test_hover_popup_visible_labels_match_full_staggering(
+    timeline_control_bar: TimelineControlBar,
+    mocker: MockerFixture,
+    count: int,
+    step_frames: int,
+    zoom: float,
+    hover_x: int,
+) -> None:
+    timeline = timeline_control_bar.timeline
+    _add_spread_notches(timeline, count, step_frames)
+    _set_hover_zoom(zoom, 50)
+    popup = timeline.hover_popup
+    popup.update_state(hover_x)
+    fm = QFontMetrics(popup.font())
+    padding = TimelineHoverPopup.LABEL_PADDING_H
+
+    def visible(lbl: HoverLabel) -> bool:
+        half_width = fm.horizontalAdvance(lbl.text) / 2 + padding
+        return lbl.x + half_width > 0 and lbl.x - half_width < popup.width()
+
+    def key(lbl: HoverLabel) -> tuple[str, float, float]:
+        return lbl.text, round(lbl.x, 6), lbl.y_offset
+
+    every_label = sorted(
+        (
+            HoverLabel(n.label, popup.radius + zoom * (n.line.x1() - hover_x), n.color)
+            for n in timeline.custom_notches["keyframes"]
+        ),
+        key=lambda lbl: lbl.x,
+    )
+    expected = [key(lbl) for lbl in popup.apply_staggering(every_label, fm) if visible(lbl)]
+    pill_spy = mocker.spy(popup, "_draw_label_pill")
+
+    popup.grab()
+
+    drawn = [key(call.args[1]) for call in pill_spy.call_args_list if visible(call.args[1])]
+    assert len(expected) > 0
+    assert drawn == expected
+
+
+def test_hover_popup_culling_follows_notch_changes(
+    timeline_control_bar: TimelineControlBar, mocker: MockerFixture
+) -> None:
+    timeline = timeline_control_bar.timeline
+    timeline.set_data(1000)
+    timeline.rect_f = QRectF(0, 0, 1000, 33)
+    _set_hover_zoom(4.0, 50)
+    popup = timeline.hover_popup
+    popup.update_state(500)
+    pill_spy = mocker.spy(popup, "_draw_label_pill")
+
+    def paint_labels() -> list[str]:
+        pill_spy.reset_mock()
+        popup.grab()
+        return [call.args[1].text for call in pill_spy.call_args_list]
+
+    timeline.add_notch("bookmarks", Frame(500), label="first")
+    assert paint_labels() == ["first"]
+
+    timeline.discard_notch("bookmarks", Frame(500))
+    timeline.add_notch("bookmarks", Frame(501), label="second")
+    assert paint_labels() == ["second"]
+
+    timeline.custom_notches.pop("bookmarks")
+    assert paint_labels() == []
+
+    timeline.add_notch("bookmarks", Frame(499), label="third")
+    assert paint_labels() == ["third"]
+
+
+def test_timeline_skips_custom_notches_outside_the_bar(qtbot: QtBot, mocker: MockerFixture) -> None:
+    timeline = Timeline()
+    qtbot.addWidget(timeline)
+    timeline.resize(1000, 40)
+    timeline.set_data(100)
+    timeline.add_notch("bookmarks", Frame(50), label="inside")
+    timeline.add_notch("bookmarks", Frame(150), label="beyond the end")
+    timeline.add_notch("ranges", Frame(90), end_data=Frame(200), label="crossing the end")
+    draw_spy = mocker.spy(Notch, "draw")
+
+    timeline.grab()
+
+    assert sorted(call.args[0].label for call in draw_spy.call_args_list) == ["crossing the end", "inside"]
 
 
 # PlaybackContainer Tests
