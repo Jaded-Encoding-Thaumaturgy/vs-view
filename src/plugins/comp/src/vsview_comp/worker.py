@@ -814,6 +814,8 @@ class SlowPicsWorker(QObject):
                 logger.debug("Traceback:", exc_info=True)
                 await asyncio.sleep((retry + 1) * 2)
 
+        raise UploadError(f"Image {image_path.name} was rate limited on every attempt")
+
     async def _hash_images(self, src: SlowPicsSources) -> dict[str, str]:
         payload = dict[str, str]()
 
