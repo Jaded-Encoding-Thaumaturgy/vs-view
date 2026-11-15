@@ -220,7 +220,8 @@ class _PluginBaseMeta(ObjectType):
                 setattr(cls, f"{n}_settings_model", arg if is_basemodel else None)
             break
         else:
-            cls.global_settings_model, cls.local_settings_model = None, None
+            cls.global_settings_model = getattr(cls, "global_settings_model", None)
+            cls.local_settings_model = getattr(cls, "local_settings_model", None)
 
         return cls
 
