@@ -1,5 +1,7 @@
 import linecache
+import tokenize
 from collections.abc import Sequence
+from io import BytesIO
 from logging import getLogger
 from pathlib import Path
 from traceback import TracebackException
@@ -93,7 +95,12 @@ def extract_source_context(
     # Try reading from real file first, then fall back to linecache (for virtual files)
     lines = list[str]()
     if filename and not filename.startswith("<") and (p := Path(filename)).exists() and p.is_file():
-        lines = p.read_text(errors="replace").splitlines()
+        data = p.read_bytes()
+        try:
+            encoding, _ = tokenize.detect_encoding(BytesIO(data).readline)
+        except SyntaxError:
+            encoding = "utf-8"
+        lines = data.decode(encoding, errors="replace").splitlines()
     elif filename:
         lines = [line.rstrip("\n\r") for line in linecache.getlines(filename)]
 
