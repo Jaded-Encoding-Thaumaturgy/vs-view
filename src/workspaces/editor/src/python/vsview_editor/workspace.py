@@ -39,6 +39,7 @@ from vsview.api import (
 )
 from vsview.api._helpers import output_metadata
 from vsview.api.workspace import PluginWorkspace
+from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings import SettingsManager
 from vsview.app.utils import atomic_write
 from vsview.app.workspace import BaseGenericFileWorkspace, VSEngineWorkspace, get_default_script
@@ -962,10 +963,19 @@ class EditorWorkspace(
         linecache.cache.pop(self.content.filename, None)
         output_metadata.pop(self.content.filename, None)
         if new_path:
-            self.content = ContentPath(new_path.read_text(encoding="utf-8"), str(new_path))
+            code = self.code_dock.editor.bridge.main_content
+            if is_file := new_path.is_file():
+                try:
+                    code = new_path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError) as e:
+                    logger.warning("Could not read the main script %s, using the editor text: %s", new_path, e)
+            self.content = ContentPath(code, str(new_path))
 
-            if new_path.is_file():
-                self.init_load()
+            if is_file:
+                if not self.loaded_once:
+                    self.init_load()
+                elif not PluginManager.load_failed:
+                    PluginManager.populate_default_settings("local", new_path)
                 self.api.localSettingsChanged.emit(str(SettingsManager.local_settings_path(new_path)))
         else:
             self.content = ContentPath(
