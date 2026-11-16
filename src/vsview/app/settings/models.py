@@ -800,7 +800,7 @@ class GlobalSettings(BaseSettings):
             suffix=" s",
             decimals=3,
             to_ui=lambda v: v / 1000.0,
-            from_ui=lambda v: int(v * 1000.0),
+            from_ui=lambda v: round(v * 1000.0),
             tooltip="Duration of status messages",
         ),
     ] = 5000
