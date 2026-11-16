@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import threading
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
+import msgspec
 import pytest
+import zmq
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QFileDialog
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
+from vsremote.protocol import Command, StatusCode
+from vsremote.protocol.messages import RemoteErrorPayload
 from vsview_remote.dialog import ConnectionConfig
 from vsview_remote.workspace import RemoteWorkspace
 
@@ -23,9 +28,100 @@ PUBLIC_KEY = "P" * 40
 SECRET_KEY = "c" * 40
 
 
+type Reply = tuple[StatusCode, bytes] | None
+type Handler = Callable[[Command, bytes, str | None], Reply]
+
+
+class FakeServer:
+    """A ROUTER socket on 127.0.0.1 that answers vsremote requests with whatever the handler returns."""
+
+    def __init__(self, handler: Handler | None = None) -> None:
+        self.handler = handler
+        self.requests = list[tuple[Command, str | None]]()
+        self.address = ""
+        self._ready = threading.Event()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="RemoteFakeServer", daemon=True)
+        self._thread.start()
+        assert self._ready.wait(5)
+
+    def tokens(self, cmd: Command) -> list[str | None]:
+        return [t for c, t in self.requests if c == cmd]
+
+    def close(self) -> None:
+        self._stop.set()
+        self._thread.join(2)
+
+    def _run(self) -> None:
+        ctx = zmq.Context()
+        sock = ctx.socket(zmq.ROUTER)
+        sock.setsockopt(zmq.LINGER, 0)
+        port = sock.bind_to_random_port("tcp://127.0.0.1")
+        self.address = f"tcp://127.0.0.1:{port}"
+        self._ready.set()
+
+        poller = zmq.Poller()
+        poller.register(sock, zmq.POLLIN)
+        try:
+            while not self._stop.is_set():
+                if not dict(poller.poll(20)):
+                    continue
+                identity, req_id, cmd_byte, *rest = sock.recv_multipart()
+                cmd = Command(cmd_byte[0])
+                payload = rest[0] if rest else b""
+                token = rest[1].decode() if len(rest) > 1 else None
+                self.requests.append((cmd, token))
+
+                reply = self.handler(cmd, payload, token) if self.handler is not None else None
+                if reply is None and cmd in (Command.SUBSCRIBE_STREAM, Command.UNSUBSCRIBE_STREAM):
+                    reply = StatusCode.OK, b"OK"
+                if reply is not None:
+                    sock.send_multipart([identity, req_id, bytes([reply[0]]), reply[1]])
+        finally:
+            sock.close(linger=0)
+            ctx.term()
+
+
+def error_reply(payload: RemoteErrorPayload, status: StatusCode = StatusCode.ERROR) -> Handler:
+    def handler(cmd: Command, _: bytes, __: str | None) -> Reply:
+        return (status, msgspec.msgpack.encode(payload)) if cmd == Command.LOAD_CODE else None
+
+    return handler
+
+
+SCRIPT_ERROR = RemoteErrorPayload("ValueError: boom", "ValueError", "boom", "<remote>", 2, "raise ValueError('boom')")
+
+
 @pytest.fixture(autouse=True)
 def _setup(qt_event_loop: QtEventLoop, init_plugin_manager: PluginManager) -> None:
     return None
+
+
+@pytest.fixture
+def servers() -> Generator[Callable[[Handler | None], FakeServer]]:
+    made = list[FakeServer]()
+
+    def factory(handler: Handler | None = None) -> FakeServer:
+        made.append(server := FakeServer(handler))
+        return server
+
+    try:
+        yield factory
+    finally:
+        for s in made:
+            s.close()
+
+
+@pytest.fixture
+def dialogs(mocker: MockerFixture) -> list[str]:
+    shown = list[str]()
+
+    def fake_dialog(parent: Any, message: str, title: str = "Error") -> int:
+        shown.append(message)
+        return 0
+
+    mocker.patch("vsview.app.error.display_error_dialog", side_effect=fake_dialog)
+    return shown
 
 
 @pytest.fixture
@@ -33,6 +129,10 @@ def workspace(qtbot: QtBot) -> RemoteWorkspace:
     # qtbot calls deleteLater at teardown, which closes any live client.
     ws = RemoteWorkspace()
     qtbot.addWidget(ws)
+    # Keeps the fake server simple: no log forwarding, no stream subscription, no compression.
+    ws.settings.global_.forward_logs = False
+    ws.settings.global_.subscribe_streams = False
+    ws.settings.global_.compression = "none"
     return ws
 
 
@@ -59,18 +159,31 @@ def connect_through_load_button(
     script: Path,
     mocker: MockerFixture,
     before_accept: Callable[[], Any] | None = None,
+    *,
+    accept: bool = True,
 ) -> MagicMock:
     mocker.patch.object(QFileDialog, "getOpenFileName", return_value=(str(script), ""))
     load_content = mocker.patch.object(ws, "load_content")
 
-    def press_connect() -> None:
+    def close_dialog() -> None:
         if before_accept is not None:
             before_accept()
-        ws.dialog.accept()
+        if accept:
+            ws.dialog.accept()
+        else:
+            ws.dialog.reject()
 
-    QTimer.singleShot(0, press_connect)
+    QTimer.singleShot(0, close_dialog)
     ws.load_btn.click()
     return load_content
+
+
+def enter_server(ws: RemoteWorkspace, server: FakeServer, token: str | None = None) -> Callable[[], None]:
+    def edit() -> None:
+        ws.dialog.address_edit.setText(server.address)
+        ws.dialog.token_edit.setText(token or "")
+
+    return edit
 
 
 def store_curve_keys(ws: RemoteWorkspace, *, use_curve: bool) -> None:
@@ -163,3 +276,52 @@ def test_ping_uses_the_curve_keys_only_when_use_curve_is_set(
 
     kwargs = remote_client.call_args.kwargs
     assert (kwargs["curve_server_key"], kwargs["curve_public_key"], kwargs["curve_secret_key"]) == expected_keys
+
+
+# W4-01
+def test_load_button_with_new_settings_connects_to_the_new_server(
+    workspace: RemoteWorkspace,
+    servers: Callable[[Handler | None], FakeServer],
+    script: Path,
+    dialogs: list[str],
+    mocker: MockerFixture,
+) -> None:
+    server_a = servers(error_reply(SCRIPT_ERROR))
+    server_b = servers(error_reply(SCRIPT_ERROR))
+    connect_through_load_button(workspace, script, mocker, enter_server(workspace, server_a, "old-token"))
+    workspace.content = script
+    with pytest.raises(RuntimeError, match="boom"):
+        workspace.loader()
+
+    load_content = connect_through_load_button(
+        workspace, script, mocker, enter_server(workspace, server_b, "new-token")
+    )
+    with pytest.raises(RuntimeError, match="boom"):
+        workspace.loader()
+
+    load_content.assert_called_once_with(script)
+    assert server_a.tokens(Command.LOAD_CODE) == ["old-token"]
+    assert server_b.tokens(Command.LOAD_CODE) == ["new-token"]
+    assert len(dialogs) == 2
+
+
+def test_cancelling_the_load_dialog_keeps_the_previous_connection(
+    workspace: RemoteWorkspace,
+    servers: Callable[[Handler | None], FakeServer],
+    script: Path,
+    dialogs: list[str],
+    mocker: MockerFixture,
+) -> None:
+    server = servers(error_reply(SCRIPT_ERROR))
+    connect_through_load_button(workspace, script, mocker, enter_server(workspace, server, "token"))
+    workspace.content = script
+    with pytest.raises(RuntimeError, match="boom"):
+        workspace.loader()
+
+    load_content = connect_through_load_button(workspace, script, mocker, accept=False)
+    with pytest.raises(RuntimeError, match="boom"):
+        workspace.loader()
+
+    load_content.assert_not_called()
+    assert server.tokens(Command.LOAD_CODE) == ["token", "token"]
+    assert len(dialogs) == 2

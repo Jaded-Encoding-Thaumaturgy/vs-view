@@ -173,21 +173,27 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
 
         return res
 
+    def _apply_config(self, config: ConnectionConfig) -> None:
+        if config != self._config and self._client is not None:
+            self._client.close()
+            self._client = None
+
+        self._config = config
+
     @Slot()
     @override
     def _on_open_file_button_clicked(self) -> None:
-        self._config = self.prompt_connection_dialog()
-        if self._config is None:
+        if (config := self.prompt_connection_dialog()) is None:
             return
 
+        self._apply_config(config)
         super()._on_open_file_button_clicked()
 
     @Slot()
     def _on_configure_connection(self) -> None:
-        if (new_config := self.prompt_connection_dialog()) is not None:
-            self._config = new_config
-            if self._client is not None:
-                self._client.close()
-                self._client = None
-            if hasattr(self, "content") and self.content:
-                self.reload_content()
+        if (config := self.prompt_connection_dialog()) is None:
+            return
+
+        self._apply_config(config)
+        if hasattr(self, "content") and self.content:
+            self.reload_content()
