@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import pkgutil
 import weakref
+from collections import defaultdict
 from collections.abc import Callable, Set  # noqa: PYI025
 from concurrent.futures import Future
 from functools import wraps
@@ -173,19 +174,26 @@ class PluginManager(Singleton):
 
     @property
     def _plugin_identifiers(self) -> dict[str, str]:
-        identifiers = dict[str, str]()
+        return {identifier: min(owners) for identifier, owners in self._identifier_owners().items()}
+
+    def _identifier_owners(self) -> dict[str, set[str]]:
+        owners = defaultdict[str, set[str]](set)
         for hook_name in self.manager.hook.__dict__:
             hc: pluggy.HookCaller = getattr(self.manager.hook, hook_name)
             for hookimpl in hc.get_hookimpls():
                 try:
                     res = cast(type[Any], hookimpl.function())
                     if res:
-                        identifiers[res.identifier] = hookimpl.plugin_name
+                        owners[res.identifier].add(hookimpl.plugin_name)
                 except Exception:
                     logger.exception("Failed to inspect hook %r in plugin %r", hook_name, hookimpl.plugin_name)
                     self.manager.unregister(name=hookimpl.plugin_name)
 
-        return identifiers
+        return {
+            identifier: alive
+            for identifier, names in owners.items()
+            if (alive := {name for name in names if self.manager.has_plugin(name)})
+        }
 
     @run_in_background(name="PluginManagerLoad")
     def _load_worker(self) -> None:
@@ -206,27 +214,47 @@ class PluginManager(Singleton):
             except Exception:
                 logger.exception("Couldn't register first party plugin %r", name)
 
-        first_party_ids = self._plugin_identifiers
-        first_party_names = first_party_ids.values()
+        first_party_names = {name for names in self._identifier_owners().values() for name in names}
 
         logger.debug("Loading entrypoints...")
         n = load_entrypoints(self.manager, "vsview")
         logger.debug("Loaded %d second/third party plugins", n)
         self._entry_points_loaded = True
 
-        for identifier, pluggy_name in self._plugin_identifiers.items():
-            if pluggy_name not in first_party_names and identifier in first_party_ids:
-                logger.warning(
-                    "Skipping third-party plugin %r because it reuses first-party plugin identifier %r",
-                    pluggy_name,
-                    identifier,
-                )
-                self.manager.unregister(name=pluggy_name)
-
+        self._reject_invalid_identifiers(first_party_names)
         self._register_shortcuts()
         self._construct_settings_registry()
 
         logger.debug("Plugin integration, finalized")
+
+    def _reject_invalid_identifiers(self, first_party_names: Set[str]) -> None:
+        for identifier, names in self._identifier_owners().items():
+            if "." not in identifier:
+                continue
+            for name in sorted(names):
+                logger.warning("Skipping plugin %r because its identifier %r contains a '.'", name, identifier)
+                self.manager.unregister(name=name)
+
+        for identifier, names in self._identifier_owners().items():
+            if len(names) < 2 or not (third_party := sorted(names - first_party_names)):
+                continue
+
+            if names & first_party_names:
+                for name in third_party:
+                    logger.warning(
+                        "Skipping third-party plugin %r because it reuses first-party plugin identifier %r",
+                        name,
+                        identifier,
+                    )
+            else:
+                logger.warning(
+                    "Skipping plugins %s because they share the plugin identifier %r",
+                    ", ".join(repr(name) for name in third_party),
+                    identifier,
+                )
+
+            for name in third_party:
+                self.manager.unregister(name=name)
 
     def _register_shortcuts(self) -> None:
         from ..settings.shortcuts import ShortcutManager

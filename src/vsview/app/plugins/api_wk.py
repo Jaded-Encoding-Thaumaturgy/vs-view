@@ -15,7 +15,12 @@ class PluginBaseWorkspace(BaseWorkspace, Generic[TGlobalSettings, TLocalSettings
     __plugin_base__ = True
 
     identifier: ClassVar[str]
-    """Unique identifier for the plugin."""
+    """
+    Unique identifier for the plugin.
+
+    Must not contain "." or conflict with another third-party or built-in identifier.
+    Otherwise, the plugin is not loaded.
+    """
 
     display_name: ClassVar[str]
     """Display name for the plugin."""

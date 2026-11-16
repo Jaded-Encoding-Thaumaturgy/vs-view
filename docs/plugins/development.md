@@ -14,7 +14,8 @@ This guide covers how to create plugins for VSView, from setting up the basic st
 
 ## Plugin Architecture
 
-VSView uses [pluggy](https://pluggy.readthedocs.io/) for its plugin system. Plugins are discovered via Python entry points. The application defines specific specifications (hooks) that your plugin can implement to inject its components or react to events.
+VSView uses [pluggy](https://pluggy.readthedocs.io/) for its plugin system. Plugins are discovered via Python entry points.
+The application defines specific specifications (hooks) that your plugin can implement to inject its components or react to events.
 
 ### Entry Point Registration
 
@@ -34,6 +35,8 @@ The most common type of plugin is a widget plugin, which adds a custom UI panel 
 ### Basic Structure
 
 A minimal plugin requires a unique identifier, a display name, and must be registered via the `vsview_register_toolpanel` and/or `vsview_register_tooldock` hook:
+
+The identifier must not contain a `.`. VSView skips a plugin whose identifier contains a `.`, and it skips both plugins when two third-party plugins use the same identifier.
 
 ```python title="plugin.py"
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
