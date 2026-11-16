@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import gc
 import weakref
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 import pytest
 from jetpytools import complex_hash
@@ -520,6 +520,26 @@ def test_timeline_display_scale_settings_reaction(
     SettingsManager.global_settings.timeline.display_scale = 1.0
     SettingsManager.signals.globalChanged.emit()
     assert timeline.display_scale == 1.0
+
+
+@pytest.mark.parametrize(
+    ("open_mode", "global_mode"),
+    [("time", "frame"), ("frame", "time")],
+)
+def test_timeline_global_save_keeps_the_open_mode(
+    timeline_control_bar: TimelineControlBar,
+    qt_event_loop: QtEventLoop,
+    open_mode: Literal["frame", "time"],
+    global_mode: Literal["frame", "time"],
+) -> None:
+    timeline = timeline_control_bar.timeline
+    timeline.mode = open_mode
+
+    SettingsManager.global_settings.timeline.mode = global_mode
+    SettingsManager.signals.globalChanged.emit()
+
+    assert timeline.mode == open_mode
+    assert timeline.mode_selector.index == timeline.MODES.index(open_mode)
 
 
 def test_timeline_hover_zoom_factor_scaling(timeline_control_bar: TimelineControlBar) -> None:

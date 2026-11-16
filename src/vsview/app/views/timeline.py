@@ -1207,7 +1207,6 @@ class Timeline(QWidget):
         }
 
     def _on_settings_changed(self) -> None:
-        self._mode = SettingsManager.global_settings.timeline.mode
         self.display_scale = SettingsManager.global_settings.timeline.display_scale
         self.notches_cache = self._init_notches_cache()
         self.set_sizes()
