@@ -28,6 +28,13 @@ FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "scening"
 FPS_24 = Fraction(24000, 1001)
 FIXED_COLOR = QColor("#ff0000")
 
+_CHAPTERS_XML = (
+    "<Chapters><EditionEntry><ChapterAtom><ChapterTimeStart>00:00:01.000</ChapterTimeStart>"
+    "<ChapterDisplay><ChapterString>{label}</ChapterString></ChapterDisplay></ChapterAtom></EditionEntry></Chapters>"
+)
+_ENTITY_XML = '<!DOCTYPE Chapters [<!ENTITY a "AAAA">]>' + _CHAPTERS_XML.format(label="&a;")
+_PLAIN_XML = _CHAPTERS_XML.format(label="Plain")
+
 
 def _patch_parser(parser: Any) -> Any:
     setattr(parser, "get_color", MethodType(lambda _: FIXED_COLOR, parser))
@@ -172,6 +179,33 @@ class TestMatroskaXMLParser:
         f.write_text(malicious_xml, encoding="utf-8")
         with pytest.raises(ValueError, match=r"XML entity declarations \(DOCTYPE/ENTITY\) are prohibited"):
             parse(xml_p, f)
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            pytest.param(('<?xml version="1.0" encoding="UTF-16"?>' + _ENTITY_XML).encode("utf-16"), id="utf-16"),
+            pytest.param(("<!--" + "x" * 70_000 + "-->" + _ENTITY_XML).encode(), id="long-comment-prolog"),
+            pytest.param((" " * 70_000 + _ENTITY_XML).encode(), id="long-whitespace-prolog"),
+            pytest.param(
+                ('<?xml version="1.0"?><?p ' + "x" * 70_000 + "?>" + _ENTITY_XML).encode(), id="long-pi-prolog"
+            ),
+        ],
+    )
+    def test_reject_doctype_anywhere_in_the_prolog(self, xml_p: MatroskaXMLParser, tmp_path: Path, data: bytes) -> None:
+        f = tmp_path / "evil.xml"
+        f.write_bytes(data)
+
+        with pytest.raises(ValueError, match=r"^XML entity declarations \(DOCTYPE/ENTITY\) are prohibited: evil$"):
+            parse(xml_p, f)
+
+    def test_utf16_without_doctype_is_parsed(self, xml_p: MatroskaXMLParser, tmp_path: Path) -> None:
+        f = tmp_path / "chapters.xml"
+        f.write_bytes(('<?xml version="1.0" encoding="UTF-16"?>' + _PLAIN_XML).encode("utf-16"))
+
+        result = parse(xml_p, f)
+
+        assert isinstance(result, list)
+        assert [(r.start, r.label) for r in result[0].ranges] == [(timedelta(seconds=1), "Plain")]
 
 
 class TestXvidLogParser:

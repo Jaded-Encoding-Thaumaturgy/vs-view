@@ -83,12 +83,21 @@ class MatroskaXMLParser(Parser):
     @override
     def parse(self, io: BinaryIO, name: str, fps: Fraction) -> SceneRow | list[SceneRow]:
         import xml.etree.ElementTree as ET
+        import xml.parsers
 
-        header = io.read(65536)
-        io.seek(0)
-        sanitized = re.sub(rb"<!--[\s\S]*?-->", b"", header)
-        if b"<!DOCTYPE" in sanitized.upper() or b"<!ENTITY" in sanitized.upper():
+        def reject(*args: Any) -> None:
             raise ValueError(f"XML entity declarations (DOCTYPE/ENTITY) are prohibited: {name}")
+
+        parser = xml.parsers.expat.ParserCreate()
+        parser.StartDoctypeDeclHandler = reject
+        parser.EntityDeclHandler = reject
+
+        try:
+            parser.ParseFile(io)
+        except xml.parsers.expat.ExpatError:
+            raise ValueError(f"Could not parse XML file: {name}")
+
+        io.seek(0)
 
         try:
             tree = ET.parse(io)
