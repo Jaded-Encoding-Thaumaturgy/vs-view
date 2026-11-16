@@ -16,7 +16,9 @@
     "groupName": "Security fixes",
     "addLabels": ["security"]
   },
-  "dependencyDashboard": true,
+  "dependencyDashboard": {
+    "enabled": true
+  },
   "schedule": ["* 14 * * 1,4"],
   "packageRules": [
     {
