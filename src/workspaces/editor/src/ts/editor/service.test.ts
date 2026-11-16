@@ -321,6 +321,7 @@ vi.mock('../services/models', () => ({
   initVscodeServices: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
 }));
 
+import { updateUserConfiguration } from '@codingame/monaco-vscode-configuration-service-override';
 import * as monaco from 'monaco-editor';
 
 import { EditorService } from './service';
@@ -369,6 +370,17 @@ describe('EditorService', () => {
       expect(defaultTabEl.classList.contains('active')).toBe(true);
       expect(defaultTabEl.classList.contains('main')).toBe(true);
       expect(defaultTabEl.querySelector('.tab-title')?.textContent).toBe('script.py');
+    });
+
+    it('logs when the theme cannot be stored in the configuration', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.mocked(updateUserConfiguration).mockRejectedValueOnce(new Error('config locked'));
+
+      service.setTheme('Light Modern');
+
+      await vi.waitFor(() =>
+        expect(errorSpy).toHaveBeenCalledWith('Failed to set theme: config locked'),
+      );
     });
 
     it('logs when the default tab cannot be opened', () => {

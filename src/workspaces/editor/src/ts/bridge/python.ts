@@ -156,7 +156,7 @@ export class BridgeService
                 .map((pair) => ({ begin: pair.begin, end: pair.end }))
             : undefined;
 
-          void this.lspService.connect({
+          const config = {
             id: p.id,
             name: p.name,
             port: p.port,
@@ -166,14 +166,19 @@ export class BridgeService
               typeof p.fileEventsPattern === 'string' ? p.fileEventsPattern : undefined,
             configurationSection,
             progressNotifications,
-          });
+          };
+          void Result.fromPromise(() => this.lspService.connect(config)).mapErr((err) =>
+            console.error(`Failed to connect language server '${config.id}':`, err),
+          );
         }
       }),
     );
     this._disposables.add(
       this.onCommand('lsp.disconnect', (p) => {
         const id = typeof p.id === 'string' ? p.id : undefined;
-        void this.lspService.disconnect(id);
+        void Result.fromPromise(() => this.lspService.disconnect(id)).mapErr((err) =>
+          console.error(`Failed to disconnect language server '${id ?? 'all'}':`, err),
+        );
       }),
     );
     this._disposables.add(

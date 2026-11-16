@@ -591,7 +591,7 @@ describe('BridgeService', () => {
       );
     });
 
-    it('dispatches console commands (append, toggle, clear)', () => {
+    it('dispatches console commands (append, toggle)', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
@@ -680,6 +680,33 @@ describe('BridgeService', () => {
 
       mockBridgeFixture.emitCommand('lsp.disconnect', '{}');
       expect(mockLsp.disconnect).toHaveBeenCalledWith(undefined);
+    });
+
+    it('logs a failed lsp.connect or lsp.disconnect', async () => {
+      using fixture = setupInitializedBridgeService().bridgeService;
+      void fixture;
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const connectFailure = new Error('socket failed');
+      const disconnectFailure = new Error('dispose failed');
+      mockLsp.connect.mockRejectedValueOnce(connectFailure);
+      mockLsp.disconnect.mockRejectedValueOnce(disconnectFailure);
+
+      mockBridgeFixture.emitCommand(
+        'lsp.connect',
+        JSON.stringify({ id: 'pyrefly', name: 'Pyrefly', port: 1234, language: 'python' }),
+      );
+      mockBridgeFixture.emitCommand('lsp.disconnect', JSON.stringify({ id: 'pyrefly' }));
+
+      await vi.waitFor(() => {
+        expect(errorSpy).toHaveBeenCalledWith(
+          "Failed to connect language server 'pyrefly':",
+          connectFailure,
+        );
+        expect(errorSpy).toHaveBeenCalledWith(
+          "Failed to disconnect language server 'pyrefly':",
+          disconnectFailure,
+        );
+      });
     });
 
     it('logs debug message on unrecognized commands without throwing', () => {

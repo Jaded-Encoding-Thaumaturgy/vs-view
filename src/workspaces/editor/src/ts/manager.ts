@@ -1,5 +1,5 @@
 import type * as vscode from 'vscode';
-import { DisposableStore } from 'vsview-shared';
+import { DisposableStore, Result, ResultAsync } from 'vsview-shared';
 
 import { BridgeService } from './bridge/python';
 import { EditorService } from './editor/service';
@@ -13,7 +13,7 @@ export class MonacoManager implements vscode.Disposable {
   public readonly bridgeService: BridgeService;
 
   private readonly disposables = new DisposableStore();
-  private shutdownPromise: Promise<void> | null = null;
+  private shutdownResult: ResultAsync<void> | null = null;
 
   constructor() {
     this.lspService = this.disposables.add(new LspService());
@@ -28,7 +28,7 @@ export class MonacoManager implements vscode.Disposable {
   }
 
   public dispose(): void {
-    void this.shutdown().catch((err) => console.error('MonacoManager shutdown failed', err));
+    void this.shutdown().mapErr(logShutdownError);
   }
 
   public [Symbol.dispose](): void {
@@ -36,23 +36,28 @@ export class MonacoManager implements vscode.Disposable {
   }
 
   public async [Symbol.asyncDispose](): Promise<void> {
-    await this.shutdown();
+    await this.shutdown().mapErr(logShutdownError);
   }
 
   /** Dispose document owners before disconnecting their language clients. */
-  public shutdown(): Promise<void> {
-    this.shutdownPromise ??= (async () => {
-      try {
+  public shutdown(): ResultAsync<void> {
+    this.shutdownResult ??= ResultAsync.fromResult(
+      Result.fromPromise(async () => {
         this.bridgeService.flushState();
         this.lspService.beginShutdown();
         this.bridgeService.dispose();
         this.consoleService.dispose();
         this.editorService.dispose();
         await this.lspService.disconnect();
-      } finally {
+      }).then((result) => {
         this.disposables.dispose();
-      }
-    })();
-    return this.shutdownPromise;
+        return result;
+      }),
+    );
+    return this.shutdownResult;
   }
+}
+
+function logShutdownError(err: Error): void {
+  console.error('MonacoManager shutdown failed', err);
 }

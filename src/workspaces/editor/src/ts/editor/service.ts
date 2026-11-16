@@ -191,8 +191,8 @@ export class EditorService implements vscode.Disposable {
         document.documentElement.dataset.theme = def.id;
         document.documentElement.setAttribute('data-theme-kind', def.kind.toString());
         monaco.editor.setTheme(def.id);
-        this.persistThemeConfig(def.id).catch((err) =>
-          console.error(`Failed to set theme: ${err}`),
+        void Result.fromPromise(() => this.persistThemeConfig(def.id)).mapErr((err) =>
+          console.error(`Failed to set theme: ${err.message}`),
         );
       },
       err: (err) => console.error(`Failed to set theme: ${err.message}`),
