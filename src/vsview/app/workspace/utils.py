@@ -29,6 +29,8 @@ EXCLUDED_PREFIXES = frozenset(
     }
 )
 
+NEVER_EVICTED = frozenset({"__main__", "__mp_main__", "__vsview__"})
+
 
 def _get_installed_top_levels() -> set[str]:
     installed = set(importlib.metadata.packages_distributions().keys())
@@ -53,7 +55,7 @@ def find_local_packages() -> set[str]:
 
         top_level = module.__name__.split(".")[0]
 
-        if top_level in installed:
+        if top_level in installed or top_level in NEVER_EVICTED:
             continue
 
         mod_path = Path(mod_file).resolve()
