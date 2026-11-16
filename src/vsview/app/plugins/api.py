@@ -1015,7 +1015,9 @@ class NodeProcessor(
         Registered via `vsview_get_video_processor` or `vsview_get_audio_processor`.
 
         Only **one** video processor and **one** audio processor can be active application-wide.
-        The first registered plugin takes precedence.
+
+        When several plugins return one, the plugin registered last takes precedence.
+        A third-party audio processor always takes precedence over the built-in one, so a plugin can replace it.
     """
 
     __plugin_base__ = True

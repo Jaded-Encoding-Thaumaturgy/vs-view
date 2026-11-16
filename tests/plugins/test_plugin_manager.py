@@ -29,6 +29,8 @@ from vsview.app.settings.dialog import SettingsDialog
 from vsview.app.settings.manager import SettingsManager
 from vsview.app.settings.metadata import Checkbox
 from vsview.app.settings.shortcuts import ShortcutManager
+from vsview.app.tools import audio_convert as builtin_audio_convert
+from vsview.app.tools.audio_convert.plugin import AudioConvert as BuiltinAudioConvert
 from vsview.vsenv.loop import QtEventLoop
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
@@ -340,6 +342,28 @@ def test_plugin_manager_audio_processor_accessor_registered(init_plugin_manager:
 
     init_plugin_manager.manager.register(AudioProcessorPlugin())
     assert init_plugin_manager.audio_processor is MockAudioProcessor  # type: ignore
+
+
+@pytest.mark.parametrize("third_party_first", [False, True], ids=["builtin_first", "third_party_first"])
+def test_plugin_manager_third_party_audio_processor_replaces_the_builtin_one(
+    init_plugin_manager: PluginManager, third_party_first: bool
+) -> None:
+    class AudioProcessorPlugin:
+        @specs.hookimpl
+        def vsview_get_audio_processor(self) -> type[MockAudioProcessor]:
+            return MockAudioProcessor
+
+    plugins = [(builtin_audio_convert, "vsview.app.tools.audio_convert"), (AudioProcessorPlugin(), "third_party")]
+    for plugin, name in reversed(plugins) if third_party_first else plugins:
+        init_plugin_manager.manager.register(plugin, name=name)
+
+    assert init_plugin_manager.audio_processor is MockAudioProcessor  # type: ignore[comparison-overlap]
+
+
+def test_plugin_manager_builtin_audio_processor_is_used_alone(init_plugin_manager: PluginManager) -> None:
+    init_plugin_manager.manager.register(builtin_audio_convert, name="vsview.app.tools.audio_convert")
+
+    assert init_plugin_manager.audio_processor is BuiltinAudioConvert
 
 
 def test_plugin_manager_workspaces_filters_unallowed_plugins(init_plugin_manager: PluginManager) -> None:

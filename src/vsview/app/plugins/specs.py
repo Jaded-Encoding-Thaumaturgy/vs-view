@@ -54,7 +54,7 @@ def vsview_get_video_processor() -> type[NodeProcessor[VideoNode, Any, Any]]:
 
     Returns:
         A NodeProcessor[VideoNode] subclass.
-        The first registered plugin to return an object takes precedence.
+        When several plugins return one, the plugin registered last takes precedence.
     """
     raise NotImplementedError
 
@@ -72,7 +72,8 @@ def vsview_get_audio_processor() -> type[NodeProcessor[AudioNode, Any, Any]]:
 
     Returns:
         A NodeProcessor[AudioNode] subclass.
-        The first registered plugin to return an object takes precedence.
+        A third-party processor takes precedence over the built-in one, so a plugin can replace it.
+        When several third-party plugins return one, the plugin registered last takes precedence.
     """
     raise NotImplementedError
 
