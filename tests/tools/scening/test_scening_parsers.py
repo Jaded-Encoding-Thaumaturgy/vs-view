@@ -314,3 +314,54 @@ class TestPythonListTimestampsParser:
         f.write_text("")
         with pytest.raises(ValueError, match=r"^Empty file$"):
             parse(py_ts_p, f)
+
+
+BOM = b"\xef\xbb\xbf"
+
+
+def _ranges(result: Any) -> list[Any]:
+    scenes = result if isinstance(result, list) else [result]
+    return [(r.start, r.end, r.label) for scene in scenes for r in scene.ranges]
+
+
+@pytest.mark.parametrize(
+    ("parser_cls", "data", "expected"),
+    [
+        pytest.param(
+            OGMParser,
+            b"CHAPTER01=00:00:00.000\nCHAPTER01NAME=Intro\nCHAPTER02=00:01:00.000\nCHAPTER02NAME=Ep\n",
+            [(timedelta(0), None, "Intro"), (timedelta(minutes=1), None, "Ep")],
+            id="ogm",
+        ),
+        pytest.param(
+            XvidLogParser,
+            b"# XviD 2pass stat file\ni 1\np 2\np 3\ni 4\n",
+            [(0, None, ""), (3, None, "")],
+            id="xvid",
+        ),
+        pytest.param(QPFileParser, b"0 I -1\n48 I -1\n", [(0, None, "-1"), (48, None, "-1")], id="qp"),
+        pytest.param(
+            WobblyParser,
+            b'{"sections": [0, 50], "trim": [[0, 99]]}',
+            [(0, 50, ""), (50, 99, "")],
+            id="wobbly",
+        ),
+        pytest.param(PythonListFramesParser, b"[10, (20, 30)]", [(10, None, ""), (20, 30, "")], id="python-frames"),
+        pytest.param(
+            PythonListTimestampsParser,
+            b"['00:00:01.500']",
+            [(timedelta(seconds=1.5), None, "")],
+            id="python-timestamps",
+        ),
+    ],
+)
+@pytest.mark.parametrize("prefix", [pytest.param(b"", id="no-bom"), pytest.param(BOM, id="bom")])
+def test_text_parsers_ignore_a_utf8_bom(
+    tmp_path: Path, parser_cls: type[Any], data: bytes, expected: list[Any], prefix: bytes
+) -> None:
+    f = tmp_path / "input.txt"
+    f.write_bytes(prefix + data)
+
+    result = parse(_patch_parser(parser_cls()), f)
+
+    assert _ranges(result) == expected

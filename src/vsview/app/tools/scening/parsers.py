@@ -58,7 +58,7 @@ class OGMParser(Parser):
 
         ranges = list[RangeTime]()
 
-        with borrowed_text_wrapper(io) as wrapper:
+        with borrowed_text_wrapper(io, encoding="utf-8-sig") as wrapper:
             text = wrapper.read()
 
         if not text:
@@ -155,7 +155,7 @@ class XvidLogParser(Parser):
         ranges = list[RangeFrame]()
         current_frame = 0
 
-        with borrowed_text_wrapper(io, encoding="utf-8") as wrapper:
+        with borrowed_text_wrapper(io, encoding="utf-8-sig") as wrapper:
             lines = wrapper.read()
 
         for line in lines.splitlines():
@@ -179,7 +179,7 @@ class QPFileParser(Parser):
     def parse(self, io: BinaryIO, name: str, fps: Fraction) -> SceneRow:
         ranges = list[RangeFrame]()
 
-        with borrowed_text_wrapper(io, encoding="utf-8") as wrapper:
+        with borrowed_text_wrapper(io, encoding="utf-8-sig") as wrapper:
             text = wrapper.read()
 
         for matched in re.finditer(r"^(\d+)[ \t]+[IK](?:[ \t]+(-?\d+))?", text, re.MULTILINE):
@@ -198,7 +198,7 @@ class WobblyParser(Parser):
 
     @override
     def parse(self, io: BinaryIO, name: str, fps: Fraction) -> SceneRow | list[SceneRow]:
-        with borrowed_text_wrapper(io, encoding="utf-8") as wrapper:
+        with borrowed_text_wrapper(io, encoding="utf-8-sig") as wrapper:
             text = wrapper.read()
 
         try:
@@ -272,7 +272,7 @@ class PythonListFramesParser(Parser):
 
     @override
     def parse(self, io: BinaryIO, name: str, fps: Fraction) -> SceneRow:
-        with borrowed_text_wrapper(io) as wrapper:
+        with borrowed_text_wrapper(io, encoding="utf-8-sig") as wrapper:
             text = wrapper.read().strip()
 
         if not text:
@@ -303,7 +303,7 @@ class PythonListTimestampsParser(Parser):
 
     @override
     def parse(self, io: BinaryIO, name: str, fps: Fraction) -> SceneRow:
-        with borrowed_text_wrapper(io) as wrapper:
+        with borrowed_text_wrapper(io, encoding="utf-8-sig") as wrapper:
             text = wrapper.read().strip()
 
         if not text:
