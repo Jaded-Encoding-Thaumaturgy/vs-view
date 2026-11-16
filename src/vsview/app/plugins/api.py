@@ -703,8 +703,8 @@ class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     are automatically intercepted, validated and stored in the in-memory settings.
 
     They are written to disk the next time the host saves settings:
-    local settings on autosave and when the workspace closes, global settings when the Settings dialog is applied
-    and when the app closes.
+    local settings on autosave and when the workspace closes, global settings when the Settings dialog is applied,
+    when a workspace is closed and when the app closes.
 
     Note:
         In-place mutations of mutable containers (e.g., `self.settings.global_.items.append(...)`)

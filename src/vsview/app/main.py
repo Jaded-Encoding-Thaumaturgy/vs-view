@@ -441,6 +441,9 @@ class MainWindow(QMainWindow):
 
         btn.deleteLater()
 
+        with QSignalBlocker(self.settings_manager.signals):
+            self.settings_manager.save_global()
+
         if not self.nav_container.buttons:
             unregister_policy()
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import urllib.error
 import urllib.request
 from collections.abc import Generator
@@ -18,7 +19,7 @@ from vsview.app.main import Application, MainWindow, WorkspaceToolButton
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import ShortcutEditor
 from vsview.app.settings.manager import SettingsManager
-from vsview.app.settings.models import WindowGeometry
+from vsview.app.settings.models import GlobalSettings, WindowGeometry
 from vsview.app.workspace import PythonScriptWorkspace, VideoFileWorkspace
 from vsview.vsenv import QtEventLoop, unregister_policy
 
@@ -102,6 +103,16 @@ def test_workspace_lifecycle_add_and_delete(main_window: MainWindow) -> None:
     main_window.delete_workspace(btn1)
     assert len(main_window.nav_container.buttons) == 0
     assert main_window.stack.count() == 0
+
+
+def test_deleting_a_workspace_saves_the_global_settings(main_window: MainWindow) -> None:
+    btn = main_window.add_workspace(PythonScriptWorkspace)
+    SettingsManager.global_settings.plugins["unsaved_plugin"] = {"value": 3}
+
+    assert main_window.delete_workspace(btn) is True
+
+    saved = json.loads(GlobalSettings.path_env.read_text(encoding="utf-8"))
+    assert saved["plugins"]["unsaved_plugin"] == {"value": 3}
 
 
 class _HookRecordingFileWorkspace(VideoFileWorkspace):
