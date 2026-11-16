@@ -3,6 +3,7 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 from collections.abc import Generator
+from typing import override
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -98,6 +99,32 @@ def test_workspace_lifecycle_add_and_delete(main_window: MainWindow) -> None:
     main_window.delete_workspace(btn1)
     assert len(main_window.nav_container.buttons) == 0
     assert main_window.stack.count() == 0
+
+
+class _HookRecordingFileWorkspace(VideoFileWorkspace):
+    hooks: list[str]
+
+    @override
+    def on_connected(self) -> None:
+        self.hooks.append("on_connected")
+
+    @override
+    def on_disconnected(self) -> None:
+        self.hooks.append("on_disconnected")
+
+
+def test_deleting_an_inactive_workspace_keeps_the_active_one_connected(main_window: MainWindow) -> None:
+    inactive = main_window.add_workspace(PythonScriptWorkspace)
+    _HookRecordingFileWorkspace.hooks = []
+    active = main_window.add_workspace(_HookRecordingFileWorkspace)
+    assert main_window.stack.currentWidget() is active.workspace
+
+    assert main_window.delete_workspace(inactive) is True
+    active.workspace.statusLoadingStarted.emit("after delete")
+
+    assert main_window.stack.currentWidget() is active.workspace
+    assert _HookRecordingFileWorkspace.hooks == ["on_connected"]
+    assert main_window.status_widget.message_text_label.text() == "after delete"
 
 
 def test_workspace_delete_cancelled_by_confirm_close(main_window: MainWindow) -> None:

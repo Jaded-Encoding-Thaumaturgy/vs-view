@@ -407,7 +407,9 @@ class MainWindow(QMainWindow):
         if Shiboken.isValid(btn.workspace) and not btn.workspace.confirm_close():
             return False
 
-        self.disconnect_workspace()
+        # Removing a page that is not current emits no currentChanged, so nothing would reconnect the active workspace.
+        if btn.workspace is self._connected_workspace:
+            self.disconnect_workspace()
 
         # Switching to another workspace before deleting the workspace and the environment,
         # otherwise we're getting a dead environment when `self.stack.removeWidget` because it triggers
