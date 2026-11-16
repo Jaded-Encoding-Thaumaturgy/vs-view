@@ -27,8 +27,11 @@ from rich.text import Text
 
 if sys.version_info >= (3, 14):
     from compression import zstd
+
+    ZSTD_AVAILABLE = True
 else:
     zstd = Any
+    ZSTD_AVAILABLE = False
 
 console = Console(stderr=True)
 handler = RichHandler(
@@ -191,6 +194,12 @@ def create_dist(
         main_wheel
 
     """
+    if offline and not ZSTD_AVAILABLE:
+        raise RuntimeError(
+            "An offline distribution needs Python 3.14 or newer for `compression.zstd`. "
+            f"This is Python {platform.python_version()}."
+        )
+
     q = ["--quiet"] if quiet else []
     logger.info("Building main wheel...")
     if main_dir.exists():
