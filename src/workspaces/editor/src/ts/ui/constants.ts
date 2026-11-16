@@ -13,3 +13,6 @@ export const DOM_IDS = {
   TAB_CONTEXT_MENU: 'tab-context-menu',
   CONSOLE_CONTEXT_MENU: 'console-context-menu',
 } as const;
+
+/** Time the editor may take to start before it shows a startup error. */
+export const STARTUP_TIMEOUT_MS = 30_000;
