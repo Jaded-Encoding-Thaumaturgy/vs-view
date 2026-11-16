@@ -175,8 +175,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         self.tbar.playback_container.settings.loop = self.local_settings.playback.loop
         self.tbar.playback_container.settings.step = self.local_settings.playback.step
 
-        self.tbar.timeline.mode = self.local_settings.timeline.mode
-
+        self._sync_timeline_mode()
         self._sync_audio_controls()
 
         self.outputs_manager.current_audio_index = self.local_settings.playback.last_audio_index
@@ -293,6 +292,10 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         self.tab_manager.sync_zoom_btn.setChecked(self.local_settings.synchronization.sync_zoom)
         self.tab_manager.sync_scroll_btn.setChecked(self.local_settings.synchronization.sync_scroll)
         self.tab_manager.autofit_btn.setChecked(self.local_settings.synchronization.autofit_all_views)
+
+    @run_in_loop(return_future=False)
+    def _sync_timeline_mode(self) -> None:
+        self.tbar.timeline.mode = self.local_settings.timeline.mode
 
     @run_in_loop(return_future=False)
     def _sync_audio_controls(self) -> None:
