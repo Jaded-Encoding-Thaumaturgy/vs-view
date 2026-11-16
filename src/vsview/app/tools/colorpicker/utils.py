@@ -57,9 +57,7 @@ def scale_value_to_float(value: float, input_frame: vs.VideoFrame, chroma: bool 
     else:
         range_in = vs.Range.RANGE_LIMITED
 
-    if input_frame.format.bits_per_sample == 32 or (
-        input_frame.format.bits_per_sample == 16 and input_frame.format.sample_type == vs.FLOAT
-    ):
+    if in_fmt.sample_type == vs.FLOAT:
         return out_value
 
     if in_fmt.color_family == vs.RGB:
