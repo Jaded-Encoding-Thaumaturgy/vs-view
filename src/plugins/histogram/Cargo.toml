@@ -1,6 +1,7 @@
 [package]
 name = "vsview-histogram-rs"
 edition = "2024"
+rust-version = "1.99"
 description = "Internal Rust module for vsview-histogram"
 publish = false
 build = "src/rust/build.rs"
