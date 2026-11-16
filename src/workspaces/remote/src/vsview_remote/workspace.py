@@ -85,13 +85,14 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
             return self._client
 
         logger.info("Connecting to vsremote server at %s...", self._config.address)
+        curve_server_key, curve_public_key, curve_secret_key = self._config.active_curve_keys
         self._client = RemoteClient(
             self._config.address,
             compression=self._config.compression,
             auth_token=self._config.auth_token,
-            curve_server_key=self._config.curve_server_key,
-            curve_public_key=self._config.curve_public_key,
-            curve_secret_key=self._config.curve_secret_key,
+            curve_server_key=curve_server_key,
+            curve_public_key=curve_public_key,
+            curve_secret_key=curve_secret_key,
             forward_logs=self._config.forward_logs,
             subscribe_streams=self._config.subscribe_streams,
             replay_history=False,

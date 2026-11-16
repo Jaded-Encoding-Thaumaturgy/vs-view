@@ -150,12 +150,11 @@ class RemoteConnectionDialog(QDialog):
         self.frame_timeout_spin.setValue(int(sett.frame_timeout) if sett.frame_timeout is not None else 0)
         self.forward_logs_cb.setChecked(sett.forward_logs)
         self.subscribe_streams_cb.setChecked(sett.subscribe_streams)
-        use_curve = bool(sett.curve_server_key or sett.curve_public_key or self.curve_secret_key)
-        self.use_curve_cb.setChecked(use_curve)
+        self.use_curve_cb.setChecked(sett.use_curve)
         self.curve_server_key_edit.setText(sett.curve_server_key or "")
         self.curve_public_key_edit.setText(sett.curve_public_key or "")
         self.curve_secret_key_edit.setText(self.curve_secret_key or "")
-        self._on_curve_toggled(use_curve)
+        self._on_curve_toggled(sett.use_curve)
 
     @property
     def config(self) -> ConnectionConfig:
@@ -167,10 +166,10 @@ class RemoteConnectionDialog(QDialog):
             backlog=self.backlog_spin.value() or None,
             forward_logs=self.forward_logs_cb.isChecked(),
             subscribe_streams=self.subscribe_streams_cb.isChecked(),
-            use_curve=(use_curve := self.use_curve_cb.isChecked()),
-            curve_server_key=self.curve_server_key_edit.text().strip() or None if use_curve else None,
-            curve_public_key=self.curve_public_key_edit.text().strip() or None if use_curve else None,
-            curve_secret_key=self.curve_secret_key_edit.text().strip() or None if use_curve else None,
+            use_curve=self.use_curve_cb.isChecked(),
+            curve_server_key=self.curve_server_key_edit.text().strip() or None,
+            curve_public_key=self.curve_public_key_edit.text().strip() or None,
+            curve_secret_key=self.curve_secret_key_edit.text().strip() or None,
             frame_timeout=v if (v := self.frame_timeout_spin.value()) > 0 else None,
             hwm=self.settings.global_.hwm or (max((self.backlog_spin.value() or 12) * 2, 16)),
             tcp_keepalive=self.settings.global_.tcp_keepalive,
@@ -248,13 +247,14 @@ class RemoteConnectionDialog(QDialog):
 
     @run_in_background(name="PingServer")
     def ping(self, cfg: ConnectionConfig) -> bool:
+        curve_server_key, curve_public_key, curve_secret_key = cfg.active_curve_keys
         with RemoteClient(
             cfg.address,
             compression=cfg.compression,
             auth_token=cfg.auth_token,
-            curve_server_key=cfg.curve_server_key,
-            curve_public_key=cfg.curve_public_key,
-            curve_secret_key=cfg.curve_secret_key,
+            curve_server_key=curve_server_key,
+            curve_public_key=curve_public_key,
+            curve_secret_key=curve_secret_key,
             subscribe_streams=False,
             forward_logs=False,
             hwm=cfg.hwm if cfg.hwm is not None else 64,
@@ -278,3 +278,10 @@ class ConnectionConfig(NamedTuple):
     frame_timeout: float | None = None
     hwm: int | None = None
     tcp_keepalive: bool = True
+
+    @property
+    def active_curve_keys(self) -> tuple[str | None, str | None, str | None]:
+        """The server, public and secret CurveZMQ keys to connect with: all None when CurveZMQ is disabled."""
+        if not self.use_curve:
+            return None, None, None
+        return self.curve_server_key, self.curve_public_key, self.curve_secret_key
