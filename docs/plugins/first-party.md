@@ -209,6 +209,7 @@ You can export selected ranges directly to video files:
 3. Choose a destination file (single range) or base name (batch export).
 
 Exports run asynchronously in the background via FFmpeg (path configurable in **Settings** -> **Plugin - Scening**).
+The workspace is blocked while an export runs, so you cannot reload or play the script until it finishes.
 
 !!! Abstract "Extended Functionality"
     Developers can register custom parsers and serializers via the plugin hook system.
