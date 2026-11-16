@@ -57,8 +57,9 @@ class StatefulPythonLexer(PythonLexer):
                     case tuple():
                         for state in new_state:
                             match state:
-                                case "#pop" if len(statestack) > 1:
-                                    statestack.pop()
+                                case "#pop":
+                                    if len(statestack) > 1:
+                                        statestack.pop()
                                 case "#push":
                                     statestack.append(statestack[-1])
                                 case _:
