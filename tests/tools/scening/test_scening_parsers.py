@@ -198,6 +198,25 @@ class TestMatroskaXMLParser:
         with pytest.raises(ValueError, match=r"^XML entity declarations \(DOCTYPE/ENTITY\) are prohibited: evil$"):
             parse(xml_p, f)
 
+    @pytest.mark.parametrize("bad_time", ["00:00:inf", "00:00:-inf", "00:00:1e300", "00:00:nan", "99999999999:00:00"])
+    def test_skips_a_chapter_with_an_out_of_range_time(
+        self, xml_p: MatroskaXMLParser, tmp_path: Path, bad_time: str
+    ) -> None:
+        f = tmp_path / "chapters.xml"
+        f.write_text(
+            "<Chapters><EditionEntry>"
+            f"<ChapterAtom><ChapterTimeStart>{bad_time}</ChapterTimeStart></ChapterAtom>"
+            "<ChapterAtom><ChapterTimeStart>00:00:02.000</ChapterTimeStart>"
+            "<ChapterDisplay><ChapterString>Kept</ChapterString></ChapterDisplay></ChapterAtom>"
+            "</EditionEntry></Chapters>",
+            encoding="utf-8",
+        )
+
+        result = parse(xml_p, f)
+
+        assert isinstance(result, list)
+        assert [(r.start, r.label) for r in result[0].ranges] == [(timedelta(seconds=2), "Kept")]
+
     def test_utf16_without_doctype_is_parsed(self, xml_p: MatroskaXMLParser, tmp_path: Path) -> None:
         f = tmp_path / "chapters.xml"
         f.write_bytes(('<?xml version="1.0" encoding="UTF-16"?>' + _PLAIN_XML).encode("utf-16"))

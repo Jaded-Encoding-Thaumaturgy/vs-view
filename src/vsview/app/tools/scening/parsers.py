@@ -150,7 +150,7 @@ class MatroskaXMLParser(Parser):
                             label = name_node.text
 
                     ranges.append(RangeTime(start=start_dt, label=label))
-            except ValueError:
+            except (ValueError, OverflowError):
                 continue
 
         return ranges
