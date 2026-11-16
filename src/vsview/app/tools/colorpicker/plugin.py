@@ -255,9 +255,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             return self.on_current_voutput_changed(voutput, self.api.current_video_index)
 
         if self.tracking == TrackingState.ACTIVE:
-            # Force cursor shape & refresh current cursor position
-            self.api.current_view.viewport.set_cursor(Qt.CursorShape.CrossCursor)
-            self.update_labels()
+            self._refresh_tracking()
         return None
 
     @override
@@ -385,6 +383,12 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self.src_norm_fmt = f"{{:.{self.settings.global_.decimals_nb}f}}"
 
     # Internal methods
+    @run_in_loop
+    def _refresh_tracking(self) -> None:
+        # Force cursor shape & refresh current cursor position
+        self.api.current_view.viewport.set_cursor(Qt.CursorShape.CrossCursor)
+        self.update_labels()
+
     def _update_source_labels(self, pos: QPoint, frame: vs.VideoFrame) -> None:
         src_vals = self._extract_pixel_values(frame, pos)
 

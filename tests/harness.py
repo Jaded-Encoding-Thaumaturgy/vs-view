@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Generator, Iterable, MutableMapping, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
@@ -72,7 +73,8 @@ class HarnessViewportProxy:
     def __init__(self) -> None:
         self._cursor_pos = QPoint(0, 0)
         self._cursor: QCursor | Qt.CursorShape = Qt.CursorShape.OpenHandCursor
-        self.testing = HarnessTesting(self, ["_cursor"])
+        self._cursor_threads = list[threading.Thread]()
+        self.testing = HarnessTesting(self, ["_cursor", "_cursor_threads"])
 
     @property
     def cursor_pos(self) -> QPoint:
@@ -80,6 +82,7 @@ class HarnessViewportProxy:
 
     def set_cursor(self, cursor: QCursor | Qt.CursorShape) -> None:
         self._cursor = cursor
+        self._cursor_threads.append(threading.current_thread())
 
     def map_from_global(self, point: QPoint) -> QPoint:
         return point

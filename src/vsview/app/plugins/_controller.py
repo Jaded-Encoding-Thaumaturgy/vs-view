@@ -22,7 +22,7 @@ from vsview.app.utils import QObjectCounter, QObjectSet, has_overriding_method
 from vsview.types import Frame, Time
 from vsview.vsenv.loop import run_in_loop
 
-from ._interface import _PluginLike, _PluginSettingsStore, _SettingsProxy
+from ._interface import _PluginLike, _PluginSettingsStore, _SettingsProxy, _ViewportCursorReset
 from .contracts import AudioOutputProxy, VideoOutputProxy
 from .exceptions import NoCurrentVideoOutputError, NoCurrentViewError
 
@@ -57,6 +57,9 @@ class PluginWorkspaceController(QObject):
         self.__workspace = workspace
         self.__busy_callers = QObjectCounter[QObject]()
         self.__settings_store = _PluginSettingsStore(self._get_file_path)
+        self.__cursor_reset = _ViewportCursorReset(self)
+        self.__cursor_reset_lock = Lock()
+        self.__cursor_reset_connected = False
 
         SettingsManager.signals.connect_global_weak(self._on_global_settings_changed)
         SettingsManager.signals.connect_local_weak(self._on_local_settings_changed)
@@ -167,12 +170,20 @@ class PluginWorkspaceController(QObject):
     def current_view_proxy(self) -> GraphicsViewProxy:
         from .api import GraphicsViewProxy
 
+        tab_manager = self.__workspace.tab_manager
+
         try:
-            current_view = self.__workspace.tab_manager.current_view
+            current_view = tab_manager.current_view
         except TypeError as e:
             logger.debug("Error %s", e, exc_info=e)
             raise NoCurrentViewError("No current view is currently available in the active workspace") from None
-        return GraphicsViewProxy(self.__workspace.tab_manager.tabChanged, current_view)
+
+        with self.__cursor_reset_lock:
+            if not self.__cursor_reset_connected:
+                tab_manager.tabChanged.connect(self.__cursor_reset.reset)
+                self.__cursor_reset_connected = True
+
+        return GraphicsViewProxy(self.__cursor_reset, current_view)
 
     @property
     def timeline_proxy(self) -> TimelineProxy:

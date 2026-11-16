@@ -6,11 +6,12 @@ from logging import getLogger
 from pathlib import Path
 from types import get_original_bases
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, get_args, get_origin, override
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, ref
 
 from pydantic import BaseModel
-from PySide6.QtCore import QMetaObject, QObject, SignalInstance
+from PySide6.QtCore import QObject, Qt, Slot
 from PySide6.QtWidgets import QWidget
+from shiboken6 import Shiboken
 
 from vsview.app.settings import SecretsManager, SettingsManager
 from vsview.app.utils import ObjectType
@@ -227,18 +228,17 @@ class _PluginBaseMeta(ObjectType):
 
 
 class _GraphicsViewProxy(QObject):
-    def __init__(self, tab_changed: SignalInstance, view: GraphicsView) -> None:
+    def __init__(self, cursor_reset: _ViewportCursorReset, view: GraphicsView) -> None:
         super().__init__()
-        self.__tab_changed = tab_changed
+        self.__cursor_reset = cursor_reset
         self.__view = view
 
 
 class _ViewportProxy(QObject):
-    def __init__(self, tab_changed: SignalInstance, viewport: QWidget) -> None:
+    def __init__(self, cursor_reset: _ViewportCursorReset, viewport: QWidget) -> None:
         super().__init__()
-        self.__tab_changed = tab_changed
+        self.__cursor_reset = cursor_reset
         self.__viewport = viewport
-        self.__cursor_reset_conn: QMetaObject.Connection | None = None
 
 
 class _TimelineProxy(QObject):
@@ -251,6 +251,25 @@ class _PlaybackProxy(QObject):
     def __init__(self, playback_manager: PlaybackManager) -> None:
         super().__init__()
         self.__playback_manager = playback_manager
+
+
+class _ViewportCursorReset(QObject):
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._viewport: ref[QWidget] | None = None
+
+    def track(self, viewport: QWidget) -> None:
+        self._viewport = ref(viewport)
+
+    @Slot()
+    def reset(self) -> None:
+        if self._viewport is None:
+            return
+
+        viewport, self._viewport = self._viewport(), None
+
+        if viewport is not None and Shiboken.isValid(viewport):
+            viewport.setCursor(Qt.CursorShape.OpenHandCursor)
 
 
 class _PluginSecrets:

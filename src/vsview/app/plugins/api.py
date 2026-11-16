@@ -31,7 +31,6 @@ from PySide6.QtGui import (
     QShortcut,
 )
 from PySide6.QtWidgets import QGraphicsView, QWidget
-from shiboken6 import Shiboken
 
 from vsview.app.settings import SettingsManager, ShortcutManager
 from vsview.app.settings.action import ActionDefinition
@@ -133,26 +132,13 @@ class GraphicsViewProxy(_GraphicsViewProxy):
             Note:
                 The cursor automatically resets to `Qt.CursorShape.OpenHandCursor` when switching video tabs.
             """
-            v = self.__viewport
-            v.setCursor(cursor)
-
-            if self.__cursor_reset_conn:
-                self.__tab_changed.disconnect(self.__cursor_reset_conn)
-
-            def reset_cursor() -> None:
-                if Shiboken.isValid(v):
-                    v.setCursor(Qt.CursorShape.OpenHandCursor)
-                self.__cursor_reset_conn = None
-
-            self.__cursor_reset_conn = self.__tab_changed.connect(
-                reset_cursor,
-                Qt.ConnectionType.SingleShotConnection,  # Auto-disconnects after first emit
-            )
+            self.__viewport.setCursor(cursor)
+            self.__cursor_reset.track(self.__viewport)
 
     @property
     def viewport(self) -> GraphicsViewProxy.ViewportProxy:
         """Return a proxy for the viewport."""
-        return GraphicsViewProxy.ViewportProxy(self.__tab_changed, self.__view.viewport())
+        return GraphicsViewProxy.ViewportProxy(self.__cursor_reset, self.__view.viewport())
 
     @copy_signature(QGraphicsView().mapToScene if TYPE_CHECKING else lambda *args, **kwargs: cast(Any, None))
     def map_to_scene(self, *args: Any, **kwargs: Any) -> Any:
