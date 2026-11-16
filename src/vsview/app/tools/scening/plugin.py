@@ -565,7 +565,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             lambda exc: self.api.statusMessage.emit(f"Exporting {file} failed: {exc}"),
         )
 
-    @run_in_background(name="SerializeExportedCcene")
+    @run_in_background(name="SerializeExportedScene")
     def serialize_exported_scene(self, file: str, serializer: Serializer) -> None:
         scene: SceneRow = vsengine.from_thread(
             lambda: self.scenes_view.selectionModel().selectedRows()[0].data(self.scenes_model.SceneRowRole)
