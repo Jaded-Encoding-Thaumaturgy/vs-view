@@ -8,6 +8,7 @@ on:
       - 'pyproject.toml'
       - '**/*.py'
       - 'docs/**'
+      - 'zensical.toml'
 
 permissions:
   contents: read
