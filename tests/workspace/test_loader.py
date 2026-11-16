@@ -104,6 +104,12 @@ def _make_dual_output_script_content(length: int = 100) -> str:
     )
 
 
+def _make_audio_tracks_script_content(num_tracks: int) -> str:
+    return _make_valid_script_content() + "".join(
+        f"core.std.BlankAudio(length=48000, samplerate=48000).set_output({i})\n" for i in range(1, num_tracks + 1)
+    )
+
+
 # Page Transition and Cursor Calculation Tests
 def test_loader_workspace_page_transitions(loader_workspace: ConcreteLoaderWorkspace) -> None:
     ws = loader_workspace
@@ -833,3 +839,29 @@ class _PanelPluginFailingOnce:
         if self.calls == 1:
             raise RuntimeError("panel registration failed")
         return _GoodPanel
+
+
+def test_reload_with_fewer_audio_tracks_selects_the_last_remaining_track(
+    qtbot: QtBot,
+    vpy_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+) -> None:
+    script_file = tmp_path / "audio_tracks.vpy"
+    script_file.write_text(_make_audio_tracks_script_content(2), encoding="utf-8")
+    ws = ConcreteScriptWorkspace(vpy_env_factory)
+    qtbot.addWidget(ws)
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.playback.can_reload, timeout=5000)
+    combo = ws.tbar.playback_container.audio_output_combo
+    combo.setCurrentIndex(1)
+    assert ws.outputs_manager.current_audio_index == 1
+
+    script_file.write_text(_make_audio_tracks_script_content(1), encoding="utf-8")
+    fut_reload = ws.reload_content()
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.can_reload, timeout=5000)
+
+    assert fut_reload.result() == 0
+    assert len(ws.outputs_manager.aoutputs) == 1
+    assert ws.outputs_manager.current_audio_index == 0
+    assert ws.outputs_manager.current_aoutput is ws.outputs_manager.aoutputs[0]
+    assert combo.currentIndex() == 0

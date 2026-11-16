@@ -306,6 +306,39 @@ def test_create_aoutputs_valid(
     assert isinstance(aouts[1].prepared_audio, vs.AudioNode)
 
 
+@pytest.mark.parametrize("stale_index", [-1, 1, 5])
+def test_create_aoutputs_clamps_an_audio_index_that_is_out_of_range(
+    plugin_controller: HarnessPluginController,
+    manager: OutputsManager,
+    sample_audio_node: vs.AudioNode,
+    stale_index: int,
+) -> None:
+    manager.current_audio_index = stale_index
+
+    aouts = manager.create_aoutputs("one_track", {0: sample_audio_node}, {}, plugin_controller.api)
+
+    assert manager.current_audio_index == 0
+    assert manager.current_aoutput is aouts[0]
+
+
+def test_create_aoutputs_keeps_an_audio_index_that_is_in_range(
+    plugin_controller: HarnessPluginController,
+    manager: OutputsManager,
+    sample_audio_node: vs.AudioNode,
+) -> None:
+    manager.current_audio_index = 1
+
+    aouts = manager.create_aoutputs(
+        "two_tracks",
+        {0: sample_audio_node, 1: sample_audio_node},
+        {},
+        plugin_controller.api,
+    )
+
+    assert manager.current_audio_index == 1
+    assert manager.current_aoutput is aouts[1]
+
+
 def test_create_aoutputs_exception_during_prepare(
     plugin_controller: HarnessPluginController,
     manager: OutputsManager,

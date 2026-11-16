@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
+from jetpytools import clamp
 from vapoursynth import AudioNode, SampleType, VideoOutputTuple
 
 from ...env import getenv_bool
@@ -145,6 +146,7 @@ class OutputsManager:
             return []
 
         self._aoutputs = aoutputs
+        self.current_audio_index = clamp(self.current_audio_index, 0, len(aoutputs) - 1)
 
         return aoutputs
 
