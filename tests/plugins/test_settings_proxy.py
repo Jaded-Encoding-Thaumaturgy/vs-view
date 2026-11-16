@@ -5,7 +5,7 @@ from typing import cast, override
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pytest_mock import MockerFixture
 
 from vsview.app.plugins._interface import _PluginSettingsStore, _SettingsProxy
@@ -313,3 +313,80 @@ def test_store_nested_local_settings_inheritance(tmp_path: Path, mocker: MockerF
     assert isinstance(fresh_local, NestedLocalSettings)
     assert fresh_local.visual.opacity == 0.5
     assert fresh_local.visual.color == "blue"
+
+
+# Write validation
+def test_store_update_rejects_a_value_of_the_wrong_type(mock_workspace: MagicMock, mock_plugin: MagicMock) -> None:
+    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "kept", "attr2": 7}
+    store = _PluginSettingsStore(mock_workspace)
+    cached = store.get(mock_plugin, "global")
+
+    with pytest.raises(ValidationError, match=r"attr2\n  Input should be a valid integer"):
+        store.update(mock_plugin, "global", attr2="not a number")
+
+    assert SettingsManager.global_settings.plugins["test_plugin"] == {"attr1": "kept", "attr2": 7}
+    assert store.get(mock_plugin, "global") is cached
+    assert cached == MockGlobalSettings(attr1="kept", attr2=7)
+
+
+def test_proxy_write_of_the_wrong_type_leaves_the_proxy_and_the_store_unchanged(
+    mock_workspace: MagicMock, mock_plugin: MagicMock
+) -> None:
+    SettingsManager.global_settings.plugins["test_plugin"] = {"attr2": 7}
+    store = _PluginSettingsStore(mock_workspace)
+    proxy = store.get_proxy(mock_plugin, "global")
+    assert proxy is not None
+
+    with pytest.raises(ValidationError, match=r"attr2\n  Input should be a valid integer"):
+        proxy.attr2 = "not a number"
+
+    assert proxy.attr2 == 7
+    assert SettingsManager.global_settings.plugins["test_plugin"] == {"attr2": 7}
+    assert store.get(mock_plugin, "global") == MockGlobalSettings(attr2=7)
+
+
+def test_proxy_write_stores_the_validated_value(mock_workspace: MagicMock, mock_plugin: MagicMock) -> None:
+    store = _PluginSettingsStore(mock_workspace)
+    proxy = store.get_proxy(mock_plugin, "global")
+    assert proxy is not None
+
+    proxy.attr2 = "42"
+
+    assert proxy.attr2 == 42
+    assert SettingsManager.global_settings.plugins["test_plugin"] == MockGlobalSettings(attr2=42)
+    assert store.get(mock_plugin, "global") == MockGlobalSettings(attr2=42)
+
+
+def test_proxy_nested_write_that_fails_leaves_the_proxy_unchanged(tmp_path: Path, mocker: MockerFixture) -> None:
+    class Visual(BaseModel):
+        opacity: float = 1.0
+
+    class OptionalVisualLocal(LocalSettingsModel):
+        visual: Visual | None = None
+
+        @override
+        def resolve(self, global_settings: BaseModel) -> OptionalVisualLocal:
+            resolved = self.model_copy()
+            if resolved.visual is None:
+                resolved.visual = getattr(global_settings, "visual", Visual())
+            return resolved
+
+    class VisualGlobal(BaseModel):
+        visual: Visual = Visual()
+
+    plugin = mocker.MagicMock()
+    plugin.identifier = "optional_visual_plugin"
+    plugin.global_settings_model = VisualGlobal
+    plugin.local_settings_model = OptionalVisualLocal
+
+    test_file = tmp_path / "optional_visual.vpy"
+    store = _PluginSettingsStore(lambda: test_file)
+    SettingsManager.get_local_settings(test_file).plugins["optional_visual_plugin"] = {}
+    proxy = store.get_proxy(plugin, "local")
+    assert proxy is not None
+
+    with pytest.raises(TypeError, match=r"Cannot set 'visual\.opacity': 'visual' is None"):
+        proxy.visual.opacity = 0.5
+
+    assert proxy.visual.opacity == 1.0
+    assert SettingsManager.get_local_settings(test_file).plugins["optional_visual_plugin"] == {}

@@ -700,7 +700,7 @@ class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     Settings wrapper providing lazy, live access to plugin configuration models.
 
     Direct attribute assignments (e.g., `self.settings.global_.key = value`)
-    are automatically intercepted and stored in the in-memory settings.
+    are automatically intercepted, validated and stored in the in-memory settings.
 
     They are written to disk the next time the host saves settings:
     local settings on autosave and when the workspace closes, global settings when the Settings dialog is applied
@@ -765,11 +765,21 @@ class _PluginBase(Generic[TGlobalSettings, TLocalSettings], metaclass=_PluginBas
         return PluginSecrets(self)
 
     def update_global_settings(self, **updates: Any) -> None:
-        """Update specific global settings fields and trigger persistence."""
+        """
+        Update specific global settings fields and trigger persistence.
+
+        Raises:
+            pydantic.ValidationError: A value does not match its field type. Nothing is changed.
+        """
         _get_controller(self.api).update_settings(self, "global", **updates)
 
     def update_local_settings(self, **updates: Any) -> None:
-        """Update specific local settings fields and trigger persistence."""
+        """
+        Update specific local settings fields and trigger persistence.
+
+        Raises:
+            pydantic.ValidationError: A value does not match its field type. Nothing is changed.
+        """
         _get_controller(self.api).update_settings(self, "local", **updates)
 
 

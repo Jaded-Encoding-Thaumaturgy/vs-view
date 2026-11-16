@@ -66,8 +66,8 @@ class _SettingsProxy[T: BaseModel]:
             if isinstance(value, _SettingsProxy):
                 value = value._model
 
-            setattr(self._model, name, value)
             self._on_update(f"{self._path}.{name}" if self._path else name, value)
+            self._model.__pydantic_validator__.validate_assignment(self._model, name, value)
         else:
             raise AttributeError(f"{type(self._model).__name__!r} object has no attribute {name!r}")
 
@@ -141,12 +141,15 @@ class _PluginSettingsStore:
             if isinstance(value, _SettingsProxy):
                 value = value._model
 
-            parts = key.split(".")
+            *parents, field = key.split(".")
             curr = settings
-            for part in parts[:-1]:
+            for part in parents:
                 curr = getattr(curr, part)
 
-            setattr(curr, parts[-1], value)
+            if not isinstance(curr, BaseModel):
+                raise TypeError(f"Cannot set {key!r}: {'.'.join(parents)!r} is {curr!r}")
+
+            curr.__pydantic_validator__.validate_assignment(curr, field, value)
 
         self._set_raw_settings(plugin.identifier, scope, settings)
         self._caches[scope].pop(plugin, None)
