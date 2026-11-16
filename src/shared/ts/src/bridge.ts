@@ -47,6 +47,7 @@ export class WebChannelBridge<
   private isDisposed = false;
   private boundSignalHandler: ((command: string, payloadJson: string) => void) | null = null;
   private initResult: ResultAsync<TRpc> | null = null;
+  private readonly pendingInvokes = new Set<(err: Error) => void>();
 
   public initBridge(): ResultAsync<TRpc> {
     if (this.isDisposed) {
@@ -101,8 +102,8 @@ export class WebChannelBridge<
   }
 
   public invoke<R>(
-    caller: (bridge: TRpc, callback: (res: R | null) => void) => void,
-    errorMsg = 'Bridge RPC call returned null',
+    caller: (bridge: TRpc, callback: (res: R | null | undefined) => void) => void,
+    errorMsg = 'Bridge RPC call returned no result',
   ): ResultAsync<R> {
     const activeBridge = this.bridge;
     if (!activeBridge) {
@@ -112,13 +113,23 @@ export class WebChannelBridge<
     return Result.fromPromise(
       () =>
         new Promise<R>((resolve, reject) => {
-          caller(activeBridge, (data) => {
-            if (data !== null) {
-              resolve(data);
-            } else {
-              reject(new Error(errorMsg));
-            }
+          const cancel = (err: Error) => reject(err);
+          this.pendingInvokes.add(cancel);
+
+          const called = Result.fromThrowable(() => {
+            caller(activeBridge, (data) => {
+              this.pendingInvokes.delete(cancel);
+              if (data === null || data === undefined) {
+                reject(new Error(errorMsg));
+              } else {
+                resolve(data);
+              }
+            });
           });
+          if (!called.ok) {
+            this.pendingInvokes.delete(cancel);
+            reject(called.error);
+          }
         }),
     );
   }
@@ -127,6 +138,11 @@ export class WebChannelBridge<
     this.isDisposed = true;
     this.commandHandlers.clear();
     this.detachBridge();
+    const pending = [...this.pendingInvokes];
+    this.pendingInvokes.clear();
+    for (const cancel of pending) {
+      cancel(new Error('Bridge was disposed before the RPC call returned'));
+    }
     super.dispose();
   }
 

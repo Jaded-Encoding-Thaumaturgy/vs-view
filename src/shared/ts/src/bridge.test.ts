@@ -294,6 +294,48 @@ describe('WebChannelBridge', () => {
     });
   });
 
+  describe('invoke', () => {
+    it('returns Err for pending calls when the bridge is disposed', async () => {
+      const { mockBridge } = setupMockWebChannel();
+      const service = new WebChannelBridge<TestPyToJsMap, TestJsToPyMap, TestRpcBridge>();
+      await service.initBridge();
+      mockBridge.readData.mockImplementationOnce(() => {});
+
+      const pending = service.invoke<string>((b, cb) => b.readData('k', cb));
+      service.dispose();
+      const result = await pending;
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('returns Err when the callback receives undefined', async () => {
+      const { mockBridge } = setupMockWebChannel();
+      const service = new WebChannelBridge<TestPyToJsMap, TestJsToPyMap, TestRpcBridge>();
+      await service.initBridge();
+      mockBridge.readData.mockImplementationOnce((_k: string, cb: (r: unknown) => void) =>
+        cb(undefined),
+      );
+
+      const result = await service.invoke<string>((b, cb) => b.readData('k', cb), 'No result');
+
+      expect(result.match({ ok: () => '', err: (e) => e.message })).toBe('No result');
+      service.dispose();
+    });
+
+    it('returns Err when the caller throws', async () => {
+      setupMockWebChannel();
+      const service = new WebChannelBridge<TestPyToJsMap, TestJsToPyMap, TestRpcBridge>();
+      await service.initBridge();
+
+      const result = await service.invoke<string>(() => {
+        throw new Error('caller failed');
+      });
+
+      expect(result.match({ ok: () => '', err: (e) => e.message })).toBe('caller failed');
+      service.dispose();
+    });
+  });
+
   describe('init lifetime', () => {
     it('does not revive a bridge disposed before the channel opens', async () => {
       const { mockBridge, openChannel, emitCommand } = setupDeferredWebChannel();
