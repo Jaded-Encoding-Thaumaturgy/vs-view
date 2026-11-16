@@ -393,12 +393,14 @@ class _LoadedEntryPoint(EntryPoint):
 
 
 @pytest.fixture
-def fake_entry_points(monkeypatch: pytest.MonkeyPatch) -> Callable[[str, Mapping[str, Any]], None]:
+def fake_entry_points(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[str, Mapping[str, Any] | Sequence[EntryPoint]], None]:
     """
     Replace installed entry points for selected groups.
 
-    Values may be ``EntryPoint`` instances, dotted import strings (loaded normally),
-    or objects returned directly by ``load()``.
+    Entries may be a sequence of ``EntryPoint`` instances, or a mapping of names to
+    ``EntryPoint`` instances, dotted import strings (loaded normally), or objects returned directly by ``load()``.
     """
     fakes = dict[str, EntryPoints]()
     real_entry_points = importlib.metadata.entry_points
@@ -410,7 +412,11 @@ def fake_entry_points(monkeypatch: pytest.MonkeyPatch) -> Callable[[str, Mapping
 
     monkeypatch.setattr(importlib.metadata, "entry_points", entry_points)
 
-    def set_group(group: str, entries: Mapping[str, Any]) -> None:
+    def set_group(group: str, entries: Mapping[str, Any] | Sequence[EntryPoint]) -> None:
+        if not isinstance(entries, Mapping):
+            fakes[group] = EntryPoints(entries)
+            return
+
         eps = [
             entry
             if isinstance(entry, EntryPoint)

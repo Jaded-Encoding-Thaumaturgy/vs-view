@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Sequence
+from importlib.metadata import EntryPoint
 from typing import Any
 
 import pluggy
@@ -19,7 +20,8 @@ GROUP = "vsview.audit_test"
 MISSING_MODULE_VALUE = "vsview_audit_missing_module:plugin"
 
 
-class _PlainPlugin: ...
+class _PlainPlugin:
+    pass
 
 
 class _InvalidHookPlugin:
@@ -60,9 +62,8 @@ def test_load_entrypoints_isolates_each_entry_point(
             make_ep("plugin_b", plugin_b),
         ],
     )
-    manager.set_blocked("blocked_plugin")
 
-    with caplog.at_level(logging.ERROR, logger=ENTRYPOINT_LOGGER):
+    with caplog.at_level(logging.ERROR, logger="vsview.app.plugins.entrypoints"):
         count = load_entrypoints(manager, GROUP)
 
     assert count == 2
@@ -105,8 +106,8 @@ def test_load_entrypoints_skips_blocked_names(
     assert manager.is_registered(plugin_a) is False
 
 
-_test_hookspec = pluggy.HookspecMarker("vsview_entrypoints_test")
-_test_hookimpl = pluggy.HookimplMarker("vsview_entrypoints_test")
+_test_hookspec = pluggy.HookspecMarker("vsview_audit_test")
+_test_hookimpl = pluggy.HookimplMarker("vsview_audit_test")
 
 
 class _Specs:
@@ -145,34 +146,34 @@ class _Wrapper:
 
 @pytest.fixture
 def hook_manager() -> pluggy.PluginManager:
-    pm = pluggy.PluginManager("vsview_entrypoints_test")
+    pm = pluggy.PluginManager("vsview_audit_test")
     pm.add_hookspecs(_Specs)
     return pm
 
 
-def test_collect_hook_results_isolates_failures_and_preserves_order(
+def test_collect_hook_results_isolates_each_implementation(
     hook_manager: pluggy.PluginManager, caplog: pytest.LogCaptureFixture
 ) -> None:
-    hook_manager.register(_Provider(_Item("first")), name="first")
+    single, nested = _Item("single"), [_Item("nested_1"), [_Item("nested_2")]]
+    hook_manager.register(_Provider(single), name="single")
     hook_manager.register(_RaisingProvider(), name="raising")
-    hook_manager.register(_Provider([_Item("second"), [_Item("third")]]), name="nested")
+    hook_manager.register(_Provider(nested), name="nested")
     hook_manager.register(_Provider(None), name="none")
-    hook_manager.register(_Wrapper(), name="wrapper")
 
-    with caplog.at_level(logging.ERROR, logger=ENTRYPOINT_LOGGER):
+    with caplog.at_level(logging.WARNING, logger="vsview.app.plugins.entrypoints"):
         results = collect_hook_results(hook_manager.hook.provide, _Item)
 
-    assert [r.label for r in results] == ["second", "third", "first"]
+    assert [r.label for r in results] == ["nested_1", "nested_2", "single"]
     assert [r.getMessage() for r in caplog.records] == ["Hook 'provide' of plugin 'raising' failed"]
     assert caplog.records[0].exc_info is not None
 
 
-def test_collect_hook_results_ignores_wrong_types(
+def test_collect_hook_results_skips_values_of_the_wrong_type(
     hook_manager: pluggy.PluginManager, caplog: pytest.LogCaptureFixture
 ) -> None:
     hook_manager.register(_Provider([_Item("good"), _Item, "text"]), name="mixed")
 
-    with caplog.at_level(logging.WARNING, logger=ENTRYPOINT_LOGGER):
+    with caplog.at_level(logging.WARNING, logger="vsview.app.plugins.entrypoints"):
         results = collect_hook_results(hook_manager.hook.provide, _Item)
 
     assert [r.label for r in results] == ["good"]
@@ -180,3 +181,14 @@ def test_collect_hook_results_ignores_wrong_types(
         f"Hook 'provide' of plugin 'mixed' returned {_Item!r}, which is not a _Item. It will be ignored.",
         "Hook 'provide' of plugin 'mixed' returned 'text', which is not a _Item. It will be ignored.",
     ]
+
+
+def test_collect_hook_results_keeps_pluggy_call_order(hook_manager: pluggy.PluginManager) -> None:
+    items = [_Item(str(i)) for i in range(3)]
+    for i, item in enumerate(items):
+        hook_manager.register(_Provider(item), name=f"provider_{i}")
+    hook_manager.register(_Wrapper(), name="wrapper")
+
+    results = collect_hook_results(hook_manager.hook.provide, _Item)
+
+    assert results == hook_manager.hook.provide()

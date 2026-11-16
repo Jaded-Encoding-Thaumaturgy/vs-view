@@ -215,7 +215,7 @@ class TestLineEndings:
 
         saved = editor_workspace.code_dock.save_script(script, content).result(timeout=5)
 
-        assert saved is True
+        assert saved == script.resolve()
         assert script.read_bytes() == content.encode()
 
     def test_open_file_keeps_crlf(self, editor_workspace: EditorWorkspace, dispatch: MagicMock, tmp_path: Path) -> None:
@@ -244,7 +244,7 @@ class TestLineEndings:
 
         saved = editor_workspace.code_dock.save_script(script, content).result(timeout=5)
 
-        assert saved is True
+        assert saved == script.resolve()
         assert script.read_bytes() == b"a = 1\nb = 2\n"
 
     @pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff is not on PATH")
