@@ -791,7 +791,10 @@ class PlaybackManager(QObject):
 
         with self._env.use():
             for aoutput in self._outputs_manager.aoutputs:
-                aoutput.prepare_audio(delay_s, self._controller.api)
+                try:
+                    aoutput.prepare_audio(delay_s, self._controller.api)
+                except Exception:
+                    logger.exception("Failed to apply an audio delay of %ss to %r", delay_s, aoutput.vs_name)
 
     @Slot(int)
     def _on_audio_output_changed(self, index: int) -> None:

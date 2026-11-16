@@ -883,6 +883,12 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.global_settings.view_tools.panels.get(plugin_type.identifier, True),
             )
 
+    def _hide_plugin(self, plugin: WidgetPluginBase[Any, Any]) -> None:
+        try:
+            plugin.on_hide()
+        except Exception:
+            logger.exception("%s: Failed for plugin %r", plugin.on_hide, plugin.identifier)
+
     @Slot(bool)
     def _on_dock_toggle(self, checked: bool) -> None:
         for dock in self.docks:
@@ -908,7 +914,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             dock.truly_visible = True
         elif dock.truly_visible:
-            w.on_hide()
+            self._hide_plugin(w)
             dock.truly_visible = False
 
     @Slot(bool)
@@ -926,7 +932,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 with self.env.use():
                     self.plugin_controller.init_plugin(w)
         else:
-            w.on_hide()
+            self._hide_plugin(w)
 
     @Slot(int, int)
     def _on_splitter_tab_changed(self, new_index: int, old_index: int) -> None:
@@ -935,7 +941,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.plugin_controller.init_plugin(w)
 
         if isinstance(w := self.plugin_splitter.plugin_tabs.widget(old_index), WidgetPluginBase):
-            w.on_hide()
+            self._hide_plugin(w)
 
 
 class VSEngineWorkspace[T](LoaderWorkspace[T]):

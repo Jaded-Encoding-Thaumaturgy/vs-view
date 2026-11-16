@@ -671,3 +671,30 @@ def test_playback_manager_rapid_stop_cancels_startup(playback_manager_setup: Pla
     assert manager.state.is_playing is False
     assert manager.state.video_timer.isActive() is False
     assert manager.state.audio_timer.isActive() is False
+
+
+@pytest.mark.vpy("no-core")
+def test_audio_delay_change_applies_to_every_output_when_one_fails(
+    playback_manager_setup: PlaybackManagerSetup,
+    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    init_plugin_manager: PluginManager,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _, env, _, mock_outputs, _, tbar = playback_manager_setup
+    failing, healthy = create_test_audio_output(env, 100), create_test_audio_output(env, 100)
+    failing.vs_name, healthy.vs_name = "Failing audio", "Healthy audio"
+    mock_outputs.aoutputs = [failing, healthy]
+    orig_prepare = AudioOutput.prepare_audio
+    prepared = list[tuple[str, float]]()
+
+    def prepare(self: AudioOutput, delay_s: float, api: Any) -> None:
+        if self is failing:
+            raise RuntimeError("audio processor failed")
+        orig_prepare(self, delay_s, api)
+        prepared.append((self.vs_name, delay_s))
+
+    monkeypatch.setattr(AudioOutput, "prepare_audio", prepare)
+
+    tbar.playback_container.audioDelayChanged.emit(0.25)
+    assert prepared == [("Healthy audio", 0.25)]
