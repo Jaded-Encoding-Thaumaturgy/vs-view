@@ -34,6 +34,10 @@ on:
         type: string
         default: ''
 
+concurrency:
+  group: ci-test-${{ github.ref }}-${{ inputs.package }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

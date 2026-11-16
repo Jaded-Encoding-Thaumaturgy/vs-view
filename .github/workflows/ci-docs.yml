@@ -10,6 +10,10 @@ on:
       - 'docs/**'
       - 'zensical.toml'
 
+concurrency:
+  group: ci-docs-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pages: write

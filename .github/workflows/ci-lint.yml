@@ -33,6 +33,10 @@ on:
       - '.github/workflows/ci-lint.yml'
   workflow_dispatch:
 
+concurrency:
+  group: ci-lint-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
