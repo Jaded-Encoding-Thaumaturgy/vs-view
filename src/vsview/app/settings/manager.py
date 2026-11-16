@@ -32,9 +32,9 @@ class SettingsSignals(WeakableSignals):
     """Qt signals for settings change notifications."""
 
     globalChanged = Signal()
-    localChanged = Signal(str)  # Emits the script path hash
+    localChanged = Signal(str)  # Emits the local settings file path
     aboutToSaveGlobal = Signal()
-    aboutToSaveLocal = Signal(str)  # Emits the script path hash
+    aboutToSaveLocal = Signal(str)  # Emits the local settings file path
 
     def connect_global_weak(
         self,

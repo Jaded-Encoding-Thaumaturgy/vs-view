@@ -209,7 +209,7 @@ def test_settings_manager_local_settings(tmp_path: Path) -> None:
     expected_path1 = SettingsManager.local_settings_path(script1)
     hash1 = path_to_hash(script1)
 
-    # Verify aboutToSaveLocal and localChanged signals fire with the correct script path hash
+    # Verify aboutToSaveLocal and localChanged signals fire with the local settings file path
     assert len(about_local_emitted) == 1
     assert about_local_emitted[0] == str(expected_path1)
     assert hash1 in about_local_emitted[0]

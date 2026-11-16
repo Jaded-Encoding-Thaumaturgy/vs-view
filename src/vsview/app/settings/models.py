@@ -784,7 +784,8 @@ class GlobalSettings(BaseSettings):
             min=QTime(),
             max=QTime(0, 30, 0, 0),
             display_format="mm:ss",
-            tooltip="The interval for the auto save timer of both global and local settings in minutes",
+            tooltip="The interval (mm:ss) of the auto save timer for local settings. "
+            "Global settings are saved when the Settings dialog is applied and when the app closes.",
             to_ui=lambda tm, _qtime_cls=QTime: _qtime_cls(0, tm.minute, tm.second, 0),
             from_ui=lambda qtime: qtime.toPython(),
         ),
