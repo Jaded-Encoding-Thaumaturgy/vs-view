@@ -43,16 +43,31 @@ export class BridgeService
 
   /** Read file content from host via Python bridge. */
   public static readFile(filePath: string): ResultAsync<string> {
-    return ResultAsync.fromResult(BridgeService.active).andThen((svc) =>
-      svc.invoke((b, cb) => b.readFile(filePath, cb), `Failed to read file: ${filePath}`),
-    );
+    const errorMsg = `Failed to read file: ${filePath}`;
+    return ResultAsync.fromResult(BridgeService.active)
+      .andThen((svc) => svc.invoke<unknown>((b, cb) => b.readFile(filePath, cb), errorMsg))
+      .andThen((res) =>
+        isRecord(res) && res.ok === true && typeof res.content === 'string'
+          ? Result.ok(res.content)
+          : Result.err(new Error(errorMsg)),
+      );
   }
 
   /** Query file metadata from host via Python bridge. */
   public static statFile(filePath: string): ResultAsync<FileStatResponse> {
-    return ResultAsync.fromResult(BridgeService.active).andThen((svc) =>
-      svc.invoke((b, cb) => b.statFile(filePath, cb), `File not found: ${filePath}`),
-    );
+    const errorMsg = `File not found: ${filePath}`;
+    return ResultAsync.fromResult(BridgeService.active)
+      .andThen((svc) => svc.invoke<unknown>((b, cb) => b.statFile(filePath, cb), errorMsg))
+      .andThen((res) =>
+        isRecord(res) &&
+        res.ok === true &&
+        typeof res.type === 'number' &&
+        typeof res.ctime === 'number' &&
+        typeof res.mtime === 'number' &&
+        typeof res.size === 'number'
+          ? Result.ok({ type: res.type, ctime: res.ctime, mtime: res.mtime, size: res.size })
+          : Result.err(new Error(errorMsg)),
+      );
   }
 
   public flushState(): void {
@@ -347,4 +362,8 @@ export class BridgeService
         ),
     });
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

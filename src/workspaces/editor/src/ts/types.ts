@@ -5,11 +5,11 @@ import type { BasePythonBridge } from 'vsview-shared';
  * This should match the MonacoBridge class in web.py.
  */
 export interface PythonBridge extends BasePythonBridge {
-  /** Get stat metadata for a file on disk. */
-  statFile(filepath: string, callback: (res: FileStatResponse | null) => void): void;
+  /** Get stat metadata for a file on disk. Answers a `StatFileResponse`, to be validated. */
+  statFile(filepath: string, callback: (res: unknown) => void): void;
 
-  /** Read content of a file on disk. */
-  readFile(filepath: string, callback: (res: string | null) => void): void;
+  /** Read content of a file on disk. Answers a `ReadFileResponse`, to be validated. */
+  readFile(filepath: string, callback: (res: unknown) => void): void;
 }
 
 export interface FileStatResponse {

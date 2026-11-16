@@ -232,7 +232,10 @@ class TestLineEndings:
         script = tmp_path / "module.py"
         script.write_bytes(b"a = 1\r\nb = 2\r\n")
 
-        assert editor_workspace.code_dock.editor.bridge.readFile(script.as_uri()) == "a = 1\r\nb = 2\r\n"
+        assert editor_workspace.code_dock.editor.bridge.readFile(script.as_uri()) == {
+            "ok": True,
+            "content": "a = 1\r\nb = 2\r\n",
+        }
 
     def test_open_then_save_round_trips_bytes(
         self, editor_workspace: EditorWorkspace, dispatch: MagicMock, tmp_path: Path

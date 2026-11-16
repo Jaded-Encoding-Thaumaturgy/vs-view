@@ -196,30 +196,31 @@ class MonacoBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
             case JsToPyCommand.COPY_TO_CLIPBOARD:
                 QApplication.clipboard().setText(str(payload.get("text", "")))
 
-    @SafeSlot(str, result=dict)
-    def statFile(self, filepath: str) -> dict[str, Any] | None:
+    @SafeSlot(str, result=dict, fallback={"ok": False})
+    def statFile(self, filepath: str) -> dict[str, Any]:
         """Get stat metadata for a file on disk (used by Monaco FileSystemProvider)."""
         p = Path(QUrl(filepath).toLocalFile()) if filepath.startswith("file:") else Path(filepath)
         if not p.exists():
-            return None
+            return {"ok": False}
 
         st = p.stat()
         return {
+            "ok": True,
             "type": 2 if p.is_dir() else 1,
             "ctime": int(getattr(st, "st_birthtime", st.st_ctime) * 1000),  # pyright: ignore[reportDeprecated],
             "mtime": int(st.st_mtime * 1000),
             "size": st.st_size,
         }
 
-    @SafeSlot(str, result=str)
-    def readFile(self, filepath: str) -> str | None:
+    @SafeSlot(str, result=dict, fallback={"ok": False})
+    def readFile(self, filepath: str) -> dict[str, Any]:
         """Read content of a file on disk (used by Monaco FileSystemProvider)."""
         p = Path(QUrl(filepath).toLocalFile()) if filepath.startswith("file:") else Path(filepath)
         if not p.is_file():
-            return None
+            return {"ok": False}
 
         with p.open(encoding="utf-8", errors="replace", newline="") as f:
-            return f.read()
+            return {"ok": True, "content": f.read()}
 
 
 class MonacoEditorWidget(BaseWebEngineView[MonacoBridge]):

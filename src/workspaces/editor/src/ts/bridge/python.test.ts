@@ -736,15 +736,18 @@ describe('BridgeService', () => {
     });
 
     describe('BridgeService.readFile', () => {
+      function mockReadFileResponse(response: unknown): void {
+        vi.mocked(mockBridgeFixture.bridge.readFile).mockImplementation(
+          (_path: string, cb: (res: unknown) => void) => {
+            cb(response);
+          },
+        );
+      }
+
       it('returns ok with file content on success', async () => {
         using service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
         service.initBridge();
-
-        vi.mocked(mockBridgeFixture.bridge.readFile).mockImplementation(
-          (_path: string, cb: (res: string | null) => void) => {
-            cb("print('hello world')");
-          },
-        );
+        mockReadFileResponse({ ok: true, content: "print('hello world')" });
 
         const res = await BridgeService.readFile('d:/test.py');
         expect(res.ok).toBe(true);
@@ -755,15 +758,26 @@ describe('BridgeService', () => {
         );
       });
 
-      it('returns err when bridge callback returns null', async () => {
+      it('returns ok with empty content for an empty file', async () => {
         using service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
         service.initBridge();
+        mockReadFileResponse({ ok: true, content: '' });
 
-        vi.mocked(mockBridgeFixture.bridge.readFile).mockImplementation(
-          (_path: string, cb: (res: string | null) => void) => {
-            cb(null);
-          },
-        );
+        const res = await BridgeService.readFile('d:/empty.py');
+        expect(res.unwrap()).toBe('');
+      });
+
+      it.each([
+        ['null', null],
+        ['an explicit failure', { ok: false }],
+        ['an empty map (None from a typed slot)', {}],
+        ['an empty string (None from a typed slot)', ''],
+        ['a bare string', "print('hello')"],
+        ['a non-string content', { ok: true, content: 42 }],
+      ])('returns err when the bridge answers %s', async (_label, response) => {
+        using service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
+        service.initBridge();
+        mockReadFileResponse(response);
 
         const res = await BridgeService.readFile('d:/nonexistent.py');
         expect(res.ok).toBe(false);
@@ -778,22 +792,24 @@ describe('BridgeService', () => {
     });
 
     describe('BridgeService.statFile', () => {
+      function mockStatFileResponse(response: unknown): void {
+        vi.mocked(mockBridgeFixture.bridge.statFile).mockImplementation(
+          (_path: string, cb: (res: unknown) => void) => {
+            cb(response);
+          },
+        );
+      }
+
       it('returns ok with file metadata on success', async () => {
         using service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
         service.initBridge();
-
         const expectedStat: FileStatResponse = {
           type: 1,
           ctime: 1000,
           mtime: 2000,
           size: 4096,
         };
-
-        vi.mocked(mockBridgeFixture.bridge.statFile).mockImplementation(
-          (_path: string, cb: (res: FileStatResponse | null) => void) => {
-            cb(expectedStat);
-          },
-        );
+        mockStatFileResponse({ ok: true, ...expectedStat });
 
         const res = await BridgeService.statFile('d:/test.py');
         expect(res.ok).toBe(true);
@@ -804,15 +820,16 @@ describe('BridgeService', () => {
         );
       });
 
-      it('returns err when stat callback returns null', async () => {
+      it.each([
+        ['null', null],
+        ['an explicit failure', { ok: false }],
+        ['an empty map (None from a typed slot)', {}],
+        ['metadata without the ok flag', { type: 1, ctime: 1000, mtime: 2000, size: 4096 }],
+        ['incomplete metadata', { ok: true, type: 1 }],
+      ])('returns err when the bridge answers %s', async (_label, response) => {
         using service = new BridgeService(mockEditor.service, mockLsp.service, mockConsole.service);
         service.initBridge();
-
-        vi.mocked(mockBridgeFixture.bridge.statFile).mockImplementation(
-          (_path: string, cb: (res: FileStatResponse | null) => void) => {
-            cb(null);
-          },
-        );
+        mockStatFileResponse(response);
 
         const res = await BridgeService.statFile('d:/missing.py');
         expect(res.ok).toBe(false);
