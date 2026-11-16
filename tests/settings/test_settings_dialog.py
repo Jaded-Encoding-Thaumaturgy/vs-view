@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,7 @@ from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import SettingsDialog
 from vsview.app.settings.manager import SettingsManager
 from vsview.app.settings.metadata import Dropdown, LineEdit, SecretLineEdit
-from vsview.app.settings.models import SettingEntry, ShortcutConfig
+from vsview.app.settings.models import GlobalSettings, SettingEntry, ShortcutConfig
 from vsview.app.settings.secrets import SecretsManager
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
@@ -188,3 +189,25 @@ def test_local_dependent_dropdown_is_populated_from_local_settings(
     combo = _find_by_tooltip(dialog, QComboBox, "local-choice")
     assert [combo.itemData(i) for i in range(combo.count())] == ["b-1", "b-2"]
     assert combo.currentData() == "b-2"
+
+
+def test_apply_keeps_global_writes_made_in_about_to_save_global(
+    qtbot: QtBot, register_entries: RegisterEntries
+) -> None:
+    register_entries([GLOBAL_OPTION], [])
+    SettingsManager.global_settings.plugins[PLUGIN_ID] = {"option": "original"}
+
+    def flush() -> None:
+        SettingsManager.global_settings.plugins["flushing_plugin"] = {"state": "flushed"}
+
+    SettingsManager.signals.aboutToSaveGlobal.connect(flush)
+    dialog = _open_dialog(qtbot)
+    _find_by_tooltip(dialog, QLineEdit, "global-option").setText("changed")
+
+    _click_apply(dialog)
+
+    assert SettingsManager.global_settings.plugins["flushing_plugin"] == {"state": "flushed"}
+    assert SettingsManager.global_settings.plugins[PLUGIN_ID] == {"option": "changed"}
+    saved = json.loads(GlobalSettings.path_env.read_text(encoding="utf-8"))
+    assert saved["plugins"]["flushing_plugin"] == {"state": "flushed"}
+    assert saved["plugins"][PLUGIN_ID] == {"option": "changed"}

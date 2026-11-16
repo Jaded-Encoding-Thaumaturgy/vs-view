@@ -617,7 +617,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
     def _on_apply(self) -> bool:
         # Build and validate both models before anything is saved, so a failure leaves no partial Apply
         try:
-            global_settings = self._get_global_settings_from_ui()
+            self._get_global_settings_from_ui()
             if self._script_path:
                 self._get_local_settings_from_ui()
         except Exception as e:
@@ -626,7 +626,7 @@ class SettingsDialog(QDialog, IconReloadMixin):
             return False
 
         try:
-            SettingsManager.save_global(global_settings)
+            SettingsManager.save_global(self._get_global_settings_from_ui)
         except Exception as e:
             logger.error("Failed to save global settings with the error: %s", e)
             logger.debug("Full traceback:", exc_info=e)
