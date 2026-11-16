@@ -123,17 +123,17 @@ class PlaybackState(QObject):
         if self._audio_cleanup_future:
             futures.append(self._audio_cleanup_future)
 
-        if futures:
-            if timeout is not None and stall_cb:
-                _, undone = wait(futures, timeout=timeout)
-                if undone:
-                    stall_cb()
+        try:
+            if futures:
+                if timeout is not None and stall_cb:
+                    _, undone = wait(futures, timeout=timeout)
+                    if undone:
+                        stall_cb()
 
-            for f in futures:
-                f.result()
-
-        self._cleanup_future = None
-        self._audio_cleanup_future = None
+                wait(futures)
+        finally:
+            self._cleanup_future = None
+            self._audio_cleanup_future = None
 
 
 class PlaybackManager(QObject):

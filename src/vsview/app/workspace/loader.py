@@ -493,8 +493,11 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             return 0
         except Exception:
+            logger.error("Failed to reload content: %r", self.content)
             self._destroy_freeze_screenshot(screenshot)
             mmm.__exit__(None, None, None)
+            self._is_failed = False
+            self.clear_failed_load()
             raise
 
     @run_in_loop(return_future=False)
