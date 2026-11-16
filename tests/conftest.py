@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from pytestqt.qtbot import QtBot
+from shiboken6 import Shiboken
 from vsengine.loops import NO_LOOP, set_loop
 from vsengine.policy import ManagedEnvironment
 
@@ -468,8 +469,12 @@ def mock_qobject_factory() -> Callable[..., MockQObject]:
 
 
 @pytest.fixture
-def plugin_controller(qtbot: QtBot, tmp_path: Path) -> HarnessPluginController:
-    return HarnessPluginController(qtbot, tmp_path)
+def plugin_controller(qtbot: QtBot, tmp_path: Path) -> Generator[HarnessPluginController]:
+    controller = HarnessPluginController(qtbot, tmp_path)
+    try:
+        yield controller
+    finally:
+        Shiboken.delete(controller)
 
 
 # VapourSynth & Environment Fixtures
