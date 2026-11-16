@@ -22,6 +22,28 @@ export function renderAppLayout(): void {
   );
 }
 
+/** Replace the loading spinner with a startup error message. */
+export function renderStartupError(message: string, err: unknown): void {
+  const overlay = document.getElementById(DOM_IDS.LOADING_OVERLAY);
+  if (!overlay) {
+    console.error(`Root container #${DOM_IDS.LOADING_OVERLAY} not found in document.`);
+    return;
+  }
+
+  overlay.classList.remove('fade-out');
+  overlay.classList.add('startup-error');
+  overlay.replaceChildren();
+
+  const detail = err instanceof Error ? err.message : String(err);
+  render(
+    html`
+      <div class="loading-error-title" role="alert">${message}</div>
+      <div class="loading-error-detail">${detail}</div>
+    `,
+    overlay,
+  );
+}
+
 function renderConsolePanel(): TemplateResult {
   return html`
     <div id=${DOM_IDS.CONSOLE_PANEL} class="console-panel">

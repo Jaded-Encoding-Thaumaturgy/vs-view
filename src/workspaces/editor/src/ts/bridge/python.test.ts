@@ -1073,6 +1073,55 @@ describe('BridgeService', () => {
       bridgeService.dispose();
     });
 
+    describe('inside vsview', () => {
+      beforeEach(() => {
+        window.ENV = { VSVIEW: true };
+      });
+
+      afterEach(() => {
+        delete window.ENV;
+      });
+
+      it('shows the bridge error instead of removing the overlay', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        Object.assign(window, { QWebChannel: undefined });
+        const bridgeService = new BridgeService(
+          mockEditor.service,
+          mockLsp.service,
+          mockConsole.service,
+        );
+
+        bridgeService.initBridge();
+        vi.advanceTimersByTime(200);
+
+        expect(overlayEl.classList.contains('fade-out')).toBe(false);
+        expect(overlayEl.classList.contains('startup-error')).toBe(true);
+        expect(overlayEl.textContent).toContain('QWebChannel');
+
+        bridgeService.dispose();
+      });
+
+      it('cancels the scheduled overlay removal when setup fails after onBridgeReady', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.mocked(mockBridgeFixture.bridge.onWebReady).mockImplementationOnce(() => {
+          throw new Error('onWebReady failed');
+        });
+        const bridgeService = new BridgeService(
+          mockEditor.service,
+          mockLsp.service,
+          mockConsole.service,
+        );
+
+        bridgeService.initBridge();
+        vi.advanceTimersByTime(200);
+
+        expect(overlayEl.classList.contains('fade-out')).toBe(false);
+        expect(overlayEl.textContent).toContain('onWebReady failed');
+
+        bridgeService.dispose();
+      });
+    });
+
     it('forwards editor service events to bridge slots', () => {
       const { bridgeService, bridge } = setupInitializedBridgeService();
       using fixture = bridgeService;

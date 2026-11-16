@@ -37,6 +37,28 @@
   letter-spacing: 0.5px;
 }
 
+#loading-overlay.startup-error {
+  gap: 8px;
+  padding: 0 24px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.loading-error-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vscode-errorForeground, #f14c4c);
+}
+
+.loading-error-detail {
+  max-width: 640px;
+  font-size: 12px;
+  color: var(--initial-fg, var(--vscode-descriptionForeground, #858585));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

@@ -6,6 +6,7 @@ import type { LspService } from '../lsp/service';
 import type { FileStatResponse, JsToPyCommandMap, PyToJsCommandMap, PythonBridge } from '../types';
 import type { ConsolePanelService } from '../ui/console';
 import { DOM_IDS } from '../ui/constants';
+import { renderStartupError } from '../ui/layout';
 
 export class BridgeService
   extends WebChannelBridge<PyToJsCommandMap, JsToPyCommandMap, PythonBridge>
@@ -82,10 +83,7 @@ export class BridgeService
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
-    if (this.loadingOverlayTimer !== null) {
-      clearTimeout(this.loadingOverlayTimer);
-      this.loadingOverlayTimer = null;
-    }
+    this.cancelLoadingOverlayRemoval();
     super.dispose();
   }
 
@@ -94,8 +92,13 @@ export class BridgeService
     this.removeLoadingOverlayWithDelay();
   }
 
-  protected override onBridgeError(): void {
-    this.removeLoadingOverlayWithDelay();
+  protected override onBridgeError(err: Error): void {
+    if (window.ENV?.VSVIEW) {
+      this.cancelLoadingOverlayRemoval();
+      renderStartupError('The editor could not connect to vsview.', err);
+    } else {
+      this.removeLoadingOverlayWithDelay();
+    }
   }
 
   private setupCommandHandlers(): void {
@@ -313,10 +316,15 @@ export class BridgeService
     overlay.classList.add('fade-out');
   }
 
-  private removeLoadingOverlayWithDelay(delay: number = 200): void {
+  private cancelLoadingOverlayRemoval(): void {
     if (this.loadingOverlayTimer !== null) {
       clearTimeout(this.loadingOverlayTimer);
+      this.loadingOverlayTimer = null;
     }
+  }
+
+  private removeLoadingOverlayWithDelay(delay: number = 200): void {
+    this.cancelLoadingOverlayRemoval();
     this.loadingOverlayTimer = setTimeout(() => {
       this.loadingOverlayTimer = null;
       this.removeLoadingOverlay();
