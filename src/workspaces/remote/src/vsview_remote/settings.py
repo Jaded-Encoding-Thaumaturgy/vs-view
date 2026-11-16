@@ -66,6 +66,19 @@ class GlobalSettings(BaseModel):
             from_ui=lambda v: None if v == 0 else v,
         ),
     ] = None
+    load_timeout: Annotated[
+        int | None,
+        Spin(
+            label="Script Load Timeout",
+            min=0,
+            max=3600,
+            suffix=" s",
+            tooltip="Maximum seconds to wait for the remote server to run the script (0 or No limit to wait forever)",
+            min_text="No limit",
+            to_ui=lambda v: 0 if v is None else v,
+            from_ui=lambda v: None if v == 0 else v,
+        ),
+    ] = None
     hwm: Annotated[
         int | None,
         Spin(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+import time
 from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,7 @@ from PySide6.QtWidgets import QFileDialog
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
-from vsremote import RemoteTimeoutError, TransportNotConnectedError
+from vsremote import RemoteTimeoutError, TransportClosedError, TransportNotConnectedError
 from vsremote.protocol import Command, StatusCode
 from vsremote.protocol.messages import RemoteErrorPayload, StackFrame
 from vsview_remote._secrets import READ_ERROR_MESSAGE, WRITE_ERROR_MESSAGE
@@ -673,3 +674,77 @@ def test_timeout_and_transport_errors_show_a_dialog(
     assert statuses == [status_text]
     assert len(dialogs) == 1
     assert dialogs[0].endswith(f"{type(error).__name__}: {error}\n".replace(": \n", "\n"))
+
+
+def test_script_load_has_no_time_limit_by_default(
+    workspace: RemoteWorkspace,
+    script: Path,
+    mocker: MockerFixture,
+) -> None:
+    remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
+    client = remote_client.return_value.start.return_value
+    client.load_code.return_value.result.return_value = []
+    client.get_outputs.return_value = {}
+    connect_through_load_button(workspace, script, mocker)
+    workspace.content = script
+
+    workspace.loader()
+
+    assert workspace.settings.global_.load_timeout is None
+    client.load_code.return_value.result.assert_called_once_with(timeout=None)
+
+
+def test_script_load_timeout_setting_limits_the_wait(
+    workspace: RemoteWorkspace,
+    servers: Callable[[Handler | None], FakeServer],
+    script: Path,
+    dialogs: list[str],
+    mocker: MockerFixture,
+) -> None:
+    server = servers(None)
+    connect_through_load_button(workspace, script, mocker, enter_server(workspace, server))
+    workspace.content = script
+    workspace.settings.global_.load_timeout = 1
+    statuses = list[str]()
+    workspace.statusLoadingErrored.connect(statuses.append)
+
+    start = time.perf_counter()
+    with pytest.raises(TimeoutError):
+        workspace.loader()
+    elapsed = time.perf_counter() - start
+
+    assert 0.9 < elapsed < 10.0
+    assert server.tokens(Command.LOAD_CODE) == [None]
+    assert statuses == ["Remote server timed out"]
+    assert len(dialogs) == 1
+
+
+def test_closing_the_client_ends_a_load_with_no_time_limit(
+    qtbot: QtBot,
+    workspace: RemoteWorkspace,
+    servers: Callable[[Handler | None], FakeServer],
+    script: Path,
+    dialogs: list[str],
+    mocker: MockerFixture,
+) -> None:
+    server = servers(None)
+    connect_through_load_button(workspace, script, mocker, enter_server(workspace, server))
+    workspace.content = script
+    errors = list[TransportClosedError]()
+
+    def load() -> None:
+        try:
+            workspace.loader()
+        except TransportClosedError as e:
+            errors.append(e)
+
+    loader_thread = threading.Thread(target=load, name="RemoteLoaderTest", daemon=True)
+    loader_thread.start()
+    qtbot.waitUntil(lambda: server.tokens(Command.LOAD_CODE) == [None], timeout=5000)
+
+    workspace.client.close()
+    loader_thread.join(5)
+
+    assert not loader_thread.is_alive()
+    assert [type(e) for e in errors] == [TransportClosedError]
+    assert len(dialogs) == 1

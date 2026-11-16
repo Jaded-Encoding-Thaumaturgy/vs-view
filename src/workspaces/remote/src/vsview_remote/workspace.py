@@ -134,7 +134,9 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
                 raise ConnectionNotConfiguredError("Remote connection not configured")
 
             code = self.content.read_text(encoding="utf-8")
-            output_items = self.client.load_code(code, filename=str(self.content)).result(timeout=30.0)
+            output_items = self.client.load_code(code, filename=str(self.content)).result(
+                timeout=self.settings.global_.load_timeout
+            )
             logger.info("Remote script execution completed successfully (%d outputs)", len(output_items))
 
             for idx, clip in self.client.get_outputs(
