@@ -7,7 +7,16 @@ from typing import ClassVar, override
 
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QDialog, QWidget
-from vsremote import RemoteClient, RemoteError, RemoteExecutionError, UnsupportedFormatError
+from vsremote import (
+    RemoteAuthenticationError,
+    RemoteClient,
+    RemoteError,
+    RemoteExecutionError,
+    RemotePermissionError,
+    TransportError,
+    UnsupportedFormatError,
+    VSRemoteError,
+)
 
 from vsview.api import ActionDefinition, IconName
 from vsview.api.workspace import PluginWorkspace
@@ -18,6 +27,7 @@ from vsview.app.workspace import PythonScriptWorkspace
 from ._metadata import AUTH_CONTEXT, AUTH_KEY, CURVE_CONTEXT, CURVE_KEY, WORKSPACE_ID
 from ._secrets import SessionSecrets
 from .dialog import ConnectionConfig, RemoteConnectionDialog
+from .exceptions import ConnectionNotConfiguredError
 from .settings import GlobalSettings
 
 logger = getLogger(__name__)
@@ -120,18 +130,18 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
             logger.error("File not found: %s", self.content)
             raise FileNotFoundError(f"File not found: {self.content}")
 
-        if self._config is None:
-            raise RuntimeError("Remote connection not configured")
-
-        code = self.content.read_text(encoding="utf-8")
         try:
+            if (config := self._config) is None:
+                raise ConnectionNotConfiguredError("Remote connection not configured")
+
+            code = self.content.read_text(encoding="utf-8")
             output_items = self.client.load_code(code, filename=str(self.content)).result(timeout=30.0)
             logger.info("Remote script execution completed successfully (%d outputs)", len(output_items))
 
             for idx, clip in self.client.get_outputs(
-                self._config.prefetch,
-                self._config.backlog,
-                frame_timeout=self._config.frame_timeout,
+                config.prefetch,
+                config.backlog,
+                frame_timeout=config.frame_timeout,
             ).items():
                 clip.set_output(idx)
 
@@ -146,6 +156,17 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
             )
             err.__traceback__ = None
             raise RuntimeError(err) from None
+        except (ConnectionNotConfiguredError, UnicodeDecodeError, VSRemoteError, TimeoutError) as err:
+            logger.debug("Full traceback:", exc_info=True)
+            self.statusLoadingErrored.emit(_failure_status(err))
+
+            err.__traceback__ = None
+            show_error(
+                _strip_local_paths(err, str(self.content)) if isinstance(err, RemoteError) else err,
+                self,
+                user_script_path=str(self.content),
+            )
+            raise err from None
         except Exception as err:
             logger.exception("Remote Error:")
             err.__traceback__ = None
@@ -242,3 +263,21 @@ def _strip_local_paths(err: RemoteError, script_path: str) -> RemoteErrorView:
         formatted_traceback=err.formatted_traceback,
         frames=[RemoteStackFrame(rename(f.filename), f.lineno, f.func_name, f.code) for f in err.frames],
     )
+
+
+def _failure_status(err: BaseException) -> str:
+    match err:
+        case ConnectionNotConfiguredError():
+            return "Remote connection not configured"
+        case UnicodeDecodeError():
+            return "Script is not valid UTF-8"
+        case RemoteAuthenticationError():
+            return "Authentication failed"
+        case RemotePermissionError():
+            return "Permission denied by the server"
+        case TimeoutError():
+            return "Remote server timed out"
+        case TransportError():
+            return "Connection error"
+        case _:
+            return "Remote error"

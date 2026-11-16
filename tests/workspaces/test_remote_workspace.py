@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Callable, Generator
 from pathlib import Path
@@ -11,10 +12,13 @@ import msgspec
 import pytest
 import zmq
 from keyring.backends.fail import Keyring
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QMimeData, QPointF, Qt, QTimer, QUrl
+from PySide6.QtGui import QDropEvent
 from PySide6.QtWidgets import QFileDialog
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
+from vsengine.policy import ManagedEnvironment
+from vsremote import RemoteTimeoutError, TransportNotConnectedError
 from vsremote.protocol import Command, StatusCode
 from vsremote.protocol.messages import RemoteErrorPayload, StackFrame
 from vsview_remote._secrets import READ_ERROR_MESSAGE, WRITE_ERROR_MESSAGE
@@ -537,3 +541,134 @@ def test_a_unc_filename_never_reaches_the_filesystem(
 
     assert len(dialogs) == 1
     assert not any(str(call.args[0]).startswith("\\\\") for call in spy.call_args_list)
+
+
+# W4-08
+def test_drop_without_a_connection_shows_the_reason(
+    qtbot: QtBot,
+    vpy_env_factory: Callable[[], ManagedEnvironment],
+    script: Path,
+    dialogs: list[str],
+    caplog: pytest.LogCaptureFixture,
+    mocker: MockerFixture,
+) -> None:
+    def env(self: RemoteWorkspace) -> ManagedEnvironment:
+        if not self._env or self._env.disposed:
+            self._env = vpy_env_factory()
+        return self._env
+
+    # A subclass would lose the plugin settings model, so the property is replaced on the class itself.
+    mocker.patch.object(RemoteWorkspace, "env", property(env))
+    ws = RemoteWorkspace()
+    qtbot.addWidget(ws)
+    load_spy = mocker.spy(ws, "load_content")
+    statuses = list[str]()
+    ws.statusLoadingErrored.connect(statuses.append)
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(script))])
+    event = QDropEvent(
+        QPointF(10, 10), Qt.DropAction.CopyAction, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier
+    )
+
+    with caplog.at_level(logging.ERROR):
+        ws.dropEvent(event)
+        qtbot.waitUntil(lambda: load_spy.spy_return is not None and load_spy.spy_return.done(), timeout=10000)
+        qtbot.waitUntil(lambda: ws.stack.currentWidget() is ws.error_page, timeout=5000)
+
+    assert load_spy.spy_return.result() == 1
+    assert statuses == ["Remote connection not configured", "Error while loading content"]
+    assert len(dialogs) == 1
+    assert dialogs[0].endswith("ConnectionNotConfiguredError: Remote connection not configured\n")
+    assert any("Remote connection not configured" in r.getMessage() for r in caplog.records)
+
+
+def test_a_script_that_is_not_utf8_shows_the_reason(
+    workspace: RemoteWorkspace,
+    tmp_path: Path,
+    dialogs: list[str],
+    mocker: MockerFixture,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    path = tmp_path / "cp1252.vpy"
+    path.write_bytes(b"# -*- coding: cp1252 -*-\n# caf\xe9\n")
+    remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
+    connect_through_load_button(workspace, path, mocker)
+    workspace.content = path
+    statuses = list[str]()
+    workspace.statusLoadingErrored.connect(statuses.append)
+
+    with caplog.at_level(logging.ERROR), pytest.raises(UnicodeDecodeError):
+        workspace.loader()
+
+    remote_client.assert_not_called()
+    assert statuses == ["Script is not valid UTF-8"]
+    assert len(dialogs) == 1
+    assert "UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe9" in dialogs[0]
+    assert any("UnicodeDecodeError" in r.getMessage() for r in caplog.records)
+
+
+# W4-V02
+@pytest.mark.parametrize(
+    ("status", "text", "status_text"),
+    [
+        (StatusCode.UNAUTHORIZED, "Unauthorized: invalid or missing auth token", "Authentication failed"),
+        (
+            StatusCode.PERMISSION_DENIED,
+            "Dynamic code evaluation is disabled on this server (allow_eval=False)",
+            "Permission denied by the server",
+        ),
+    ],
+)
+def test_auth_and_permission_errors_show_the_server_message(
+    workspace: RemoteWorkspace,
+    servers: Callable[[Handler | None], FakeServer],
+    script: Path,
+    dialogs: list[str],
+    mocker: MockerFixture,
+    status: StatusCode,
+    text: str,
+    status_text: str,
+) -> None:
+    server = servers(error_reply(RemoteErrorPayload(text, status.name, text), status))
+    connect_through_load_button(workspace, script, mocker, enter_server(workspace, server))
+    workspace.content = script
+    statuses = list[str]()
+    workspace.statusLoadingErrored.connect(statuses.append)
+
+    with pytest.raises(PermissionError, match=re.escape(text)):
+        workspace.loader()
+
+    assert statuses == [status_text]
+    assert len(dialogs) == 1
+    assert dialogs[0].endswith(f"{status.name}: {text}\n")
+
+
+@pytest.mark.parametrize(
+    ("error", "status_text"),
+    [
+        (TimeoutError(), "Remote server timed out"),
+        (RemoteTimeoutError("handshake timed out"), "Remote server timed out"),
+        (TransportNotConnectedError("not connected"), "Connection error"),
+    ],
+)
+def test_timeout_and_transport_errors_show_a_dialog(
+    workspace: RemoteWorkspace,
+    script: Path,
+    dialogs: list[str],
+    mocker: MockerFixture,
+    error: Exception,
+    status_text: str,
+) -> None:
+    remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
+    remote_client.return_value.start.return_value.load_code.return_value.result.side_effect = error
+    connect_through_load_button(workspace, script, mocker)
+    workspace.content = script
+    statuses = list[str]()
+    workspace.statusLoadingErrored.connect(statuses.append)
+
+    with pytest.raises(type(error)):
+        workspace.loader()
+
+    assert statuses == [status_text]
+    assert len(dialogs) == 1
+    assert dialogs[0].endswith(f"{type(error).__name__}: {error}\n".replace(": \n", "\n"))
