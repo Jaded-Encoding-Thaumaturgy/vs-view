@@ -166,7 +166,12 @@ class GraphicsViewProxy(_GraphicsViewProxy):
 
 
 class TimelineProxy(_TimelineProxy):
-    """Proxy for the timeline."""
+    """
+    Proxy for the timeline.
+
+    Notches added by a plugin survive a workspace reload.
+    Clear them with `clear_notches` when they no longer apply.
+    """
 
     @staticmethod
     def _norm_data(
@@ -416,13 +421,22 @@ class PluginAPI(QObject):
     """Signal emitted when global settings change or are invalidated."""
 
     localSettingsChanged = Signal(str)
-    """Signal emitted when local settings change, passing the affected script file path."""
+    """
+    Signal emitted after local settings are saved, passing the path of the saved local settings JSON file.
+
+    It is emitted for the local settings of any script, not only the script of this workspace.
+    """
 
     aboutToSaveGlobal = Signal()
     """Signal emitted immediately before global settings are saved to disk."""
 
     aboutToSaveLocal = Signal(str)  # path
-    """Signal emitted immediately before local settings are saved to disk, passing the script file path."""
+    """
+    Signal emitted immediately before local settings are saved to disk,
+    passing the path of the local settings JSON file.
+
+    It is emitted for the local settings of any script, not only the script of this workspace.
+    """
 
     @property
     def file_path(self) -> Path | None:
@@ -545,6 +559,9 @@ class PluginAPI(QObject):
         """
         Register a callback to be called before the workspace begins a reload or when the workspace is destroyed.
         This is generally used to clean up VapourSynth resources.
+
+        Registrations are permanent and cumulative: a callback cannot be unregistered,
+        each call adds one more callback, and every callback runs again before each reload.
         """
         _get_controller(self).register_on_destroy(cb)
 
@@ -683,7 +700,11 @@ class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     Settings wrapper providing lazy, live access to plugin configuration models.
 
     Direct attribute assignments (e.g., `self.settings.global_.key = value`)
-    are automatically intercepted and persisted to disk.
+    are automatically intercepted and stored in the in-memory settings.
+
+    They are written to disk the next time the host saves settings:
+    local settings on autosave and when the workspace closes, global settings when the Settings dialog is applied
+    and when the app closes.
 
     Note:
         In-place mutations of mutable containers (e.g., `self.settings.global_.items.append(...)`)
@@ -769,7 +790,7 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
         """
         Called when the workspace has loaded or reloaded content.
 
-        Execution Thread: **Background**.
+        Execution Thread: **Unspecified**. It may change between versions.
 
         Any UI updates MUST use the `@run_in_loop` decorator.
         """
@@ -778,7 +799,7 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
         """
         Called when the workspace is being destroyed.
 
-        Execution Thread: **Background**.
+        Execution Thread: **Unspecified**. It may change between versions.
 
         Any UI updates MUST use the `@run_in_loop` decorator.
         """
@@ -787,7 +808,7 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
         """
         Called when the active video output tab changes, or when the plugin becomes visible.
 
-        Execution Thread: **Main or Background**.
+        Execution Thread: **Unspecified**. It may change between versions.
 
         Any UI updates MUST use the `@run_in_loop` decorator.
         """
@@ -931,7 +952,12 @@ class PluginGraphicsView(BaseGraphicsView):
         self.set_pixmap(QPixmap.fromImage(image))
 
     def refresh(self) -> None:
-        """Refresh the view."""
+        """
+        Refresh the view.
+
+        Execution Thread: call it from the **Main** thread. It updates widgets directly.
+        Use the `@run_in_loop` decorator when calling it from a background callback.
+        """
         _get_controller(self.api).init_view(self, refresh=True)
 
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:

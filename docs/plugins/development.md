@@ -88,6 +88,9 @@ class MyPlugin(WidgetPluginBase):
             print("Viewing by frame!")
 ```
 
+Timeline notches added with `self.api.timeline.add_notch(...)` survive a workspace reload.
+Call `self.api.timeline.clear_notches(...)` when they no longer apply.
+
 See the [API reference](../api/developer/#vsview.api.PluginAPI) page for a complete list of capabilities.
 
 ## Settings Management
