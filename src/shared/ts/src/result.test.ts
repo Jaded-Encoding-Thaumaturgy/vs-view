@@ -8,6 +8,44 @@ describe('Result utility', () => {
       expectTypeOf(Result.ok(42)).toEqualTypeOf<Ok<number>>();
       expectTypeOf(Result.err('fail')).toEqualTypeOf<Err<string>>();
     });
+
+    it('should type the error as Error when fromThrowable or fromPromise has no errorMapper', () => {
+      interface CustomError {
+        code: number;
+      }
+      const sync = () => Result.fromThrowable(() => 1);
+      const async = () => Result.fromPromise(async () => 1);
+      expectTypeOf(sync).returns.toEqualTypeOf<Result<number>>();
+      expectTypeOf(async).returns.toEqualTypeOf<ResultAsync<number>>();
+
+      // @ts-expect-error: without an errorMapper the error is always an Error at runtime
+      const explicitSync = () => Result.fromThrowable<number, CustomError>(() => 1);
+      // @ts-expect-error: without an errorMapper the error is always an Error at runtime
+      const explicitAsync = () => Result.fromPromise<number, CustomError>(async () => 1);
+      // @ts-expect-error: a contextual error type must not leak into fromThrowable
+      const contextualSync = (): Result<number, CustomError> => Result.fromThrowable(() => 1);
+      const contextualAsync = (): ResultAsync<number, CustomError> =>
+        // @ts-expect-error: a contextual error type must not leak into fromPromise
+        Result.fromPromise(async () => 1);
+      expect([explicitSync, explicitAsync, contextualSync, contextualAsync]).toHaveLength(4);
+    });
+
+    it('should infer the error type from the errorMapper', () => {
+      const sync = () =>
+        Result.fromThrowable(
+          () => 1,
+          (e) => ({ code: 1, cause: e }),
+        );
+      const async = () =>
+        Result.fromPromise(
+          async () => 1,
+          (e) => ({ code: 1, cause: e }),
+        );
+      expectTypeOf(sync).returns.toEqualTypeOf<Result<number, { code: number; cause: unknown }>>();
+      expectTypeOf(async).returns.toEqualTypeOf<
+        ResultAsync<number, { code: number; cause: unknown }>
+      >();
+    });
   });
 
   describe('ok & err constructors', () => {

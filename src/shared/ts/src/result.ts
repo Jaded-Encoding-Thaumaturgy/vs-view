@@ -251,40 +251,51 @@ export const Result = {
   err<E>(error: E): Err<E> {
     return new Err(error);
   },
-
-  /**
-   * Wraps a synchronous fallible function in a Result.
-   */
-  fromThrowable<T, E = Error>(fn: () => T, errorMapper?: (e: unknown) => E): Result<T, E> {
-    try {
-      return Result.ok(fn());
-    } catch (e) {
-      const err = errorMapper
-        ? errorMapper(e)
-        : ((e instanceof Error ? e : new Error(String(e))) as E);
-      return Result.err(err);
-    }
-  },
-
-  /**
-   * Wraps an asynchronous Promise or function in a ResultAsync.
-   */
-  fromPromise<T, E = Error>(
-    promiseOrFn: PromiseLike<T> | (() => PromiseLike<T> | T),
-    errorMapper?: (e: unknown) => E,
-  ): ResultAsync<T, E> {
-    const promise = (async () => {
-      try {
-        const value = typeof promiseOrFn === 'function' ? await promiseOrFn() : await promiseOrFn;
-        return Result.ok<T>(value);
-      } catch (e) {
-        const err = errorMapper
-          ? errorMapper(e)
-          : ((e instanceof Error ? e : new Error(String(e))) as E);
-        return Result.err<E>(err);
-      }
-    })();
-
-    return new ResultAsync(promise);
-  },
+  fromThrowable,
+  fromPromise,
 };
+
+/**
+ * Wraps a synchronous fallible function in a Result.
+ *
+ * Without an `errorMapper` the error is always an `Error`. Pass an `errorMapper` to get another error type.
+ */
+function fromThrowable<T>(fn: () => T): Result<T>;
+function fromThrowable<T, E>(fn: () => T, errorMapper: (e: unknown) => E): Result<T, E>;
+function fromThrowable<T, E>(fn: () => T, errorMapper?: (e: unknown) => E): Result<T, E | Error> {
+  try {
+    return new Ok(fn());
+  } catch (e) {
+    return new Err(errorMapper ? errorMapper(e) : toError(e));
+  }
+}
+
+/**
+ * Wraps an asynchronous Promise or function in a ResultAsync.
+ *
+ * Without an `errorMapper` the error is always an `Error`. Pass an `errorMapper` to get another error type.
+ */
+function fromPromise<T>(promiseOrFn: PromiseLike<T> | (() => PromiseLike<T> | T)): ResultAsync<T>;
+function fromPromise<T, E>(
+  promiseOrFn: PromiseLike<T> | (() => PromiseLike<T> | T),
+  errorMapper: (e: unknown) => E,
+): ResultAsync<T, E>;
+function fromPromise<T, E>(
+  promiseOrFn: PromiseLike<T> | (() => PromiseLike<T> | T),
+  errorMapper?: (e: unknown) => E,
+): ResultAsync<T, E | Error> {
+  const promise = (async (): Promise<Result<T, E | Error>> => {
+    try {
+      const value = typeof promiseOrFn === 'function' ? await promiseOrFn() : await promiseOrFn;
+      return new Ok(value);
+    } catch (e) {
+      return new Err(errorMapper ? errorMapper(e) : toError(e));
+    }
+  })();
+
+  return new ResultAsync(promise);
+}
+
+function toError(e: unknown): Error {
+  return e instanceof Error ? e : new Error(String(e));
+}
