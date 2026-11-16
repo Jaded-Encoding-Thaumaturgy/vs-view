@@ -665,7 +665,20 @@ class RangeTableModel(AbstractTableModel):
             return
 
         self.layoutAboutToBeChanged.emit()
-        self._data.sort(key=self._sort_key, reverse=self._sort_order == Qt.SortOrder.DescendingOrder)
+
+        old_rows = sorted(
+            range(len(self._data)),
+            key=lambda row: self._sort_key(self._data[row]),
+            reverse=self._sort_order == Qt.SortOrder.DescendingOrder,
+        )
+        new_row_of = {old_row: new_row for new_row, old_row in enumerate(old_rows)}
+        self._data[:] = [self._data[row] for row in old_rows]
+
+        old_indexes = self.persistentIndexList()
+        self.changePersistentIndexList(
+            old_indexes, [self.index(new_row_of[idx.row()], idx.column()) for idx in old_indexes]
+        )
+
         self.layoutChanged.emit()
 
 
