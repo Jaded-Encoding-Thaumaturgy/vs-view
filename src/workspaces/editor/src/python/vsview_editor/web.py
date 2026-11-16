@@ -26,6 +26,7 @@ class PyToJsCommand(StrEnum):
     TRIGGER_SAVE = "editor.triggerSave"
     TRIGGER_SAVE_AS = "editor.triggerSaveAs"
     TRIGGER_FORMAT = "editor.triggerFormat"
+    TRIGGER_RUN = "editor.triggerRun"
     CONSOLE_APPEND = "console.append"
     CONSOLE_TOGGLE = "console.toggle"
     LSP_CONNECT = "lsp.connect"
@@ -43,6 +44,7 @@ class JsToPyCommand(StrEnum):
     SAVE_REQUESTED = "editor.saveRequested"
     SAVE_AS_REQUESTED = "editor.saveAsRequested"
     FORMAT_REQUESTED = "editor.formatRequested"
+    RUN_REQUESTED = "editor.runRequested"
     GENERATE_STUBS_REQUESTED = "editor.generateStubsRequested"
     RESTART_LSP_REQUESTED = "lsp.restartRequested"
     CONSOLE_RESIZED = "console.resized"
@@ -121,7 +123,7 @@ class MonacoBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._content = ""
-        self._main_content = ""
+        self._main_content: str | None = None
 
     @property
     def content(self) -> str:
@@ -134,7 +136,7 @@ class MonacoBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
 
     @property
     def main_content(self) -> str:
-        return self._main_content or self._content
+        return self._main_content if self._main_content is not None else self._content
 
     @overload  # type: ignore[override]
     def dispatch(
@@ -144,6 +146,7 @@ class MonacoBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
             PyToJsCommand.TRIGGER_SAVE,
             PyToJsCommand.TRIGGER_SAVE_AS,
             PyToJsCommand.TRIGGER_FORMAT,
+            PyToJsCommand.TRIGGER_RUN,
         ],
     ) -> None: ...
     @overload

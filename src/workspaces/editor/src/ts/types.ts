@@ -71,6 +71,7 @@ export interface PyToJsCommandMap {
   'editor.triggerSave': Record<string, never>;
   'editor.triggerSaveAs': Record<string, never>;
   'editor.triggerFormat': Record<string, never>;
+  'editor.triggerRun': Record<string, never>;
   'console.append': { stream?: string; text: string };
   'console.toggle': { state?: boolean };
   'lsp.connect': LspConnectPayload;
@@ -89,6 +90,7 @@ export interface JsToPyCommandMap {
   'editor.saveRequested': Record<string, never>;
   'editor.saveAsRequested': Record<string, never>;
   'editor.formatRequested': Record<string, never>;
+  'editor.runRequested': Record<string, never>;
   'editor.generateStubsRequested': Record<string, never>;
   'lsp.restartRequested': Record<string, never>;
   'console.resized': { cols: number };

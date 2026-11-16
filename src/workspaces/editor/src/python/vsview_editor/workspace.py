@@ -199,7 +199,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             icon_size=self.ICON_SIZE,
             color_role=self.ICON_COLOR,
         )
-        self.run_btn.clicked.connect(self.runClicked.emit)
+        self.run_btn.clicked.connect(lambda: self.editor.bridge.dispatch(PyToJsCommand.TRIGGER_RUN))
 
         self.toolbar.addWidget(self.new_btn)
         self.toolbar.addWidget(self.open_btn)
@@ -453,6 +453,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
                 self._on_save_as_clicked()
             case JsToPyCommand.FORMAT_REQUESTED:
                 self._on_format_clicked()
+            case JsToPyCommand.RUN_REQUESTED:
+                self.runClicked.emit()
             case JsToPyCommand.GENERATE_STUBS_REQUESTED:
                 self._generate_stubs(force=True)
             case JsToPyCommand.RESTART_LSP_REQUESTED:

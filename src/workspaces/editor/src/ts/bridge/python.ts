@@ -216,6 +216,12 @@ export class BridgeService
         this.editorService.requestFormat();
       }),
     );
+    this._disposables.add(
+      this.onCommand('editor.triggerRun', () => {
+        this.flushState();
+        this.sendEvent('editor.runRequested');
+      }),
+    );
   }
 
   private setupConsoleListeners(): void {

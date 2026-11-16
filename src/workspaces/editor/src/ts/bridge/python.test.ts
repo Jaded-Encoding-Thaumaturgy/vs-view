@@ -477,6 +477,22 @@ describe('BridgeService', () => {
       expect(mockEditor.requestFormat).toHaveBeenCalledOnce();
     });
 
+    it('answers editor.triggerRun with the flushed state, then editor.runRequested', () => {
+      const { bridgeService, bridge } = setupInitializedBridgeService();
+      using fixture = bridgeService;
+      void fixture;
+      mockEditor.emitContentChange();
+
+      mockBridgeFixture.emitCommand('editor.triggerRun', '{}');
+
+      expect(vi.mocked(bridge.dispatchFromJs).mock.calls).toEqual([
+        ['editor.contentChanged', JSON.stringify({ content: 'active content' })],
+        ['editor.mainContentChanged', JSON.stringify({ content: 'main content' })],
+        ['editor.sessionStateChanged', expect.any(String)],
+        ['editor.runRequested', '{}'],
+      ]);
+    });
+
     it('dispatches editor.updateOptions', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
