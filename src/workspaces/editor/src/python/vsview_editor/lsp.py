@@ -68,6 +68,8 @@ LSP_PYREFLY_CONFIG = LSPConfig(
     progress_notifications=None,
 )
 
+LSP_START_TIMEOUT_MS = 5000
+
 # Virtual tabs live in a folder that does not exist on disk, so a real `script.py` in the root never aliases one.
 VIRTUAL_DIR = ".vsview-virtual"
 EDITOR_ORIGINS = frozenset({"", "null", "file://"})
@@ -134,8 +136,15 @@ class LSPProcessServer(QObject):
 
         try:
             self.process.start(str(binary), self.config.command[1:])
+            started = self.process.waitForStarted(LSP_START_TIMEOUT_MS)
         except Exception:
             logger.exception("Failed to launch LSP subprocess for %r:", self.config.id)
+            started = False
+
+        if not started:
+            logger.error("LSP subprocess for %r did not start.", self.config.id)
+            self.stop()
+            return -1
 
         return actual_port
 
