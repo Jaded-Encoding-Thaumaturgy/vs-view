@@ -906,7 +906,8 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         if len(selected_ranges) == 1:
             r = selected_ranges[0]
             s, e = r.as_frames(voutput)
-            default_file = default_file.with_stem(f"{default_file.stem}_{s}-{e}_{r.label}")
+            stem = sanitize_filename(f"{default_file.stem}_{s}-{e}_{r.label}", "_", max_len=255 - len(ext.encode()))
+            default_file = default_file.with_name(f"{stem}{ext}")
             chosen, _ = QFileDialog.getSaveFileName(self, "Export Clip", str(default_file), filter=filter_str)
             if not chosen:
                 return
