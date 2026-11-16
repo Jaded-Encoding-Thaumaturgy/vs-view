@@ -45,7 +45,7 @@ class PythonListTimestampsSerializer(Serializer):
     def serialize(self, io: BinaryIO, ranges: Iterable[UnifiedRange]) -> None:
         with borrowed_text_wrapper(io) as wrapper:
             wrapper.write(
-                str([tuple(ts.to_ts("{H:02d}:{M:02d}:{S:02d}.{ms:06d}") for ts in r.as_times()) for r in ranges])
+                str([tuple(ts.to_ts("{H:02d}:{M:02d}:{S:02d}.{ms:03d}") for ts in r.as_times()) for r in ranges])
             )
 
 
