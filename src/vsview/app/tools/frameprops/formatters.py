@@ -32,16 +32,17 @@ class FormatterProperty:
     """
 
     def format_value(self, value: Any) -> str:
-        if callable(self.value_formatter):
-            try:
-                return self.value_formatter(value)
-            except Exception:
-                logger.exception("There was an error when trying to format %r:", self.prop_key)
-                return self.default_format(value)
+        try:
+            if callable(self.value_formatter):
+                if not isinstance(res := self.value_formatter(value), str):
+                    raise TypeError(f"The formatter returned {type(res).__name__}, expected str")
+                return res
 
-        # Dictionary lookup (for enums)
-        if isinstance(self.value_formatter, dict):
-            return self.value_formatter.get(value, self.default_format(value))
+            # Dictionary lookup (for enums)
+            if isinstance(self.value_formatter, dict):
+                return self.value_formatter.get(value, self.default_format(value))
+        except Exception:
+            logger.exception("There was an error when trying to format %r:", self.prop_key)
 
         return self.default_format(value)
 
