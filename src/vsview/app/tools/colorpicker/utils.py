@@ -8,10 +8,10 @@ def get_chroma_offsets(frame: vs.VideoFrame) -> tuple[float, float]:
     chromaloc = frame.props.get("_ChromaLocation", 0)
 
     if chromaloc in [vs.CHROMA_TOP_LEFT, vs.CHROMA_TOP]:
-        off_top = 2 ** (frame.format.subsampling_h - 1) - 0.5
+        off_top = 0.5 if frame.format.subsampling_h else 0.0
 
     if chromaloc in [vs.CHROMA_LEFT, vs.CHROMA_TOP_LEFT, vs.CHROMA_BOTTOM_LEFT]:
-        off_left = 2 ** (frame.format.subsampling_w - 1) - 0.5
+        off_left = 0.5 if frame.format.subsampling_w else 0.0
 
     return off_top, off_left
 
