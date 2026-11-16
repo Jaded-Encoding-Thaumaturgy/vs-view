@@ -450,9 +450,13 @@ def _resolve_workspaces(choices: Sequence[str], *, strict: bool = False) -> list
     possibles = {w.title.lower().replace(" ", "-"): w for w in builtin_workspaces}
 
     if any(choice not in possibles for choice in choices):
-        PluginManager.wait_for_loaded()
-        for w in PluginManager.workspaces:
-            possibles[w.title.lower().replace(" ", "-")] = w
+        try:
+            PluginManager.wait_for_loaded()
+        except Exception:
+            logger.exception("Plugin loading failed, plugin workspaces are not available")
+        else:
+            for w in PluginManager.workspaces:
+                possibles[w.title.lower().replace(" ", "-")] = w
 
     resolved: list[type[BaseWorkspace]] = []
     unknown: list[str] = []
