@@ -3,16 +3,19 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 from collections.abc import Generator
+from pathlib import Path
 from typing import override
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QKeyEvent
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
+from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
 from vsview.app.main import Application, MainWindow, WorkspaceToolButton
+from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import ShortcutEditor
 from vsview.app.settings.manager import SettingsManager
 from vsview.app.settings.models import WindowGeometry
@@ -150,6 +153,53 @@ def test_add_workspace_with_a_raising_constructor_keeps_the_active_one_connected
     assert main_window.stack.currentWidget() is active.workspace
     assert _HookRecordingFileWorkspace.hooks == ["on_connected"]
     assert main_window.status_widget.message_text_label.text() == "after failed add"
+
+
+def _choose_popup_action(qtbot: QtBot, text: str) -> None:
+    # QMenu.exec runs a nested event loop, so the timer fires while the menu is open.
+    def choose() -> None:
+        menu = QApplication.activePopupWidget()
+        if not isinstance(menu, QMenu):
+            QTimer.singleShot(10, choose)
+            return
+        menu.setActiveAction(next(action for action in menu.actions() if action.text() == text))
+        qtbot.keyClick(menu, Qt.Key.Key_Return)
+
+    QTimer.singleShot(0, choose)
+
+
+_VALID_SCRIPT = (
+    "import vapoursynth as vs\n"
+    "clip = vs.core.std.BlankClip(length=10, width=64, height=64, format=vs.RGB24, fpsnum=24, fpsden=1)\n"
+    "clip = vs.core.std.SetFrameProps(\n"
+    "    clip, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709\n"
+    ")\n"
+    "clip.set_output(0)\n"
+)
+
+
+def test_sidebar_reload_on_a_failed_workspace_loads_the_content_again(
+    main_window: MainWindow,
+    qtbot: QtBot,
+    mocker: MockerFixture,
+    tmp_path: Path,
+    init_plugin_manager: PluginManager,
+) -> None:
+    btn = main_window.add_workspace(PythonScriptWorkspace)
+    workspace = btn.workspace
+    script = tmp_path / "script.vpy"
+    script.write_text("import vapoursynth as vs\n", encoding="utf-8")
+    fut = workspace.load_content(script)
+    qtbot.waitUntil(lambda: fut.done() and workspace.stack.currentWidget() is workspace.error_page, timeout=5000)
+    script.write_text(_VALID_SCRIPT, encoding="utf-8")
+    _choose_popup_action(qtbot, "Reload")
+    reload_content = mocker.spy(workspace, "reload_content")
+
+    btn.customContextMenuRequested.emit(QPoint(0, 0))
+
+    qtbot.waitUntil(lambda: workspace.stack.currentWidget() is workspace.loaded_page, timeout=5000)
+    reload_content.assert_not_called()
+    assert len(workspace.outputs_manager.voutputs) == 1
 
 
 def test_workspace_delete_cancelled_by_confirm_close(main_window: MainWindow) -> None:

@@ -595,7 +595,10 @@ class MainWindow(QMainWindow):
             return
 
         if selected is reload_action and isinstance(btn.workspace, LoaderWorkspace) and Shiboken.isValid(btn.workspace):
-            btn.workspace.reload_content()
+            if btn.workspace.stack.currentWidget() is btn.workspace.error_page:
+                btn.workspace.reload_btn.click()
+            else:
+                btn.workspace.reload_content()
         elif selected is clear_action:
             self.clear_workspace(btn)
         elif selected is delete_action:
