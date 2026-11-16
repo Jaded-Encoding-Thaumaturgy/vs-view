@@ -907,6 +907,23 @@ describe('EditorService', () => {
       expect(model?.options.tabSize).toBe(2);
       expect(model?.options.insertSpaces).toBe(false);
     });
+
+    it('applies tabSize and insertSpaces to models created later', () => {
+      service.updateOptionsFromMap({ 'editor.tabSize': 2 });
+      service.updateOptionsFromMap({ 'editor.insertSpaces': false });
+
+      service.openTab('file:///workspace/later.py', 'x = 1', 'python', false).unwrap();
+      expect(modelsMap.get('file:///workspace/later.py')?.options).toEqual({
+        tabSize: 2,
+        insertSpaces: false,
+      });
+
+      service.renameTab('file:///workspace/later.py', 'file:///workspace/renamed.py').unwrap();
+      expect(modelsMap.get('file:///workspace/renamed.py')?.options).toEqual({
+        tabSize: 2,
+        insertSpaces: false,
+      });
+    });
   });
 
   describe('Dirty state tracking', () => {

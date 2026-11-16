@@ -41,6 +41,7 @@ export class EditorService implements vscode.Disposable {
   private readonly formatRequestEmitter = this.disposables.add(new monaco.Emitter<void>());
   private activeUri: string | null = null;
   private mainUri: string | null = null;
+  private modelOptions: monaco.editor.ITextModelUpdateOptions = {};
 
   constructor() {
     const container = document.getElementById(DOM_IDS.EDITOR)!;
@@ -279,6 +280,7 @@ export class EditorService implements vscode.Disposable {
     this.editor.updateOptions(opts);
 
     if (Object.keys(modelOpts).length > 0) {
+      this.modelOptions = { ...this.modelOptions, ...modelOpts };
       for (const tab of this.tabs.values()) {
         if (!tab.model.isDisposed()) {
           tab.model.updateOptions(modelOpts);
@@ -320,6 +322,7 @@ export class EditorService implements vscode.Disposable {
         if (content && model.getValue() !== content) {
           model.setValue(content);
         }
+        this.applyModelOptions(model);
 
         const title = this.deriveTitle(uriInput);
 
@@ -549,6 +552,12 @@ export class EditorService implements vscode.Disposable {
     this.dispose();
   }
 
+  private applyModelOptions(model: monaco.editor.ITextModel): void {
+    if (Object.keys(this.modelOptions).length > 0) {
+      model.updateOptions(this.modelOptions);
+    }
+  }
+
   private disposeTab(tab: TabRecord): void {
     tab.disposables.dispose();
     if (tab.ownsModel && !tab.model.isDisposed()) {
@@ -722,6 +731,7 @@ export class EditorService implements vscode.Disposable {
         newModel.setValue(tab.model.getValue());
       }
     }
+    this.applyModelOptions(newModel);
 
     const oldModel = tab.model;
     const oldOwnsModel = tab.ownsModel;
