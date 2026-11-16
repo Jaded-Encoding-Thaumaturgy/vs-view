@@ -16,7 +16,7 @@ import zmq
 from keyring.backends.fail import Keyring
 from PySide6.QtCore import QMimeData, QPointF, Qt, QTimer, QUrl
 from PySide6.QtGui import QDropEvent
-from PySide6.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
@@ -24,7 +24,7 @@ from vsremote import RemoteTimeoutError, TransportClosedError, TransportNotConne
 from vsremote.protocol import Command, StatusCode
 from vsremote.protocol.messages import RemoteErrorPayload, StackFrame
 from vsview_remote._secrets import READ_ERROR_MESSAGE, WRITE_ERROR_MESSAGE
-from vsview_remote.dialog import ConnectionConfig
+from vsview_remote.dialog import ConnectionConfig, is_local_address
 from vsview_remote.workspace import RemoteWorkspace
 
 from vsview.app.plugins.manager import PluginManager
@@ -887,3 +887,178 @@ def test_client_hwm_follows_the_backlog_when_auto(
     assert remote_client.call_args.kwargs["hwm"] == expected_hwm
     assert ping_client.call_args.kwargs["hwm"] == expected_hwm
     assert workspace.settings.global_.hwm == hwm
+
+
+REMOTE_ADDRESS = "tcp://192.168.1.20:5555"
+
+
+@pytest.mark.parametrize(
+    ("address", "expected"),
+    [
+        ("tcp://127.0.0.1:5555", True),
+        ("tcp://127.8.0.1:5555", True),
+        ("tcp://localhost:5555", True),
+        ("tcp://LocalHost:5555", True),
+        ("tcp://[::1]:5555", True),
+        ("tcp://10.0.0.1;127.0.0.1:5555", True),
+        ("ipc:///tmp/vsremote.sock", True),
+        ("inproc://vsremote", True),
+        (REMOTE_ADDRESS, False),
+        ("tcp://example.com:5555", False),
+        ("tcp://0.0.0.0:5555", False),
+        ("tcp://[2001:db8::1]:5555", False),
+        ("tcp://127.0.0.1;192.168.1.20:5555", False),
+        ("ws://127.0.0.1:5555", False),
+        ("127.0.0.1:5555", False),
+        ("", False),
+    ],
+)
+def test_is_local_address(address: str, expected: bool) -> None:
+    assert is_local_address(address) is expected
+
+
+@pytest.fixture
+def warnings(mocker: MockerFixture) -> Callable[[QMessageBox.StandardButton], list[tuple[str, Qt.TextFormat]]]:
+    def factory(answer: QMessageBox.StandardButton) -> list[tuple[str, Qt.TextFormat]]:
+        shown = list[tuple[str, Qt.TextFormat]]()
+
+        def fake_exec(box: QMessageBox) -> int:
+            shown.append((box.text(), box.textFormat()))
+            return answer.value
+
+        mocker.patch.object(QMessageBox, "exec", new=fake_exec)
+        return shown
+
+    return factory
+
+
+def set_address(ws: RemoteWorkspace, address: str, *, use_curve: bool = False) -> Callable[[], None]:
+    def edit() -> None:
+        ws.dialog.address_edit.setText(address)
+        ws.dialog.use_curve_cb.setChecked(use_curve)
+        ws.dialog.curve_server_key_edit.setText(SERVER_KEY if use_curve else "")
+
+    return edit
+
+
+def test_connect_to_a_remote_host_without_curve_asks_first(
+    workspace: RemoteWorkspace,
+    warnings: Callable[[QMessageBox.StandardButton], list[tuple[str, Qt.TextFormat]]],
+) -> None:
+    shown = warnings(QMessageBox.StandardButton.Yes)
+
+    res = accept_dialog(workspace, set_address(workspace, REMOTE_ADDRESS))
+
+    assert res is not None
+    assert res.address == REMOTE_ADDRESS
+    assert len(shown) == 1
+    assert REMOTE_ADDRESS in shown[0][0]
+    assert "clear text" in shown[0][0]
+    assert shown[0][1] == Qt.TextFormat.PlainText
+    assert workspace.settings.global_.address == REMOTE_ADDRESS
+
+
+def test_declining_the_warning_keeps_the_dialog_open(
+    workspace: RemoteWorkspace,
+    warnings: Callable[[QMessageBox.StandardButton], list[tuple[str, Qt.TextFormat]]],
+) -> None:
+    shown = warnings(QMessageBox.StandardButton.No)
+    after_connect = list[bool]()
+
+    def connect_then_cancel() -> None:
+        set_address(workspace, REMOTE_ADDRESS)()
+        workspace.dialog.accept()
+        after_connect.append(workspace.dialog.isVisible())
+        workspace.dialog.reject()
+
+    QTimer.singleShot(0, connect_then_cancel)
+    res = workspace.prompt_connection_dialog()
+
+    assert res is None
+    assert len(shown) == 1
+    assert after_connect == [True]
+    assert workspace.settings.global_.address == "tcp://127.0.0.1:5555"
+
+
+@pytest.mark.parametrize(
+    ("address", "use_curve"),
+    [("tcp://127.0.0.1:5555", False), ("tcp://localhost:5555", False), (REMOTE_ADDRESS, True)],
+)
+def test_local_or_encrypted_connect_does_not_ask(
+    workspace: RemoteWorkspace,
+    warnings: Callable[[QMessageBox.StandardButton], list[tuple[str, Qt.TextFormat]]],
+    address: str,
+    use_curve: bool,
+) -> None:
+    shown = warnings(QMessageBox.StandardButton.No)
+
+    res = accept_dialog(workspace, set_address(workspace, address, use_curve=use_curve))
+
+    assert res is not None
+    assert (res.address, res.use_curve) == (address, use_curve)
+    assert shown == []
+
+
+def test_curve_ticked_without_a_server_key_still_asks(
+    workspace: RemoteWorkspace,
+    warnings: Callable[[QMessageBox.StandardButton], list[tuple[str, Qt.TextFormat]]],
+) -> None:
+    shown = warnings(QMessageBox.StandardButton.Yes)
+
+    def edit() -> None:
+        set_address(workspace, REMOTE_ADDRESS)()
+        workspace.dialog.use_curve_cb.setChecked(True)
+
+    res = accept_dialog(workspace, edit)
+
+    assert res is not None
+    assert res.active_curve_keys == (None, None, None)
+    assert len(shown) == 1
+
+
+def test_declined_test_connection_sends_nothing(
+    qtbot: QtBot,
+    workspace: RemoteWorkspace,
+    mocker: MockerFixture,
+    warnings: Callable[[QMessageBox.StandardButton], list[tuple[str, Qt.TextFormat]]],
+) -> None:
+    remote_client = mocker.patch("vsview_remote.dialog.RemoteClient")
+    shown = warnings(QMessageBox.StandardButton.No)
+
+    def test_then_cancel() -> None:
+        set_address(workspace, REMOTE_ADDRESS)()
+        workspace.dialog.test_btn.click()
+        workspace.dialog.reject()
+
+    QTimer.singleShot(0, test_then_cancel)
+    workspace.prompt_connection_dialog()
+    qtbot.wait(50)
+
+    assert len(shown) == 1
+    remote_client.assert_not_called()
+
+
+def test_accepted_warning_is_asked_once_per_dialog(
+    qtbot: QtBot,
+    workspace: RemoteWorkspace,
+    mocker: MockerFixture,
+    warnings: Callable[[QMessageBox.StandardButton], list[tuple[str, Qt.TextFormat]]],
+) -> None:
+    remote_client = mocker.patch("vsview_remote.dialog.RemoteClient")
+    remote_client.return_value.__enter__.return_value.ping.return_value.result.return_value = True
+    shown = warnings(QMessageBox.StandardButton.Yes)
+
+    def test_then_connect() -> None:
+        set_address(workspace, REMOTE_ADDRESS)()
+        workspace.dialog.test_btn.click()
+        qtbot.waitUntil(lambda: workspace.dialog.test_btn.isEnabled(), timeout=5000)
+        workspace.dialog.accept()
+
+    QTimer.singleShot(0, test_then_connect)
+    first = workspace.prompt_connection_dialog()
+    second = accept_dialog(workspace)
+
+    assert first is not None
+    assert second is not None
+    assert remote_client.call_args.args == (REMOTE_ADDRESS,)
+    assert len(shown) == 2

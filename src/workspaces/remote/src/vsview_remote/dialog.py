@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from ipaddress import ip_address
 from typing import Any, Literal, NamedTuple, cast, override
 
 from PySide6.QtCore import Qt, Slot
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -42,6 +44,7 @@ class RemoteConnectionDialog(QDialog):
         self.settings = settings
         self.secrets = secrets
         self._ping_worker: UnifiedFuture[None] | None = None
+        self._insecure_address_confirmed: str | None = None
 
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(8)
@@ -186,7 +189,13 @@ class RemoteConnectionDialog(QDialog):
         return self.secrets.get(CURVE_CONTEXT, CURVE_KEY)
 
     @override
+    def accept(self) -> None:
+        if self._confirm_insecure_connection(self.config):
+            super().accept()
+
+    @override
     def exec(self) -> int:
+        self._insecure_address_confirmed = None
         self.set_status()
         self.refresh_from_settings()
         res = super().exec()
@@ -203,6 +212,31 @@ class RemoteConnectionDialog(QDialog):
         self.status_label.setStyleSheet(style)
         self.status_label.setText(text)
 
+    def _confirm_insecure_connection(self, cfg: ConnectionConfig) -> bool:
+        if cfg.active_curve_keys[0] is not None or is_local_address(cfg.address):
+            return True
+        if cfg.address == self._insecure_address_confirmed:
+            return True
+
+        box = QMessageBox(
+            QMessageBox.Icon.Warning,
+            "Unencrypted Connection",
+            f"CurveZMQ encryption is off for {cfg.address}. "
+            "Traffic, including your auth token, will be sent in plain text.\n\n"
+            "Continue anyway?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            self,
+            textFormat=Qt.TextFormat.PlainText,
+        )
+        box.setDefaultButton(QMessageBox.StandardButton.No)
+
+        if box.exec() != QMessageBox.StandardButton.Yes:
+            self.set_status("Not connected. Turn on CurveZMQ or use a local address.", "#e74c3c")
+            return False
+
+        self._insecure_address_confirmed = cfg.address
+        return True
+
     @Slot(bool)
     def _on_curve_toggled(self, checked: bool) -> None:
         self.curve_server_key_edit.setEnabled(checked)
@@ -211,6 +245,10 @@ class RemoteConnectionDialog(QDialog):
 
     @Slot()
     def _on_test_connection_clicked(self) -> None:
+        cfg = self.config
+        if not self._confirm_insecure_connection(cfg):
+            return
+
         self.set_status("Connecting...")
         self.test_btn.setDisabled(True)
         self.button_box.button(QDialogButtonBox.StandardButton.Ok).setDisabled(True)
@@ -238,8 +276,6 @@ class RemoteConnectionDialog(QDialog):
             self.test_btn.setEnabled(True)
             self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(True)
             self._ping_worker = None
-
-        cfg = self.config
 
         self._ping_worker = (
             self.ping(cfg)
@@ -295,3 +331,21 @@ class ConnectionConfig(NamedTuple):
         if not self.use_curve:
             return None, None, None
         return self.curve_server_key, self.curve_public_key, self.curve_secret_key
+
+
+def is_local_address(address: str) -> bool:
+    scheme, sep, rest = address.partition("://")
+    if not sep:
+        return False
+    if scheme in ("ipc", "inproc"):
+        return True
+    if scheme != "tcp":
+        return False
+
+    host = rest.rpartition(";")[2].rpartition(":")[0].removeprefix("[").removesuffix("]")
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
