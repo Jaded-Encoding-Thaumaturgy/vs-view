@@ -780,12 +780,8 @@ class EditorWorkspace(
 
     @property
     @override
-    def current_file_path(self) -> ContentPath | None:
-        return (
-            ContentPath(p.read_text(encoding="utf-8"), str(p))
-            if (p := self.code_dock.main_filepath) and p.is_file()
-            else None
-        )
+    def current_file_path(self) -> Path | None:  # type: ignore[override]
+        return p if (p := self.code_dock.main_filepath) and p.is_file() else None
 
     @override
     def showEvent(self, event: QShowEvent) -> None:
