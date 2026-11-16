@@ -51,7 +51,7 @@ from .console import GlobalConsoleHub
 from .lsp import DEV_SERVER_ORIGIN, LSP_PYREFLY_CONFIG, LSPProcessManager
 from .settings import GlobalSettings, LocalSettings
 from .stubs import get_stubs_dir
-from .utils import ContentPath, WorkspaceUri, extract_supported_script_files
+from .utils import ContentPath, WorkspaceUri, extract_supported_script_files, find_ruff
 from .web import JsToPyCommand, MonacoEditorWidget, OpenTabPayload, PyToJsCommand, TabInfo
 
 logger = getLogger(__name__)
@@ -518,8 +518,9 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     def _on_format_clicked(self) -> None:
         self.format_btn.setDisabled(True)
 
-        if not (ruff_binary := shutil.which("ruff")):
+        if not (ruff_binary := find_ruff()):
             logger.error("ruff executable not found")
+            self.format_btn.setEnabled(True)
             return
 
         code = self.editor.bridge.content

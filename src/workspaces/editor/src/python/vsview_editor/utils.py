@@ -1,3 +1,4 @@
+import shutil
 import sys
 from pathlib import Path
 from typing import override
@@ -17,6 +18,20 @@ def extract_supported_script_files(mime_data: QMimeData) -> list[Path]:
             if p.is_file() and p.suffix.lower() in SUPPORTED_SCRIPT_SUFFIXES:
                 files.append(p)
     return files
+
+
+def find_executable(name: str) -> str | None:
+    """Find a tool installed next to the running interpreter, then on PATH."""
+    return shutil.which(name, path=str(Path(sys.executable).parent)) or shutil.which(name)
+
+
+def find_ruff() -> str | None:
+    from ruff import find_ruff_bin  # type: ignore[import-untyped]
+
+    try:
+        return find_ruff_bin()
+    except FileNotFoundError:
+        return shutil.which("ruff")
 
 
 class WorkspaceUri(QUrl):

@@ -3,7 +3,6 @@ from __future__ import annotations
 import itertools
 import re
 import secrets
-import shutil
 import sys
 import urllib.parse
 import weakref
@@ -20,6 +19,8 @@ from PySide6.QtWebSockets import QWebSocket, QWebSocketProtocol, QWebSocketServe
 
 from vsview.api import QObjectSet
 from vsview.env import getenv_bool
+
+from .utils import find_executable
 
 if TYPE_CHECKING:
     from .web import LspConnectPayload
@@ -111,8 +112,8 @@ class LSPProcessServer(QObject):
         executable_name = Path(self.config.command[0])
         if executable_name.is_file():
             binary = executable_name.resolve()
-        elif not (binary := shutil.which(executable_name)):
-            logger.error("LSP executable %r for %r not found in PATH.", executable_name, self.config.id)
+        elif not (binary := find_executable(str(executable_name))):
+            logger.error("LSP executable %r for %r not found.", executable_name, self.config.id)
             return -1
 
         self.server = QWebSocketServer(f"LSP Bridge ({self.config.name})", QWebSocketServer.SslMode.NonSecureMode, self)
