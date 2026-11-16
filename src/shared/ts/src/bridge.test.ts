@@ -293,4 +293,67 @@ describe('WebChannelBridge', () => {
       expect(service.errors).toHaveLength(1);
     });
   });
+
+  describe('init lifetime', () => {
+    it('does not revive a bridge disposed before the channel opens', async () => {
+      const { mockBridge, openChannel, emitCommand } = setupDeferredWebChannel();
+      const service = new HookedBridge();
+      const readyHook = vi.fn();
+      service.readyHook = readyHook;
+      const handler = vi.fn();
+      service.onCommand('test.ping', handler);
+
+      const init = service.initBridge();
+      service.dispose();
+      openChannel();
+      const result = await init;
+
+      expect(result.ok).toBe(false);
+      expect(readyHook).not.toHaveBeenCalled();
+      expect(mockBridge.dispatchCommandSignal.connect).not.toHaveBeenCalled();
+      expect(mockBridge.onWebReady).not.toHaveBeenCalled();
+      expect(service.errors).toEqual([]);
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      expect(service.sendEvent('test.ready').ok).toBe(false);
+      emitCommand('test.ping', {});
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('returns Err from initBridge after dispose without opening a channel', async () => {
+      const { channelCount } = setupDeferredWebChannel();
+      const service = new HookedBridge();
+      service.dispose();
+
+      const result = await service.initBridge();
+
+      expect(result.ok).toBe(false);
+      expect(channelCount()).toBe(0);
+    });
+
+    it('shares one channel between repeated initBridge calls', async () => {
+      const { mockBridge, channelCount, openChannel, emitCommand } = setupDeferredWebChannel();
+      const service = new HookedBridge();
+      const handler = vi.fn();
+      service.onCommand('test.ping', handler);
+
+      const first = service.initBridge();
+      const second = service.initBridge();
+      expect(channelCount()).toBe(1);
+      openChannel();
+      const third = service.initBridge();
+
+      const results = await Promise.all([first, second, third]);
+      expect(results.map((r) => r.ok)).toEqual([true, true, true]);
+      expect(channelCount()).toBe(0);
+      expect(mockBridge.dispatchCommandSignal.connect).toHaveBeenCalledTimes(1);
+      expect(mockBridge.onWebReady).toHaveBeenCalledTimes(1);
+
+      emitCommand('test.ping', {});
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      service.dispose();
+      const connectedHandler: unknown = mockBridge.dispatchCommandSignal.connect.mock.calls[0]?.[0];
+      expect(mockBridge.dispatchCommandSignal.disconnect).toHaveBeenCalledWith(connectedHandler);
+    });
+  });
 });

@@ -46,46 +46,18 @@ export class WebChannelBridge<
   private readonly commandHandlers = new Map<string, Array<CommandHandler<unknown>>>();
   private isDisposed = false;
   private boundSignalHandler: ((command: string, payloadJson: string) => void) | null = null;
+  private initResult: ResultAsync<TRpc> | null = null;
 
   public initBridge(): ResultAsync<TRpc> {
-    return Result.fromPromise(
-      () =>
-        new Promise<TRpc>((resolve, reject) => {
-          const fail = (err: Error) => {
-            reject(err);
-            console.error(err);
-            this.onBridgeError(err);
-          };
+    if (this.isDisposed) {
+      return ResultAsync.fromResult(Result.err(new Error('Cannot initialize a disposed bridge')));
+    }
 
-          const transport = window.qt?.webChannelTransport;
-          if (!transport) {
-            fail(new Error('Qt WebChannel transport is not available'));
-            return;
-          }
-
-          const created = Result.fromThrowable(
-            () =>
-              new window.QWebChannel(transport, (channel) => {
-                const pyBridge = channel.objects['bridge'] as TRpc | undefined;
-                if (!pyBridge) {
-                  fail(new Error('Bridge object not found on Qt WebChannel'));
-                  return;
-                }
-
-                const attached = Result.fromThrowable(() => this.attachBridge(pyBridge));
-                if (!attached.ok) {
-                  this.detachBridge();
-                  fail(attached.error);
-                  return;
-                }
-                resolve(pyBridge);
-              }),
-          );
-          if (!created.ok) {
-            fail(created.error);
-          }
-        }),
-    );
+    this.initResult ??= this.connectBridge().mapErr((err) => {
+      this.initResult = null;
+      return err;
+    });
+    return this.initResult;
   }
 
   public onCommand<K extends keyof PyToJsMap & string>(
@@ -191,6 +163,52 @@ export class WebChannelBridge<
         console.error(`Error in handler for bridge command ${command}:`, err);
       });
     }
+  }
+
+  private connectBridge(): ResultAsync<TRpc> {
+    return Result.fromPromise(
+      () =>
+        new Promise<TRpc>((resolve, reject) => {
+          const fail = (err: Error) => {
+            reject(err);
+            console.error(err);
+            this.onBridgeError(err);
+          };
+
+          const transport = window.qt?.webChannelTransport;
+          if (!transport) {
+            fail(new Error('Qt WebChannel transport is not available'));
+            return;
+          }
+
+          const created = Result.fromThrowable(
+            () =>
+              new window.QWebChannel(transport, (channel) => {
+                if (this.isDisposed) {
+                  reject(new Error('Bridge was disposed before the Qt WebChannel was ready'));
+                  return;
+                }
+
+                const pyBridge = channel.objects['bridge'] as TRpc | undefined;
+                if (!pyBridge) {
+                  fail(new Error('Bridge object not found on Qt WebChannel'));
+                  return;
+                }
+
+                const attached = Result.fromThrowable(() => this.attachBridge(pyBridge));
+                if (!attached.ok) {
+                  this.detachBridge();
+                  fail(attached.error);
+                  return;
+                }
+                resolve(pyBridge);
+              }),
+          );
+          if (!created.ok) {
+            fail(created.error);
+          }
+        }),
+    );
   }
 
   private attachBridge(pyBridge: TRpc): void {
