@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { type BasePythonBridge, WebChannelBridge } from './bridge';
+import { type BasePythonBridge, INVOKE_TIMEOUT_MS, WebChannelBridge } from './bridge';
 
 interface TestPyToJsMap {
   'test.setData': { items: number[] };
@@ -333,6 +333,99 @@ describe('WebChannelBridge', () => {
 
       expect(result.match({ ok: () => '', err: (e) => e.message })).toBe('caller failed');
       service.dispose();
+    });
+
+    describe('timeout', () => {
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      async function initWithSilentReadData(): Promise<{
+        mockBridge: MockBridge;
+        service: WebChannelBridge<TestPyToJsMap, TestJsToPyMap, TestRpcBridge>;
+      }> {
+        const { mockBridge } = setupMockWebChannel();
+        const service = new WebChannelBridge<TestPyToJsMap, TestJsToPyMap, TestRpcBridge>();
+        await service.initBridge();
+        vi.useFakeTimers();
+        return { mockBridge, service };
+      }
+
+      it('returns Err when Python never answers within 30 s', async () => {
+        const { service } = await initWithSilentReadData();
+        let settled = false;
+
+        const pending = service.invoke<string>((b, cb) => b.readData('k', cb));
+        void pending.then((result) => {
+          settled = true;
+          return result;
+        });
+        await vi.advanceTimersByTimeAsync(INVOKE_TIMEOUT_MS - 1);
+        const settledBeforeTimeout = settled;
+        await vi.advanceTimersByTimeAsync(1);
+        const result = await pending;
+
+        expect(INVOKE_TIMEOUT_MS).toBe(30_000);
+        expect(settledBeforeTimeout).toBe(false);
+        expect(result.match({ ok: () => '', err: (e) => e.message })).toBe(
+          'Bridge RPC call timed out after 30000 ms',
+        );
+        service.dispose();
+      });
+
+      it('ignores a reply that arrives after the timeout', async () => {
+        const { mockBridge, service } = await initWithSilentReadData();
+        let reply: ((res: string | null) => void) | undefined;
+        mockBridge.readData.mockImplementationOnce((_k: string, cb: (r: string | null) => void) => {
+          reply = cb;
+        });
+
+        const pending = service.invoke<string>((b, cb) => b.readData('k', cb));
+        await vi.advanceTimersByTimeAsync(INVOKE_TIMEOUT_MS);
+        const result = await pending;
+        reply?.('late');
+
+        expect(result.ok).toBe(false);
+        service.dispose();
+      });
+
+      it('stops the timer when the call is answered', async () => {
+        const { mockBridge, service } = await initWithSilentReadData();
+        mockBridge.readData.mockImplementationOnce((_k: string, cb: (r: string | null) => void) =>
+          cb('value'),
+        );
+
+        const result = await service.invoke<string>((b, cb) => b.readData('k', cb));
+
+        expect(result.match({ ok: (v) => v, err: (e) => e.message })).toBe('value');
+        expect(vi.getTimerCount()).toBe(0);
+        service.dispose();
+      });
+
+      it('stops the timer when the caller throws', async () => {
+        const { service } = await initWithSilentReadData();
+
+        const result = await service.invoke<string>(() => {
+          throw new Error('caller failed');
+        });
+
+        expect(result.ok).toBe(false);
+        expect(vi.getTimerCount()).toBe(0);
+        service.dispose();
+      });
+
+      it('stops the timer when the bridge is disposed', async () => {
+        const { service } = await initWithSilentReadData();
+
+        const pending = service.invoke<string>((b, cb) => b.readData('k', cb));
+        service.dispose();
+        const result = await pending;
+
+        expect(result.match({ ok: () => '', err: (e) => e.message })).toBe(
+          'Bridge was disposed before the RPC call returned',
+        );
+        expect(vi.getTimerCount()).toBe(0);
+      });
     });
   });
 

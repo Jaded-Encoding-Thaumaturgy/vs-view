@@ -33,6 +33,8 @@ declare global {
 
 export type CommandHandler<T> = (payload: T) => void;
 
+export const INVOKE_TIMEOUT_MS = 30_000;
+
 /**
  * Generic typed QWebChannel command bus for Python <-> JavaScript communication.
  */
@@ -113,22 +115,33 @@ export class WebChannelBridge<
     return Result.fromPromise(
       () =>
         new Promise<R>((resolve, reject) => {
-          const cancel = (err: Error) => reject(err);
+          const settle = (outcome: Result<R>) => {
+            clearTimeout(timer);
+            this.pendingInvokes.delete(cancel);
+            if (outcome.ok) {
+              resolve(outcome.value);
+            } else {
+              reject(outcome.error);
+            }
+          };
+          const cancel = (err: Error) => settle(Result.err(err));
           this.pendingInvokes.add(cancel);
+          const timer = setTimeout(
+            () => cancel(new Error(`Bridge RPC call timed out after ${INVOKE_TIMEOUT_MS} ms`)),
+            INVOKE_TIMEOUT_MS,
+          );
 
           const called = Result.fromThrowable(() => {
             caller(activeBridge, (data) => {
-              this.pendingInvokes.delete(cancel);
-              if (data === null || data === undefined) {
-                reject(new Error(errorMsg));
-              } else {
-                resolve(data);
-              }
+              settle(
+                data === null || data === undefined
+                  ? Result.err(new Error(errorMsg))
+                  : Result.ok(data),
+              );
             });
           });
           if (!called.ok) {
-            this.pendingInvokes.delete(cancel);
-            reject(called.error);
+            cancel(called.error);
           }
         }),
     );
