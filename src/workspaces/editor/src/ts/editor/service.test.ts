@@ -432,6 +432,21 @@ describe('EditorService', () => {
       expect(service.getValue()).toBe('version 2');
     });
 
+    it('openTab() on the active clean tab with new content leaves the tab bar clean', () => {
+      const uri = 'file:///workspace/reopen.py';
+      service.openTab(uri, 'initial', 'python', false).unwrap();
+
+      service.openTab(uri, 'updated from disk', 'python', false).unwrap();
+
+      expect(service.getValue()).toBe('updated from disk');
+      expect(service.getSessionState().find((t) => t.uri === uri)?.isDirty).toBe(false);
+      const activeTabEl = document.getElementById(DOM_IDS.TAB_BAR)!.querySelector('.tab.active')!;
+      expect(activeTabEl.classList.contains('dirty')).toBe(false);
+
+      service.setValue('edited');
+      expect(service.getSessionState().find((t) => t.uri === uri)?.isDirty).toBe(true);
+    });
+
     it('openTab() with replaceUri removes target tab, disposes its model, and sets new tab as active and main', () => {
       const sessionBefore = service.getSessionState();
       expect(sessionBefore.map((t) => t.uri)).toEqual(['file:///workspace/script.py']);
