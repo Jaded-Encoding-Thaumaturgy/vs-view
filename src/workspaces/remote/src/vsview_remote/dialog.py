@@ -173,7 +173,7 @@ class RemoteConnectionDialog(QDialog):
             curve_public_key=self.curve_public_key_edit.text().strip() or None,
             curve_secret_key=self.curve_secret_key_edit.text().strip() or None,
             frame_timeout=v if (v := self.frame_timeout_spin.value()) > 0 else None,
-            hwm=self.settings.global_.hwm or (max((self.backlog_spin.value() or 12) * 2, 16)),
+            hwm=self.settings.global_.hwm,
             tcp_keepalive=self.settings.global_.tcp_keepalive,
         )
 
@@ -259,7 +259,7 @@ class RemoteConnectionDialog(QDialog):
             curve_secret_key=curve_secret_key,
             subscribe_streams=False,
             forward_logs=False,
-            hwm=cfg.hwm if cfg.hwm is not None else 64,
+            hwm=cfg.effective_hwm,
             tcp_keepalive=cfg.tcp_keepalive,
         ) as client:
             return client.ping().result(timeout=5.0)
@@ -280,6 +280,14 @@ class ConnectionConfig(NamedTuple):
     frame_timeout: float | None = None
     hwm: int | None = None
     tcp_keepalive: bool = True
+
+    @property
+    def effective_hwm(self) -> int:
+        """The ZeroMQ high water mark to connect with: the set value, or twice the frame backlog when it is Auto."""
+        if self.hwm is not None:
+            return self.hwm
+        backlog = self.prefetch * 3 if self.backlog is None else max(self.backlog, self.prefetch)
+        return max(backlog * 2, 16)
 
     @property
     def active_curve_keys(self) -> tuple[str | None, str | None, str | None]:

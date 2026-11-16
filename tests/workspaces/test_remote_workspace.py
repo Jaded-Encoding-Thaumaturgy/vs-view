@@ -748,3 +748,64 @@ def test_closing_the_client_ends_a_load_with_no_time_limit(
     assert not loader_thread.is_alive()
     assert [type(e) for e in errors] == [TransportClosedError]
     assert len(dialogs) == 1
+
+
+def test_connect_keeps_auto_backlog_and_hwm(workspace: RemoteWorkspace) -> None:
+    shown = list[tuple[int, str]]()
+
+    def raise_limits() -> None:
+        shown.append((workspace.dialog.backlog_spin.value(), workspace.dialog.backlog_spin.text()))
+        workspace.dialog.prefetch_spin.setValue(64)
+
+    first = accept_dialog(workspace)
+    second = accept_dialog(workspace, raise_limits)
+
+    assert first is not None
+    assert (first.backlog, first.hwm) == (None, None)
+    assert shown == [(0, "Default")]
+    assert second is not None
+    assert (second.prefetch, second.backlog, second.hwm) == (64, None, None)
+    assert workspace.settings.global_.backlog is None
+    assert workspace.settings.global_.hwm is None
+
+
+@pytest.mark.parametrize(
+    ("prefetch", "backlog", "hwm", "expected_hwm"),
+    [
+        (4, None, None, 24),
+        (0, None, None, 16),
+        (64, None, None, 384),
+        (64, 128, None, 256),
+        (64, 16, None, 128),
+        (64, 128, 100, 100),
+    ],
+)
+def test_client_hwm_follows_the_backlog_when_auto(
+    workspace: RemoteWorkspace,
+    script: Path,
+    mocker: MockerFixture,
+    prefetch: int,
+    backlog: int | None,
+    hwm: int | None,
+    expected_hwm: int,
+) -> None:
+    remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
+    ping_client = mocker.patch("vsview_remote.dialog.RemoteClient")
+    ping_client.return_value.__enter__.return_value.ping.return_value.result.return_value = True
+    workspace.settings.global_.hwm = hwm
+
+    def edit() -> None:
+        workspace.dialog.prefetch_spin.setValue(prefetch)
+        workspace.dialog.backlog_spin.setValue(backlog or 0)
+
+    connect_through_load_button(workspace, script, mocker, edit)
+    res = accept_dialog(workspace)
+    assert res is not None
+    client = workspace.client
+    pinged = workspace.dialog.ping(res).result(timeout=5)
+
+    assert client is remote_client.return_value.start.return_value
+    assert pinged is True
+    assert remote_client.call_args.kwargs["hwm"] == expected_hwm
+    assert ping_client.call_args.kwargs["hwm"] == expected_hwm
+    assert workspace.settings.global_.hwm == hwm

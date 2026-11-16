@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from vsview.api import Checkbox, Dropdown, LineEdit, SecretLineEdit, Spin
 
@@ -142,3 +142,8 @@ class GlobalSettings(BaseModel):
             tooltip="Client secret key for CurveZMQ encryption",
         ),
     ] = None
+
+    @field_validator("backlog", "hwm", mode="before")
+    @classmethod
+    def _zero_means_auto(cls, value: Any) -> Any:
+        return None if value == 0 else value
