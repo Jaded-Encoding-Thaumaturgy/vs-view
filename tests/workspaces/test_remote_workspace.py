@@ -6,19 +6,23 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
+import keyring.errors
 import msgspec
 import pytest
 import zmq
+from keyring.backends.fail import Keyring
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QFileDialog
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsremote.protocol import Command, StatusCode
 from vsremote.protocol.messages import RemoteErrorPayload
+from vsview_remote._secrets import READ_ERROR_MESSAGE, WRITE_ERROR_MESSAGE
 from vsview_remote.dialog import ConnectionConfig
 from vsview_remote.workspace import RemoteWorkspace
 
 from vsview.app.plugins.manager import PluginManager
+from vsview.app.settings.secrets import SecretsManager
 from vsview.vsenv.loop import QtEventLoop
 
 pytestmark = [pytest.mark.qt, pytest.mark.integration, pytest.mark.vpy("no-core")]
@@ -193,7 +197,6 @@ def store_curve_keys(ws: RemoteWorkspace, *, use_curve: bool) -> None:
     ws.curve_secret_key = SECRET_KEY
 
 
-# W4-03
 def test_connect_with_curve_unticked_keeps_the_stored_keys(workspace: RemoteWorkspace) -> None:
     store_curve_keys(workspace, use_curve=True)
     workspace.auth_token = "token"
@@ -278,7 +281,6 @@ def test_ping_uses_the_curve_keys_only_when_use_curve_is_set(
     assert (kwargs["curve_server_key"], kwargs["curve_public_key"], kwargs["curve_secret_key"]) == expected_keys
 
 
-# W4-01
 def test_load_button_with_new_settings_connects_to_the_new_server(
     workspace: RemoteWorkspace,
     servers: Callable[[Handler | None], FakeServer],
@@ -327,7 +329,6 @@ def test_cancelling_the_load_dialog_keeps_the_previous_connection(
     assert len(dialogs) == 2
 
 
-# W4-V01
 def test_configure_connection_on_the_error_page_loads_the_script_again(
     workspace: RemoteWorkspace,
     script: Path,
@@ -361,3 +362,101 @@ def test_configure_connection_on_a_loaded_script_reloads_it(
 
     reload_content.assert_called_once_with()
     load_content.assert_not_called()
+
+
+@pytest.fixture
+def no_keyring_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = Keyring()  # type: ignore[no-untyped-call]
+    monkeypatch.setattr(SecretsManager, "_keyring", property(lambda self: backend))
+    monkeypatch.setattr(
+        SecretsManager, "_PasswordDeleteError", property(lambda self: keyring.errors.PasswordDeleteError)
+    )
+
+
+def test_workspace_is_created_without_a_keyring_backend(qtbot: QtBot, no_keyring_backend: None) -> None:
+    ws = RemoteWorkspace()
+    qtbot.addWidget(ws)
+
+    assert ws.stack.currentWidget() is ws.empty_page
+
+
+def test_connect_without_a_keyring_backend_keeps_the_secrets_for_the_session(
+    workspace: RemoteWorkspace,
+    script: Path,
+    mocker: MockerFixture,
+    no_keyring_backend: None,
+) -> None:
+    remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
+    messages = list[str]()
+    workspace.api.statusMessage.connect(messages.append)
+    shown = list[tuple[str, str]]()
+
+    def record_and_edit() -> None:
+        shown.append((workspace.dialog.token_edit.text(), workspace.dialog.status_label.text()))
+        workspace.dialog.token_edit.setText("session-token")
+
+    def record() -> None:
+        shown.append((workspace.dialog.token_edit.text(), workspace.dialog.status_label.text()))
+
+    load_content = connect_through_load_button(workspace, script, mocker, record_and_edit)
+    client = workspace.client
+    res = accept_dialog(workspace, record)
+
+    load_content.assert_called_once_with(script)
+    assert client is remote_client.return_value.start.return_value
+    assert remote_client.call_args.kwargs["auth_token"] == "session-token"
+    assert shown == [("", READ_ERROR_MESSAGE), ("session-token", "")]
+    assert res is not None
+    assert res.auth_token == "session-token"
+    assert workspace.auth_token == "session-token"
+    assert messages == [READ_ERROR_MESSAGE, READ_ERROR_MESSAGE]
+
+
+def test_a_failed_keyring_read_never_deletes_the_stored_secret(
+    workspace: RemoteWorkspace,
+    isolate_secrets: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace.auth_token = "stored-token"
+    stored = dict(isolate_secrets._storage)
+
+    def fail_read(service: str, username: str) -> str | None:
+        raise RuntimeError("keyring is locked")
+
+    monkeypatch.setattr(isolate_secrets, "get_password", fail_read)
+
+    res = accept_dialog(workspace)
+
+    assert res is not None
+    assert res.auth_token is None
+    assert isolate_secrets._storage == stored
+
+
+def test_connect_with_a_failing_keyring_write_keeps_the_secret_for_the_session(
+    workspace: RemoteWorkspace,
+    script: Path,
+    isolate_secrets: Any,
+    mocker: MockerFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
+    messages = list[str]()
+    workspace.api.statusMessage.connect(messages.append)
+
+    def fail_write(service: str, username: str, password: str) -> None:
+        raise RuntimeError("keyring is read-only")
+
+    monkeypatch.setattr(isolate_secrets, "set_password", fail_write)
+
+    def edit() -> None:
+        workspace.dialog.token_edit.setText("new-token")
+
+    load_content = connect_through_load_button(workspace, script, mocker, edit)
+    client = workspace.client
+
+    load_content.assert_called_once_with(script)
+    assert client is remote_client.return_value.start.return_value
+    assert remote_client.call_args.kwargs["auth_token"] == "new-token"
+    assert messages == [WRITE_ERROR_MESSAGE]
+    assert workspace.auth_token == "new-token"
+    assert isolate_secrets._storage == {}

@@ -14,6 +14,7 @@ from vsview.app.outputs import VideoMetadata
 from vsview.app.workspace import PythonScriptWorkspace
 
 from ._metadata import AUTH_CONTEXT, AUTH_KEY, CURVE_CONTEXT, CURVE_KEY, WORKSPACE_ID
+from ._secrets import SessionSecrets
 from .dialog import ConnectionConfig, RemoteConnectionDialog
 from .settings import GlobalSettings
 
@@ -43,33 +44,27 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         self._client: RemoteClient | None = None
         self._config: ConnectionConfig | None = None
         self._output_metadata = dict[int, VideoMetadata]()
-
-        self.dialog = RemoteConnectionDialog(self, self.settings, self.secrets)
+        self._session_secrets = SessionSecrets(self.secrets, self._on_secrets_error)
+        self.dialog = RemoteConnectionDialog(self, self.settings, self._session_secrets)
 
         self.api.register_shortcut(self.CONFIGURE_CONNECTION, self._on_configure_connection, self)
         self.api.register_on_destroy(self._output_metadata.clear)
 
     @property
     def auth_token(self) -> str | None:
-        return self.secrets.get(AUTH_CONTEXT, AUTH_KEY)
+        return self._session_secrets.get(AUTH_CONTEXT, AUTH_KEY)
 
     @auth_token.setter
     def auth_token(self, value: str | None) -> None:
-        if value:
-            self.secrets.set(AUTH_CONTEXT, AUTH_KEY, value)
-        else:
-            self.secrets.delete(AUTH_CONTEXT, AUTH_KEY)
+        self._session_secrets.set(AUTH_CONTEXT, AUTH_KEY, value)
 
     @property
     def curve_secret_key(self) -> str | None:
-        return self.secrets.get(CURVE_CONTEXT, CURVE_KEY)
+        return self._session_secrets.get(CURVE_CONTEXT, CURVE_KEY)
 
     @curve_secret_key.setter
     def curve_secret_key(self, value: str | None) -> None:
-        if value:
-            self.secrets.set(CURVE_CONTEXT, CURVE_KEY, value)
-        else:
-            self.secrets.delete(CURVE_CONTEXT, CURVE_KEY)
+        self._session_secrets.set(CURVE_CONTEXT, CURVE_KEY, value)
 
     @property
     def client(self) -> RemoteClient:
@@ -172,6 +167,10 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         self.curve_secret_key = res.curve_secret_key
 
         return res
+
+    def _on_secrets_error(self, message: str) -> None:
+        self.api.statusMessage.emit(message)
+        self.dialog.set_status(message, "#e74c3c")
 
     def _apply_config(self, config: ConnectionConfig) -> None:
         if config != self._config and self._client is not None:

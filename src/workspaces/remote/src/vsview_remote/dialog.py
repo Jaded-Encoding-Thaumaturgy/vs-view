@@ -22,16 +22,17 @@ from PySide6.QtWidgets import (
 from vsengine import UnifiedFuture
 from vsremote import RemoteAuthenticationError, RemoteClient, RemoteTimeoutError, TransportError, VSRemoteError
 
-from vsview.api import CustomSpinBox, PluginSecrets, PluginSettings, run_in_background
+from vsview.api import CustomSpinBox, PluginSettings, run_in_background
 
 from ._metadata import AUTH_CONTEXT, AUTH_KEY, CURVE_CONTEXT, CURVE_KEY
+from ._secrets import SessionSecrets
 from .settings import GlobalSettings
 
 logger = logging.getLogger(__name__)
 
 
 class RemoteConnectionDialog(QDialog):
-    def __init__(self, parent: QWidget, settings: PluginSettings[GlobalSettings], secrets: PluginSecrets) -> None:
+    def __init__(self, parent: QWidget, settings: PluginSettings[GlobalSettings], secrets: SessionSecrets) -> None:
         super().__init__(parent)
 
         self.setWindowTitle("VSRemote Connection")
@@ -108,8 +109,6 @@ class RemoteConnectionDialog(QDialog):
         self.curve_secret_key_edit = QLineEdit(form_frame2, echoMode=QLineEdit.EchoMode.PasswordEchoOnEdit)
         self.curve_secret_key_edit.setPlaceholderText("Client secret key (optional)")
 
-        self.refresh_from_settings()
-
         form_layout2.addRow("Enable CurveZMQ end-to-end encryption", self.use_curve_cb)
         form_layout2.addRow("Server key", self.curve_server_key_edit)
         form_layout2.addRow("Client public key", self.curve_public_key_edit)
@@ -185,8 +184,8 @@ class RemoteConnectionDialog(QDialog):
 
     @override
     def exec(self) -> int:
-        self.refresh_from_settings()
         self.set_status()
+        self.refresh_from_settings()
         res = super().exec()
         if self._ping_worker:
             logger.debug("Cancelling ping task")
