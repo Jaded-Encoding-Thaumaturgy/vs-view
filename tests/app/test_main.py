@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QKeyEvent
-from PySide6.QtWidgets import QApplication, QMenu
+from PySide6.QtWidgets import QApplication, QMenu, QWidget
 from pytestqt.qtbot import QtBot
 
 from vsview.app.main import Application, MainWindow, WorkspaceToolButton
@@ -125,6 +125,31 @@ def test_deleting_an_inactive_workspace_keeps_the_active_one_connected(main_wind
     assert main_window.stack.currentWidget() is active.workspace
     assert _HookRecordingFileWorkspace.hooks == ["on_connected"]
     assert main_window.status_widget.message_text_label.text() == "after delete"
+
+
+class _BrokenWorkspace(VideoFileWorkspace):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        raise RuntimeError("workspace constructor failed")
+
+
+def test_add_workspace_with_a_raising_constructor_keeps_the_active_one_connected(
+    main_window: MainWindow, qtbot: QtBot
+) -> None:
+    _HookRecordingFileWorkspace.hooks = []
+    active = main_window.add_workspace(_HookRecordingFileWorkspace)
+    buttons_before = list(main_window.nav_container.buttons)
+
+    with pytest.raises(RuntimeError, match="workspace constructor failed"):
+        main_window.add_workspace(_BrokenWorkspace)
+    active.workspace.statusLoadingStarted.emit("after failed add")
+    qtbot.waitUntil(lambda: not main_window.findChildren(_BrokenWorkspace), timeout=2000)
+
+    assert main_window.nav_container.buttons == buttons_before
+    assert main_window.stack.count() == 1
+    assert main_window.stack.currentWidget() is active.workspace
+    assert _HookRecordingFileWorkspace.hooks == ["on_connected"]
+    assert main_window.status_widget.message_text_label.text() == "after failed add"
 
 
 def test_workspace_delete_cancelled_by_confirm_close(main_window: MainWindow) -> None:

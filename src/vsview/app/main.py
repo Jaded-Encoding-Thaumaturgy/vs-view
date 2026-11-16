@@ -388,8 +388,20 @@ class MainWindow(QMainWindow):
     ) -> WorkspaceToolButton[WorkspaceT]:
         get_policy()
 
+        children_before = {Shiboken.getCppPointer(child)[0] for child in self.children()}
+
+        try:
+            workspace = workspace_t(self)
+        except Exception:
+            for child in self.children():
+                if Shiboken.getCppPointer(child)[0] not in children_before and isinstance(child, QWidget):
+                    QWidget.deleteLater(child)
+
+            if not self.nav_container.buttons:
+                unregister_policy()
+            raise
+
         self.disconnect_workspace()
-        workspace = workspace_t(self)
 
         btn = WorkspaceToolButton(self, workspace.title, workspace)
         btn.customContextMenuRequested.connect(self._on_sidebar_context_menu_requested)
