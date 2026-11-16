@@ -321,6 +321,8 @@ vi.mock('../services/models', () => ({
   initVscodeServices: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
 }));
 
+import * as monaco from 'monaco-editor';
+
 import { EditorService } from './service';
 
 describe('EditorService', () => {
@@ -367,6 +369,20 @@ describe('EditorService', () => {
       expect(defaultTabEl.classList.contains('active')).toBe(true);
       expect(defaultTabEl.classList.contains('main')).toBe(true);
       expect(defaultTabEl.querySelector('.tab-title')?.textContent).toBe('script.py');
+    });
+
+    it('logs when the default tab cannot be opened', () => {
+      modelsMap.clear();
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const failure = new Error('createModel failed');
+      vi.spyOn(monaco.editor, 'createModel').mockImplementationOnce(() => {
+        throw failure;
+      });
+
+      const second = new EditorService();
+
+      expect(errorSpy).toHaveBeenCalledWith('Failed to open the default tab:', failure);
+      second.dispose();
     });
   });
 

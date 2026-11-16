@@ -151,7 +151,9 @@ export class EditorService implements vscode.Disposable {
     );
 
     // Initialize default main tab
-    this.openTab(DEFAULT_SCRIPT_URI, '', 'python', true);
+    this.openTab(DEFAULT_SCRIPT_URI, '', 'python', true).mapErr((err) =>
+      console.error('Failed to open the default tab:', err),
+    );
   }
 
   public getActiveUri(): string | null {

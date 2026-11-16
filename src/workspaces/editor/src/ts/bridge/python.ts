@@ -183,10 +183,13 @@ export class BridgeService
     this._disposables.add(
       this.onCommand('editor.updateOptions', (p) => {
         if (typeof p.optionsJson === 'string') {
-          void Result.fromThrowable(() => JSON.parse(p.optionsJson) as unknown).tap((parsed) => {
-            if (parsed && typeof parsed === 'object') {
-              this.editorService.updateOptionsFromMap(parsed);
-            }
+          Result.fromThrowable(() => JSON.parse(p.optionsJson) as unknown).match({
+            ok: (parsed) => {
+              if (parsed && typeof parsed === 'object') {
+                this.editorService.updateOptionsFromMap(parsed);
+              }
+            },
+            err: (err) => console.error('Failed to parse editor options:', err),
           });
         }
       }),
@@ -194,16 +197,24 @@ export class BridgeService
     this._disposables.add(
       this.onCommand('editor.openTab', (p) => {
         if (typeof p.uri === 'string' && typeof p.content === 'string') {
+          const uri = p.uri;
           const language = typeof p.language === 'string' ? p.language : 'python';
           const isMain = typeof p.isMain === 'boolean' ? p.isMain : false;
           const replaceUri = typeof p.replaceUri === 'string' ? p.replaceUri : undefined;
-          this.editorService.openTab(p.uri, p.content, language, isMain, replaceUri);
+          this.editorService
+            .openTab(uri, p.content, language, isMain, replaceUri)
+            .mapErr((err) => console.error(`Failed to open tab '${uri}':`, err));
         }
       }),
     );
     this._disposables.add(
       this.onCommand('editor.selectTab', (p) => {
-        if (typeof p.uri === 'string') this.editorService.selectTab(p.uri);
+        if (typeof p.uri === 'string') {
+          const uri = p.uri;
+          this.editorService
+            .selectTab(uri)
+            .mapErr((err) => console.error(`Failed to select tab '${uri}':`, err));
+        }
       }),
     );
     this._disposables.add(

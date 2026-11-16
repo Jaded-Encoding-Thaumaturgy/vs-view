@@ -45,7 +45,7 @@ vi.mock('vscode', () => {
   };
 });
 
-import type { QWebSignal } from 'vsview-shared';
+import { type QWebSignal, Result } from 'vsview-shared';
 
 import type { EditorService } from '../editor/service';
 import type { LspService } from '../lsp/service';
@@ -106,8 +106,8 @@ function createMockEditorService(): MockEditorServiceFixture {
   const setValue = vi.fn();
   const setTheme = vi.fn();
   const toggleWordWrap = vi.fn();
-  const openTab = vi.fn();
-  const selectTab = vi.fn();
+  const openTab = vi.fn(() => Result.ok('file:///workspace/script.py'));
+  const selectTab = vi.fn(() => Result.ok(undefined));
   const markTabSaved = vi.fn();
   const requestSave = vi.fn();
   const requestSaveAs = vi.fn();
@@ -435,6 +435,39 @@ describe('BridgeService', () => {
       );
     });
 
+    it('logs a failed editor.openTab', () => {
+      using fixture = setupInitializedBridgeService().bridgeService;
+      void fixture;
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const failure = new Error('model failed');
+      mockEditor.openTab.mockReturnValueOnce(Result.err(failure));
+
+      mockBridgeFixture.emitCommand(
+        'editor.openTab',
+        JSON.stringify({ uri: 'file:///broken.py', content: 'x = 1' }),
+      );
+
+      expect(errorSpy).toHaveBeenCalledWith("Failed to open tab 'file:///broken.py':", failure);
+    });
+
+    it('dispatches editor.selectTab and logs a failure', () => {
+      using fixture = setupInitializedBridgeService().bridgeService;
+      void fixture;
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      mockBridgeFixture.emitCommand('editor.selectTab', JSON.stringify({ uri: 'file:///a.py' }));
+      expect(mockEditor.selectTab).toHaveBeenCalledWith('file:///a.py');
+      expect(errorSpy).not.toHaveBeenCalled();
+
+      const failure = new Error('Tab file:///missing.py does not exist.');
+      mockEditor.selectTab.mockReturnValueOnce(Result.err(failure));
+      mockBridgeFixture.emitCommand(
+        'editor.selectTab',
+        JSON.stringify({ uri: 'file:///missing.py' }),
+      );
+      expect(errorSpy).toHaveBeenCalledWith("Failed to select tab 'file:///missing.py':", failure);
+    });
+
     it('dispatches editor.tabSaved with and without oldUri', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
@@ -504,13 +537,18 @@ describe('BridgeService', () => {
       );
       expect(mockEditor.updateOptionsFromMap).toHaveBeenCalledWith(validOptions);
 
-      // Malformed optionsJson inside payload does not throw or call service
+      // Malformed optionsJson inside payload is logged and does not call service
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       mockEditor.updateOptionsFromMap.mockClear();
       mockBridgeFixture.emitCommand(
         'editor.updateOptions',
         JSON.stringify({ optionsJson: '{invalid_json' }),
       );
       expect(mockEditor.updateOptionsFromMap).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Failed to parse editor options:',
+        expect.any(SyntaxError),
+      );
     });
 
     it('dispatches editor.updateLspSettings and updates workspace configuration', async () => {
