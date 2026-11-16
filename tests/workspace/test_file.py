@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import linecache
+import os
 from collections.abc import Callable, Generator
 from importlib.util import find_spec
 from pathlib import Path
@@ -10,6 +11,7 @@ import pytest
 import vapoursynth as vs
 from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+from PySide6.QtWidgets import QFileDialog
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
@@ -585,3 +587,56 @@ def test_quick_script_loader_linecache_registration(quick_script_workspace: Quic
         assert cached_entry[3] == ws.filename
     finally:
         linecache.cache.pop(ws.filename, None)
+
+
+def _click_quick_script_save(
+    qtbot: QtBot, ws: QuickScriptWorkspace, mocker: MockerFixture, target: Path, caplog: pytest.LogCaptureFixture
+) -> list[str]:
+    finished = list[str]()
+    ws.statusLoadingFinished.connect(finished.append)
+    mocker.patch.object(QFileDialog, "getSaveFileName", return_value=(str(target), ""))
+
+    qtbot.mouseClick(ws.code_dock.save_btn, Qt.MouseButton.LeftButton)
+
+    qtbot.waitUntil(lambda: bool(finished) or "Error saving script:" in caplog.text, timeout=3000)
+    return finished
+
+
+def test_quick_script_save_writes_the_editor_text(
+    qtbot: QtBot,
+    quick_script_workspace: QuickScriptWorkspace,
+    mocker: MockerFixture,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ws = quick_script_workspace
+    ws.code_dock.editor.setPlainText("clip = 1\n")
+    target = tmp_path / "script.vpy"
+    target.write_bytes(b"old content\n")
+
+    finished = _click_quick_script_save(qtbot, ws, mocker, target, caplog)
+
+    assert finished == ["Saved"]
+    assert target.read_text(encoding="utf-8") == "clip = 1\n"
+    assert [p.name for p in tmp_path.iterdir()] == ["script.vpy"]
+
+
+def test_quick_script_failed_save_keeps_the_old_file(
+    qtbot: QtBot,
+    quick_script_workspace: QuickScriptWorkspace,
+    mocker: MockerFixture,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ws = quick_script_workspace
+    ws.code_dock.editor.setPlainText("clip = 1\n")
+    target = tmp_path / "script.vpy"
+    target.write_bytes(b"old content\n")
+    mocker.patch.object(os, "replace", side_effect=OSError("disk full"))
+
+    finished = _click_quick_script_save(qtbot, ws, mocker, target, caplog)
+
+    assert finished == []
+    assert "Error saving script:" in caplog.text
+    assert target.read_bytes() == b"old content\n"
+    assert [p.name for p in tmp_path.iterdir()] == ["script.vpy"]

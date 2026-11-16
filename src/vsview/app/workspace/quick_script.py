@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import linecache
 from logging import getLogger
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
 from uuid import uuid4
 
@@ -31,6 +30,7 @@ from ...assets import IconName
 from ...vsenv import run_in_background, run_in_loop
 from ..icon import IconReloadMixin
 from ..settings import ActionID, SettingsManager, ShortcutManager
+from ..utils import atomic_write
 from .loader import VSEngineWorkspace
 from .utils import CodeContent, get_default_script
 
@@ -408,7 +408,7 @@ class CodeEditorDock(QDockWidget, IconReloadMixin):
     def _save_script(self, filepath: str, content: str) -> None:
         self.statusSavingScriptStarted.emit("Saving script...")
         try:
-            Path(filepath).write_text(content, encoding="utf-8")
+            atomic_write(filepath, content)
             self.statusSavingScriptFinished.emit("Saved")
         except Exception:
             logger.exception("Error saving script:")
