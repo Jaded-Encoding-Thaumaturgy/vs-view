@@ -76,11 +76,18 @@ class FFTSpectrumPlugin(WidgetPluginBase[GlobalSettings]):
         self.current_layout.setSpacing(0)
         self.current_layout.addWidget(self.view)
 
+        self._applied_settings = self.settings.global_.model_dump()
         self.api.globalSettingsChanged.connect(self.on_settings_changed)
 
     @Slot()
     def on_settings_changed(self) -> None:
-        self.view.set_autofit(self.settings.global_.autofit)
+        if (current := self.settings.global_.model_dump()) == self._applied_settings:
+            return
+
+        if current["autofit"] != self._applied_settings["autofit"]:
+            self.view.set_autofit(self.settings.global_.autofit)
+
+        self._applied_settings = current
         self.view.refresh()
 
 
