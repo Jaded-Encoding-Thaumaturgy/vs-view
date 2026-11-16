@@ -51,6 +51,8 @@ class PlaybackState(QObject):
         audio_buffer: Audio buffer for async audio frame pre-fetching.
         audio_frame_interval_ns: Target audio frame interval in nanoseconds.
         next_audio_frame_time_ns: Target time (ns) when next audio frame should be pushed.
+        played_audio_frame: Index of the last audio frame pushed to the sink, -1 before the first one.
+        last_audio_frame: Index of the last audio frame to play, or None when the audio loops.
 
         video_timer: Timer for video frame scheduling.
         audio_timer: Timer for audio frame scheduling.
@@ -78,6 +80,8 @@ class PlaybackState(QObject):
         self.audio_buffer: AudioBuffer | None = None
         self.audio_frame_interval_ns = 0
         self.next_audio_frame_time_ns = 0
+        self.played_audio_frame = -1
+        self.last_audio_frame: int | None = -1
 
         self.video_timer = QTimer(self, timerType=Qt.TimerType.PreciseTimer, singleShot=True)
         self.audio_timer = QTimer(self, timerType=Qt.TimerType.PreciseTimer, singleShot=True)
@@ -109,6 +113,8 @@ class PlaybackState(QObject):
     def reset_audio(self) -> None:
         self.next_audio_frame_time_ns = 0
         self.audio_frame_interval_ns = 0
+        self.played_audio_frame = -1
+        self.last_audio_frame = -1
         self.audio_timer.stop()
 
         if self.audio_buffer:
@@ -684,6 +690,8 @@ class PlaybackManager(QObject):
             return
 
         self.state.audio_buffer = audio_buffer
+        self.state.played_audio_frame = -1
+        self.state.last_audio_frame = None if loop else aoutput.playback_audio.num_frames - 1
 
         # Calculate interval so that (num_frames x interval) = actual audio duration
         # This ensures timer and audio content stay in sync, especially for partial last frames
@@ -721,10 +729,18 @@ class PlaybackManager(QObject):
             self.state.audio_timer.start(delay_ms)
             return
 
-        # Stop timer once audio buffer is exhausted
         if not (result := self.state.audio_buffer.get_next_frame()):
             self.state.audio_timer.stop()
+
+            if self.state.played_audio_frame != self.state.last_audio_frame:
+                logger.warning(
+                    "Audio stopped because audio frame %d was not ready in time. "
+                    'Raise the "Audio Buffer Size" playback setting if this happens often.',
+                    self.state.played_audio_frame + 1,
+                )
             return
+
+        self.state.played_audio_frame = result[0]
 
         with (frame := result[1]):
             aoutput.render_raw_audio_frame(frame)

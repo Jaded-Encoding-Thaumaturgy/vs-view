@@ -703,6 +703,56 @@ def test_playback_manager_buffered_audio_buffer_exhaustion(
         mock_outputs.current_aoutput = None
 
 
+LATE_AUDIO_WARNING = (
+    'Audio stopped because audio frame {} was not ready in time. Raise the "Audio Buffer Size" playback setting '
+    "if this happens often."
+)
+
+
+@pytest.mark.vpy("initial-core")
+@pytest.mark.parametrize(
+    ("played_audio_frame", "last_audio_frame", "late_frame"),
+    [(5, 99, 6), (0, None, 1), (-1, 99, 0), (99, 99, None), (-1, -1, None)],
+    ids=["late_frame", "late_frame_while_looping", "late_first_frame", "end_of_audio", "nothing_to_play"],
+)
+def test_playback_manager_warns_once_when_audio_stops_on_a_late_frame(
+    playback_manager_setup: PlaybackManagerSetup,
+    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    mocker: MockerFixture,
+    qtbot: QtBot,
+    caplog: pytest.LogCaptureFixture,
+    played_audio_frame: int,
+    last_audio_frame: int | None,
+    late_frame: int | None,
+) -> None:
+    manager, env, _, mock_outputs, _, _ = playback_manager_setup
+    aoutput = create_test_audio_output(env, 100)
+    mock_outputs.current_aoutput = aoutput
+    mock_sink = mocker.MagicMock()
+    mock_sink.bytesFree.return_value = aoutput.bytes_per_frame + 1024
+    aoutput.sink = mock_sink
+
+    # An empty buffer answers like a buffer whose next frame is not done yet.
+    manager.state.audio_buffer = AudioBuffer(aoutput, env)
+    manager.state.is_playing = True
+    manager.state.audio_frame_interval_ns = 20_000_000
+    manager.state.played_audio_frame = played_audio_frame
+    manager.state.last_audio_frame = last_audio_frame
+    manager.state.audio_timer.start(100)
+
+    try:
+        with caplog.at_level(logging.WARNING, logger="vsview.app.workspace.playback"):
+            manager.state.audio_timer.timeout.emit()
+            qtbot.waitUntil(lambda: not manager.state.audio_timer.isActive(), timeout=2000)
+
+        warnings = [r.getMessage() for r in caplog.records if r.name == "vsview.app.workspace.playback"]
+        assert warnings == ([] if late_frame is None else [LATE_AUDIO_WARNING.format(late_frame)])
+    finally:
+        manager.state.reset_audio()
+        aoutput.clear()
+        mock_outputs.current_aoutput = None
+
+
 def test_playback_manager_rapid_stop_cancels_startup(playback_manager_setup: PlaybackManagerSetup) -> None:
     manager, *_ = playback_manager_setup
 
