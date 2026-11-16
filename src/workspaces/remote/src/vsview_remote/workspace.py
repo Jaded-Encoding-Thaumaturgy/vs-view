@@ -60,7 +60,6 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         self.dialog = RemoteConnectionDialog(self, self.settings, self._session_secrets)
 
         self.api.register_shortcut(self.CONFIGURE_CONNECTION, self._on_configure_connection, self)
-        self.api.register_on_destroy(self._output_metadata.clear)
 
     @property
     def auth_token(self) -> str | None:
