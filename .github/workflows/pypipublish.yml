@@ -12,7 +12,6 @@ on:
         options:
           - vsview
           - vspackrgb
-          - audio-convert
           - comp
           - editor
           - fftspectrum

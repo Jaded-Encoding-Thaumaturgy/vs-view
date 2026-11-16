@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from packaging.version import InvalidVersion, Version
+from resolve_package import workspace_excluded_dirs
 
 import __main__
 
@@ -121,9 +122,10 @@ def detect_changes(plugins_dir: Path) -> list[PluginChange]:
         sys.exit(1)
 
     changes = list[PluginChange]()
+    excluded = workspace_excluded_dirs()
 
     for plugin_dir in sorted(plugins_path.iterdir()):
-        if not plugin_dir.is_dir():
+        if not plugin_dir.is_dir() or plugin_dir.resolve() in excluded:
             continue
 
         name = plugin_dir.name

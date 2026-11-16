@@ -19,15 +19,25 @@ class PackageMetadata(TypedDict):
     build_args: str
 
 
+def workspace_excluded_dirs() -> set[Path]:
+    with open(REPO_ROOT / "pyproject.toml", "rb") as f:
+        data = tomllib.load(f)
+
+    patterns: list[str] = data.get("tool", {}).get("uv", {}).get("workspace", {}).get("exclude", [])
+
+    return {p.resolve() for pattern in patterns for p in REPO_ROOT.glob(pattern) if p.is_dir()}
+
+
 def discover_packages() -> dict[str, PackageMetadata]:
     """Discover all packages across root, plugins, workspaces, and auxiliary crates."""
     packages = dict[str, PackageMetadata]()
 
     search_dirs = [REPO_ROOT, REPO_ROOT / "src" / "vspackrgb"]
+    excluded = workspace_excluded_dirs()
 
     for parent in [REPO_ROOT / "src" / "plugins", REPO_ROOT / "src" / "workspaces"]:
         if parent.is_dir():
-            search_dirs.extend([p for p in parent.iterdir() if p.is_dir()])
+            search_dirs.extend([p for p in parent.iterdir() if p.is_dir() and p.resolve() not in excluded])
 
     for directory in search_dirs:
         pyproject_file = directory / "pyproject.toml"
