@@ -557,6 +557,38 @@ class TestMainCommandRouting:
         assert "doesn't exist" in combined
         mock_window.add_workspace.assert_called_once_with(PythonScriptWorkspace)
 
+    def test_main_starts_with_builtin_workspaces_after_a_failed_plugin_load(
+        self,
+        mock_gui_components: tuple[MagicMock, MagicMock],
+        init_plugin_manager: PluginManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        mock_app, mock_window = mock_gui_components
+        failed: Future[None] = Future()
+        failed.set_exception(RuntimeError("simulated plugin load failure"))
+        monkeypatch.setattr(init_plugin_manager, "_load_future", failed)
+        SettingsManager.global_settings.default_workspaces = ["editor", "script"]
+
+        with pytest.raises(SystemExit, match=r"^0$"):
+            app([], exit_on_error=False)
+
+        mock_window.add_workspace.assert_called_once_with(PythonScriptWorkspace)
+        mock_app.exec.assert_called_once_with()
+
+    def test_main_keeps_starting_when_a_default_workspace_constructor_raises(
+        self, mock_gui_components: tuple[MagicMock, MagicMock]
+    ) -> None:
+        mock_app, mock_window = mock_gui_components
+        SettingsManager.global_settings.default_workspaces = ["quick-script", "script"]
+        mock_window.add_workspace.side_effect = [RuntimeError("broken workspace"), MagicMock()]
+
+        with pytest.raises(SystemExit, match=r"^0$"):
+            app([], exit_on_error=False)
+
+        assert mock_window.add_workspace.call_args_list == [call(QuickScriptWorkspace), call(PythonScriptWorkspace)]
+        mock_window.button_group.buttons.return_value[0].click.assert_called_once_with()
+        mock_app.exec.assert_called_once_with()
+
     def test_main_meta_triggers_path_population_when_pyapp_active(
         self,
         mock_gui_components: tuple[MagicMock, MagicMock],

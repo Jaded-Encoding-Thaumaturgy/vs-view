@@ -341,7 +341,10 @@ def main(
 
         with main_window.stack.disable_animation():
             for target in target_workspaces:
-                main_window.add_workspace(target)
+                try:
+                    main_window.add_workspace(target)
+                except Exception:
+                    logger.exception("Failed to create the %r workspace", target.title)
 
             if buttons := main_window.button_group.buttons():
                 buttons[0].click()
