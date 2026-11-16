@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
 import shutil
 import sys
+import threading
 from bisect import bisect_left, bisect_right
+from contextlib import suppress
 from enum import StrEnum
 from functools import cache
 from itertools import count, cycle, islice
@@ -498,17 +501,32 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             logger.info("No file selected")
             return
 
-        def on_success(result: list[SceneRow]) -> None:
-            self.scenes_model.add_scene(result)
-            self.api.statusMessage.emit(f"Importing {', '.join(files)} completed")
+        def on_success(result: tuple[list[SceneRow], list[str]]) -> None:
+            scenes, failed = result
+            self.scenes_model.add_scene(scenes)
 
-        self.parse_imported_files(files, filters[selected_filter]).map(on_success, on_loop=True)
+            if failed:
+                message = f"Importing failed for {', '.join(failed)}"
+                if scenes:
+                    message = f"Imported {len(scenes)} scene(s). {message}"
+            elif not scenes:
+                message = f"No scenes found in {', '.join(files)}"
+            else:
+                message = f"Importing {', '.join(files)} completed"
+
+            self.api.statusMessage.emit(message)
+
+        def on_error(exc: BaseException) -> None:
+            self.api.statusMessage.emit(f"Importing {', '.join(files)} failed: {exc}")
+
+        self.parse_imported_files(files, filters[selected_filter]).then(on_success, on_error, on_loop=True)
 
     @run_in_background(name="ParseImportedFiles")
-    def parse_imported_files(self, files: list[str], parser: Parser) -> list[SceneRow]:
+    def parse_imported_files(self, files: list[str], parser: Parser) -> tuple[list[SceneRow], list[str]]:
         src_fps = self.api.current_voutput.vs_output.clip.fps
 
         scenes = list[SceneRow]()
+        failed = list[str]()
 
         with monkey_patch_parser(parser, self._color_gen):
             for file in files:
@@ -519,8 +537,9 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
                         scenes.extend([parsed] if isinstance(parsed, SceneRow) else parsed)
                 except Exception:
                     logger.exception("Error parsing file: %s", file)
+                    failed.append(file)
 
-        return scenes
+        return scenes, failed
 
     @Slot()
     def on_export_scene(self) -> None:
@@ -541,8 +560,10 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             logger.info("Export aborted")
             return
 
-        f = self.serialize_exported_scene(file, filters[selected_filter])
-        f.map(lambda _: self.api.statusMessage.emit(f"Exporting {file} completed"), on_loop=True)
+        self.serialize_exported_scene(file, filters[selected_filter]).then(
+            lambda _: self.api.statusMessage.emit(f"Exporting {file} completed"),
+            lambda exc: self.api.statusMessage.emit(f"Exporting {file} failed: {exc}"),
+        )
 
     @run_in_background(name="SerializeExportedCcene")
     def serialize_exported_scene(self, file: str, serializer: Serializer) -> None:
@@ -552,11 +573,19 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
         v = self.api.current_voutput
 
+        path = Path(file)
+        tmp_path = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+
         try:
-            with Path(file).open("wb") as f:
+            with tmp_path.open("xb") as f:
                 serializer.serialize(f, (UnifiedRange(r, v.frame_to_time, v.time_to_frame) for r in scene.ranges))
-        except Exception:
-            logger.exception("Error exporting file: %s", file)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+        except BaseException:
+            with suppress(OSError):
+                tmp_path.unlink()
+            raise
 
     @Slot()
     def on_remove_scene_triggered(self) -> None:
