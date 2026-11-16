@@ -587,6 +587,22 @@ def test_frame_strip_settings_and_slots(qtbot: QtBot, plugin_controller: Harness
     }
 
 
+def test_frame_strip_playback_stop_keeps_up_to_date_slots(
+    qtbot: QtBot, plugin_controller: HarnessPluginController
+) -> None:
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+    plugin_controller.set_current_frame(50)
+    qtbot.waitUntil(lambda: all(s.target_frame is not None and not s.is_loading for s in plugin.slots.values()))
+    request_gens = {offset: slot.request_gen for offset, slot in plugin.slots.items()}
+
+    plugin.on_playback_stopped()
+    qtbot.wait(50)
+
+    assert {offset: slot.request_gen for offset, slot in plugin.slots.items()} == request_gens
+    assert {offset: slot.target_frame for offset, slot in plugin.slots.items()} == {-2: 48, -1: 49, 1: 51, 2: 52}
+
+
 def test_frame_strip_frame_navigation_and_bounds(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
     plugin = plugin_controller.create_plugin(FrameStripPlugin)
     plugin.show()

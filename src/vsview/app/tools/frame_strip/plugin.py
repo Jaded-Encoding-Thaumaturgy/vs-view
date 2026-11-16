@@ -476,7 +476,7 @@ class FrameStripPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         except NoCurrentVideoOutputError:
             return
 
-        if self.active_voutput is not voutput:
+        if self.active_voutput != voutput:
             self.active_voutput = voutput
             for slot in self.slot_pool.values():
                 slot.request_gen += 1

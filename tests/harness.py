@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Generator, Iterable, MutableMapping, Sequence
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import timedelta
 from fractions import Fraction
 from pathlib import Path
@@ -281,7 +282,7 @@ class HarnessPluginController(QObject):
     @property
     def current_voutput(self) -> VideoOutputProxy:
         if self._current_voutput is not None:
-            return self._current_voutput
+            return replace(self._current_voutput)
         raise NoCurrentVideoOutputError("No video output is currently available in the test harness.")
 
     @property
