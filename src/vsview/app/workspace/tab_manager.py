@@ -133,6 +133,7 @@ class TabManager(QWidget, IconReloadMixin):
     # Status bar signals
     statusLoadingStarted = Signal(str)  # message
     statusLoadingFinished = Signal(str)  # completed message
+    statusLoadingErrored = Signal(str)  # error message
 
     def __init__(self, parent: QWidget, controller: PluginWorkspaceController) -> None:
         super().__init__(parent)
@@ -267,6 +268,7 @@ class TabManager(QWidget, IconReloadMixin):
             view.keyReleased.connect(self.controller.on_view_key_release)
             view.statusSavingImageStarted.connect(self.statusLoadingStarted.emit)
             view.statusSavingImageFinished.connect(self.statusLoadingFinished.emit)
+            view.statusSavingImageErrored.connect(self.statusLoadingErrored.emit)
             view.displayTransformChanged.connect(lambda transform: self.sarTransformed.emit(transform.m11()))
             view.set_hdr_enabled(voutput.packer.hdr)
 

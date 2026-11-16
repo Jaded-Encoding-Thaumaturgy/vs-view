@@ -439,6 +439,10 @@ def test_create_tabs_signal_forwarding(
         view.statusSavingImageFinished.emit("Finished.")
     assert blocker.args == ["Finished."]
 
+    with qtbot.waitSignal(mgr.statusLoadingErrored) as blocker:
+        view.statusSavingImageErrored.emit("Failed to save image")
+    assert blocker.args == ["Failed to save image"]
+
     # SAR transformed signal
     transform = QTransform()
     transform.scale(1.75, 1.0)

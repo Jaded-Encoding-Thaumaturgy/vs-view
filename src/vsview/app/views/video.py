@@ -345,6 +345,7 @@ class BaseGraphicsView(QGraphicsView):
     # Status bar signals
     statusSavingImageStarted = Signal(str)  # message
     statusSavingImageFinished = Signal(str)  # completed message
+    statusSavingImageErrored = Signal(str)  # error message
 
     displayTransformChanged = Signal(QTransform)
     contextMenuRequested = Signal(QContextMenuEvent)
@@ -1172,12 +1173,12 @@ class BaseGraphicsView(QGraphicsView):
             saved = image.save(file_path, fmt, SettingsManager.global_settings.view.png_compression_level)  # type: ignore[call-overload]
         except Exception:
             logger.exception("Error saving image:")
-            self.statusSavingImageFinished.emit("Failed to save image")
+            self.statusSavingImageErrored.emit("Failed to save image")
             return
 
         if not saved:
             logger.error("Failed to save image to %r", file_path)
-            self.statusSavingImageFinished.emit("Failed to save image")
+            self.statusSavingImageErrored.emit("Failed to save image")
             return
 
         logger.info("Saved image to %r", file_path)

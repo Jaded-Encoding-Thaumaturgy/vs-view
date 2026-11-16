@@ -271,6 +271,7 @@ class StatusWidget(IconReloadMixin, QWidget):
 
         workspace.tab_manager.statusLoadingStarted.connect(self.start_loading)
         workspace.tab_manager.statusLoadingFinished.connect(self.stop_loading)
+        workspace.tab_manager.statusLoadingErrored.connect(self.error_loading)
 
         workspace.plugin_controller.statusMessage.connect(self.set_plugin_message)
 
@@ -289,6 +290,7 @@ class StatusWidget(IconReloadMixin, QWidget):
 
         workspace.tab_manager.statusLoadingStarted.disconnect(self.start_loading)
         workspace.tab_manager.statusLoadingFinished.disconnect(self.stop_loading)
+        workspace.tab_manager.statusLoadingErrored.disconnect(self.error_loading)
 
         workspace.plugin_controller.statusMessage.disconnect(self.set_plugin_message)
 
