@@ -136,10 +136,6 @@ class GlobalConsoleHub(Singleton):
     def set_width(self, bridge: MonacoBridge, width: int) -> None:
         with self._lock:
             self._bridge_widths[bridge] = width
-            target_bridge = EXECUTION_BRIDGE.get()
-            if self._log_handler and (target_bridge == bridge or (target_bridge is None and bridge in self._bridges)):
-                with self._log_handler.lock:
-                    self._log_handler.console.width = width
 
     @inject_self
     @contextmanager
