@@ -46,9 +46,9 @@ class GlobalSettings(BaseModel):
             label="Offset chroma",
             items=[("Fixed", 0.0), ("Min", "min"), ("Max", "max")],
             tooltip="Apply chroma plane offsetting\n"
-            '- "min": match luma minimum\n'
-            '- "max": match luma maximum\n'
-            "- Fixed: use a custom float value",
+            "- Fixed: no offset. Set a custom value from the view context menu\n"
+            "- Min: move each chroma plane so its frame minimum sits at the lowest chroma value of the format\n"
+            "- Max: move each chroma plane so its frame maximum sits at the peak chroma value of the format",
         ),
     ] = 0.0
     mode: Annotated[
