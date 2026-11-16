@@ -201,6 +201,25 @@ class TestQPFileParser:
         assert len(result.ranges) == count
         assert (result.ranges[0].start, result.ranges[0].label) == (first_frame, label)
 
+    @pytest.mark.parametrize(
+        ("data", "expected"),
+        [
+            pytest.param(b"0 K\n100 K\n200 K\n", [(0, ""), (100, ""), (200, "")], id="lf-without-qp"),
+            pytest.param(b"0 K\r\n100 K\r\n200 K\r\n", [(0, ""), (100, ""), (200, "")], id="crlf-without-qp"),
+            pytest.param(b"0 I -1\n48 K\n96 I\t20\n", [(0, "-1"), (48, ""), (96, "20")], id="mixed-qp"),
+            pytest.param(b"0 K Intro\n100 K Ep\n", [(0, ""), (100, "")], id="text-third-column"),
+        ],
+    )
+    def test_optional_qp_column(
+        self, qp_p: QPFileParser, tmp_path: Path, data: bytes, expected: list[tuple[int, str]]
+    ) -> None:
+        f = tmp_path / "test.qp"
+        f.write_bytes(data)
+
+        result = parse(qp_p, f)
+
+        assert [(r.start, r.label) for r in result.ranges] == expected
+
     def test_parse_empty_qp(self, qp_p: QPFileParser, tmp_path: Path) -> None:
         f = tmp_path / "empty.qp"
         f.write_text("", encoding="utf-8")

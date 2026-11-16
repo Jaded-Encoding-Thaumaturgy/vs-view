@@ -11,8 +11,8 @@ from PySide6.QtGui import QColor
 
 from vsview.app.tools.scening.api import Parser, Serializer
 from vsview.app.tools.scening.models import RangeFrame, RangeTime, UnifiedRange
-from vsview.app.tools.scening.parsers import PythonListTimestampsParser
-from vsview.app.tools.scening.serializer import PythonListTimestampsSerializer
+from vsview.app.tools.scening.parsers import PythonListTimestampsParser, QPFileParser
+from vsview.app.tools.scening.serializer import PythonListTimestampsSerializer, QPFileSerializer
 from vsview.types import Time
 
 pytestmark = [pytest.mark.unit]
@@ -62,3 +62,21 @@ class TestPythonListTimestampsSerializer:
             (timedelta(seconds=1.5), timedelta(seconds=2.25)),
             (timedelta(minutes=59, seconds=59, milliseconds=999), timedelta(minutes=59, seconds=59, milliseconds=999)),
         ]
+
+
+class TestQPFileSerializer:
+    @pytest.mark.parametrize(
+        "labels",
+        [
+            pytest.param(["", "", ""], id="no-labels"),
+            pytest.param(["Intro", "Ep", "Outro"], id="labels"),
+        ],
+    )
+    def test_round_trips_frames_through_its_parser(self, labels: list[str]) -> None:
+        ranges: list[RangeFrame | RangeTime] = [
+            RangeFrame(start=frame, label=label) for frame, label in zip([0, 100, 200], labels)
+        ]
+
+        scene = parse(QPFileParser(), serialize(QPFileSerializer(), ranges))
+
+        assert [r.start for r in scene.ranges] == [0, 100, 200]

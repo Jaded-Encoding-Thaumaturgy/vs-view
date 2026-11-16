@@ -182,13 +182,13 @@ class QPFileParser(Parser):
         with borrowed_text_wrapper(io, encoding="utf-8") as wrapper:
             text = wrapper.read()
 
-        for matched in re.finditer(r"^(\d+)\s+[IK]\s+(-?\d+)", text, re.MULTILINE):
+        for matched in re.finditer(r"^(\d+)[ \t]+[IK](?:[ \t]+(-?\d+))?", text, re.MULTILINE):
             try:
                 frame = int(matched.group(1))
             except ValueError:
                 continue
 
-            ranges.append(RangeFrame(start=frame, label=str(matched.group(2))))
+            ranges.append(RangeFrame(start=frame, label=matched.group(2) or ""))
 
         return SceneRow(color=self.get_color(), name=name, ranges=ranges)
 
