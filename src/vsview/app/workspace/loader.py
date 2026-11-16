@@ -360,7 +360,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.outputs_manager.current_video_index = clamp(self.outputs_manager.current_video_index, 0, len(voutputs) - 1)
         tabs = self.tab_manager.create_tabs(voutputs)
         if has_overriding_method(LoaderWorkspace, self, "on_views_created"):
-            self.on_views_created(list(self.loop.from_thread(lambda: tabs.views()).result()))
+            self.on_views_created(self.loop.from_thread(lambda: list(tabs.views())).result())
 
         with QSignalBlocker(self.tab_manager):
             self.tab_manager.swap_tabs(tabs, self.outputs_manager.current_video_index)
@@ -464,7 +464,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             # 4. Reconstruct UI
             tabs = self.tab_manager.create_tabs(voutputs, enabled=False)
             if has_overriding_method(LoaderWorkspace, self, "on_views_created"):
-                self.on_views_created(list(self.loop.from_thread(lambda: tabs.views()).result()))
+                self.on_views_created(self.loop.from_thread(lambda: list(tabs.views())).result())
             current_tab_i = self._restore_reload_tabs(tabs, voutputs, saved_state, current_tab_i, autofit_enabled)
 
             self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
