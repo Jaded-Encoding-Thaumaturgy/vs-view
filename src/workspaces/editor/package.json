@@ -46,7 +46,7 @@
     "@types/node": "catalog:",
     "@types/vscode": "1.145.0",
     "@vitest/coverage-v8": "catalog:",
-    "happy-dom": "21.0.4",
+    "happy-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",

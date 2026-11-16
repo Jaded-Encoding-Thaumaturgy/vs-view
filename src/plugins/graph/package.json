@@ -22,7 +22,7 @@
   "devDependencies": {
     "@types/cytoscape-dagre": "2.3.4",
     "@types/node": "catalog:",
-    "happy-dom": "21.0.4",
+    "happy-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

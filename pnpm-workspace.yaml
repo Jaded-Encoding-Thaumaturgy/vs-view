@@ -8,6 +8,7 @@ catalogMode: prefer
 catalog:
   '@types/node': 26.6.6
   '@vitest/coverage-v8': 5.1.0
+  'happy-dom': 21.0.4
   'lit-html': 3.3.3
   'typescript': 7.0.2
   'vite': npm:@voidzero-dev/vite-plus-core@1.6.0

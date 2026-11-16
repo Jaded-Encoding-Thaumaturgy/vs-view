@@ -170,6 +170,9 @@ catalogs:
     '@vitest/coverage-v8':
       specifier: 5.1.0
       version: 5.1.0
+    happy-dom:
+      specifier: 21.0.4
+      version: 21.0.4
     lit-html:
       specifier: 3.3.3
       version: 3.3.3
@@ -226,7 +229,7 @@ importers:
         specifier: 'catalog:'
         version: 26.6.6
       happy-dom:
-        specifier: 21.0.4
+        specifier: 'catalog:'
         version: 21.0.4
       typescript:
         specifier: 'catalog:'
@@ -332,7 +335,7 @@ importers:
         specifier: 'catalog:'
         version: 5.1.0(@vitest/browser@5.1.0)(vitest@5.1.0)
       happy-dom:
-        specifier: 21.0.4
+        specifier: 'catalog:'
         version: 21.0.4
       typescript:
         specifier: 'catalog:'
