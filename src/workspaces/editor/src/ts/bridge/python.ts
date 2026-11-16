@@ -356,35 +356,35 @@ export class BridgeService
     this.editorService.updateTabBar();
   }
 
-  private async applyLspSettings(section: string, jsonSettings: string): Promise<void> {
+  private applyLspSettings(section: string, jsonSettings: string): ResultAsync<void> {
     const parseResult = Result.fromThrowable(
       () => JSON.parse(jsonSettings) as Record<string, unknown>,
     );
     if (!parseResult.ok) {
       console.error(`Failed to parse LSP settings for section '${section}':`, parseResult.error);
-      return;
+      return ResultAsync.fromResult(Result.err(parseResult.error));
     }
 
     const parsed = parseResult.value;
 
-    const conf = vscode.workspace.getConfiguration();
-    const updateResult = await Result.fromPromise(
-      Promise.all(
+    return Result.fromPromise(async () => {
+      const conf = vscode.workspace.getConfiguration();
+      await Promise.all(
         Object.entries(parsed).map(([key, value]) =>
           conf.update(key, value, vscode.ConfigurationTarget.Workspace),
         ),
-      ),
-    );
-
-    updateResult.match({
-      ok: () =>
-        console.debug(`Updated LSP configuration for '${section}':`, JSON.stringify(parsed)),
-      err: (err) =>
+      );
+    })
+      .tap(() => {
+        console.debug(`Updated LSP configuration for '${section}':`, JSON.stringify(parsed));
+      })
+      .mapErr((err) => {
         console.error(
           `Failed to apply LSP settings for '${section}' to workspace configuration:`,
           err,
-        ),
-    });
+        );
+        return err;
+      });
   }
 }
 

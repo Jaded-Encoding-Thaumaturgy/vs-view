@@ -45,6 +45,7 @@ vi.mock('vscode', () => {
   };
 });
 
+import * as vscode from 'vscode';
 import { type QWebSignal, Result } from 'vsview-shared';
 
 import type { EditorService } from '../editor/service';
@@ -589,6 +590,62 @@ describe('BridgeService', () => {
         expect.stringContaining("Failed to parse LSP settings for section 'pyrefly'"),
         expect.any(Error),
       );
+    });
+
+    describe('editor.updateLspSettings failures that throw instead of rejecting', () => {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => {
+        unhandled.push(reason);
+      };
+
+      beforeEach(() => {
+        unhandled.length = 0;
+        process.on('unhandledRejection', onUnhandled);
+      });
+
+      afterEach(() => {
+        process.off('unhandledRejection', onUnhandled);
+      });
+
+      it.each([
+        {
+          name: 'getConfiguration',
+          makeThrow: (failure: Error) => {
+            vi.mocked(vscode.workspace.getConfiguration).mockImplementationOnce(() => {
+              throw failure;
+            });
+          },
+        },
+        {
+          name: 'update',
+          makeThrow: (failure: Error) => {
+            mockWorkspaceConfig.update.mockImplementationOnce(() => {
+              throw failure;
+            });
+          },
+        },
+      ])('logs a synchronous $name throw', async ({ makeThrow }) => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const failure = new Error('configuration failed');
+        makeThrow(failure);
+        using fixture = setupInitializedBridgeService().bridgeService;
+        void fixture;
+
+        mockBridgeFixture.emitCommand(
+          'editor.updateLspSettings',
+          JSON.stringify({ section: 'pyrefly', settingsJson: JSON.stringify({ key: 1 }) }),
+        );
+
+        await vi.waitFor(() =>
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            "Failed to apply LSP settings for 'pyrefly' to workspace configuration:",
+            failure,
+          ),
+        );
+        // Unhandled rejections are reported after a macrotask.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(unhandled).toEqual([]);
+      });
     });
 
     it('dispatches console commands (append, toggle)', () => {
