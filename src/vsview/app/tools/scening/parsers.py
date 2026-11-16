@@ -83,7 +83,7 @@ class MatroskaXMLParser(Parser):
     @override
     def parse(self, io: BinaryIO, name: str, fps: Fraction) -> SceneRow | list[SceneRow]:
         import xml.etree.ElementTree as ET
-        import xml.parsers
+        import xml.parsers.expat
 
         def reject(*args: Any) -> None:
             raise ValueError(f"XML entity declarations (DOCTYPE/ENTITY) are prohibited: {name}")

@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QApplication
 from rich.pretty import pretty_repr
 
 from ...env import getenv_bool
-from ..utils import WeakableSignals, atomic_write_text
+from ..utils import WeakableSignals, atomic_write
 from .models import GlobalSettings, LocalSettings
 
 if sys.version_info >= (3, 13):
@@ -134,7 +134,7 @@ class SettingsManager(Singleton):
         try:
             if not self._noop:
                 path.parent.mkdir(parents=True, exist_ok=True)
-                atomic_write_text(path, self._global_settings.model_dump_json(indent=2))
+                atomic_write(path, self._global_settings.model_dump_json(indent=2))
                 logger.debug("Saved global settings to: %s", path)
             self._signals.globalChanged.emit()
         except Exception:
@@ -183,7 +183,7 @@ class SettingsManager(Singleton):
         try:
             if not self._noop:
                 settings_path.parent.mkdir(parents=True, exist_ok=True)
-                atomic_write_text(settings_path, resolved_settings.model_dump_json(indent=2))
+                atomic_write(settings_path, resolved_settings.model_dump_json(indent=2))
                 logger.debug("Saved local settings for %s to: %s", script_path, settings_path)
             self._signals.localChanged.emit(str(settings_path))
         except Exception:

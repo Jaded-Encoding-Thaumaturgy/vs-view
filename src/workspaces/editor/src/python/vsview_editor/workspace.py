@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import errno
 import linecache
-import os
-import shutil
 import subprocess
 from collections.abc import Sequence
 from enum import StrEnum
@@ -43,6 +40,7 @@ from vsview.api import (
 from vsview.api._helpers import output_metadata
 from vsview.api.workspace import PluginWorkspace
 from vsview.app.settings import SettingsManager
+from vsview.app.utils import atomic_write
 from vsview.app.workspace import BaseGenericFileWorkspace, VSEngineWorkspace, get_default_script
 from vsview.env import getenv_bool
 from vsview.vsenv import QtEventLoop, create_environment
@@ -577,28 +575,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
     @run_in_background(name="SaveScript")
     def _write_script(self, filepath: Path, content: str) -> Path:
-        target = filepath.resolve()
-
-        if target.is_dir():
-            raise IsADirectoryError(errno.EISDIR, "Is a directory", str(filepath))
-
-        # os.replace would silently swap out a read-only file on POSIX, where a plain write fails.
-        if target.exists() and not os.access(target, os.W_OK):
-            raise PermissionError(errno.EACCES, "File is read-only", str(filepath))
-
-        tmp = target.with_name(f".{target.name}.{uuid4().hex[:8]}.tmp")
-        try:
-            with tmp.open("x", encoding="utf-8", newline="") as f:
-                f.write(content)
-                f.flush()
-                os.fsync(f.fileno())
-            if target.exists():
-                shutil.copymode(target, tmp)
-            os.replace(tmp, target)
-        except BaseException:
-            tmp.unlink(missing_ok=True)
-            raise
-        return target
+        atomic_write(filepath, content, newline="")
+        return filepath.resolve()
 
     def _on_console_resized(self, width: int) -> None:
         GlobalConsoleHub.set_width(self.editor.bridge, width)

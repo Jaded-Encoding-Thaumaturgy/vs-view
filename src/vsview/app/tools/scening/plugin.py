@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import os
 import shutil
 import sys
-import threading
 from bisect import bisect_left, bisect_right
-from contextlib import suppress
 from enum import StrEnum
 from functools import cache
 from itertools import count, cycle, islice
@@ -51,6 +48,7 @@ from vsview.api import (
 )
 
 from ...plugins.entrypoints import collect_hook_results, load_entrypoints
+from ...utils import atomic_open
 from . import specs
 from .api import Parser, Serializer
 from .constants import PLUGIN_DISPLAY_NAME, PLUGIN_IDENTIFIER
@@ -573,19 +571,8 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
         v = self.api.current_voutput
 
-        path = Path(file)
-        tmp_path = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-
-        try:
-            with tmp_path.open("xb") as f:
-                serializer.serialize(f, (UnifiedRange(r, v.frame_to_time, v.time_to_frame) for r in scene.ranges))
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp_path, path)
-        except BaseException:
-            with suppress(OSError):
-                tmp_path.unlink()
-            raise
+        with atomic_open(file) as f:
+            serializer.serialize(f, (UnifiedRange(r, v.frame_to_time, v.time_to_frame) for r in scene.ranges))
 
     @Slot()
     def on_remove_scene_triggered(self) -> None:

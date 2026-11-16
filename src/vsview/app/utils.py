@@ -1,9 +1,11 @@
 """Utility functions for vsview."""
 
+import errno
 import gc
 import hashlib
 import io
 import os
+import shutil
 import sys
 import threading
 import weakref
@@ -27,13 +29,16 @@ from logging import DEBUG, getLogger
 from operator import attrgetter
 from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Any, Literal, Self, get_origin, override
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal, Self, get_origin, overload, override
+from uuid import uuid4
 
 import vapoursynth as vs
 from jetpytools import inject_self
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, SignalInstance
 from PySide6.QtWidgets import QApplication
 from shiboken6 import Shiboken
+
+type AnyPath = str | os.PathLike[str]
 
 logger = getLogger(__name__)
 
@@ -167,7 +172,7 @@ def measure_memory(
         logger.log(log_level, "[%s] Memory (after) -> %s", label, after.format(before))
 
 
-def path_to_hash(path: str | os.PathLike[str]) -> str:
+def path_to_hash(path: AnyPath) -> str:
     """
     Generate a stable hash from an absolute file path.
 
@@ -182,25 +187,65 @@ def path_to_hash(path: str | os.PathLike[str]) -> str:
     return hashlib.md5(str(Path(path).resolve()).encode()).hexdigest()[:16]
 
 
-def atomic_write_text(path: str | os.PathLike[str], data: str, encoding: str = "utf-8") -> None:
+@contextmanager
+def atomic_open(path: AnyPath) -> Generator[BinaryIO]:
     """
-    Write text to a file so that it holds either the old or the new content, never a partial write.
+    Open a file for atomic binary writing via a temporary file.
+    Leaves the target untouched on error.
 
-    The data goes to a temporary file in the same directory, is flushed to disk, and then replaces the target.
+    Args:
+        path: Target file path.
+
+    Raises:
+        IsADirectoryError: If `path` is a directory.
+        PermissionError: If `path` exists and is read-only.
+
+    Yields:
+        A binary file object for writing.
     """
-    path = Path(path)
-    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    target = Path(path).resolve()
+
+    if target.is_dir():
+        raise IsADirectoryError(errno.EISDIR, "Is a directory", str(path))
+
+    # os.replace would silently swap out a read-only file on POSIX, where a plain write fails.
+    if target.exists() and not os.access(target, os.W_OK):
+        raise PermissionError(errno.EACCES, "File is read-only", str(path))
+
+    # A unique name opened with "x" keeps the umask-based permissions that a plain write would give
+    tmp_path = target.with_name(f".{target.name}.{uuid4().hex[:8]}.tmp")
 
     try:
-        with tmp_path.open("x", encoding=encoding) as f:
-            f.write(data)
+        with tmp_path.open("xb") as f:
+            yield f
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp_path, path)
+        if target.exists():
+            shutil.copymode(target, tmp_path)
+        os.replace(tmp_path, target)
     except BaseException:
         with suppress(OSError):
             tmp_path.unlink()
         raise
+
+
+@overload
+def atomic_write(path: AnyPath, data: bytes) -> None: ...
+@overload
+def atomic_write(path: AnyPath, data: str, encoding: str = "utf-8", newline: str | None = None) -> None: ...
+def atomic_write(path: AnyPath, data: str | bytes, encoding: str = "utf-8", newline: str | None = None) -> None:
+    """Atomically write bytes or text to `path`."""
+    if isinstance(data, bytes):
+        raw = data
+    else:
+        if newline is None:
+            data = data.replace("\n", os.linesep)
+        elif newline not in ("", "\n"):
+            data = data.replace("\n", newline)
+        raw = data.encode(encoding)
+
+    with atomic_open(path) as f:
+        f.write(raw)
 
 
 class _CheckLeaks:
