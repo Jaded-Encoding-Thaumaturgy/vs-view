@@ -187,7 +187,7 @@ class VideoOutput:
         return fps.vs_output.clip.fps, fps.cum_durations, fps.midpoints
 
     def _get_props_on_render(self, n: int, f: vs.VideoFrame) -> vs.VideoFrame:
-        self.props[n] = f.props
+        self.props[n] = f.props.copy()
         return f
 
     def __del__(self) -> None:
