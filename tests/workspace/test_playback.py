@@ -580,6 +580,47 @@ def test_playback_manager_sar_denominator_zero(
         mock_outputs.current_voutput = None
 
 
+@pytest.mark.vpy("no-core")
+@pytest.mark.parametrize(
+    ("sar_num", "sar_den", "expected"),
+    [(0, 1, 1.0), (-4, 3, 1.0), (4, -3, 1.0), (16, 11, 16 / 11)],
+    ids=["zero", "negative_num", "negative_den", "valid"],
+)
+def test_playback_manager_treats_a_non_positive_sar_as_square_pixels(
+    playback_manager_setup: PlaybackManagerSetup,
+    plugin_controller: HarnessPluginController,
+    init_plugin_manager: PluginManager,
+    qtbot: QtBot,
+    sar_num: int,
+    sar_den: int,
+    expected: float,
+) -> None:
+    manager, env, _, mock_outputs, _, _ = playback_manager_setup
+    with env.use():
+        clip = env.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=10, fpsnum=24, fpsden=1)
+        clip = env.core.std.SetFrameProps(
+            clip,
+            _Matrix=vs.MATRIX_RGB,
+            _Primaries=vs.PRIMARIES_BT709,
+            _Transfer=vs.TRANSFER_BT709,
+            _SARNum=sar_num,
+            _SARDen=sar_den,
+        )
+        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
+        voutput.prepare_video(plugin_controller.api)
+        mock_outputs.current_voutput = voutput
+
+    try:
+        with qtbot.waitSignal(manager.frameRendered, timeout=2000) as blocker:
+            manager.request_frame(0)
+        qtbot.waitUntil(lambda: manager.can_reload, timeout=2000)
+
+        assert blocker.args[2] == expected
+    finally:
+        voutput.clear()
+        mock_outputs.current_voutput = None
+
+
 @pytest.mark.vpy("initial-core")
 def test_playback_manager_buffered_audio_backpressure(
     playback_manager_setup: PlaybackManagerSetup,

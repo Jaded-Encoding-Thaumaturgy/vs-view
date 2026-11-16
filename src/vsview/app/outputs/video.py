@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from bisect import bisect_right
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
@@ -100,11 +99,9 @@ class VideoOutput:
         if props := self.props.get(self.last_frame):
             sar_num, sar_den = props.get("_SARNum"), props.get("_SARDen")
 
-            if isinstance(sar_num, int) and isinstance(sar_den, int):
-                try:
-                    sar = sar_num / sar_den
-                except ZeroDivisionError:
-                    sar = math.nan
+            # A zero or negative SAR (unknown or broken metadata) is shown as square pixels.
+            if isinstance(sar_num, int) and isinstance(sar_den, int) and sar_num > 0 and sar_den > 0:
+                sar = sar_num / sar_den
 
         return OutputInfo(
             total_duration=total_duration,

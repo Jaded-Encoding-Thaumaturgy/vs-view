@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 from collections.abc import Callable, Generator
 
 import pytest
@@ -400,9 +399,17 @@ def test_outputs_manager_clear(
 
 # VideoOutput Tests
 @pytest.mark.vpy("no-core")
-def test_video_output_info_sar_denominator_zero(
+@pytest.mark.parametrize(
+    ("sar_num", "sar_den", "expected"),
+    [(1, 0, 1.0), (0, 1, 1.0), (-4, 3, 1.0), (4, -3, 1.0), (16, 11, 16 / 11)],
+    ids=["zero_den", "zero_num", "negative_num", "negative_den", "valid"],
+)
+def test_video_output_info_treats_an_invalid_sar_as_square_pixels(
     plugin_controller: HarnessPluginController,
     vpy_env_factory: Callable[[], ManagedEnvironment],
+    sar_num: int,
+    sar_den: int,
+    expected: float,
 ) -> None:
     env = vpy_env_factory()
     plugin_controller.env = env
@@ -413,15 +420,15 @@ def test_video_output_info_sar_denominator_zero(
             _Matrix=vs.MATRIX_RGB,
             _Primaries=vs.PRIMARIES_BT709,
             _Transfer=vs.TRANSFER_BT709,
-            _SARNum=1,
-            _SARDen=0,
+            _SARNum=sar_num,
+            _SARDen=sar_den,
         )
         packer = Packer()
         voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, packer)
         voutput.prepare_video(plugin_controller.api)
         try:
             voutput.prepared_clip.get_frame(0).close()
-            assert math.isnan(voutput.info.sar) is True
+            assert voutput.info.sar == expected
         finally:
             voutput.clear()
 
