@@ -320,7 +320,7 @@ Pre-built standalone executables feature an embedded Python runtime managed via 
     **Options:**
 
     - `--pre`: Allow upgrading to pre-release and development versions.
-    - `--restore` / `-r`: Wipe the environment first and perform a clean re-installation with full build extras (e.g. `vsview[all]`).
+    - `--restore` / `-r`: Wipe the environment first and perform a clean re-installation with full build extras (e.g. `vsview[full]`).
 
     === "PowerShell (Windows)"
 
