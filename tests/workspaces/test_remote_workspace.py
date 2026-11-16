@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QFileDialog
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsremote.protocol import Command, StatusCode
-from vsremote.protocol.messages import RemoteErrorPayload
+from vsremote.protocol.messages import RemoteErrorPayload, StackFrame
 from vsview_remote._secrets import READ_ERROR_MESSAGE, WRITE_ERROR_MESSAGE
 from vsview_remote.dialog import ConnectionConfig
 from vsview_remote.workspace import RemoteWorkspace
@@ -460,3 +460,80 @@ def test_connect_with_a_failing_keyring_write_keeps_the_secret_for_the_session(
     assert messages == [WRITE_ERROR_MESSAGE]
     assert workspace.auth_token == "new-token"
     assert isolate_secrets._storage == {}
+
+
+def load_with_error(
+    ws: RemoteWorkspace,
+    servers: Callable[[Handler | None], FakeServer],
+    script: Path,
+    mocker: MockerFixture,
+    payload: RemoteErrorPayload,
+) -> None:
+    server = servers(error_reply(payload))
+    connect_through_load_button(ws, script, mocker, enter_server(ws, server))
+    ws.content = script
+    with pytest.raises(RuntimeError, match="boom"):
+        ws.loader()
+
+
+def test_a_server_chosen_filename_is_not_read_from_the_local_disk(
+    workspace: RemoteWorkspace,
+    servers: Callable[[Handler | None], FakeServer],
+    script: Path,
+    dialogs: list[str],
+    mocker: MockerFixture,
+    tmp_path: Path,
+) -> None:
+    private = tmp_path / "id_ed25519"
+    private.write_text("-----BEGIN KEY-----\nTOP-SECRET-KEY-MATERIAL\n-----END KEY-----\n", encoding="utf-8")
+    payload = RemoteErrorPayload("ValueError: boom", "ValueError", "boom", str(private), 2, "remote line")
+
+    load_with_error(workspace, servers, script, mocker, payload)
+
+    assert len(dialogs) == 1
+    assert f"File: <remote:{private}>:2\n>   2 | remote line" in dialogs[0]
+    assert "TOP-SECRET-KEY-MATERIAL" not in dialogs[0]
+
+
+def test_a_remote_frame_filename_does_not_replace_the_script(
+    workspace: RemoteWorkspace,
+    servers: Callable[[Handler | None], FakeServer],
+    script: Path,
+    dialogs: list[str],
+    mocker: MockerFixture,
+    tmp_path: Path,
+) -> None:
+    private = tmp_path / "notes.txt"
+    private.write_text("first\nPRIVATE-NOTE\nthird\n", encoding="utf-8")
+    payload = RemoteErrorPayload(
+        "ValueError: boom", "ValueError", "boom", str(script), 2, frames=[StackFrame(str(private), 2)]
+    )
+
+    load_with_error(workspace, servers, script, mocker, payload)
+
+    assert len(dialogs) == 1
+    assert f"File: {script}:2" in dialogs[0]
+    assert ">  2 | raise ValueError('boom')" in dialogs[0]
+    assert "PRIVATE-NOTE" not in dialogs[0]
+
+
+def test_a_unc_filename_never_reaches_the_filesystem(
+    workspace: RemoteWorkspace,
+    servers: Callable[[Handler | None], FakeServer],
+    script: Path,
+    dialogs: list[str],
+    mocker: MockerFixture,
+) -> None:
+    unc = r"\\remote-test.invalid\share\x.py"
+    real_exists = Path.exists
+
+    def exists(self: Path, *args: Any, **kwargs: Any) -> bool:
+        return False if str(self).startswith("\\\\") else real_exists(self, *args, **kwargs)
+
+    spy = mocker.patch.object(Path, "exists", autospec=True, side_effect=exists)
+    payload = RemoteErrorPayload("ValueError: boom", "ValueError", "boom", unc, 1)
+
+    load_with_error(workspace, servers, script, mocker, payload)
+
+    assert len(dialogs) == 1
+    assert not any(str(call.args[0]).startswith("\\\\") for call in spy.call_args_list)

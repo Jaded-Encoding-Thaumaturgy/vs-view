@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from logging import getLogger
 from typing import ClassVar, override
 
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QDialog, QWidget
-from vsremote import RemoteClient, RemoteExecutionError, UnsupportedFormatError
+from vsremote import RemoteClient, RemoteError, RemoteExecutionError, UnsupportedFormatError
 
 from vsview.api import ActionDefinition, IconName
 from vsview.api.workspace import PluginWorkspace
-from vsview.app.error import show_error
+from vsview.app.error import StackFrame, show_error
 from vsview.app.outputs import VideoMetadata
 from vsview.app.workspace import PythonScriptWorkspace
 
@@ -136,7 +138,12 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
             self._output_metadata = {item.index: VideoMetadata(item.name) for item in output_items if item.name}
         except (RemoteExecutionError, UnsupportedFormatError) as err:
             self.statusLoadingErrored.emit("Script error")
-            show_error(err, self, user_script_path=str(self.content), header_suffix=" on the remote server")
+            show_error(
+                _strip_local_paths(err, str(self.content)) if isinstance(err, RemoteError) else err,
+                self,
+                user_script_path=str(self.content),
+                header_suffix=" on the remote server",
+            )
             err.__traceback__ = None
             raise RuntimeError(err) from None
         except Exception as err:
@@ -201,3 +208,37 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
             self.load_content(self.content)
         else:
             self.reload_content()
+
+
+@dataclass
+class RemoteStackFrame:
+    filename: str
+    lineno: int | None
+    func_name: str | None = None
+    code: str | None = None
+
+
+@dataclass
+class RemoteErrorView:
+    exc_type: str
+    exc_msg: str
+    filename: str | None
+    lineno: int | None
+    code_line: str | None = None
+    formatted_traceback: str | None = None
+    frames: Sequence[StackFrame] | None = None
+
+
+def _strip_local_paths(err: RemoteError, script_path: str) -> RemoteErrorView:
+    def rename(filename: str) -> str:
+        return filename if filename == script_path else f"<remote:{filename}>"
+
+    return RemoteErrorView(
+        exc_type=err.exc_type,
+        exc_msg=err.exc_msg,
+        filename=rename(err.filename) if err.filename is not None else None,
+        lineno=err.lineno,
+        code_line=err.code_line,
+        formatted_traceback=err.formatted_traceback,
+        frames=[RemoteStackFrame(rename(f.filename), f.lineno, f.func_name, f.code) for f in err.frames],
+    )
