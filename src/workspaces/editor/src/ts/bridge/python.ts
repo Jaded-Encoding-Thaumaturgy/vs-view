@@ -230,19 +230,16 @@ export class BridgeService
     );
     this._disposables.add(
       this.onCommand('editor.triggerSave', () => {
-        this.flushState();
         this.editorService.requestSave();
       }),
     );
     this._disposables.add(
       this.onCommand('editor.triggerSaveAs', () => {
-        this.flushState();
         this.editorService.requestSaveAs();
       }),
     );
     this._disposables.add(
       this.onCommand('editor.triggerFormat', () => {
-        this.flushState();
         this.editorService.requestFormat();
       }),
     );
@@ -289,6 +286,7 @@ export class BridgeService
     );
     this._disposables.add(
       this.editorService.onDidRequestSave(() => {
+        this.flushState();
         if (this.bridge) {
           this.sendEvent('editor.saveRequested');
         }
@@ -296,6 +294,7 @@ export class BridgeService
     );
     this._disposables.add(
       this.editorService.onDidRequestSaveAs(() => {
+        this.flushState();
         if (this.bridge) {
           this.sendEvent('editor.saveAsRequested');
         }
@@ -303,6 +302,7 @@ export class BridgeService
     );
     this._disposables.add(
       this.editorService.onDidRequestFormat(() => {
+        this.flushState();
         if (this.bridge) {
           this.sendEvent('editor.formatRequested');
         }

@@ -109,9 +109,9 @@ function createMockEditorService(): MockEditorServiceFixture {
   const openTab = vi.fn(() => Result.ok('file:///workspace/script.py'));
   const selectTab = vi.fn(() => Result.ok(undefined));
   const markTabSaved = vi.fn();
-  const requestSave = vi.fn();
-  const requestSaveAs = vi.fn();
-  const requestFormat = vi.fn();
+  const requestSave = vi.fn(() => saveRequestEmitter.fire(undefined));
+  const requestSaveAs = vi.fn(() => saveAsRequestEmitter.fire(undefined));
+  const requestFormat = vi.fn(() => formatRequestEmitter.fire(undefined));
   const updateOptionsFromMap = vi.fn();
   const layout = vi.fn();
   const updateTabBar = vi.fn();
@@ -498,10 +498,12 @@ describe('BridgeService', () => {
 
       mockBridgeFixture.emitCommand('editor.triggerSave', '{}');
       expect(mockEditor.requestSave).toHaveBeenCalledOnce();
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
-        'editor.contentChanged',
-        JSON.stringify({ content: 'active content' }),
-      );
+      expect(vi.mocked(bridge.dispatchFromJs).mock.calls).toEqual([
+        ['editor.contentChanged', JSON.stringify({ content: 'active content' })],
+        ['editor.mainContentChanged', JSON.stringify({ content: 'main content' })],
+        ['editor.sessionStateChanged', expect.any(String)],
+        ['editor.saveRequested', '{}'],
+      ]);
 
       mockBridgeFixture.emitCommand('editor.triggerSaveAs', '{}');
       expect(mockEditor.requestSaveAs).toHaveBeenCalledOnce();
@@ -1141,6 +1143,26 @@ describe('BridgeService', () => {
 
       mockEditor.emitFormatRequest();
       expect(bridge.dispatchFromJs).toHaveBeenCalledWith('editor.formatRequested', '{}');
+    });
+
+    it.each([
+      { emit: 'emitSaveRequest', command: 'editor.saveRequested' },
+      { emit: 'emitSaveAsRequest', command: 'editor.saveAsRequested' },
+      { emit: 'emitFormatRequest', command: 'editor.formatRequested' },
+    ] as const)('flushes pending content before $command', ({ emit, command }) => {
+      const { bridgeService, bridge } = setupInitializedBridgeService();
+      using fixture = bridgeService;
+      void fixture;
+      mockEditor.emitContentChange();
+
+      mockEditor[emit]();
+
+      expect(vi.mocked(bridge.dispatchFromJs).mock.calls).toEqual([
+        ['editor.contentChanged', JSON.stringify({ content: 'active content' })],
+        ['editor.mainContentChanged', JSON.stringify({ content: 'main content' })],
+        ['editor.sessionStateChanged', expect.any(String)],
+        [command, '{}'],
+      ]);
     });
 
     it('forwards console service toggle and resize events to editor layout', () => {
