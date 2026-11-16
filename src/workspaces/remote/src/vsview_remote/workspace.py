@@ -195,5 +195,10 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
             return
 
         self._apply_config(config)
-        if hasattr(self, "content") and self.content:
+        if not getattr(self, "content", None):
+            return
+
+        if self.stack.currentWidget() is self.error_page:
+            self.load_content(self.content)
+        else:
             self.reload_content()

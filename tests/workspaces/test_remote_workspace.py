@@ -325,3 +325,39 @@ def test_cancelling_the_load_dialog_keeps_the_previous_connection(
     load_content.assert_not_called()
     assert server.tokens(Command.LOAD_CODE) == ["token", "token"]
     assert len(dialogs) == 2
+
+
+# W4-V01
+def test_configure_connection_on_the_error_page_loads_the_script_again(
+    workspace: RemoteWorkspace,
+    script: Path,
+    mocker: MockerFixture,
+) -> None:
+    workspace.content = script
+    workspace.clear_failed_load()
+    load_content = mocker.patch.object(workspace, "load_content")
+    reload_content = mocker.patch.object(workspace, "reload_content")
+
+    QTimer.singleShot(0, workspace.dialog.accept)
+    workspace._on_configure_connection()
+
+    assert workspace.stack.currentWidget() is workspace.error_page
+    load_content.assert_called_once_with(script)
+    reload_content.assert_not_called()
+
+
+def test_configure_connection_on_a_loaded_script_reloads_it(
+    workspace: RemoteWorkspace,
+    script: Path,
+    mocker: MockerFixture,
+) -> None:
+    workspace.content = script
+    workspace.set_loaded_page()
+    load_content = mocker.patch.object(workspace, "load_content")
+    reload_content = mocker.patch.object(workspace, "reload_content")
+
+    QTimer.singleShot(0, workspace.dialog.accept)
+    workspace._on_configure_connection()
+
+    reload_content.assert_called_once_with()
+    load_content.assert_not_called()
