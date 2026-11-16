@@ -12,6 +12,7 @@ from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
 from vsview.app.outputs.video import VideoOutput
+from vsview.app.packing import Packer
 from vsview.app.tools.colorpicker.plugin import ColorPickerPlugin, TrackingState
 from vsview.app.tools.cropping.plugin import RegionSelectorPlugin
 from vsview.app.tools.frame_strip.plugin import FrameStripPlugin
@@ -298,6 +299,58 @@ def test_color_picker_copy_row(qtbot: QtBot, plugin_controller: HarnessPluginCon
     assert QApplication.clipboard().text() == "0  , 0  , 0  "
     assert len(status_messages) == 1
     assert "Copied '0  , 0  , 0  ' to clipboard" in status_messages[0]
+
+
+def _make_colored_voutput(
+    env: ManagedEnvironment, fmt: vs.PresetVideoFormat, color: list[int], **props: int
+) -> VideoOutput:
+    with env.use():
+        clip = env.core.std.BlankClip(length=10, width=64, height=64, format=fmt, fpsnum=24, fpsden=1, color=color)
+        clip = env.core.std.SetFrameProps(clip, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709, **props)
+        packer = Packer()
+        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, packer)
+        voutput.prepared_clip = packer.pack_clip(clip, None)
+        return voutput
+
+
+@pytest.mark.parametrize(
+    ("fmt", "color", "props", "expected_norm"),
+    [
+        (vs.RGB24, [0, 0, 0], {"_Matrix": vs.MATRIX_RGB}, ["0.00000", "0.00000", "0.00000"]),
+        (vs.RGB24, [128, 128, 128], {"_Matrix": vs.MATRIX_RGB}, ["0.50196", "0.50196", "0.50196"]),
+        (vs.RGB24, [255, 0, 255], {"_Matrix": vs.MATRIX_RGB}, ["1.00000", "0.00000", "1.00000"]),
+        (vs.RGB48, [0, 32768, 65535], {"_Matrix": vs.MATRIX_RGB}, ["0.00000", "0.50001", "1.00000"]),
+        (vs.YUV444P8, [235, 128, 128], {"_Matrix": vs.MATRIX_BT709}, ["1.00000", "0.50000", "0.50000"]),
+        (vs.YUV444P8, [16, 16, 240], {"_Matrix": vs.MATRIX_BT709}, ["0.00000", "0.00000", "1.00000"]),
+    ],
+    ids=["rgb24-black", "rgb24-grey", "rgb24-magenta", "rgb48", "yuv-white", "yuv-chroma-bounds"],
+)
+def test_color_picker_source_norm_row(
+    qtbot: QtBot,
+    plugin_controller: HarnessPluginController,
+    fmt: vs.PresetVideoFormat,
+    color: list[int],
+    props: dict[str, int],
+    expected_norm: list[str],
+) -> None:
+    assert plugin_controller.env is not None
+    plugin_controller.set_current_voutput(_make_colored_voutput(plugin_controller.env, fmt, color, **props))
+    plugin = plugin_controller.create_plugin(ColorPickerPlugin)
+    plugin.eyedropper_btn.setChecked(True)
+
+    plugin.on_view_mouse_moved(
+        QMouseEvent(
+            QEvent.Type.MouseMove,
+            QPointF(5, 5),
+            QPointF(5, 5),
+            Qt.MouseButton.NoButton,
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+    )
+    qtbot.waitUntil(lambda: plugin.position_label.cursor_pos == QPoint(5, 5))
+
+    assert [label.text() for label in plugin.src_labels["Norm"]] == expected_norm
 
 
 # FramePropsPlugin Tests

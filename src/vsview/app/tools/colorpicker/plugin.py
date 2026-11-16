@@ -397,8 +397,9 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         if frame.format.sample_type == vs.INTEGER:
             self._set_row_values(self.src_labels, "Hex", [self.src_hex_fmt.format(v) for v in src_vals])
 
+            is_rgb = frame.format.color_family == vs.RGB
             norm_vals = [
-                clamp(scale_value_to_float(v, frame, (chroma := not not i)) + 0.5 * chroma, 0, 1.0)  # noqa: SIM208
+                clamp(scale_value_to_float(v, frame, (chroma := i > 0 and not is_rgb)) + 0.5 * chroma, 0, 1.0)
                 for i, v in enumerate(src_vals)
             ]
         else:
