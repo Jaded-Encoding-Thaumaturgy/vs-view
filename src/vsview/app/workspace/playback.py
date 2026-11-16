@@ -348,7 +348,7 @@ class PlaybackManager(QObject):
         self.timelineCursorChanged.emit(n)
 
         if failed:
-            self._loop.from_thread(show_warning, self._tbar.window(), error_msg).result()
+            self._loop.from_thread(lambda: show_warning(self._tbar.window(), error_msg)).result()
             return 1
 
         return 0
