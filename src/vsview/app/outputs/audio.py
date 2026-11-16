@@ -131,8 +131,20 @@ class AudioOutput:
         if audio is None:
             audio = self.vs_output
 
-            if PluginManager.audio_processor:
-                audio = PluginManager.audio_processor(api).prepare(audio)
+            if (processor := PluginManager.audio_processor) is not None:
+                try:
+                    audio = processor(api).prepare(audio)
+                except Exception as e:
+                    name = getattr(processor, "display_name", processor.__name__)
+                    logger.exception(
+                        "Audio processor %r failed on audio output %r, playing the raw audio",
+                        name,
+                        self.vs_name,
+                    )
+                    api.statusMessage.emit(
+                        f"Audio processor {name!r} failed on audio output {self.vs_name!r}, "  # no format
+                        f"playing the raw audio: {e}"
+                    )
 
             if self.vs_output.num_channels > 2 and self.downmix:
                 audio = self.create_stereo_downmix(audio)

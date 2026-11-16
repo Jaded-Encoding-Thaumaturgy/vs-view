@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Generator
+from typing import override
 
 import pytest
 import vapoursynth as vs
 from pytest_mock import MockerFixture
+from pytestqt.qtbot import QtBot
 from vsengine import ManagedEnvironment
 
 from tests.harness import HarnessPluginController
@@ -13,7 +15,8 @@ from vsview.app.outputs.audio import AudioMetadata, AudioOutput
 from vsview.app.outputs.manager import OutputsManager
 from vsview.app.outputs.video import VideoMetadata, VideoOutput
 from vsview.app.packing import Packer
-from vsview.app.plugins import PluginAPI
+from vsview.app.plugins import PluginAPI, specs
+from vsview.app.plugins.api import NodeProcessor
 from vsview.app.plugins.manager import PluginManager
 
 pytestmark = [pytest.mark.integration, pytest.mark.qt, pytest.mark.vpy("no-core")]
@@ -369,6 +372,72 @@ def test_create_aoutputs_exception_during_prepare(
     # Output 0 was prepared and added to aoutputs, so it should be cleared when Output 1 fails
     assert spy_clear.call_count == 1
     assert "Failed to initialize aoutput: 'bad_audio_script'" in caplog.text
+
+
+class StereoOnlyAudioProcessor(NodeProcessor[vs.AudioNode]):
+    """Raises for any audio that is not stereo, and halves the gain of stereo audio."""
+
+    identifier = "test_stereo_only_audio_processor"
+    display_name = "Stereo Only"
+
+    @override
+    def prepare(self, node: vs.AudioNode, /) -> vs.AudioNode:
+        if node.num_channels != 2:
+            raise ValueError(f"cannot process {node.num_channels} channels")
+        return node.std.AudioGain(0.5)
+
+
+@pytest.fixture
+def stereo_only_audio_processor(init_plugin_manager: PluginManager) -> Generator[None]:
+    class _Plugin:
+        @specs.hookimpl
+        def vsview_get_audio_processor(self) -> type[StereoOnlyAudioProcessor]:
+            return StereoOnlyAudioProcessor
+
+    plugin = _Plugin()
+    init_plugin_manager.manager.register(plugin, name="stereo_only")
+    try:
+        yield
+    finally:
+        init_plugin_manager.manager.unregister(plugin)
+
+
+@pytest.mark.usefixtures("stereo_only_audio_processor")
+def test_create_aoutputs_plays_the_raw_audio_of_an_output_whose_processor_fails(
+    plugin_controller: HarnessPluginController,
+    manager: OutputsManager,
+    qtbot: QtBot,
+) -> None:
+    stereo = core.std.BlankAudio(length=10000)
+    mono = core.std.BlankAudio(channels=[vs.AudioChannels.FRONT_LEFT], length=10000)
+
+    with qtbot.waitSignal(plugin_controller.statusMessage, timeout=1000) as blocker:
+        aouts = manager.create_aoutputs(
+            "mixed_audio", {0: stereo, 1: mono}, {1: AudioMetadata(name="Mono")}, plugin_controller.api
+        )
+
+    assert manager.aoutputs == aouts
+    assert [a.vs_index for a in aouts] == [0, 1]
+    assert aouts[0].prepared_audio is not stereo
+    assert aouts[1].prepared_audio is mono
+    assert aouts[1].qformat.channelCount() == 1
+    assert blocker.args == [
+        "Audio processor 'Stereo Only' failed on audio output 'Mono', playing the raw audio: cannot process 1 channels"
+    ]
+
+
+@pytest.mark.usefixtures("stereo_only_audio_processor")
+def test_create_aoutputs_keeps_the_delay_when_the_processor_fails(
+    plugin_controller: HarnessPluginController,
+    manager: OutputsManager,
+) -> None:
+    mono = core.std.BlankAudio(channels=[vs.AudioChannels.FRONT_LEFT], length=10000)
+    aouts = manager.create_aoutputs("delayed_mono", {0: mono}, {}, plugin_controller.api, delay_s=0.25)
+
+    assert len(aouts) == 1
+    assert aouts[0].prepared_audio is not mono
+    assert aouts[0].prepared_audio.num_samples == mono.num_samples
+    assert aouts[0].prepared_audio.num_channels == 1
 
 
 # clear Tests
