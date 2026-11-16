@@ -915,15 +915,16 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             filter_str = "MKV Video (*.mkv);;All Files (*.*)"
             ffmpeg_args = FFV1_ARGS
 
+        def file_name(stem: str, ext: str) -> str:
+            return sanitize_filename(stem, "_", max_len=255 - len(ext.encode())) + ext
+
         default_dir = self.api.file_path.parent if self.api.file_path else Path.cwd()
-        default_file = default_dir / sanitize_filename(f"{scene.name}_{voutput.vs_name}{ext}", replacement_text="_")
-        default_file = default_file.with_stem(default_file.stem.replace(" ", "_"))
+        default_file = default_dir / file_name(f"{scene.name}_{voutput.vs_name}", ext).replace(" ", "_")
 
         if len(selected_ranges) == 1:
             r = selected_ranges[0]
             s, e = r.as_frames(voutput)
-            stem = sanitize_filename(f"{default_file.stem}_{s}-{e}_{r.label}", "_", max_len=255 - len(ext.encode()))
-            default_file = default_file.with_name(f"{stem}{ext}")
+            default_file = default_file.with_name(file_name(f"{default_file.stem}_{s}-{e}_{r.label}", ext))
             chosen, _ = QFileDialog.getSaveFileName(self, "Export Clip", str(default_file), filter=filter_str)
             if not chosen:
                 return
@@ -942,8 +943,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             dest_files = list[Path]()
             for i, r in enumerate(selected_ranges, 1):
                 s, e = r.as_frames(voutput)
-                f = base.with_name(sanitize_filename(f"{base.stem}_{s}-{e}_{r.label or i}{base.suffix}", "_"))
-                dest_files.append(f)
+                dest_files.append(base.with_name(file_name(f"{base.stem}_{s}-{e}_{r.label or i}", base.suffix)))
 
         self.export_manager.enqueue(selected_ranges, voutput, dest_files, ffmpeg_args, fmt)
 
