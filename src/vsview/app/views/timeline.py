@@ -469,7 +469,7 @@ class TimelineHoverPopup(QWidget):
 
         try:
             return base_label.format(self._format_data_value(notch.data))
-        except (KeyError, IndexError, ValueError):
+        except (AttributeError, KeyError, IndexError, TypeError, ValueError):
             return base_label
 
     def _format_data_value(self, data: Frame | Time) -> str:

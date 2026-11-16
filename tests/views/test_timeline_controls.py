@@ -603,6 +603,22 @@ def test_timeline_set_data_moves_time_notches_when_only_durations_change(qtbot: 
     assert notch.line.x1() == 600
 
 
+@pytest.mark.parametrize("label", ["{foo}", "unbalanced {", "{1}", "{} and {}", "{0.foo}", "{0[foo]}"])
+def test_hover_popup_shows_raw_label_when_format_fails(
+    timeline_control_bar: TimelineControlBar, mocker: MockerFixture, label: str
+) -> None:
+    timeline = timeline_control_bar.timeline
+    timeline.rect_f = QRectF(0, 0, 1000, 33)
+    popup = timeline.hover_popup
+    timeline.add_notch("bookmarks", Frame(50), label=label)
+    popup.update_state(500)
+    spy = mocker.spy(popup, "_draw_label_pill")
+
+    popup.grab()
+
+    assert [call.args[1].text for call in spy.call_args_list] == [label]
+
+
 def test_timeline_delete_later_deletes_timeline_and_hover_popup(qtbot: QtBot) -> None:
     # Not registered with qtbot: both widgets are deleted inside the test.
     timeline = Timeline()
