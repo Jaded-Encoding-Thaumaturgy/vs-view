@@ -26,7 +26,7 @@ class QPFileSerializer(Serializer):
     def serialize(self, io: BinaryIO, ranges: Iterable[UnifiedRange]) -> None:
         with borrowed_text_wrapper(io) as wrapper:
             for r in ranges:
-                wrapper.write(f"{r.as_frames()[0]} K" + (f" {r.label}" if r.label else "") + "\n")
+                wrapper.write(f"{r.as_frames()[0]} K\n")
 
 
 class PythonListFramesSerializer(Serializer):

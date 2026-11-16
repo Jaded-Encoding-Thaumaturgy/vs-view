@@ -81,6 +81,14 @@ class TestQPFileSerializer:
 
         assert [r.start for r in scene.ranges] == [0, 100, 200]
 
+    @pytest.mark.parametrize("label", ["Intro", "12", "-3"])
+    def test_does_not_write_the_label(self, label: str) -> None:
+        ranges: list[RangeFrame | RangeTime] = [RangeFrame(start=24, label=label), RangeFrame(start=48)]
+
+        out = serialize(QPFileSerializer(), ranges)
+
+        assert out.decode().splitlines() == ["24 K", "48 K"]
+
 
 class TestOGMSerializer:
     @pytest.mark.parametrize(
