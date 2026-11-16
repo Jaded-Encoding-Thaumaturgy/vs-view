@@ -546,7 +546,91 @@ def test_a_unc_filename_never_reaches_the_filesystem(
 
 
 # W4-08
-def test_drop_without_a_connection_shows_the_reason(
+def drop_file(ws: RemoteWorkspace, path: Path) -> QDropEvent:
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(path))])
+    event = QDropEvent(
+        QPointF(10, 10), Qt.DropAction.CopyAction, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier
+    )
+    ws.dropEvent(event)
+    return event
+
+
+def close_dialog_when_shown(
+    ws: RemoteWorkspace, before_close: Callable[[], Any] | None = None, *, accept: bool = True
+) -> list[bool]:
+    closed = list[bool]()
+
+    def close_when_visible() -> None:
+        if not ws.dialog.isVisible():
+            QTimer.singleShot(10, ws, close_when_visible)
+            return
+        if before_close is not None:
+            before_close()
+        if accept:
+            ws.dialog.accept()
+        else:
+            ws.dialog.reject()
+        closed.append(accept)
+
+    QTimer.singleShot(0, ws, close_when_visible)
+    return closed
+
+
+def test_drop_without_a_connection_opens_the_connection_dialog(
+    qtbot: QtBot,
+    workspace: RemoteWorkspace,
+    script: Path,
+    mocker: MockerFixture,
+) -> None:
+    load_content = mocker.patch.object(workspace, "load_content")
+    closed = close_dialog_when_shown(workspace, lambda: workspace.dialog.address_edit.setText("tcp://127.0.0.1:6001"))
+
+    event = drop_file(workspace, script)
+    qtbot.waitUntil(lambda: closed == [True], timeout=5000)
+    qtbot.waitUntil(lambda: load_content.called, timeout=5000)
+
+    assert event.isAccepted()
+    load_content.assert_called_once_with(script)
+    assert workspace.settings.global_.address == "tcp://127.0.0.1:6001"
+
+
+def test_cancelling_the_connection_dialog_after_a_drop_loads_nothing(
+    qtbot: QtBot,
+    workspace: RemoteWorkspace,
+    script: Path,
+    mocker: MockerFixture,
+) -> None:
+    load_content = mocker.patch.object(workspace, "load_content")
+    closed = close_dialog_when_shown(workspace, accept=False)
+
+    drop_file(workspace, script)
+    qtbot.waitUntil(lambda: closed == [False], timeout=5000)
+    qtbot.wait(50)
+
+    load_content.assert_not_called()
+    assert workspace.stack.currentWidget() is workspace.empty_page
+
+
+def test_drop_with_a_connection_loads_without_the_dialog(
+    qtbot: QtBot,
+    workspace: RemoteWorkspace,
+    script: Path,
+    mocker: MockerFixture,
+) -> None:
+    connect_through_load_button(workspace, script, mocker)
+    load_content = mocker.patch.object(workspace, "load_content")
+    dialog_exec = mocker.spy(workspace.dialog, "exec")
+
+    event = drop_file(workspace, script)
+    qtbot.wait(50)
+
+    assert event.isAccepted()
+    load_content.assert_called_once_with(script)
+    dialog_exec.assert_not_called()
+
+
+def test_load_without_a_connection_shows_the_reason(
     qtbot: QtBot,
     vpy_env_factory: Callable[[], ManagedEnvironment],
     script: Path,
@@ -563,21 +647,15 @@ def test_drop_without_a_connection_shows_the_reason(
     mocker.patch.object(RemoteWorkspace, "env", property(env))
     ws = RemoteWorkspace()
     qtbot.addWidget(ws)
-    load_spy = mocker.spy(ws, "load_content")
     statuses = list[str]()
     ws.statusLoadingErrored.connect(statuses.append)
-    mime = QMimeData()
-    mime.setUrls([QUrl.fromLocalFile(str(script))])
-    event = QDropEvent(
-        QPointF(10, 10), Qt.DropAction.CopyAction, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier
-    )
 
     with caplog.at_level(logging.ERROR):
-        ws.dropEvent(event)
-        qtbot.waitUntil(lambda: load_spy.spy_return is not None and load_spy.spy_return.done(), timeout=10000)
+        future = ws.load_content(script)
+        qtbot.waitUntil(future.done, timeout=10000)
         qtbot.waitUntil(lambda: ws.stack.currentWidget() is ws.error_page, timeout=5000)
 
-    assert load_spy.spy_return.result() == 1
+    assert future.result() == 1
     assert statuses == ["Remote connection not configured", "Error while loading content"]
     assert len(dialogs) == 1
     assert dialogs[0].endswith("ConnectionNotConfiguredError: Remote connection not configured\n")

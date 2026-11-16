@@ -3,9 +3,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from logging import getLogger
+from pathlib import Path
 from typing import ClassVar, override
 
-from PySide6.QtCore import Slot
+from PySide6.QtCore import QTimer, Slot
+from PySide6.QtGui import QDropEvent
 from PySide6.QtWidgets import QDialog, QWidget
 from vsremote import (
     RemoteAuthenticationError,
@@ -108,6 +110,15 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         return self._client.start()
 
     @override
+    def dropEvent(self, event: QDropEvent) -> None:
+        if self._config is not None or (dropped_file := self._get_supported_drop_file(event)) is None:
+            super().dropEvent(event)
+            return
+
+        event.acceptProposedAction()
+        QTimer.singleShot(0, self, lambda: self._connect_and_load(dropped_file))
+
+    @override
     def deleteLater(self) -> None:
         if self._client:
             self._client.close()
@@ -207,6 +218,13 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
             self._client = None
 
         self._config = config
+
+    def _connect_and_load(self, path: Path) -> None:
+        if (config := self.prompt_connection_dialog()) is None:
+            return
+
+        self._apply_config(config)
+        self.load_content(path)
 
     @Slot()
     @override
