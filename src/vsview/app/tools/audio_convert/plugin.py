@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from logging import getLogger
-from typing import Annotated, override
+from typing import Annotated, Self, override
 
-from pydantic import BaseModel
-from vapoursynth import AudioNode, SampleType
+from pydantic import BaseModel, model_validator
+from vapoursynth import AudioNode, Error, SampleType
 
 from vsview.api import Dropdown, NodeProcessor, Spin
 
@@ -57,6 +57,12 @@ class GlobalSettings(BaseModel):
         ),
     ] = "triangular"
 
+    @model_validator(mode="after")
+    def _float_uses_32_bits(self) -> Self:
+        if self.sample_type == SampleType.FLOAT:
+            self.bits = 32
+        return self
+
 
 class AudioConvert(NodeProcessor[AudioNode, GlobalSettings]):
     identifier = "jet_vsview_audioconvert"
@@ -72,9 +78,14 @@ class AudioConvert(NodeProcessor[AudioNode, GlobalSettings]):
             self.settings.global_.bits,
             self.settings.global_.dither_type,
         )
-        return audio.std.AudioResample(
-            samplerate=self.settings.global_.sample_rate,
-            sampletype=self.settings.global_.sample_type,
-            bits=self.settings.global_.bits,
-            dither_type=self.settings.global_.dither_type,
-        )
+        try:
+            return audio.std.AudioResample(
+                samplerate=self.settings.global_.sample_rate,
+                sampletype=self.settings.global_.sample_type,
+                bits=self.settings.global_.bits,
+                dither_type=self.settings.global_.dither_type,
+            )
+        except Error as e:
+            logger.exception("std.AudioResample failed on audio %r", audio)
+            self.api.statusMessage.emit(f"{self.display_name} failed, playing the audio unconverted: {e}")
+            return audio
