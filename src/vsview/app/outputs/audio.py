@@ -99,6 +99,9 @@ class AudioOutput:
 
         self._cache_delay_audio = LRUCache[float, vs.AudioNode]()
 
+    def __del__(self) -> None:
+        self._clear_vs_resources()
+
     @property
     def fps(self) -> Fraction:
         return Fraction(self.prepared_audio.sample_rate, self.SAMPLES_PER_FRAME)
@@ -189,17 +192,9 @@ class AudioOutput:
         return True
 
     def clear(self) -> None:
-        """Clear VapourSynth resources."""
-        if self.sink is not None:
-            self.sink.stop()
-            self.sink.deleteLater()
-            self.sink = None
-
-        for name in ["prepared_audio", "vs_output", "playback_audio", "kwargs"]:
-            with suppress(AttributeError):
-                delattr(self, name)
-
-        self._cache_delay_audio.clear()
+        """Release the audio sink and clear VapourSynth resources."""
+        self._release_sink()
+        self._clear_vs_resources()
 
     def render_raw_audio_frame(self, frame: vs.AudioFrame) -> None:
         if not (sink := self.sink) or not sink.ready:
@@ -321,8 +316,19 @@ class AudioOutput:
     def sample_to_time(self, sample_num: int) -> Time:
         return Time(seconds=sample_num / self.prepared_audio.sample_rate)
 
-    def __del__(self) -> None:
-        self.clear()
+    @run_in_loop(return_future=False)
+    def _release_sink(self) -> None:
+        if self.sink is not None:
+            self.sink.stop()
+            self.sink.deleteLater()
+            self.sink = None
+
+    def _clear_vs_resources(self) -> None:
+        for name in ["prepared_audio", "vs_output", "playback_audio", "kwargs"]:
+            with suppress(AttributeError):
+                delattr(self, name)
+
+        self._cache_delay_audio.clear()
 
 
 class AudioSink(QAudioSink):
