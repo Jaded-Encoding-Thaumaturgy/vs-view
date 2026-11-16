@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import Shiboken
 from vsengine import keep_environment
 from vsengine.policy import ManagedEnvironment
 from vsengine.vpy import ExecutionError, Script, load_code, load_script
@@ -807,6 +808,17 @@ class LoaderWorkspace[T](BaseWorkspace):
     @run_in_loop(return_future=False)
     def load_plugins(self) -> None:
         if not self.plugins_loaded:
+            tabs = self.plugin_splitter.plugin_tabs
+
+            for dock in self.docks:
+                self.dock_container.removeDockWidget(dock)
+                dock.deleteLater()
+
+            for plugin in self.plugins:
+                if (index := tabs.indexOf(plugin)) != -1:
+                    tabs.removeTab(index)
+                    plugin.deleteLater()
+
             self.plugins.clear()
             self.docks.clear()
 
@@ -822,7 +834,13 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         for plugin_type in PluginManager.tooldocks:
             dock = PluginDock(plugin_type.display_name, plugin_type.identifier, self.dock_container)
-            plugin_obj = plugin_type(dock, self.plugin_controller.api)
+
+            try:
+                plugin_obj = plugin_type(dock, self.plugin_controller.api)
+            except Exception:
+                logger.exception("Failed to create the tool dock %r, skipping it", plugin_type.identifier)
+                dock.deleteLater()
+                continue
 
             dock.setWidget(plugin_obj)
             dock.visibilityChanged.connect(self._on_dock_visibility_changed)
@@ -841,13 +859,25 @@ class LoaderWorkspace[T](BaseWorkspace):
     def _setup_panels(self) -> None:
         from ..plugins.manager import PluginManager
 
-        for i, plugin_type in enumerate(PluginManager.toolpanels):
-            plugin_obj = plugin_type(self.plugin_splitter.plugin_tabs, self.plugin_controller.api)
+        tabs = self.plugin_splitter.plugin_tabs
+
+        for plugin_type in PluginManager.toolpanels:
+            children_before = {Shiboken.getCppPointer(child)[0] for child in tabs.children()}
+
+            try:
+                plugin_obj = plugin_type(tabs, self.plugin_controller.api)
+            except Exception:
+                logger.exception("Failed to create the tool panel %r, skipping it", plugin_type.identifier)
+                for child in tabs.children():
+                    if Shiboken.getCppPointer(child)[0] not in children_before and isinstance(child, QWidget):
+                        child.deleteLater()
+                continue
 
             self.plugins.append(plugin_obj)
             self.plugin_splitter.add_plugin(plugin_obj, plugin_type.display_name)
-            self.plugin_splitter.plugin_tabs.setTabVisible(
-                i, self.global_settings.view_tools.panels.get(plugin_type.identifier, True)
+            tabs.setTabVisible(
+                tabs.indexOf(plugin_obj),
+                self.global_settings.view_tools.panels.get(plugin_type.identifier, True),
             )
 
     @Slot(bool)

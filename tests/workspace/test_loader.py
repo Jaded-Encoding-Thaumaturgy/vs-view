@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator, Sequence
 from pathlib import Path
-from typing import override
+from typing import Any, override
 
 import pytest
+from PySide6.QtCore import QRegularExpression
 from PySide6.QtWidgets import QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from shiboken6 import Shiboken
 from vsengine.policy import ManagedEnvironment
 
+from vsview.api import hookimpl
 from vsview.app.outputs.video import VideoOutput
+from vsview.app.plugins.api import WidgetPluginBase
 from vsview.app.plugins.manager import PluginManager
+from vsview.app.views import PluginDock
 from vsview.app.workspace.loader import LoaderWorkspace, VSEngineWorkspace
 from vsview.app.workspace.tab_manager import PlayHeadToolButton
 from vsview.assets import IconName
@@ -721,3 +725,111 @@ def test_reload_content_failure_destroys_freeze_screenshot_and_enables_tbar(
     assert ws.stack.currentWidget() is ws.loaded_page
     assert ws.tbar.isEnabled() is True
     assert ws.tbar.timeline.is_events_blocked is False
+
+
+# Plugin Construction and Load Failure Tests
+class _GoodDock(WidgetPluginBase[Any, Any]):
+    identifier = "test_loader_good_dock"
+    display_name = "Good dock"
+
+
+class _BrokenDock(WidgetPluginBase[Any, Any]):
+    identifier = "test_loader_broken_dock"
+    display_name = "Broken dock"
+
+    def __init__(self, parent: QWidget, api: Any) -> None:
+        super().__init__(parent, api)
+        self.setObjectName("broken_dock_widget")
+        raise RuntimeError("dock constructor failed")
+
+
+class _BrokenPanel(WidgetPluginBase[Any, Any]):
+    identifier = "test_loader_broken_panel"
+    display_name = "Broken panel"
+
+    def __init__(self, parent: QWidget, api: Any) -> None:
+        super().__init__(parent, api)
+        self.setObjectName("broken_panel_widget")
+        raise RuntimeError("panel constructor failed")
+
+
+class _GoodPanel(WidgetPluginBase[Any, Any]):
+    identifier = "test_loader_good_panel"
+    display_name = "Good panel"
+
+
+class _DockPlugin:
+    def __init__(self, dock: type[WidgetPluginBase[Any, Any]]) -> None:
+        self.dock = dock
+
+    @hookimpl
+    def vsview_register_tooldock(self) -> type[WidgetPluginBase[Any, Any]]:
+        return self.dock
+
+
+class _PanelPlugin:
+    def __init__(self, panel: type[WidgetPluginBase[Any, Any]]) -> None:
+        self.panel = panel
+
+    @hookimpl
+    def vsview_register_toolpanel(self) -> type[WidgetPluginBase[Any, Any]]:
+        return self.panel
+
+
+@pytest.fixture
+def register_tools(init_plugin_manager: PluginManager) -> Generator[Callable[..., None]]:
+    names = list[str]()
+
+    def register(
+        docks: Sequence[type[WidgetPluginBase[Any, Any]]] = (),
+        panels: Sequence[type[WidgetPluginBase[Any, Any]]] = (),
+    ) -> None:
+        # pluggy calls the most recently registered implementation first.
+        for plugin in [*map(_DockPlugin, reversed(docks)), *map(_PanelPlugin, reversed(panels))]:
+            name = f"test_loader_tools_{len(names)}"
+            init_plugin_manager.manager.register(plugin, name=name)
+            names.append(name)
+
+    try:
+        yield register
+    finally:
+        for name in names:
+            init_plugin_manager.manager.unregister(name=name)
+
+
+def test_load_content_skips_plugins_whose_constructor_raises(
+    qtbot: QtBot,
+    vpy_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+    register_tools: Callable[..., None],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    register_tools(docks=[_BrokenDock, _GoodDock], panels=[_BrokenPanel, _GoodPanel])
+    script_file = tmp_path / "plugins.vpy"
+    script_file.write_text(_make_valid_script_content(length=50), encoding="utf-8")
+    ws = ConcreteScriptWorkspace(vpy_env_factory)
+    qtbot.addWidget(ws)
+
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.playback.can_reload, timeout=5000)
+    qtbot.waitUntil(lambda: not ws.findChildren(QWidget, QRegularExpression("^broken_")), timeout=2000)
+
+    tabs = ws.plugin_splitter.plugin_tabs
+    assert fut.result() == 0
+    assert ws.stack.currentWidget() is ws.loaded_page
+    assert [type(p) for p in ws.plugins] == [_GoodDock, _GoodPanel]
+    assert [d.objectName() for d in ws.dock_container.findChildren(PluginDock)] == ["test_loader_good_dock"]
+    assert [type(tabs.widget(i)) for i in range(tabs.count())] == [_GoodPanel]
+    assert tabs.isTabVisible(0) is True
+
+
+class _PanelPluginFailingOnce:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    @hookimpl
+    def vsview_register_toolpanel(self) -> type[WidgetPluginBase[Any, Any]]:
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("panel registration failed")
+        return _GoodPanel
