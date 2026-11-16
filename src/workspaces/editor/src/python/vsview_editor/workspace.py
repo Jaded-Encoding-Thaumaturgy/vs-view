@@ -744,6 +744,7 @@ class EditorWorkspace(
             (SPath.cwd() / f"<vsview editor {uuid4().hex[:8].upper()}>").to_str(),
         )
         self.loaded_once = False
+        self._pending_reload_code: str | None = None
         self._initial_docks_resized = False
         self._saved_dock_sizes: tuple[int, int] | None = None
 
@@ -899,14 +900,19 @@ class EditorWorkspace(
             return super().loader()
 
     @override
+    def on_before_reload(self) -> None:
+        if (code := self._pending_reload_code) is not None:
+            self._pending_reload_code = None
+            self._replace_content(code)
+
+    @override
     def reload_content(self, code: str | None = None) -> UnifiedFuture[int]:
         self._save_current_dock_sizes()
-        linecache.cache.pop(self.content.filename, None)
-        output_metadata.pop(self.content.filename, None)
-        self.content = ContentPath(fallback(code, self.code_dock.editor.bridge.content), self.content.filename)
+        code = fallback(code, self.code_dock.editor.bridge.main_content)
 
         if not self.loaded_once:
             self.loaded_once = True
+            self._replace_content(code)
             return self.load_content(
                 self.content,
                 self.playback.state.current_frame,
@@ -914,6 +920,7 @@ class EditorWorkspace(
                 self.outputs_manager.current_video_index,
             )
 
+        self._pending_reload_code = code
         return super().reload_content()
 
     @run_in_loop(return_future=False)
@@ -964,6 +971,11 @@ class EditorWorkspace(
                 self._saved_dock_sizes,
                 Qt.Orientation.Horizontal,
             )
+
+    def _replace_content(self, code: str) -> None:
+        linecache.cache.pop(self.content.filename, None)
+        output_metadata.pop(self.content.filename, None)
+        self.content = ContentPath(code, self.content.filename)
 
     @Slot(object)
     def _on_main_file_changed(self, new_path: Path | None) -> None:
