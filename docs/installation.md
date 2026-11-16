@@ -55,12 +55,12 @@ Release executables are provided in two variants:
 
 === "Windows"
 
-    - Download `VSView.exe` (or `VSView-offline.exe`) from [GitHub Releases](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/releases)
+    - Download `VSView-<version>-windows-x86_64.exe` (or `VSView-<version>-windows-x86_64-offline.exe`) from [GitHub Releases](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/releases)
     and launch the executable directly.
 
 === "Linux"
 
-    1. Download and extract the Linux release archive (`vsview-pyapp-linux-x86_64.tar.gz` or offline variant)
+    1. Download and extract the Linux release archive (`VSView-<version>-linux-x86_64.tar.gz` or `VSView-<version>-linux-x86_64-offline.tar.gz`)
     from [GitHub Releases](https://github.com/Jaded-Encoding-Thaumaturgy/vs-view/releases).
     2. Run the included installation script from the extracted folder:
 
