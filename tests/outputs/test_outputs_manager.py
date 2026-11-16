@@ -457,3 +457,48 @@ def test_audio_output_render_frame_before_sink(sample_audio_node: vs.AudioNode) 
         output.render_raw_audio_frame(frame)
     finally:
         output.clear()
+
+
+@pytest.mark.parametrize(
+    ("start_s", "stop_s", "expected"),
+    [(0.5, 2.0, True), (1.0, 2.0, False), (1.5, 2.0, False)],
+    ids=["inside", "at_the_end", "past_the_end"],
+)
+def test_audio_output_playback_window_starting_at_or_past_the_audio_end_has_no_audio(
+    plugin_controller: HarnessPluginController,
+    manager: OutputsManager,
+    start_s: float,
+    stop_s: float,
+    expected: bool,
+) -> None:
+    one_second = core.std.BlankAudio(length=48000, samplerate=48000)
+    [aout] = manager.create_aoutputs("short_audio", {0: one_second}, {}, plugin_controller.api)
+
+    assert aout.prepare_playback_audio(start_s, stop_s) is expected
+
+
+def test_audio_output_playback_window_inside_the_audio_is_trimmed_to_the_audio_end(
+    plugin_controller: HarnessPluginController,
+    manager: OutputsManager,
+) -> None:
+    one_second = core.std.BlankAudio(length=48000, samplerate=48000)
+    [aout] = manager.create_aoutputs("short_audio", {0: one_second}, {}, plugin_controller.api)
+
+    aout.prepare_playback_audio(0.5, 2.0)
+
+    assert aout.playback_audio.num_samples == 24000
+
+
+@pytest.mark.parametrize("delay_s", [-0.5, -1.0, -1.5], ids=["shorter", "equal", "longer"])
+def test_negative_audio_delay_keeps_the_track_length(
+    plugin_controller: HarnessPluginController,
+    manager: OutputsManager,
+    delay_s: float,
+) -> None:
+    one_second = core.std.BlankAudio(length=48000, samplerate=48000)
+    [aout] = manager.create_aoutputs("short_audio", {0: one_second}, {}, plugin_controller.api)
+
+    aout.prepare_audio(delay_s, plugin_controller.api)
+
+    assert aout.prepared_audio.num_samples == 48000
+    assert aout.prepared_audio.sample_rate == 48000

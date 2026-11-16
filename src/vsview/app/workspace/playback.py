@@ -666,10 +666,14 @@ class PlaybackManager(QObject):
             return
 
         with self._env.use():
-            aoutput.prepare_playback_audio(
+            has_audio = aoutput.prepare_playback_audio(
                 voutput.frame_to_time(play_range.start).total_seconds(),
                 voutput.frame_to_time(play_range.stop).total_seconds(),
             )
+
+        if not has_audio:
+            logger.info("Playback starts past the end of the audio, no audio will be played")
+            return
 
         audio_buffer = AudioBuffer(aoutput, self._env)
         audio_buffer.allocate(play_range=range(aoutput.playback_audio.num_frames), loop=loop)

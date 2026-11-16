@@ -16,6 +16,7 @@ from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
+from tests.conftest import FakeAudioSink
 from tests.harness import HarnessPluginController
 from vsview.app.outputs import AudioBuffer, FrameBuffer
 from vsview.app.outputs.audio import AudioOutput
@@ -698,3 +699,39 @@ def test_audio_delay_change_applies_to_every_output_when_one_fails(
 
     tbar.playback_container.audioDelayChanged.emit(0.25)
     assert prepared == [("Healthy audio", 0.25)]
+
+
+@pytest.mark.vpy("no-core")
+def test_playback_starts_without_audio_past_the_end_of_a_shorter_audio_track(
+    playback_manager_setup: PlaybackManagerSetup,
+    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    init_plugin_manager: PluginManager,
+    fake_audio_sinks: list[FakeAudioSink],
+    qtbot: QtBot,
+) -> None:
+    manager, env, plugin_controller, mock_outputs, _, tbar = playback_manager_setup
+    voutput = create_test_video_output(env, 100)
+    with env.use():
+        aoutput = AudioOutput(env.core.std.BlankAudio(length=48000, samplerate=48000), 0)
+        aoutput.prepare_audio(0.0, plugin_controller.api)
+    mock_outputs.current_voutput = voutput
+    mock_outputs.current_aoutput = aoutput
+    mock_outputs.aoutputs = [aoutput]
+    # Frame 50 is at 2.08 s, the audio ends at 1 s.
+    manager.state.current_frame = 50
+
+    try:
+        with qtbot.waitSignal(
+            manager.statusLoadingStarted, check_params_cb=lambda message: message == "Playing...", timeout=5000
+        ):
+            manager.toggle_playback()
+
+        assert manager.state.is_playing is True
+        assert tbar.playback_container.play_pause_btn.isChecked() is True
+        assert manager.state.audio_buffer is None
+    finally:
+        manager.stop()
+        qtbot.waitUntil(lambda: manager.can_reload, timeout=5000)
+        manager.state.wait_for_cleanup()
+        voutput.clear()
+        aoutput.clear()

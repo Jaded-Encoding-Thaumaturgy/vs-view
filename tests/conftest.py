@@ -529,6 +529,61 @@ def create_test_audio_output() -> Callable[[ManagedEnvironment, int], AudioOutpu
     return create
 
 
+class FakeAudioSink:
+    """Stands in for `AudioSink` so no audio device is opened. Records each call with the calling thread."""
+
+    def __init__(self, fmt: Any) -> None:
+        self.ready = False
+        self.calls = list[tuple[str, str]]()
+        self.written = list[bytes]()
+
+    def _record(self, name: str) -> None:
+        self.calls.append((name, threading.current_thread().name))
+
+    def setup(self, buffer_size: int, volume: float) -> None:
+        self.ready = True
+        self._record("setup")
+
+    def setVolume(self, volume: float) -> None:
+        return None
+
+    def bytesFree(self) -> int:
+        return 1 << 30
+
+    @property
+    def io(self) -> FakeAudioSink:
+        if not self.ready:
+            raise RuntimeError("Device not ready")
+        return self
+
+    def write(self, data: bytes) -> None:
+        self.written.append(data)
+
+    def stop(self) -> None:
+        self.ready = False
+        self._record("stop")
+
+    def reset(self) -> None:
+        self.ready = False
+        self._record("reset")
+
+    def deleteLater(self) -> None:
+        self._record("deleteLater")
+
+
+@pytest.fixture
+def fake_audio_sinks(monkeypatch: pytest.MonkeyPatch) -> list[FakeAudioSink]:
+    """Replace the audio device with `FakeAudioSink`. Returns every sink created, in order."""
+    created = list[FakeAudioSink]()
+
+    def create(fmt: Any) -> FakeAudioSink:
+        created.append(sink := FakeAudioSink(fmt))
+        return sink
+
+    monkeypatch.setattr("vsview.app.outputs.audio.AudioSink", create)
+    return created
+
+
 @pytest.fixture
 def fixture_video_file() -> Path:
     """Path to the real video fixture tests/fixtures/鬼滅のRICKROLL.mp4."""

@@ -143,7 +143,8 @@ class AudioOutput:
                 if delay_samples > 0:
                     audio = (silence + audio)[: audio.num_samples]
                 elif delay_samples < 0:
-                    audio = (audio[abs_delay:] + silence)[: audio.num_samples]
+                    shifted = audio[abs_delay:] + silence if abs_delay < audio.num_samples else silence
+                    audio = shifted[: audio.num_samples]
 
             self._cache_delay_audio[delay_s] = audio
 
@@ -167,15 +168,25 @@ class AudioOutput:
         self.qformat.setSampleRate(audio.sample_rate)
         self.qformat.setSampleFormat(sample_format)
 
-    def prepare_playback_audio(self, start_seconds: float, stop_seconds: float) -> None:
+    def prepare_playback_audio(self, start_seconds: float, stop_seconds: float) -> bool:
+        """
+        Prepare the audio node for one playback run.
+
+        Returns False when the run starts at or past the end of the audio, so there is nothing to play.
+        """
         duration_samples = ceil((stop_seconds - start_seconds) * self.prepared_audio.sample_rate)
 
         # Truncate for start to avoid cutting into the first sample
         start = max(0, int(start_seconds * self.prepared_audio.sample_rate))
+
+        if start >= self.prepared_audio.num_samples:
+            return False
+
         end = min(self.prepared_audio.num_samples, start + duration_samples)
 
         self.playback_audio = self.prepared_audio[start:end]
         self.playback_audio.std.SetAudioCache(0)
+        return True
 
     def clear(self) -> None:
         """Clear VapourSynth resources."""
