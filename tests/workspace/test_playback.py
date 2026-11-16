@@ -337,6 +337,7 @@ def test_playback_manager_volume_and_mute(
 
     # Mute changed to True: stops audio sink and invalidates audio buffer
     mock_outputs.current_aoutput = mock_aoutput
+    mock_outputs.aoutputs = [mock_aoutput]
     aoutput = create_test_audio_output(env, 10000)
     real_audio_buffer = AudioBuffer(aoutput, env)
     spy_invalidate = mocker.spy(AudioBuffer, "invalidate")
@@ -363,6 +364,7 @@ def test_playback_manager_volume_and_mute(
     restart_mock.assert_not_called()
 
     mock_outputs.current_aoutput = aoutput
+    mock_outputs.aoutputs = [aoutput]
     assert aoutput.sink is None
     manager.state.audio_timer.start(100)
     tbar.playback_container.muteChanged.emit(True)
@@ -735,3 +737,31 @@ def test_playback_starts_without_audio_past_the_end_of_a_shorter_audio_track(
         manager.state.wait_for_cleanup()
         voutput.clear()
         aoutput.clear()
+
+
+@pytest.mark.vpy("no-core")
+def test_stopping_playback_resets_the_sink_of_every_audio_track(
+    playback_manager_setup: PlaybackManagerSetup,
+    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+) -> None:
+    manager, env, _, mock_outputs, _, _ = playback_manager_setup
+    aoutputs = [create_test_audio_output(env, 10000) for _ in range(2)]
+    sinks = [FakeAudioSink(None) for _ in aoutputs]
+    for aoutput, sink in zip(aoutputs, sinks, strict=True):
+        sink.setup(0, 1.0)
+        aoutput.sink = sink  # pyright: ignore[reportAttributeAccessIssue]
+    mock_outputs.aoutputs = aoutputs
+    # After a track switch during playback, the current output is already the new track,
+    # while the sink of the previous track is still started.
+    mock_outputs.current_aoutput = aoutputs[1]
+    manager.state.is_playing = True
+
+    try:
+        manager.stop()
+
+        assert [sink.ready for sink in sinks] == [False, False]
+        assert [sink.calls for sink in sinks] == [[("setup", "MainThread"), ("reset", "MainThread")]] * 2
+    finally:
+        for aoutput in aoutputs:
+            aoutput.sink = None
+            aoutput.clear()
