@@ -725,6 +725,7 @@ export class EditorService implements vscode.Disposable {
     const oldModel = tab.model;
     const oldOwnsModel = tab.ownsModel;
 
+    tab.savedVersionId = tab.isDirty ? -1 : newModel.getAlternativeVersionId();
     tab.uri = newUri;
     tab.uriString = newUriString;
     tab.title = newTitle;

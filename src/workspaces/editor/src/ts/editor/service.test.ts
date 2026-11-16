@@ -790,6 +790,35 @@ describe('EditorService', () => {
       expect(invalidRename.ok).toBe(false);
     });
 
+    it('renameTab() on a clean tab keeps it clean and marks the next edit dirty', () => {
+      const oldUri = 'file:///workspace/clean_old.py';
+      const newUri = 'file:///workspace/clean_new.py';
+      service.openTab(oldUri, 'v1', 'python', false).unwrap();
+      service.setValue('v2');
+      service.markTabSaved(oldUri);
+
+      service.renameTab(oldUri, newUri).unwrap();
+      expect(service.getSessionState().find((t) => t.uri === newUri)?.isDirty).toBe(false);
+
+      service.setValue('v3');
+      expect(service.getSessionState().find((t) => t.uri === newUri)?.isDirty).toBe(true);
+    });
+
+    it('renameTab() on a dirty tab keeps it dirty after more edits', () => {
+      const oldUri = 'file:///workspace/dirty_old.py';
+      const newUri = 'file:///workspace/dirty_new.py';
+      service.openTab(oldUri, 'v1', 'python', false).unwrap();
+      service.setValue('v2');
+      service.markTabSaved(oldUri);
+      service.setValue('v3');
+
+      service.renameTab(oldUri, newUri).unwrap();
+      expect(service.getSessionState().find((t) => t.uri === newUri)?.isDirty).toBe(true);
+
+      service.setValue('v4');
+      expect(service.getSessionState().find((t) => t.uri === newUri)?.isDirty).toBe(true);
+    });
+
     it('markTabSaved() clears dirty flag on tab and handles URI updates', () => {
       service.openTab('file:///workspace/save_test.py', 'original', 'python', false);
       service.setValue('modified text');
