@@ -5,6 +5,7 @@ import hashlib
 import math
 import random
 import re
+import sys
 import threading
 import time
 from bisect import bisect_left
@@ -19,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Protocol
 
 import niquests
 import niquests.cookies
+import PySide6
 from jetpytools import cachedproperty, clamp, ndigits
 from pathvalidate import sanitize_filepath
 from PySide6.QtCore import QObject, QThreadPool
@@ -56,6 +58,11 @@ if TYPE_CHECKING:
 REV_CONF = niquests.RevocationConfiguration(niquests.RevocationStrategy.PREFER_CRL)
 
 logger = getLogger(__name__)
+
+if sys.version_info >= (3, 15) and PySide6.__version_info__[:3] <= (6, 12, 0):
+    import concurrent.futures.thread
+
+    setattr(concurrent.futures, "ThreadPoolExecutor", concurrent.futures.thread.ThreadPoolExecutor)
 
 
 class ProgressCallback(Protocol):

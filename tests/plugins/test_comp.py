@@ -80,16 +80,6 @@ class FakeResponse:
         return self._body
 
 
-@pytest.fixture(autouse=True)
-def inline_to_thread(monkeypatch: pytest.MonkeyPatch) -> None:
-    # With PySide6 imported on CPython 3.15, concurrent.futures.ThreadPoolExecutor stays an unresolved lazy import,
-    # so the default asyncio executor cannot be created.
-    async def run_inline[**P, R](func: Callable[P, R], /, *args: P.args, **kwargs: P.kwargs) -> R:
-        return func(*args, **kwargs)
-
-    monkeypatch.setattr(asyncio, "to_thread", run_inline)
-
-
 @pytest.fixture
 def comp_plugin(qt_event_loop: QtEventLoop, plugin_controller: HarnessPluginController) -> CompPlugin:
     return plugin_controller.create_plugin(CompPlugin)
