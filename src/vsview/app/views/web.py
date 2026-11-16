@@ -165,8 +165,13 @@ class BaseWebChannelBridge[PyCmdT: StrEnum, JsCmdT: StrEnum](QObject):
         return self._is_ready
 
     def dispatch(self, command: PyCmdT, payload: Mapping[str, Any] | None = None) -> None:
-        """Dispatch a command payload to the JavaScript frontend."""
-        self.dispatchCommandSignal.emit(command, json.dumps(payload) if payload is not None else "")
+        """
+        Dispatch a command payload to the JavaScript frontend.
+
+        Raises:
+            ValueError: The payload holds a NaN or infinite number, which `JSON.parse` would reject.
+        """
+        self.dispatchCommandSignal.emit(command, json.dumps(payload, allow_nan=False) if payload is not None else "")
 
     def on_command_received(self, command: JsCmdT, payload: dict[str, Any]) -> None:
         """Hook for subclasses to update internal bridge state prior to emitting commandReceived."""
