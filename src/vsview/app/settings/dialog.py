@@ -4,7 +4,7 @@ from functools import partial
 from itertools import combinations
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Self, override
+from typing import Any, Literal, Self, override
 
 from jetpytools import cachedproperty, classproperty
 from PySide6.QtCore import QAbstractAnimation, QCoreApplication, QEvent, QObject, QPoint, Qt, Slot
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QKeySequenceEdit,
     QLabel,
+    QMessageBox,
     QScrollArea,
     QSpinBox,
     QSplitter,
@@ -574,12 +575,13 @@ class SettingsDialog(QDialog, IconReloadMixin):
                     else entry.metadata.get_value(widget)
                 )
                 GlobalSettings.set_nested_value(data, entry.key, value)
-            except Exception:
+            except Exception as e:
                 logger.error("Failed to get value for %s", entry.key)
-                raise
+                raise ValueError(f"{entry.name}: {e}") from e
 
         # Add shortcuts (not in registry) and build settings dynamically
         data["shortcuts"] = list(shortcuts.values())
+        _validate_plugin_entries(data["plugins"], "global")
 
         return GlobalSettings.model_validate(data)
 
@@ -602,9 +604,11 @@ class SettingsDialog(QDialog, IconReloadMixin):
                     else entry.metadata.get_value(widget)
                 )
                 LocalSettings.set_nested_value(data, entry.key, value)
-            except Exception:
+            except Exception as e:
                 logger.error("Failed to get value for %s", entry.key)
-                raise
+                raise ValueError(f"{entry.name}: {e}") from e
+
+        _validate_plugin_entries(data["plugins"], "local")
 
         return LocalSettings.model_validate(data)
 
@@ -621,34 +625,56 @@ class SettingsDialog(QDialog, IconReloadMixin):
             if self._script_path:
                 self._get_local_settings_from_ui()
         except Exception as e:
-            logger.error("Failed to read the settings with the error: %s", e)
-            logger.debug("Full traceback:", exc_info=e)
-            return False
+            logger.exception("Failed to read the settings")
+            return self._apply_failed(e)
 
         try:
-            SettingsManager.save_global(self._get_global_settings_from_ui)
+            saved = SettingsManager.save_global(self._get_global_settings_from_ui)
         except Exception as e:
-            logger.error("Failed to save global settings with the error: %s", e)
-            logger.debug("Full traceback:", exc_info=e)
-            return False
+            logger.exception("Failed to build the global settings")
+            return self._apply_failed(e)
+
+        if not saved:
+            return self._show_apply_error(
+                f"The global settings could not be written to:\n{GlobalSettings.path_env}\n\nSee the log for details."
+            )
 
         if self._script_path:
             try:
                 # Built again from a callable, so changes made by aboutToSaveLocal slots are kept
-                SettingsManager.save_local(self._script_path, self._get_local_settings_from_ui)
+                saved = SettingsManager.save_local(self._script_path, self._get_local_settings_from_ui)
             except Exception as e:
-                logger.error("Failed to save local settings with the error: %s", e)
-                logger.debug("Full traceback:", exc_info=e)
-                return False
+                logger.exception("Failed to build the local settings")
+                return self._apply_failed(e)
 
-        return self._store_secrets()
+            if not saved:
+                return self._show_apply_error(
+                    "The local settings could not be written to:\n"
+                    f"{SettingsManager.local_settings_path(self._script_path)}\n\nSee the log for details."
+                )
 
-    def _store_secrets(self) -> bool:
+        if failed_secrets := self._store_secrets():
+            return self._show_apply_error(
+                "These secrets could not be stored in the system keyring:\n"
+                + "\n".join(failed_secrets)
+                + "\n\nThe other settings were saved. See the log for details."
+            )
+
+        return True
+
+    def _apply_failed(self, error: Exception) -> bool:
+        return self._show_apply_error(f"The settings could not be applied:\n\n{error}")
+
+    def _show_apply_error(self, message: str) -> bool:
+        QMessageBox.warning(self, "Settings", message)
+        return False
+
+    def _store_secrets(self) -> list[str]:
         scopes = [(self.global_settings_registry, self._global_widgets)]
         if self._script_path:
             scopes.append((self.local_settings_registry, self._local_widgets))
 
-        stored = True
+        failed = list[str]()
 
         for registry, widgets in scopes:
             for entry in registry:
@@ -658,9 +684,9 @@ class SettingsDialog(QDialog, IconReloadMixin):
                     entry.metadata.store_secret(widget)
                 except Exception:
                     logger.exception("Failed to store the secret of %s", entry.key)
-                    stored = False
+                    failed.append(entry.name)
 
-        return stored
+        return failed
 
     def _on_shortcut_user_edited(self, aid: str) -> None:
         if not self._updating_shortcuts_ui:
@@ -745,3 +771,12 @@ class SettingsDialog(QDialog, IconReloadMixin):
             self._shortcut_widgets.editors[aid].setKeySequence(translated)
         finally:
             self._updating_shortcuts_ui = False
+
+
+def _validate_plugin_entries(plugins: dict[str, Any], scope: Literal["global", "local"]) -> None:
+    from ..plugins.manager import PluginManager
+
+    for plugin in PluginManager.all_plugins:
+        if (model := getattr(plugin, f"{scope}_settings_model", None)) is None or plugin.identifier not in plugins:
+            continue
+        plugins[plugin.identifier] = model.model_validate(plugins[plugin.identifier])

@@ -125,7 +125,7 @@ class SettingsManager(Singleton):
         self,
         settings: GlobalSettings | Callable[[], GlobalSettings] | None = None,
         path: os.PathLike[str] | None = None,
-    ) -> None:
+    ) -> bool:
         """
         Save global settings to disk.
 
@@ -133,6 +133,9 @@ class SettingsManager(Singleton):
             settings: The global settings to save, or a callable returning them.
                 A callable is called after `aboutToSaveGlobal`, so it sees the writes made by its slots.
             path: The file to write. Defaults to the global settings path.
+
+        Returns:
+            False when the file could not be written, True otherwise.
         """
         try:
             self._signals.aboutToSaveGlobal.emit()
@@ -153,19 +156,25 @@ class SettingsManager(Singleton):
             self._signals.globalChanged.emit()
         except Exception:
             logger.exception("Failed to save global settings")
+            return False
+
+        return True
 
     @inject_self
     def save_local(
         self,
         script_path: os.PathLike[str],
         settings: LocalSettings | Callable[[LocalSettings], LocalSettings] | Callable[[], LocalSettings] | None = None,
-    ) -> None:
+    ) -> bool:
         """
         Save local settings for a script to disk.
 
         Args:
             script_path: Path to the script file.
             settings: The local settings to save, or a callable returning them.
+
+        Returns:
+            False when the file could not be written, True otherwise.
         """
         from ..utils import path_to_hash
 
@@ -202,6 +211,9 @@ class SettingsManager(Singleton):
             self._signals.localChanged.emit(str(settings_path))
         except Exception:
             logger.exception("Failed to save local settings for %s", script_path)
+            return False
+
+        return True
 
     @staticmethod
     def local_settings_path(script_path: os.PathLike[str]) -> Path:

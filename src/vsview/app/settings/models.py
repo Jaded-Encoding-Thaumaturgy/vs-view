@@ -73,6 +73,10 @@ class SettingEntry(NamedTuple, Generic[QWidgetT]):
     metadata: WidgetMetadata[QWidgetT]
     """Widget metadata for this setting."""
 
+    @property
+    def name(self) -> str:
+        return f"{self.section} > {self.metadata.label}"
+
 
 def extract_settings(
     model: type[BaseModel],

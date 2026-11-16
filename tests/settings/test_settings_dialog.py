@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+import os
+from collections.abc import Callable, Generator, Sequence
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from keyring.backends.fail import Keyring as FailKeyring
+from pydantic import BaseModel
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QComboBox, QDialogButtonBox, QLineEdit, QWidget
+from PySide6.QtWidgets import QComboBox, QDialogButtonBox, QLineEdit, QMessageBox, QWidget
+from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
+from vsview.app.plugins import specs
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import SettingsDialog
 from vsview.app.settings.manager import SettingsManager
@@ -40,6 +46,12 @@ def script(tmp_path: Path) -> Path:
     path = tmp_path / "script.vpy"
     path.touch()
     return path
+
+
+@pytest.fixture(autouse=True)
+def warnings_shown(mocker: MockerFixture) -> MagicMock:
+    """Record the warning message boxes, which would otherwise block the test in a modal loop."""
+    return mocker.patch.object(QMessageBox, "warning", return_value=QMessageBox.StandardButton.Ok)
 
 
 def _entry(field: str, metadata: Any) -> SettingEntry:
@@ -211,3 +223,188 @@ def test_apply_keeps_global_writes_made_in_about_to_save_global(
     saved = json.loads(GlobalSettings.path_env.read_text(encoding="utf-8"))
     assert saved["plugins"]["flushing_plugin"] == {"state": "flushed"}
     assert saved["plugins"][PLUGIN_ID] == {"option": "changed"}
+
+
+def _open_shown_dialog(qtbot: QtBot, script_path: Path | None = None) -> SettingsDialog:
+    dialog = _open_dialog(qtbot, script_path)
+    # The dialog deletes itself on close, which would leave qtbot nothing to tear down.
+    dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    return dialog
+
+
+def _click_ok(dialog: SettingsDialog) -> None:
+    button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
+    assert button is not None
+    button.click()
+
+
+def _shown_texts(warnings_shown: MagicMock) -> list[str]:
+    return [call.args[2] for call in warnings_shown.call_args_list]
+
+
+def _fail_replace_for(mocker: MockerFixture, target: Path) -> None:
+    real_replace = os.replace
+
+    def replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+        if Path(dst).resolve() == target.resolve():
+            raise OSError("disk full")
+        real_replace(src, dst)
+
+    mocker.patch.object(os, "replace", side_effect=replace)
+
+
+def test_ok_keeps_the_dialog_open_and_shows_a_message_when_the_global_save_fails(
+    qtbot: QtBot, register_entries: RegisterEntries, mocker: MockerFixture, warnings_shown: MagicMock
+) -> None:
+    register_entries([GLOBAL_OPTION], [])
+    SettingsManager.global_settings.plugins[PLUGIN_ID] = {"option": "original"}
+    dialog = _open_shown_dialog(qtbot)
+    _find_by_tooltip(dialog, QLineEdit, "global-option").setText("changed")
+    _fail_replace_for(mocker, GlobalSettings.path_env)
+
+    _click_ok(dialog)
+
+    assert dialog.isVisible() is True
+    assert _shown_texts(warnings_shown) == [
+        f"The global settings could not be written to:\n{GlobalSettings.path_env}\n\nSee the log for details."
+    ]
+
+
+def test_ok_keeps_the_dialog_open_and_shows_a_message_when_the_local_save_fails(
+    qtbot: QtBot, register_entries: RegisterEntries, script: Path, mocker: MockerFixture, warnings_shown: MagicMock
+) -> None:
+    register_entries([], [LOCAL_COUNT])
+    SettingsManager.get_local_settings(script).plugins[PLUGIN_ID] = {"count": 1}
+    dialog = _open_shown_dialog(qtbot, script)
+    _find_by_tooltip(dialog, QLineEdit, "local-count").setText("7")
+    local_path = SettingsManager.local_settings_path(script)
+    _fail_replace_for(mocker, local_path)
+
+    _click_ok(dialog)
+
+    assert dialog.isVisible() is True
+    assert _shown_texts(warnings_shown) == [
+        f"The local settings could not be written to:\n{local_path}\n\nSee the log for details."
+    ]
+
+
+def test_ok_keeps_the_dialog_open_and_shows_a_message_when_a_value_cannot_be_read(
+    qtbot: QtBot, register_entries: RegisterEntries, script: Path, warnings_shown: MagicMock
+) -> None:
+    register_entries([], [LOCAL_COUNT])
+    SettingsManager.get_local_settings(script).plugins[PLUGIN_ID] = {"count": 1}
+    dialog = _open_shown_dialog(qtbot, script)
+    _find_by_tooltip(dialog, QLineEdit, "local-count").setText("not a number")
+
+    _click_ok(dialog)
+
+    assert dialog.isVisible() is True
+    assert _shown_texts(warnings_shown) == [
+        (
+            "The settings could not be applied:\n\n"
+            f"{PLUGIN_SECTION} > Count: invalid literal for int() with base 10: 'not a number'"
+        )
+    ]
+    assert SettingsManager.get_local_settings(script).plugins[PLUGIN_ID] == {"count": 1}
+
+
+class TypedPluginSettings(BaseModel):
+    option: int = 0
+
+
+class TypedPlugin:
+    identifier = PLUGIN_ID
+    display_name = "Test Plugin"
+    global_settings_model = TypedPluginSettings
+    local_settings_model = None
+
+    @specs.hookimpl
+    def vsview_register_tooldock(self) -> type[TypedPlugin]:
+        return TypedPlugin
+
+
+@pytest.fixture
+def typed_plugin(init_plugin_manager: PluginManager) -> Generator[None]:
+    plugin = TypedPlugin()
+    init_plugin_manager.manager.register(plugin, name="typed_plugin")
+    try:
+        yield
+    finally:
+        init_plugin_manager.manager.unregister(plugin)
+
+
+@pytest.mark.usefixtures("typed_plugin")
+def test_apply_rejects_a_plugin_value_that_does_not_match_the_plugin_model(
+    qtbot: QtBot,
+    register_entries: RegisterEntries,
+    warnings_shown: MagicMock,
+) -> None:
+    register_entries([GLOBAL_OPTION], [])
+    SettingsManager.global_settings.plugins[PLUGIN_ID] = TypedPluginSettings(option=3)
+    dialog = _open_shown_dialog(qtbot)
+    _find_by_tooltip(dialog, QLineEdit, "global-option").setText("abc")
+
+    _click_ok(dialog)
+
+    assert dialog.isVisible() is True
+    assert SettingsManager.global_settings.plugins[PLUGIN_ID] == TypedPluginSettings(option=3)
+    [text] = _shown_texts(warnings_shown)
+    assert text.startswith("The settings could not be applied:\n\n1 validation error for TypedPluginSettings\noption\n")
+
+
+@pytest.mark.usefixtures("typed_plugin")
+def test_apply_stores_plugin_values_validated_by_the_plugin_model(
+    qtbot: QtBot,
+    register_entries: RegisterEntries,
+    warnings_shown: MagicMock,
+) -> None:
+    register_entries([GLOBAL_OPTION], [])
+    SettingsManager.global_settings.plugins[PLUGIN_ID] = TypedPluginSettings(option=3)
+    dialog = _open_shown_dialog(qtbot)
+    _find_by_tooltip(dialog, QLineEdit, "global-option").setText("12")
+
+    _click_ok(dialog)
+
+    assert dialog.isVisible() is False
+    assert SettingsManager.global_settings.plugins[PLUGIN_ID] == TypedPluginSettings(option=12)
+    assert warnings_shown.call_count == 0
+
+
+def test_ok_keeps_the_dialog_open_and_shows_a_message_when_a_secret_cannot_be_stored(
+    qtbot: QtBot, register_entries: RegisterEntries, monkeypatch: pytest.MonkeyPatch, warnings_shown: MagicMock
+) -> None:
+    register_entries([GLOBAL_SECRET, GLOBAL_OPTION], [])
+    SettingsManager.global_settings.plugins[PLUGIN_ID] = {"option": "original", "token": None}
+    dialog = _open_shown_dialog(qtbot)
+    _find_by_tooltip(dialog, QLineEdit, "global-option").setText("changed")
+    _find_by_tooltip(dialog, QLineEdit, "global-secret").setText("new_secret")
+    _use_backend(monkeypatch, FailKeyring())
+
+    _click_ok(dialog)
+
+    assert dialog.isVisible() is True
+    assert SettingsManager.global_settings.plugins[PLUGIN_ID] == {"option": "changed", "token": None}
+    assert _shown_texts(warnings_shown) == [
+        (
+            f"These secrets could not be stored in the system keyring:\n{PLUGIN_SECTION} > Token\n\n"
+            "The other settings were saved. See the log for details."
+        )
+    ]
+
+
+def test_ok_closes_the_dialog_without_a_message_when_everything_is_saved(
+    qtbot: QtBot, register_entries: RegisterEntries, script: Path, warnings_shown: MagicMock
+) -> None:
+    register_entries([GLOBAL_OPTION], [LOCAL_COUNT])
+    SettingsManager.global_settings.plugins[PLUGIN_ID] = {"option": "original"}
+    SettingsManager.get_local_settings(script).plugins[PLUGIN_ID] = {"count": 1}
+    dialog = _open_shown_dialog(qtbot, script)
+    _find_by_tooltip(dialog, QLineEdit, "global-option").setText("changed")
+    _find_by_tooltip(dialog, QLineEdit, "local-count").setText("7")
+
+    _click_ok(dialog)
+
+    assert dialog.isVisible() is False
+    assert warnings_shown.call_count == 0
