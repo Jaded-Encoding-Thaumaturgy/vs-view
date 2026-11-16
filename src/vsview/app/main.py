@@ -559,7 +559,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_open_settings_when_plugins_loaded(self) -> None:
-        if not self.plugin_manager.loaded:
+        if not self.plugin_manager.loaded and not self.plugin_manager.load_failed:
             logger.warning("Plugins are still loading...")
 
         self.plugin_manager.call_when_loaded(self._on_open_settings)

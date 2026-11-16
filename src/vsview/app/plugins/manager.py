@@ -148,6 +148,10 @@ class PluginManager(Singleton):
     def loaded(self) -> bool:
         return self._load_future is not None and self._load_future.done() and self._load_future.exception() is None
 
+    @inject_self.property
+    def load_failed(self) -> bool:
+        return self._load_future is not None and self._load_future.done() and self._load_future.exception() is not None
+
     @inject_self
     def load(self) -> None:
         if self._load_future:
