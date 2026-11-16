@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import errno
+import os
 import queue
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -10,6 +13,7 @@ from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
+from uuid import uuid4
 
 import vapoursynth as vs
 import vsengine.video
@@ -138,7 +142,6 @@ class ExportQueueManager:
 
         for i, (r, dest_file) in enumerate(zip(job.ranges, job.dest_files), 1):
             if job.cancel_event.is_set():
-                dest_file.unlink(missing_ok=True)
                 self.api.statusMessage.emit("Export cancelled.")
                 return
 
@@ -176,11 +179,9 @@ class ExportQueueManager:
                 self._export_clip(job, trimmed, dest_file, job.ffmpeg_args)
             except Cancelled:
                 self.api.statusMessage.emit(f"Export cancelled for {dest_file.name}.")
-                dest_file.unlink(missing_ok=True)
                 return
             except Exception as exc:
                 logger.exception("Export failed for %s", dest_file)
-                dest_file.unlink(missing_ok=True)
                 self.api.statusMessage.emit(f"Export failed for {dest_file.name}: {exc}")
                 return
 
@@ -194,8 +195,24 @@ class ExportQueueManager:
         self.api.statusMessage.emit(f"Successfully exported {total} clip(s).")
 
     def _export_clip(self, job: ExportJob, clip: vs.VideoNode, destination_file: Path, ffmpeg_args: list[str]) -> None:
+        if destination_file.exists() and not os.access(destination_file, os.W_OK):
+            raise PermissionError(errno.EACCES, "File is read-only", str(destination_file))
+
         destination_file.parent.mkdir(parents=True, exist_ok=True)
 
+        tmp_file = destination_file.with_name(f".vsview-export-{uuid4().hex[:8]}{destination_file.suffix}")
+
+        try:
+            self._run_ffmpeg(job, clip, tmp_file, ffmpeg_args)
+            if destination_file.exists():
+                shutil.copymode(destination_file, tmp_file)
+            os.replace(tmp_file, destination_file)
+        except BaseException:
+            with suppress(OSError):
+                tmp_file.unlink(missing_ok=True)
+            raise
+
+    def _run_ffmpeg(self, job: ExportJob, clip: vs.VideoNode, destination_file: Path, ffmpeg_args: list[str]) -> None:
         is_y4m = clip.format.color_family in (vs.ColorFamily.YUV, vs.ColorFamily.GRAY)
         total = clip.num_frames
 

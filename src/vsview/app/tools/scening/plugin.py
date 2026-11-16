@@ -951,7 +951,24 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
                 s, e = r.as_frames(voutput)
                 dest_files.append(base.with_name(file_name(f"{base.stem}_{s}-{e}_{r.label or i}", base.suffix)))
 
+            if (existing := [f for f in dest_files if f.exists()]) and not self._confirm_overwrite(existing):
+                return
+
         self.export_manager.enqueue(selected_ranges, voutput, dest_files, ffmpeg_args, fmt)
+
+    def _confirm_overwrite(self, files: list[Path]) -> bool:
+        names = "\n".join(f.name for f in files[:10])
+        if len(files) > 10:
+            names += f"\n... and {len(files) - 10} more"
+
+        answer = QMessageBox.question(
+            self,
+            "Overwrite Files?",
+            f"{len(files)} file(s) already exist:\n\n{names}\n\nDo you want to replace them?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
 
     def _get_visible_range_boundaries(self, starts_only: bool = False) -> list[int]:
         v = self.api.current_voutput

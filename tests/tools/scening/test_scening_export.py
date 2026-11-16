@@ -239,7 +239,7 @@ def test_export_queue_manager_cancel_all(
     manager.shutdown(timeout=1.0)
 
 
-def test_export_job_cleanup_on_cancel(
+def test_export_job_cancel_keeps_existing_files(
     tmp_path: Path,
     qtbot: QtBot,
     mocker: MockerFixture,
@@ -248,14 +248,17 @@ def test_export_job_cleanup_on_cancel(
     sample_voutput_proxy: VideoOutputProxy,
 ) -> None:
     # Arrange
-    dummy_file = tmp_path / "cancelled_output.mp4"
-    dummy_file.write_bytes(b"dummy corrupted data")
+    first = tmp_path / "clip_1.mp4"
+    first.write_bytes(b"old clip 1")
+    second = tmp_path / "clip_2.mp4"
+    second.write_bytes(b"old clip 2")
 
     status_messages = list[str]()
     export_harness.statusMessage.connect(status_messages.append)
 
-    # Patch Popen so that when export starts, we simulate cancellation
-    def mock_popen(*args: Any, **kwargs: Any) -> Any:
+    # Popen creates its output like ffmpeg, then the user cancels while the first clip is written
+    def mock_popen(cmd: Any, **kwargs: Any) -> Any:
+        Path(cmd[-1]).write_bytes(b"partial")
         manager.cancel_current()
         proc = mocker.MagicMock()
         proc.__enter__.return_value = proc
@@ -269,19 +272,56 @@ def test_export_job_cleanup_on_cancel(
 
     # Act
     manager.enqueue(
-        ranges=[RangeFrame(start=0, end=5)],
+        ranges=[RangeFrame(start=0, end=5), RangeFrame(start=6, end=10)],
         voutput=sample_voutput_proxy,
-        dest_files=[dummy_file],
+        dest_files=[first, second],
         ffmpeg_args=[],
         fmt="h264",
     )
 
-    qtbot.waitUntil(lambda: not dummy_file.exists(), timeout=3000)
+    qtbot.waitUntil(lambda: any("Export cancelled" in msg for msg in status_messages), timeout=3000)
+    qtbot.waitUntil(lambda: export_harness.busy is False, timeout=3000)
+    manager.shutdown(timeout=1.0)
 
     # Assert
-    assert not dummy_file.exists()
-    assert any("Export cancelled" in msg for msg in status_messages)
+    assert first.read_bytes() == b"old clip 1"
+    assert second.read_bytes() == b"old clip 2"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["clip_1.mp4", "clip_2.mp4"]
+
+
+def test_export_job_failure_keeps_an_existing_file(
+    tmp_path: Path,
+    qtbot: QtBot,
+    mocker: MockerFixture,
+    manager: ExportQueueManager,
+    export_harness: HarnessPluginController,
+    sample_voutput_proxy: VideoOutputProxy,
+) -> None:
+    existing = tmp_path / "clip.mp4"
+    existing.write_bytes(b"old clip")
+
+    def mock_popen(cmd: Any, **kwargs: Any) -> Any:
+        Path(cmd[-1]).write_bytes(b"partial")
+        proc = mocker.MagicMock()
+        proc.__enter__.return_value = proc
+        proc.stdin = mocker.MagicMock()
+        proc.stdin.closed = False
+        proc.returncode = 1
+        proc.wait.return_value = 1
+        return proc
+
+    mocker.patch("subprocess.Popen", side_effect=mock_popen)
+    status_messages = list[str]()
+    export_harness.statusMessage.connect(status_messages.append)
+
+    manager.enqueue([RangeFrame(start=0, end=5)], sample_voutput_proxy, [existing], [], "h264")
+
+    qtbot.waitUntil(lambda: any("Export failed for clip.mp4" in msg for msg in status_messages), timeout=3000)
+    qtbot.waitUntil(lambda: export_harness.busy is False, timeout=3000)
     manager.shutdown(timeout=1.0)
+
+    assert existing.read_bytes() == b"old clip"
+    assert [p.name for p in tmp_path.iterdir()] == ["clip.mp4"]
 
 
 def test_export_clip_pipes_frame_chunks_to_stdin(
@@ -305,7 +345,11 @@ def test_export_clip_pipes_frame_chunks_to_stdin(
     mock_proc.returncode = 0
     mock_proc.wait.return_value = 0
 
-    mocker.patch("subprocess.Popen", return_value=mock_proc)
+    def fake_popen(cmd: Any, **kwargs: Any) -> Any:
+        Path(cmd[-1]).write_bytes(b"new clip")
+        return mock_proc
+
+    mocker.patch("subprocess.Popen", side_effect=fake_popen)
 
     status_messages = list[str]()
     export_harness.statusMessage.connect(status_messages.append)
@@ -374,9 +418,8 @@ def test_export_clip_ffmpeg_error(
         "Export failed for out.mp4: FFmpeg returned exit code 1: Error initializing encoder: invalid parameter" in msg
         for msg in status_messages
     )
-    assert not out_file.exists()
-
     manager.shutdown(timeout=1.0)
+    assert list(tmp_path.iterdir()) == []
 
 
 # End-to-End Integration Tests (Real FFmpeg + In-Memory Video Node)
