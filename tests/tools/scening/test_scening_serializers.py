@@ -11,8 +11,8 @@ from PySide6.QtGui import QColor
 
 from vsview.app.tools.scening.api import Parser, Serializer
 from vsview.app.tools.scening.models import RangeFrame, RangeTime, UnifiedRange
-from vsview.app.tools.scening.parsers import PythonListTimestampsParser, QPFileParser
-from vsview.app.tools.scening.serializer import PythonListTimestampsSerializer, QPFileSerializer
+from vsview.app.tools.scening.parsers import OGMParser, PythonListTimestampsParser, QPFileParser
+from vsview.app.tools.scening.serializer import OGMSerializer, PythonListTimestampsSerializer, QPFileSerializer
 from vsview.types import Time
 
 pytestmark = [pytest.mark.unit]
@@ -80,3 +80,34 @@ class TestQPFileSerializer:
         scene = parse(QPFileParser(), serialize(QPFileSerializer(), ranges))
 
         assert [r.start for r in scene.ranges] == [0, 100, 200]
+
+
+class TestOGMSerializer:
+    @pytest.mark.parametrize(
+        ("label", "expected"),
+        [
+            pytest.param(
+                "a\nCHAPTER09=00:00:09.000\nCHAPTER09NAME=evil", "a CHAPTER09=00:00:09.000 CHAPTER09NAME=evil", id="lf"
+            ),
+            pytest.param("Part\r\nOne", "Part One", id="crlf"),
+            pytest.param("Part\rOne", "Part One", id="cr"),
+            pytest.param("Plain", "Plain", id="no-line-break"),
+        ],
+    )
+    def test_writes_each_label_on_one_line(self, label: str, expected: str) -> None:
+        ranges: list[RangeFrame | RangeTime] = [RangeTime(start=timedelta(seconds=1), label=label)]
+
+        out = serialize(OGMSerializer(), ranges)
+
+        assert out.decode().splitlines() == ["CHAPTER01=00:00:01.000", f"CHAPTER01NAME={expected}"]
+
+    def test_label_with_line_break_round_trips_as_one_chapter(self) -> None:
+        ranges: list[RangeFrame | RangeTime] = [
+            RangeTime(start=timedelta(seconds=1), label="a\nCHAPTER09=00:00:09.000\nCHAPTER09NAME=evil")
+        ]
+
+        scene = parse(OGMParser(), serialize(OGMSerializer(), ranges))
+
+        assert [(r.start, r.label) for r in scene.ranges] == [
+            (timedelta(seconds=1), "a CHAPTER09=00:00:09.000 CHAPTER09NAME=evil")
+        ]
