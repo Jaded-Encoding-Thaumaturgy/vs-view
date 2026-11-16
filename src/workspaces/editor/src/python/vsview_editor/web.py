@@ -98,6 +98,7 @@ class LspConnectPayload(TypedDict):
     id: str
     name: str
     port: int
+    path: str
     language: str
     fileEventsPattern: NotRequired[str | None]
     configurationSection: NotRequired[str | Sequence[str]]

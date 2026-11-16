@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 import re
+import secrets
 import shutil
 import sys
 import urllib.parse
@@ -15,9 +16,10 @@ from typing import TYPE_CHECKING
 from jetpytools import CustomValueError
 from PySide6.QtCore import QObject, QProcess, QUrl, Slot
 from PySide6.QtNetwork import QHostAddress
-from PySide6.QtWebSockets import QWebSocket, QWebSocketServer
+from PySide6.QtWebSockets import QWebSocket, QWebSocketProtocol, QWebSocketServer
 
 from vsview.api import QObjectSet
+from vsview.env import getenv_bool
 
 if TYPE_CHECKING:
     from .web import LspConnectPayload
@@ -39,11 +41,12 @@ class LSPConfig:
         if not self.command:
             raise CustomValueError("LSP config %r has an empty command list.", self.id)
 
-    def to_payload(self, port: int) -> LspConnectPayload:
+    def to_payload(self, port: int, path: str) -> LspConnectPayload:
         payload: LspConnectPayload = {
             "id": self.id,
             "name": self.name,
             "port": port,
+            "path": path,
             "language": self.language,
             "fileEventsPattern": self.file_events_pattern,
         }
@@ -66,6 +69,8 @@ LSP_PYREFLY_CONFIG = LSPConfig(
 
 # Virtual tabs live in a folder that does not exist on disk, so a real `script.py` in the root never aliases one.
 VIRTUAL_DIR = ".vsview-virtual"
+EDITOR_ORIGINS = frozenset({"", "null", "file://"})
+DEV_SERVER_ORIGIN = "http://localhost:5173"
 
 CLIENT_VIRTUAL_PATTERN = re.compile(
     r"file:///workspace(?:/(script\.py|untitled_[a-zA-Z0-9_-]+\.py|workspace\.code-workspace)|(?=[\"']))"
@@ -81,6 +86,7 @@ class LSPProcessServer(QObject):
         self.server: QWebSocketServer | None = None
         self.clients = QObjectSet[QWebSocket]()
         self.process: QProcess | None = None
+        self.url_path = f"/{secrets.token_urlsafe(16)}"
         self._stdout_buffer = bytearray()
         self.real_uri: str | None = None
         self.uri_variations = list[str]()
@@ -177,6 +183,24 @@ class LSPProcessServer(QObject):
         if not self.server:
             return
         client = self.server.nextPendingConnection()
+
+        if client.requestUrl().path() != self.url_path:
+            rejection_reason = "wrong path"
+        elif client.origin() not in EDITOR_ORIGINS | (
+            {DEV_SERVER_ORIGIN} if getenv_bool("VSVIEW_EDITOR_DEV") else EDITOR_ORIGINS
+        ):
+            rejection_reason = f"origin {client.origin()!r} is not allowed"
+        elif any(c.isValid() for c in self.clients):
+            rejection_reason = "a client is already connected"
+        else:
+            rejection_reason = None
+
+        if rejection_reason:
+            logger.warning("Rejected LSP WebSocket connection for %r: %s", self.config.id, rejection_reason)
+            client.close(QWebSocketProtocol.CloseCode.CloseCodePolicyViolated, rejection_reason)
+            client.deleteLater()
+            return
+
         self.clients.add(client)
         logger.debug("New LSP WebSocket connection established for %r", self.config.id)
 

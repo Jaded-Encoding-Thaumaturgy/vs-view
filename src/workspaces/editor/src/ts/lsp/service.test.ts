@@ -293,6 +293,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyrefly',
         name: 'Pyrefly',
         port: 9005,
+        path: '',
         language: 'python',
       };
 
@@ -303,11 +304,28 @@ describe('LspService and Language Client Lifecycle', () => {
       expect(ws.url).toBe('ws://127.0.0.1:9005');
     });
 
+    it('appends the token path to the WebSocket URL', async () => {
+      const config: LspServerConfig = {
+        id: 'pyrefly',
+        name: 'Pyrefly',
+        port: 9005,
+        path: '/abc-token_1',
+        language: 'python',
+      };
+
+      await service.connect(config);
+
+      expect(lspState.createdSockets).toHaveLength(1);
+      const ws = lspState.createdSockets[0] as MockWebSocket;
+      expect(ws.url).toBe('ws://127.0.0.1:9005/abc-token_1');
+    });
+
     it('creates and starts WebSocketLanguageClient on websocket open', async () => {
       const config: LspServerConfig = {
         id: 'pyrefly',
         name: 'Pyrefly',
         port: 9005,
+        path: '',
         language: 'python',
       };
 
@@ -332,6 +350,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 8080,
+        path: '',
         language: 'python',
         fileEventsPattern: '**/*.py',
       };
@@ -348,6 +367,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pylsp',
         name: 'Python LSP',
         port: 9001,
+        path: '',
         language: 'python',
       };
 
@@ -363,6 +383,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pylsp',
         name: 'Python LSP Reconnected',
         port: 9002,
+        path: '',
         language: 'python',
       };
 
@@ -393,6 +414,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'failing',
         name: 'Failing',
         port: 9999,
+        path: '',
         language: 'python',
       };
 
@@ -411,6 +433,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'ruff',
         name: 'Ruff LSP',
         port: 9003,
+        path: '',
         language: 'python',
       };
 
@@ -431,12 +454,14 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'clientA',
         name: 'Client A',
         port: 9010,
+        path: '',
         language: 'python',
       };
       const configB: LspServerConfig = {
         id: 'clientB',
         name: 'Client B',
         port: 9011,
+        path: '',
         language: 'rust',
       };
 
@@ -463,6 +488,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'autoClose',
         name: 'Auto Close LSP',
         port: 9020,
+        path: '',
         language: 'python',
       };
 
@@ -483,6 +509,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'errLsp',
         name: 'Error LSP',
         port: 9021,
+        path: '',
         language: 'python',
       };
 
@@ -503,6 +530,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
         configurationSection: 'python',
       };
@@ -530,6 +558,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyrefly',
         name: 'Pyrefly',
         port: 9000,
+        path: '',
         language: 'python',
         configurationSection: ['python', 'pyrefly'],
       };
@@ -557,6 +586,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
         configurationSection: 'python',
       };
@@ -582,6 +612,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
         configurationSection: 'python',
       };
@@ -609,6 +640,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
       };
 
@@ -638,6 +670,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'customLsp',
         name: 'Custom LSP',
         port: 9000,
+        path: '',
         language: 'python',
         progressNotifications: [
           {
@@ -667,6 +700,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
       };
 
@@ -710,6 +744,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
       };
       await service.connect(config);
@@ -748,6 +783,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
       };
 
@@ -788,6 +824,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
       };
 
@@ -827,6 +864,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
       };
 
@@ -888,6 +926,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
       };
 
@@ -933,6 +972,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'pyright',
         name: 'Pyright',
         port: 9000,
+        path: '',
         language: 'python',
       };
 
@@ -1022,6 +1062,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'disposeTest',
         name: 'Dispose Test',
         port: 9050,
+        path: '',
         language: 'python',
       };
 
@@ -1044,6 +1085,7 @@ describe('LspService and Language Client Lifecycle', () => {
         id: 'symbolDispose',
         name: 'Symbol Dispose',
         port: 9051,
+        path: '',
         language: 'python',
       };
 

@@ -48,7 +48,7 @@ from vsview.env import getenv_bool
 from vsview.vsenv import QtEventLoop, create_environment
 
 from .console import GlobalConsoleHub
-from .lsp import LSP_PYREFLY_CONFIG, LSPProcessManager
+from .lsp import DEV_SERVER_ORIGIN, LSP_PYREFLY_CONFIG, LSPProcessManager
 from .settings import GlobalSettings, LocalSettings
 from .stubs import get_stubs_dir
 from .utils import ContentPath, WorkspaceUri, extract_supported_script_files
@@ -109,7 +109,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         query.addQueryItem("accentColor", self.palette().color(QPalette.ColorRole.Accent).name())
 
         url = (
-            QUrl("http://localhost:5173")
+            QUrl(DEV_SERVER_ORIGIN)
             if getenv_bool("VSVIEW_EDITOR_DEV")
             else QUrl.fromLocalFile(MonacoEditorDock.INDEX_PATH)
         )
@@ -394,7 +394,10 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         script_dir = self._active_filepath.parent if self._active_filepath else Path.cwd()
         port = self.lsp_manager.restart_server(config=LSP_PYREFLY_CONFIG, workspace_dir=script_dir)
         if port > 0:
-            self.editor.bridge.dispatch(PyToJsCommand.LSP_CONNECT, LSP_PYREFLY_CONFIG.to_payload(port))
+            self.editor.bridge.dispatch(
+                PyToJsCommand.LSP_CONNECT,
+                LSP_PYREFLY_CONFIG.to_payload(port, self.lsp_manager.servers[LSP_PYREFLY_CONFIG.id].url_path),
+            )
 
     @Slot()
     def _on_editor_ready(self) -> None:

@@ -142,6 +142,7 @@ export class BridgeService
             id: p.id,
             name: p.name,
             port: p.port,
+            path: p.path,
             language: p.language,
             fileEventsPattern:
               typeof p.fileEventsPattern === 'string' ? p.fileEventsPattern : undefined,

@@ -46,6 +46,7 @@ export interface LspConnectPayload {
   id: string;
   name: string;
   port: number;
+  path: string;
   language: string;
   fileEventsPattern?: string | null;
   configurationSection?: string | string[];

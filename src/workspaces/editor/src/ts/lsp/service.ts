@@ -64,6 +64,7 @@ export interface LspServerConfig {
   id: string;
   name: string;
   port: number;
+  path: string;
   language: string;
   fileEventsPattern?: string | undefined;
   configurationSection?: string | string[] | undefined;
@@ -106,7 +107,7 @@ export class LspService implements vscode.Disposable {
       pendingSocket.close();
     }
 
-    const url = `ws://127.0.0.1:${config.port}`;
+    const url = `ws://127.0.0.1:${config.port}${config.path}`;
     console.debug(`Connecting LSP WebSocket client '${config.id}' to ${url}...`);
 
     const wsResult = Result.fromThrowable(() => new WebSocket(url));
