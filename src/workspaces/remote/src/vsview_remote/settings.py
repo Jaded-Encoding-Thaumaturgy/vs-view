@@ -60,7 +60,7 @@ class GlobalSettings(BaseModel):
             suffix=" s",
             tooltip=(
                 "Maximum seconds to wait for remote frame rendering before timing out "
-                "(0 or Default to use server timeout)"
+                "(0 or Default to use the client timeout of 30 s)"
             ),
             to_ui=lambda v: 0 if v is None else v,
             from_ui=lambda v: None if v == 0 else v,

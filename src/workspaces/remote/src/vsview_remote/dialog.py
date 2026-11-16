@@ -75,7 +75,10 @@ class RemoteConnectionDialog(QDialog):
 
         self.frame_timeout_spin = CustomSpinBox(form_frame, min_text="Default", custom_suffix=" s")
         self.frame_timeout_spin.setRange(0, 120)
-        self.frame_timeout_spin.setToolTip("Maximum seconds to wait for a frame before timing out (0 for default 30s)")
+        self.frame_timeout_spin.setToolTip(
+            "Maximum seconds to wait for a frame before timing out "  # no format
+            "(0 or Default to use the client timeout of 30 s)"
+        )
 
         self.forward_logs_cb = QCheckBox(form_frame)
         self.subscribe_streams_cb = QCheckBox(form_frame)
