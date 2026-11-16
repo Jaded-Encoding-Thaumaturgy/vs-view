@@ -118,24 +118,12 @@ class PluginManager(Singleton):
     def all_plugins(
         self,
     ) -> list[type[WidgetPluginBase[Any, Any] | NodeProcessor[Any] | PluginBaseWorkspace[Any, Any]]]:
-        all_plugins: set[Any] = {*self.tooldocks, *self.toolpanels, *self.workspaces}
-
-        if vp := self.video_processor:
-            all_plugins.add(vp)
-        if ap := self.audio_processor:
-            all_plugins.add(ap)
-
-        return sorted(all_plugins, key=lambda p: p.identifier)
+        return self._all_plugins()
 
     @inject_self.property
     @ensure_loaded("entrypoints")
     def workspaces(self) -> list[type[PluginBaseWorkspace[Any, Any]]]:
-        restricted_caller = self.manager.subset_hook_caller(
-            "vsview_register_workspace",
-            remove_plugins=(p for n, p in self.manager.list_name_plugin() if n not in self.ALLOWED_WORKSPACES),
-        )
-
-        return restricted_caller()
+        return self._workspaces()
 
     @inject_self.property
     def plugin_global_settings(self) -> list[SettingEntry]:
@@ -176,6 +164,31 @@ class PluginManager(Singleton):
     def _plugin_identifiers(self) -> dict[str, str]:
         return {identifier: min(owners) for identifier, owners in self._identifier_owners().items()}
 
+    def _all_plugins(
+        self,
+    ) -> list[type[WidgetPluginBase[Any, Any] | NodeProcessor[Any] | PluginBaseWorkspace[Any, Any]]]:
+        hook = self.manager.hook
+        all_plugins: set[Any] = {
+            *hook.vsview_register_tooldock(),
+            *hook.vsview_register_toolpanel(),
+            *self._workspaces(),
+        }
+
+        if vp := hook.vsview_get_video_processor():
+            all_plugins.add(vp)
+        if ap := hook.vsview_get_audio_processor():
+            all_plugins.add(ap)
+
+        return sorted(all_plugins, key=lambda p: p.identifier)
+
+    def _workspaces(self) -> list[type[PluginBaseWorkspace[Any, Any]]]:
+        restricted_caller = self.manager.subset_hook_caller(
+            "vsview_register_workspace",
+            remove_plugins=(p for n, p in self.manager.list_name_plugin() if n not in self.ALLOWED_WORKSPACES),
+        )
+
+        return restricted_caller()
+
     def _identifier_owners(self) -> dict[str, set[str]]:
         owners = defaultdict[str, set[str]](set)
         for hook_name in self.manager.hook.__dict__:
@@ -200,6 +213,7 @@ class PluginManager(Singleton):
         try:
             self._load_plugins()
         finally:
+            self._entry_points_loaded = True
             self._notifier.notify()
 
     def _load_plugins(self) -> None:
@@ -219,7 +233,6 @@ class PluginManager(Singleton):
         logger.debug("Loading entrypoints...")
         n = load_entrypoints(self.manager, "vsview")
         logger.debug("Loaded %d second/third party plugins", n)
-        self._entry_points_loaded = True
 
         self._reject_invalid_identifiers(first_party_names)
         self._register_shortcuts()
@@ -327,7 +340,7 @@ class PluginManager(Singleton):
     def _for_each_plugin(self, step: str, func: Callable[[type[Any]], None]) -> None:
         owners = self._plugin_identifiers
 
-        for plugin in self.all_plugins:
+        for plugin in self._all_plugins():
             owner = owners.get(plugin.identifier)
 
             if owner is not None and not self.manager.has_plugin(owner):
@@ -364,7 +377,7 @@ class PluginManager(Singleton):
         model_attr = f"{scope}_settings_model"
 
         with self._lock:
-            for plugin in self.all_plugins:
+            for plugin in self._all_plugins():
                 try:
                     if (model := getattr(plugin, model_attr)) is None:
                         continue

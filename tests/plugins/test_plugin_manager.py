@@ -612,6 +612,32 @@ def test_failed_load_is_not_reported_as_loaded(
     ]
 
 
+class ProbedPanel:
+    identifier = "probed_panel"
+    display_name = "Probed Panel"
+    global_settings_model = None
+    local_settings_model = None
+
+
+def test_plugin_accessors_open_after_a_failed_load(
+    qt_event_loop: QtEventLoop,
+    fake_entry_points: Callable[[str, Sequence[EntryPoint]], None],
+    mocker: MockerFixture,
+) -> None:
+    fake_entry_points("vsview", [])
+    mocker.patch(
+        "vsview.app.plugins.manager.load_entrypoints", side_effect=RuntimeError("simulated entry point failure")
+    )
+    pm = PluginManager()
+
+    pm.load()
+    with pytest.raises(RuntimeError, match="simulated entry point failure"):
+        pm.wait_for_loaded()
+
+    assert pm.load_failed is True
+    assert "jet_vsview_colorpicker" in {p.identifier for p in pm.tooldocks}
+
+
 # Shortcut Registration Tests
 def test_register_shortcuts_valid_prefix(init_plugin_manager: PluginManager, mocker: MockerFixture) -> None:
     action_1 = ActionDefinition("my_plugin.action1", "Action 1", "Ctrl+1")
