@@ -64,6 +64,9 @@ LSP_PYREFLY_CONFIG = LSPConfig(
     progress_notifications=None,
 )
 
+# Virtual tabs live in a folder that does not exist on disk, so a real `script.py` in the root never aliases one.
+VIRTUAL_DIR = ".vsview-virtual"
+
 CLIENT_VIRTUAL_PATTERN = re.compile(
     r"file:///workspace(?:/(script\.py|untitled_[a-zA-Z0-9_-]+\.py|workspace\.code-workspace)|(?=[\"']))"
 )
@@ -93,7 +96,8 @@ class LSPProcessServer(QObject):
         self.uri_variations = self._build_uri_variations(workspace_dir)
         escaped_vars = "|".join(re.escape(v.rstrip("/")) for v in self.uri_variations)
         self._virtual_tab_pattern = re.compile(
-            rf"(?:{escaped_vars})/(script\.py|untitled_[a-zA-Z0-9_-]+\.py|workspace\.code-workspace)",
+            rf"(?:{escaped_vars})/{re.escape(VIRTUAL_DIR)}/"
+            r"(script\.py|untitled_[a-zA-Z0-9_-]+\.py|workspace\.code-workspace)",
             re.IGNORECASE if sys.platform == "win32" else 0,
         )
         logger.log(DEBUG - 1, "URI Variations: %s", self.uri_variations)
@@ -200,7 +204,7 @@ class LSPProcessServer(QObject):
         if self.real_uri and "file:///workspace" in message:
             real_uri = self.real_uri
             message = CLIENT_VIRTUAL_PATTERN.sub(
-                lambda m: f"{real_uri}/{m.group(1)}" if m.group(1) else real_uri,
+                lambda m: f"{real_uri}/{VIRTUAL_DIR}/{m.group(1)}" if m.group(1) else real_uri,
                 message,
             )
 

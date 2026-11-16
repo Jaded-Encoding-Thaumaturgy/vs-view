@@ -161,7 +161,7 @@ class TestLSPConfigAndServer:
         # Virtual files should be translated
         msg1 = '{"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///workspace/script.py"}}}'
         server._on_ws_message(msg1)
-        assert b"file:///C:/Users/test/workspace/script.py" in written_data[-1]
+        assert b"file:///C:/Users/test/workspace/.vsview-virtual/script.py" in written_data[-1]
 
         # Non-virtual file under workspace (e.g. Linux path) should NOT be translated
         msg2 = '{"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///workspace/my_project/filter.vpy"}}}'
