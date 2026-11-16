@@ -50,7 +50,7 @@ from .console import GlobalConsoleHub
 from .lsp import DEV_SERVER_ORIGIN, LSP_PYREFLY_CONFIG, LSPProcessManager
 from .settings import GlobalSettings, LocalSettings
 from .stubs import get_stubs_dir
-from .utils import ContentPath, WorkspaceUri, extract_supported_script_files, find_ruff
+from .utils import ContentPath, WorkspaceUri, disk_stamp, extract_supported_script_files, find_ruff
 from .web import JsToPyCommand, MonacoEditorWidget, OpenTabPayload, PyToJsCommand, TabInfo
 
 logger = getLogger(__name__)
@@ -95,6 +95,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self._main_tab_uri: str | None = None
         self._default_content = get_default_script().replace("\r\n", "\n")
         self._open_tabs = list[TabInfo]()
+        self._disk_stamps = dict[Path, tuple[int, int]]()
 
         self.editor = MonacoEditorWidget(self)
         self.editor.bridge.webReady.connect(self._on_editor_ready)
@@ -337,6 +338,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self.editor.bridge.dispatch(PyToJsCommand.OPEN_TAB, payload)
 
         existing = self._find_tab(uri)
+        if not (existing and existing.get("isDirty", False)):
+            self._record_disk_stamp(resolved)
         if existing:
             if not existing.get("isDirty", False):
                 existing["content"] = content
@@ -367,6 +370,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
                 self._active_filepath = filepath
                 self._active_tab_uri = filepath.as_uri()
 
+            self._record_disk_stamp(filepath.resolve())
             self.statusSavingScriptFinished.emit("Saved")
             self.editor.bridge.dispatch(PyToJsCommand.TAB_SAVED, {"uri": filepath.as_uri(), "oldUri": old_uri})
 
@@ -500,7 +504,8 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
     def _on_save_clicked(self) -> None:
         if self._active_filepath:
-            self.save_script(self._active_filepath, self.editor.bridge.content)
+            if self.confirm_overwrite(self._active_filepath):
+                self.save_script(self._active_filepath, self.editor.bridge.content)
         else:
             self._on_save_as_clicked()
 
@@ -511,7 +516,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             "",
             "VapourSynth Script (*.vpy);;All Files (*)",
         )
-        if filepath:
+        if filepath and self.confirm_overwrite(Path(filepath)):
             self.save_script(Path(filepath), self.editor.bridge.content)
 
     def _on_format_clicked(self) -> None:
@@ -574,6 +579,23 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         if filepath:
             self.open_file(Path(filepath))
 
+    def confirm_overwrite(self, filepath: Path) -> bool:
+        """Ask before saving over a file that another program changed since the editor opened or last saved it."""
+        resolved = filepath.resolve()
+        known = self._disk_stamps.get(resolved)
+        if known is None or (current := disk_stamp(resolved)) is None or current == known:
+            return True
+
+        reply = QMessageBox.warning(
+            self,
+            "File Changed on Disk",
+            f"'{resolved.name}' was changed by another program since it was opened or last saved.\n\n"
+            "Save anyway and overwrite those changes?",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        return reply == QMessageBox.StandardButton.Save
+
     @run_in_background(name="SaveScript")
     def _write_script(self, filepath: Path, content: str) -> Path:
         atomic_write(filepath, content, newline="")
@@ -622,6 +644,12 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             PyToJsCommand.UPDATE_OPTIONS,
             {"optionsJson": self.settings.global_.options.model_dump_json(by_alias=True)},
         )
+
+    def _record_disk_stamp(self, resolved: Path) -> None:
+        if (stamp := disk_stamp(resolved)) is not None:
+            self._disk_stamps[resolved] = stamp
+        else:
+            self._disk_stamps.pop(resolved, None)
 
     def _is_default_tab(self, tab: TabInfo) -> bool:
         if tab.get("uri") != self.DEFAULT_SCRIPT_URI or tab.get("isDirty", False):
@@ -850,6 +878,9 @@ class EditorWorkspace(
                     if not filepath:
                         return False
                     target = Path(filepath)
+
+                if not self.code_dock.confirm_overwrite(target):
+                    return False
 
                 try:
                     self.code_dock.save_script(target, content, tab_uri=uri).result()

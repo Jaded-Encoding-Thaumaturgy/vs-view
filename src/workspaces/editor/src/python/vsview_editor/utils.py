@@ -34,6 +34,14 @@ def find_ruff() -> str | None:
         return shutil.which("ruff")
 
 
+def disk_stamp(path: Path) -> tuple[int, int] | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return st.st_mtime_ns, st.st_size
+
+
 class WorkspaceUri(QUrl):
     @property
     def local_path(self) -> Path | None:

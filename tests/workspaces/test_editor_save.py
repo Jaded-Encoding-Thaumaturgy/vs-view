@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import stat
 from collections.abc import Generator
@@ -259,3 +260,176 @@ class TestLineEndings:
 
         qtbot.waitUntil(lambda: editor_workspace.code_dock.format_btn.isEnabled(), timeout=10000)
         assert bridge.content == "a = 1\r\nb = 2\r\n"
+
+
+def change_on_disk(path: Path, data: bytes, *, keep_mtime: bool = False) -> None:
+    before = path.stat()
+    path.write_bytes(data)
+    if keep_mtime:
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+    else:
+        # Coarse file system clocks could give the same mtime to both writes.
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns + 2_000_000_000))
+
+
+class TestDiskChangeWarning:
+    def open_and_edit(self, workspace: EditorWorkspace, path: Path, content: str) -> None:
+        assert workspace.code_dock.open_file(path) is True
+        send_from_js(workspace, JsToPyCommand.CONTENT_CHANGED, {"content": content})
+
+    @pytest.mark.parametrize(
+        ("external", "keep_mtime"),
+        [
+            pytest.param(b"other\n", False, id="mtime"),
+            pytest.param(b"other program\n", True, id="size"),
+        ],
+    )
+    def test_cancel_keeps_the_external_change(
+        self,
+        editor_workspace: EditorWorkspace,
+        dispatch: MagicMock,
+        tmp_path: Path,
+        mocker: MockerFixture,
+        qtbot: QtBot,
+        external: bytes,
+        keep_mtime: bool,
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"old\n")
+        self.open_and_edit(editor_workspace, script, "mine\n")
+        change_on_disk(script, external, keep_mtime=keep_mtime)
+        warning = mocker.patch.object(QMessageBox, "warning", return_value=QMessageBox.StandardButton.Cancel)
+
+        with qtbot.assertNotEmitted(editor_workspace.statusLoadingStarted, wait=100):
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+
+        warning.assert_called_once()
+        assert warning.call_args.args[1] == "File Changed on Disk"
+        assert "script.vpy" in warning.call_args.args[2]
+        assert script.read_bytes() == external
+
+    def test_confirm_overwrites_the_external_change(
+        self,
+        editor_workspace: EditorWorkspace,
+        dispatch: MagicMock,
+        tmp_path: Path,
+        mocker: MockerFixture,
+        qtbot: QtBot,
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"old\n")
+        self.open_and_edit(editor_workspace, script, "mine\n")
+        change_on_disk(script, b"other\n")
+        warning = mocker.patch.object(QMessageBox, "warning", return_value=QMessageBox.StandardButton.Save)
+
+        with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+
+        warning.assert_called_once()
+        assert script.read_bytes() == b"mine\n"
+
+    def test_unchanged_file_saves_without_a_warning(
+        self,
+        editor_workspace: EditorWorkspace,
+        dispatch: MagicMock,
+        tmp_path: Path,
+        mocker: MockerFixture,
+        qtbot: QtBot,
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"old\n")
+        self.open_and_edit(editor_workspace, script, "mine\n")
+        warning = mocker.patch.object(QMessageBox, "warning")
+
+        with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+
+        warning.assert_not_called()
+        assert script.read_bytes() == b"mine\n"
+
+    def test_own_save_is_the_new_reference(
+        self,
+        editor_workspace: EditorWorkspace,
+        dispatch: MagicMock,
+        tmp_path: Path,
+        mocker: MockerFixture,
+        qtbot: QtBot,
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"old\n")
+        self.open_and_edit(editor_workspace, script, "first save, longer\n")
+        warning = mocker.patch.object(QMessageBox, "warning")
+        with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+        send_from_js(editor_workspace, JsToPyCommand.CONTENT_CHANGED, {"content": "second\n"})
+
+        with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+
+        warning.assert_not_called()
+        assert script.read_bytes() == b"second\n"
+
+    def test_file_deleted_on_disk_is_saved_without_a_warning(
+        self,
+        editor_workspace: EditorWorkspace,
+        dispatch: MagicMock,
+        tmp_path: Path,
+        mocker: MockerFixture,
+        qtbot: QtBot,
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"old\n")
+        self.open_and_edit(editor_workspace, script, "mine\n")
+        script.unlink()
+        warning = mocker.patch.object(QMessageBox, "warning")
+
+        with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+
+        warning.assert_not_called()
+        assert script.read_bytes() == b"mine\n"
+
+    def test_reopening_a_dirty_tab_does_not_hide_the_external_change(
+        self,
+        editor_workspace: EditorWorkspace,
+        dispatch: MagicMock,
+        tmp_path: Path,
+        mocker: MockerFixture,
+        qtbot: QtBot,
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"old\n")
+        assert editor_workspace.code_dock.open_file(script) is True
+        open_dirty_tab(editor_workspace, script.resolve().as_uri(), "mine\n")
+        change_on_disk(script, b"other\n")
+        assert editor_workspace.code_dock.open_file(script) is True
+        warning = mocker.patch.object(QMessageBox, "warning", return_value=QMessageBox.StandardButton.Cancel)
+
+        with qtbot.assertNotEmitted(editor_workspace.statusLoadingStarted, wait=100):
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+
+        warning.assert_called_once()
+        assert script.read_bytes() == b"other\n"
+
+    def test_close_is_cancelled_when_the_overwrite_is_refused(
+        self,
+        editor_workspace: EditorWorkspace,
+        dispatch: MagicMock,
+        tmp_path: Path,
+        mocker: MockerFixture,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"old\n")
+        assert editor_workspace.code_dock.open_file(script) is True
+        uri = script.resolve().as_uri()
+        open_dirty_tab(editor_workspace, uri, "mine\n")
+        change_on_disk(script, b"other\n")
+        mocker.patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Save)
+        warning = mocker.patch.object(QMessageBox, "warning", return_value=QMessageBox.StandardButton.Cancel)
+
+        closed = editor_workspace.confirm_close()
+        assert closed is False
+        warning.assert_called_once()
+        assert warning.call_args.args[1] == "File Changed on Disk"
+        assert script.read_bytes() == b"other\n"
