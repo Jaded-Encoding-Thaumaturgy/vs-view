@@ -166,6 +166,8 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
     def init_load(self, frame: int | None = None, time: float | None = None, tab_index: int | None = None) -> None:
         from ..plugins.manager import PluginManager
 
+        super().init_load(frame, time, tab_index)
+
         self._sync_sync_container()
 
         self.tbar.playback_container.settings.seek_step = self.local_settings.playback.seek_step
@@ -188,7 +190,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         if tab_index is None:
             self.outputs_manager.current_video_index = self.local_settings.last_output_tab_index
 
-        if (path := self.current_file_path) is not None:
+        if (path := self.current_file_path) is not None and not PluginManager.load_failed:
             PluginManager.populate_default_settings("local", path)
 
     @requires_content(return_fallback=dict[int, Any])

@@ -310,7 +310,10 @@ class LoaderWorkspace[T](BaseWorkspace):
     def init_load(self, frame: int | None = None, time: float | None = None, tab_index: int | None = None) -> None:
         from ..plugins.manager import PluginManager
 
-        PluginManager.wait_for_loaded()
+        try:
+            PluginManager.wait_for_loaded()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Plugin loading failed (%s); loading the content with the plugins that loaded", e)
 
     def on_views_created(self, views: Sequence[GraphicsView]) -> None:
         """Lifecycle hook called when views have been created for video outputs."""
