@@ -499,20 +499,19 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             logger.info("No file selected")
             return
 
-        def on_success(result: tuple[list[SceneRow], list[str]]) -> None:
-            scenes, failed = result
+        def on_success(result: tuple[list[SceneRow], list[str], list[str]]) -> None:
+            scenes, failed, without_ranges = result
             self.scenes_model.add_scene(scenes)
 
+            parts = list[str]()
+            if scenes and (failed or without_ranges):
+                parts.append(f"Imported {len(scenes)} scene(s)")
+            if without_ranges:
+                parts.append(f"No ranges found in {', '.join(without_ranges)}")
             if failed:
-                message = f"Importing failed for {', '.join(failed)}"
-                if scenes:
-                    message = f"Imported {len(scenes)} scene(s). {message}"
-            elif not scenes:
-                message = f"No scenes found in {', '.join(files)}"
-            else:
-                message = f"Importing {', '.join(files)} completed"
+                parts.append(f"Importing failed for {', '.join(failed)}")
 
-            self.api.statusMessage.emit(message)
+            self.api.statusMessage.emit(". ".join(parts) or f"Importing {', '.join(files)} completed")
 
         def on_error(exc: BaseException) -> None:
             self.api.statusMessage.emit(f"Importing {', '.join(files)} failed: {exc}")
@@ -520,11 +519,12 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.parse_imported_files(files, filters[selected_filter]).then(on_success, on_error, on_loop=True)
 
     @run_in_background(name="ParseImportedFiles")
-    def parse_imported_files(self, files: list[str], parser: Parser) -> tuple[list[SceneRow], list[str]]:
+    def parse_imported_files(self, files: list[str], parser: Parser) -> tuple[list[SceneRow], list[str], list[str]]:
         src_fps = self.api.current_voutput.vs_output.clip.fps
 
         scenes = list[SceneRow]()
         failed = list[str]()
+        without_ranges = list[str]()
 
         with monkey_patch_parser(parser, self._color_gen):
             for file in files:
@@ -532,12 +532,18 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
                 try:
                     with pfile.open("rb") as f:
                         parsed = parser.parse(f, pfile.stem, src_fps)
-                        scenes.extend([parsed] if isinstance(parsed, SceneRow) else parsed)
+                        file_scenes = [s for s in ([parsed] if isinstance(parsed, SceneRow) else parsed) if s.ranges]
                 except Exception:
                     logger.exception("Error parsing file: %s", file)
                     failed.append(file)
+                    continue
 
-        return scenes, failed
+                if file_scenes:
+                    scenes.extend(file_scenes)
+                else:
+                    without_ranges.append(file)
+
+        return scenes, failed, without_ranges
 
     @Slot()
     def on_export_scene(self) -> None:
