@@ -631,7 +631,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     def _send_pyrefly_settings(self) -> None:
         settings = self.settings.global_.pyrefly
         if (stubs_path := get_stubs_dir()) not in settings.extra_search_paths:
-            settings.extra_search_paths.append(stubs_path)
+            settings.extra_search_paths = [*settings.extra_search_paths, stubs_path]
 
         self.editor.bridge.dispatch(
             PyToJsCommand.UPDATE_LSP_SETTINGS,
