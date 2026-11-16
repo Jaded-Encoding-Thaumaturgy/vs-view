@@ -127,3 +127,34 @@ def test_vfr_with_nominal_fps() -> None:
     assert vo.frame_to_time(1) == Time(seconds=0.030)
     assert vo.frame_to_time(2) == Time(seconds=0.080)
     assert vo.frame_to_time(3) == Time(seconds=0.110)
+
+
+def test_info_with_zero_fps_and_zero_durations_reports_zero_fps() -> None:
+    clip = core.std.BlankClip(length=3, fpsnum=0, fpsden=1)
+    vo = VideoOutput(
+        vs.VideoOutputTuple(clip, None, 0),
+        0,
+        Packer(),
+        VideoMetadata("zero", framedurs=[0.0] * 3),
+    )
+
+    info = vo.info
+
+    assert info.fps == 0
+    assert info.total_duration == Time(seconds=0.0)
+    assert info.total_frames == 3
+
+
+def test_info_with_zero_fps_uses_the_frame_durations() -> None:
+    clip = core.std.BlankClip(length=4, fpsnum=0, fpsden=1)
+    vo = VideoOutput(
+        vs.VideoOutputTuple(clip, None, 0),
+        0,
+        Packer(),
+        VideoMetadata("vfr", framedurs=[0.25] * 4),
+    )
+
+    info = vo.info
+
+    assert info.fps == pytest.approx(4.0)
+    assert info.total_duration == Time(seconds=1.0)

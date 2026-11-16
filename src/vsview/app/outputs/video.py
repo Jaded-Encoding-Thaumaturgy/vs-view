@@ -90,7 +90,8 @@ class VideoOutput:
             fps = self.vs_output.clip.fps
         elif self.cum_durations:
             total_duration = Time(seconds=self.cum_durations[-1])
-            fps = self.vs_output.clip.num_frames / total_duration.total_seconds()
+            seconds = total_duration.total_seconds()
+            fps = self.vs_output.clip.num_frames / seconds if seconds > 0 else 0
         else:
             total_duration = Time()
             fps = 0
