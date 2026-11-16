@@ -134,6 +134,7 @@ class ExportQueueManager:
 
     def _execute_job(self, job: ExportJob) -> None:
         total = len(job.ranges)
+        failed = list[str]()
 
         for i, (r, dest_file) in enumerate(zip(job.ranges, job.dest_files), 1):
             if job.cancel_event.is_set():
@@ -148,6 +149,7 @@ class ExportQueueManager:
                 trimmed = job.voutput.vs_output.clip[s : e + (not self.settings.global_.exclusive)]
             except vs.Error as exc:
                 logger.error("Failed to slice clip: %s", exc)
+                failed.append(dest_file.name[:100])
                 continue
 
             cfmt = trimmed.format
@@ -167,6 +169,7 @@ class ExportQueueManager:
                         trimmed = trimmed.resize.Point(format=target_fmt)
             except vs.Error:
                 logger.exception("Failed to convert format for output %s", job.voutput.vs_index)
+                failed.append(dest_file.name[:100])
                 continue
 
             try:
@@ -180,6 +183,12 @@ class ExportQueueManager:
                 dest_file.unlink(missing_ok=True)
                 self.api.statusMessage.emit(f"Export failed for {dest_file.name}: {exc}")
                 return
+
+        if failed:
+            message = f"Exported {total - len(failed)} of {total} clip(s). Failed: {', '.join(failed)}"
+            logger.warning(message)
+            self.api.statusMessage.emit(message)
+            return
 
         logger.info("Successfully exported %s clip(s).", total)
         self.api.statusMessage.emit(f"Successfully exported {total} clip(s).")
