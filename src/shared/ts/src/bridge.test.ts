@@ -71,6 +71,44 @@ function setupMockWebChannel(provideBridge = true): {
   };
 }
 
+function setupDeferredWebChannel(): {
+  mockBridge: MockBridge;
+  channelCount: () => number;
+  openChannel: () => void;
+  emitCommand: (command: string, payload: unknown) => void;
+} {
+  const { mockBridge, emitCommand } = setupMockWebChannel();
+  const callbacks: Array<(channel: { objects: Record<string, unknown> }) => void> = [];
+
+  fakeWindow.QWebChannel = class {
+    constructor(_transport: unknown, cb: (channel: { objects: Record<string, unknown> }) => void) {
+      callbacks.push(cb);
+    }
+  };
+
+  return {
+    mockBridge,
+    channelCount: () => callbacks.length,
+    openChannel: () => {
+      for (const cb of callbacks.splice(0)) cb({ objects: { bridge: mockBridge } });
+    },
+    emitCommand,
+  };
+}
+
+class HookedBridge extends WebChannelBridge<TestPyToJsMap, TestJsToPyMap, TestRpcBridge> {
+  public readyHook: (bridge: TestRpcBridge) => void = () => {};
+  public readonly errors: Error[] = [];
+
+  protected override onBridgeReady(bridge: TestRpcBridge): void {
+    this.readyHook(bridge);
+  }
+
+  protected override onBridgeError(err: Error): void {
+    this.errors.push(err);
+  }
+}
+
 describe('WebChannelBridge', () => {
   afterEach(() => {
     delete fakeWindow.qt;
@@ -197,5 +235,62 @@ describe('WebChannelBridge', () => {
     expect(() => rpcErr.unwrap()).toThrow('Not found');
 
     service.dispose();
+  });
+
+  describe('init failures', () => {
+    it('returns Err, reports the error and detaches the bridge when onBridgeReady throws', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { mockBridge, openChannel, emitCommand } = setupDeferredWebChannel();
+      const service = new HookedBridge();
+      const boom = new Error('boom inside onBridgeReady');
+      service.readyHook = () => {
+        throw boom;
+      };
+      const handler = vi.fn();
+      service.onCommand('test.ping', handler);
+
+      const init = service.initBridge();
+      expect(() => openChannel()).not.toThrow();
+      const result = await init;
+
+      expect(result.match({ ok: () => null, err: (e) => e })).toBe(boom);
+      expect(service.errors).toEqual([boom]);
+      const connectedHandler: unknown = mockBridge.dispatchCommandSignal.connect.mock.calls[0]?.[0];
+      expect(mockBridge.dispatchCommandSignal.disconnect).toHaveBeenCalledWith(connectedHandler);
+      expect(mockBridge.onWebReady).not.toHaveBeenCalled();
+      expect(service.sendEvent('test.ready').ok).toBe(false);
+      emitCommand('test.ping', {});
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('returns Err and reports the error when connecting the command signal throws', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { mockBridge, openChannel } = setupDeferredWebChannel();
+      mockBridge.dispatchCommandSignal.connect.mockImplementationOnce(() => {
+        throw new Error('connect failed');
+      });
+      const service = new HookedBridge();
+
+      const init = service.initBridge();
+      expect(() => openChannel()).not.toThrow();
+      const result = await init;
+
+      expect(result.match({ ok: () => '', err: (e) => e.message })).toBe('connect failed');
+      expect(service.errors).toHaveLength(1);
+      expect(mockBridge.onWebReady).not.toHaveBeenCalled();
+      expect(service.sendEvent('test.ready').ok).toBe(false);
+    });
+
+    it('returns Err and reports the error when QWebChannel cannot be constructed', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      setupMockWebChannel();
+      delete fakeWindow.QWebChannel;
+      const service = new HookedBridge();
+
+      const result = await service.initBridge();
+
+      expect(result.ok).toBe(false);
+      expect(service.errors).toHaveLength(1);
+    });
   });
 });

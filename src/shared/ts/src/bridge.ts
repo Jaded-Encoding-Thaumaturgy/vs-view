@@ -51,34 +51,39 @@ export class WebChannelBridge<
     return Result.fromPromise(
       () =>
         new Promise<TRpc>((resolve, reject) => {
-          if (!window.qt?.webChannelTransport) {
-            const err = new Error('Qt WebChannel transport is not available');
-            this.onBridgeError(err);
+          const fail = (err: Error) => {
             reject(err);
+            console.error(err);
+            this.onBridgeError(err);
+          };
+
+          const transport = window.qt?.webChannelTransport;
+          if (!transport) {
+            fail(new Error('Qt WebChannel transport is not available'));
             return;
           }
 
-          new window.QWebChannel(window.qt.webChannelTransport, (channel) => {
-            const pyBridge = channel.objects['bridge'] as TRpc | undefined;
+          const created = Result.fromThrowable(
+            () =>
+              new window.QWebChannel(transport, (channel) => {
+                const pyBridge = channel.objects['bridge'] as TRpc | undefined;
+                if (!pyBridge) {
+                  fail(new Error('Bridge object not found on Qt WebChannel'));
+                  return;
+                }
 
-            if (!pyBridge) {
-              const err = new Error('Bridge object not found on Qt WebChannel');
-              console.error(err);
-              this.onBridgeError(err);
-              reject(err);
-              return;
-            }
-
-            this.bridge = pyBridge;
-            this.boundSignalHandler = (command: string, payloadJson: string) => {
-              this.handleCommand(command, payloadJson);
-            };
-            this.bridge.dispatchCommandSignal.connect(this.boundSignalHandler);
-
-            this.onBridgeReady(pyBridge);
-            this.bridge.onWebReady();
-            resolve(pyBridge);
-          });
+                const attached = Result.fromThrowable(() => this.attachBridge(pyBridge));
+                if (!attached.ok) {
+                  this.detachBridge();
+                  fail(attached.error);
+                  return;
+                }
+                resolve(pyBridge);
+              }),
+          );
+          if (!created.ok) {
+            fail(created.error);
+          }
         }),
     );
   }
@@ -149,11 +154,7 @@ export class WebChannelBridge<
   public override dispose(): void {
     this.isDisposed = true;
     this.commandHandlers.clear();
-    if (this.bridge && this.boundSignalHandler) {
-      this.bridge.dispatchCommandSignal.disconnect(this.boundSignalHandler);
-      this.boundSignalHandler = null;
-    }
-    this.bridge = null;
+    this.detachBridge();
     super.dispose();
   }
 
@@ -188,6 +189,30 @@ export class WebChannelBridge<
     for (const handler of [...handlers]) {
       void Result.fromThrowable(() => handler(payload)).mapErr((err) => {
         console.error(`Error in handler for bridge command ${command}:`, err);
+      });
+    }
+  }
+
+  private attachBridge(pyBridge: TRpc): void {
+    this.bridge = pyBridge;
+    this.boundSignalHandler = (command: string, payloadJson: string) =>
+      this.handleCommand(command, payloadJson);
+    pyBridge.dispatchCommandSignal.connect(this.boundSignalHandler);
+
+    this.onBridgeReady(pyBridge);
+    pyBridge.onWebReady();
+  }
+
+  private detachBridge(): void {
+    const { bridge, boundSignalHandler } = this;
+    this.bridge = null;
+    this.boundSignalHandler = null;
+
+    if (bridge && boundSignalHandler) {
+      Result.fromThrowable(() =>
+        bridge.dispatchCommandSignal.disconnect(boundSignalHandler),
+      ).mapErr((err) => {
+        console.error('Failed to disconnect the bridge command signal:', err);
       });
     }
   }
