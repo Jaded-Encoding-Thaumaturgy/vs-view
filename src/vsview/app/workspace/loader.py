@@ -1018,7 +1018,7 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
                 self.script = loader(self._script_content, self.env, module=module, chdir=chdir, **self._script_kwargs)
             except (SyntaxError, OSError, ValueError) as skill_issue:
                 self.statusLoadingErrored.emit(re.sub(r"(?<=\w)([A-Z])", r" \1", skill_issue.__class__.__name__))
-                show_error(skill_issue, self, self._user_script_path)
+                show_error(skill_issue, self, self._user_script_path, phase="loading")
                 raise RuntimeError("Script loading failed") from None
             except TypeError as e:
                 raise RuntimeError("Script loading failed") from e

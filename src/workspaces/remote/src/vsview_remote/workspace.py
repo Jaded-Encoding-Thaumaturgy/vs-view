@@ -177,6 +177,7 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
                 _strip_local_paths(err, str(self.content)) if isinstance(err, RemoteError) else err,
                 self,
                 user_script_path=str(self.content),
+                phase="loading",
             )
             raise err from None
         except Exception as err:

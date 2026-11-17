@@ -233,7 +233,7 @@ def test_script_loading_syntax_error(
 
     assert mock_dialog.called
     dialog_msg = mock_dialog.call_args[0][1]
-    assert "SyntaxError" in dialog_msg
+    assert dialog_msg.startswith("A SyntaxError exception was raised while loading the script.\n")
     assert errored_signals == ["Syntax Error", "Error while loading content"]
 
     # Workspace does not crash and remains responsive
@@ -268,7 +268,7 @@ def test_script_loading_name_error(
 
     assert mock_dialog.called
     dialog_msg = mock_dialog.call_args[0][1]
-    assert "NameError" in dialog_msg
+    assert dialog_msg.startswith("A NameError exception was raised while running the script.\n")
     assert "undefined_variable" in dialog_msg
     assert errored_signals == ["Execution error", "Error while loading content"]
 

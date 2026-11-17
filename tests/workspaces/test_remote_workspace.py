@@ -657,6 +657,7 @@ def test_load_without_a_connection_shows_the_reason(
     assert future.result() == 1
     assert statuses == ["Remote connection not configured", "Error while loading content"]
     assert len(dialogs) == 1
+    assert dialogs[0].startswith("A ConnectionNotConfiguredError exception was raised while loading the script.\n")
     assert dialogs[0].endswith("ConnectionNotConfiguredError: Remote connection not configured\n")
     assert any("Remote connection not configured" in r.getMessage() for r in caplog.records)
 

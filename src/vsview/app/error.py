@@ -5,7 +5,7 @@ from io import BytesIO
 from logging import getLogger
 from pathlib import Path
 from traceback import TracebackException
-from typing import Any, NamedTuple, Protocol, runtime_checkable
+from typing import Any, Literal, NamedTuple, Protocol, runtime_checkable
 
 from PySide6.QtGui import QFontMetrics, Qt
 from PySide6.QtWidgets import QGridLayout, QMessageBox, QSpacerItem, QStyle, QWidget
@@ -199,14 +199,15 @@ def show_error(
     user_script_path: str | None = None,
     header_suffix: str = "",
     title: str = "Error",
+    phase: Literal["loading", "running"] = "running",
 ) -> int:
     """
-    Format and display an error dialog for script execution failures.
+    Format and display an error dialog for script loading or execution failures.
     """
     info = resolve_error_location(error, user_script_path)
     context = extract_source_context(info.filename, info.lineno, fallback_code_line=info.code_line)
 
-    header = f"A {info.exc_type} exception was raised while running the script{header_suffix}."
+    header = f"A {info.exc_type} exception was raised while {phase} the script{header_suffix}."
     detail = f"{info.exc_type}: {info.exc_msg}" if info.exc_msg else info.exc_type
     error_message = f"{header}\n\n{'\n'.join(context)}\n\n{detail}\n"
 
