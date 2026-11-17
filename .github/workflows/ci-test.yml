@@ -127,10 +127,16 @@ jobs:
             libxcb-xtest0 \
             libxcb-cursor0 \
             libpulse0 \
-            xvfb
+            xvfb \
+            gdb
 
       - name: Install dependencies
         run: uv sync --locked --group test --group plugins --no-dev
+
+      - name: Enable core dumps
+        run: |
+          mkdir -p /tmp/cores
+          sudo sysctl -w kernel.core_pattern=/tmp/cores/core.%p
 
       - name: Run tests
         env:
@@ -138,11 +144,23 @@ jobs:
           QT_DEBUG_PLUGINS: 1
           PACKAGE: ${{ inputs.package }}
         run: |
+          ulimit -c unlimited
           if [ -n "$PACKAGE" ]; then
             uv run --package "$PACKAGE" pytest -v
           else
             uv run pytest -v
           fi
+
+      - name: Print native backtraces
+        if: failure()
+        run: |
+          shopt -s nullglob
+          python_exe="$(readlink -f .venv/bin/python)"
+          for core in /tmp/cores/core.*; do
+            echo "::group::Backtrace of $core"
+            gdb -batch -nx -ex "thread apply all bt" "$python_exe" "$core" || true
+            echo "::endgroup::"
+          done
 
       - name: Post webhook for failure
         if: failure()
