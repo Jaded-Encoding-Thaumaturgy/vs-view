@@ -16,7 +16,7 @@ import zmq
 from keyring.backends.fail import Keyring
 from PySide6.QtCore import QMimeData, QPointF, Qt, QTimer, QUrl
 from PySide6.QtGui import QDropEvent
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QDialogButtonBox, QFileDialog, QMessageBox
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
@@ -153,14 +153,25 @@ def script(tmp_path: Path) -> Path:
     return path
 
 
+def when_secrets_ready(ws: RemoteWorkspace, action: Callable[[], Any]) -> None:
+    # The dialog reads the keyring in the background, so the action waits for the secrets to reach the widgets.
+    def run() -> None:
+        if not ws.dialog.secrets_ready:
+            QTimer.singleShot(5, run)
+            return
+        action()
+
+    QTimer.singleShot(0, run)
+
+
 def accept_dialog(ws: RemoteWorkspace, before_accept: Callable[[], Any] | None = None) -> ConnectionConfig | None:
-    # The dialog is modal: a zero timer edits the widgets and presses Connect from inside exec().
+    # The dialog is modal: a timer edits the widgets and presses Connect from inside exec().
     def press_connect() -> None:
         if before_accept is not None:
             before_accept()
         ws.dialog.accept()
 
-    QTimer.singleShot(0, press_connect)
+    when_secrets_ready(ws, press_connect)
     return ws.prompt_connection_dialog()
 
 
@@ -183,7 +194,7 @@ def connect_through_load_button(
         else:
             ws.dialog.reject()
 
-    QTimer.singleShot(0, close_dialog)
+    when_secrets_ready(ws, close_dialog)
     ws.load_btn.click()
     return load_content
 
@@ -344,7 +355,7 @@ def test_configure_connection_on_the_error_page_loads_the_script_again(
     load_content = mocker.patch.object(workspace, "load_content")
     reload_content = mocker.patch.object(workspace, "reload_content")
 
-    QTimer.singleShot(0, workspace.dialog.accept)
+    when_secrets_ready(workspace, workspace.dialog.accept)
     workspace._on_configure_connection()
 
     assert workspace.stack.currentWidget() is workspace.error_page
@@ -362,7 +373,7 @@ def test_configure_connection_on_a_loaded_script_reloads_it(
     load_content = mocker.patch.object(workspace, "load_content")
     reload_content = mocker.patch.object(workspace, "reload_content")
 
-    QTimer.singleShot(0, workspace.dialog.accept)
+    when_secrets_ready(workspace, workspace.dialog.accept)
     workspace._on_configure_connection()
 
     reload_content.assert_called_once_with()
@@ -415,6 +426,70 @@ def test_connect_without_a_keyring_backend_keeps_the_secrets_for_the_session(
     assert res.auth_token == "session-token"
     assert workspace.auth_token == "session-token"
     assert messages == [READ_ERROR_MESSAGE, READ_ERROR_MESSAGE]
+
+
+def test_dialog_reads_the_keyring_off_the_gui_thread(
+    workspace: RemoteWorkspace, isolate_secrets: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store_curve_keys(workspace, use_curve=True)
+    workspace.auth_token = "stored-token"
+    read_threads = list[threading.Thread]()
+    real_get = isolate_secrets.get_password
+
+    def recording_get(service: str, username: str) -> str | None:
+        read_threads.append(threading.current_thread())
+        return real_get(service, username)
+
+    monkeypatch.setattr(isolate_secrets, "get_password", recording_get)
+    shown = list[tuple[str, str, list[threading.Thread]]]()
+
+    # Saving on Connect may read the keyring again; only the reads made while the dialog is open are checked.
+    def record() -> None:
+        dialog = workspace.dialog
+        shown.append((dialog.token_edit.text(), dialog.curve_secret_key_edit.text(), list(read_threads)))
+
+    res = accept_dialog(workspace, record)
+
+    ((token, secret_key, dialog_reads),) = shown
+    assert (token, secret_key) == ("stored-token", SECRET_KEY)
+    assert len(dialog_reads) == 2
+    assert threading.main_thread() not in dialog_reads
+    assert res is not None
+    assert res.auth_token == "stored-token"
+
+
+def test_dialog_blocks_connect_until_the_secrets_are_read(
+    workspace: RemoteWorkspace, isolate_secrets: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace.auth_token = "stored-token"
+    release = threading.Event()
+    real_get = isolate_secrets.get_password
+
+    def slow_get(service: str, username: str) -> str | None:
+        release.wait(5)
+        return real_get(service, username)
+
+    monkeypatch.setattr(isolate_secrets, "get_password", slow_get)
+    dialog = workspace.dialog
+    while_reading = list[tuple[bool, bool, bool, str]]()
+
+    def record_then_release() -> None:
+        connect_btn = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        while_reading.append(
+            (dialog.secrets_ready, connect_btn.isEnabled(), dialog.token_edit.isEnabled(), dialog.token_edit.text())
+        )
+        # A press while the keyring is still being read must not save the empty field over the stored token.
+        dialog.accept()
+        release.set()
+        when_secrets_ready(workspace, dialog.accept)
+
+    QTimer.singleShot(0, record_then_release)
+    res = workspace.prompt_connection_dialog()
+
+    assert while_reading == [(False, False, False, "")]
+    assert res is not None
+    assert res.auth_token == "stored-token"
+    assert workspace.auth_token == "stored-token"
 
 
 def test_a_failed_keyring_read_never_deletes_the_stored_secret(
@@ -561,7 +636,7 @@ def close_dialog_when_shown(
     closed = list[bool]()
 
     def close_when_visible() -> None:
-        if not ws.dialog.isVisible():
+        if not ws.dialog.isVisible() or not ws.dialog.secrets_ready:
             QTimer.singleShot(10, ws, close_when_visible)
             return
         if before_close is not None:
@@ -968,7 +1043,7 @@ def test_declining_the_warning_keeps_the_dialog_open(
         after_connect.append(workspace.dialog.isVisible())
         workspace.dialog.reject()
 
-    QTimer.singleShot(0, connect_then_cancel)
+    when_secrets_ready(workspace, connect_then_cancel)
     res = workspace.prompt_connection_dialog()
 
     assert res is None
@@ -1027,7 +1102,7 @@ def test_declined_test_connection_sends_nothing(
         workspace.dialog.test_btn.click()
         workspace.dialog.reject()
 
-    QTimer.singleShot(0, test_then_cancel)
+    when_secrets_ready(workspace, test_then_cancel)
     workspace.prompt_connection_dialog()
     qtbot.wait(50)
 
@@ -1050,7 +1125,7 @@ def test_accepted_warning_is_asked_once_per_dialog(
         qtbot.waitUntil(lambda: workspace.dialog.test_btn.isEnabled(), timeout=5000)
         workspace.dialog.accept()
 
-    QTimer.singleShot(0, test_then_connect)
+    when_secrets_ready(workspace, test_then_connect)
     first = workspace.prompt_connection_dialog()
     second = accept_dialog(workspace)
 
@@ -1081,7 +1156,7 @@ def test_test_connection_reports_a_wrong_token(
         status.append(workspace.dialog.status_label.text())
         workspace.dialog.reject()
 
-    QTimer.singleShot(0, test_then_cancel)
+    when_secrets_ready(workspace, test_then_cancel)
     workspace.prompt_connection_dialog()
 
     assert status == ["Authentication failed: invalid or missing auth token."]
@@ -1099,7 +1174,7 @@ def test_test_connection_succeeds_when_the_server_answers(
         status.append(workspace.dialog.status_label.text())
         workspace.dialog.reject()
 
-    QTimer.singleShot(0, test_then_cancel)
+    when_secrets_ready(workspace, test_then_cancel)
     workspace.prompt_connection_dialog()
 
     assert status == ["Connected successfully!"]
@@ -1143,7 +1218,7 @@ def test_connect_with_invalid_input_keeps_the_dialog_open(
         after_connect.append(workspace.dialog.isVisible())
         workspace.dialog.reject()
 
-    QTimer.singleShot(0, connect_then_cancel)
+    when_secrets_ready(workspace, connect_then_cancel)
     res = workspace.prompt_connection_dialog()
 
     assert res is None

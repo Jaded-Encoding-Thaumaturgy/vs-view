@@ -20,7 +20,7 @@ from vsremote import (
     VSRemoteError,
 )
 
-from vsview.api import ActionDefinition, IconName
+from vsview.api import ActionDefinition, IconName, run_in_loop
 from vsview.api.workspace import PluginWorkspace
 from vsview.app.error import StackFrame, show_error
 from vsview.app.outputs import VideoMetadata
@@ -209,6 +209,7 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
 
         return res
 
+    @run_in_loop
     def _on_secrets_error(self, message: str) -> None:
         self.api.statusMessage.emit(message)
         self.dialog.set_status(message, "#e74c3c")

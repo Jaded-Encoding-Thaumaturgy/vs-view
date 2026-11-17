@@ -46,6 +46,8 @@ class RemoteConnectionDialog(QDialog):
         self.secrets = secrets
         self._ping_worker: UnifiedFuture[None] | None = None
         self._insecure_address_confirmed: str | None = None
+        self._secrets_ready = True
+        self._secrets_generation = 0
 
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(8)
@@ -149,7 +151,6 @@ class RemoteConnectionDialog(QDialog):
     def refresh_from_settings(self) -> None:
         sett = self.settings.global_
         self.address_edit.setText(sett.address)
-        self.token_edit.setText(self.auth_token or "")
         self.compression_combo.setCurrentText(sett.compression)
         self.prefetch_spin.setValue(sett.prefetch)
         self.backlog_spin.setValue(sett.backlog or 0)
@@ -159,7 +160,6 @@ class RemoteConnectionDialog(QDialog):
         self.use_curve_cb.setChecked(sett.use_curve)
         self.curve_server_key_edit.setText(sett.curve_server_key or "")
         self.curve_public_key_edit.setText(sett.curve_public_key or "")
-        self.curve_secret_key_edit.setText(self.curve_secret_key or "")
         self._on_curve_toggled(sett.use_curve)
 
     @property
@@ -182,6 +182,11 @@ class RemoteConnectionDialog(QDialog):
         )
 
     @property
+    def secrets_ready(self) -> bool:
+        """Whether the saved auth token and client secret key have been read into the dialog."""
+        return self._secrets_ready
+
+    @property
     def auth_token(self) -> str | None:
         return self.secrets.get(AUTH_CONTEXT, AUTH_KEY)
 
@@ -191,6 +196,9 @@ class RemoteConnectionDialog(QDialog):
 
     @override
     def accept(self) -> None:
+        if not self._secrets_ready:
+            return
+
         cfg = self.config
 
         if (problem := cfg.validate()) is not None:
@@ -205,6 +213,7 @@ class RemoteConnectionDialog(QDialog):
         self._insecure_address_confirmed = None
         self.set_status()
         self.refresh_from_settings()
+        self._load_secrets()
         res = super().exec()
         if self._ping_worker:
             logger.debug("Cancelling ping task")
@@ -244,11 +253,38 @@ class RemoteConnectionDialog(QDialog):
         self._insecure_address_confirmed = cfg.address
         return True
 
+    def _load_secrets(self) -> None:
+        self._secrets_generation += 1
+        self.token_edit.clear()
+        self.curve_secret_key_edit.clear()
+        self._set_secrets_ready(False)
+
+        def on_secrets_read(secrets: tuple[str | None, str | None], generation: int) -> None:
+            if generation != self._secrets_generation:
+                return
+            auth_token, curve_secret_key = secrets
+            self.token_edit.setText(auth_token or "")
+            self.curve_secret_key_edit.setText(curve_secret_key or "")
+            self._set_secrets_ready(True)
+
+        self._read_secrets().map(lambda secrets: on_secrets_read(secrets, self._secrets_generation), on_loop=True)
+
+    def _set_secrets_ready(self, ready: bool) -> None:
+        self._secrets_ready = ready
+        self.token_edit.setEnabled(ready)
+        self.curve_secret_key_edit.setEnabled(ready and self.use_curve_cb.isChecked())
+        self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(ready)
+        self.test_btn.setEnabled(ready)
+
+    @run_in_background(name="ReadRemoteSecrets")
+    def _read_secrets(self) -> tuple[str | None, str | None]:
+        return self.auth_token, self.curve_secret_key
+
     @Slot(bool)
     def _on_curve_toggled(self, checked: bool) -> None:
         self.curve_server_key_edit.setEnabled(checked)
         self.curve_public_key_edit.setEnabled(checked)
-        self.curve_secret_key_edit.setEnabled(checked)
+        self.curve_secret_key_edit.setEnabled(checked and self._secrets_ready)
 
     @Slot()
     def _on_test_connection_clicked(self) -> None:
@@ -282,8 +318,8 @@ class RemoteConnectionDialog(QDialog):
                     self.set_status(f"Connection failed: {e}", "#e74c3c")
 
         def restore_state(*_: Any) -> None:
-            self.test_btn.setEnabled(True)
-            self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(True)
+            self.test_btn.setEnabled(self._secrets_ready)
+            self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(self._secrets_ready)
             self._ping_worker = None
 
         self._ping_worker = (
