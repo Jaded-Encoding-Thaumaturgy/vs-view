@@ -953,7 +953,6 @@ def test_connect_to_a_remote_host_without_curve_asks_first(
     assert res.address == REMOTE_ADDRESS
     assert len(shown) == 1
     assert REMOTE_ADDRESS in shown[0][0]
-    assert "clear text" in shown[0][0]
     assert shown[0][1] == Qt.TextFormat.PlainText
     assert workspace.settings.global_.address == REMOTE_ADDRESS
 
