@@ -9,7 +9,7 @@ from dataclasses import KW_ONLY, dataclass, field
 from functools import cache, wraps
 from itertools import chain
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, Final, get_args, get_origin, override
+from typing import TYPE_CHECKING, Any, Concatenate, Final, get_args, get_origin, override
 
 from jetpytools import CustomTypeError, SupportsRichComparison
 from pydantic import TypeAdapter, ValidationError
@@ -219,6 +219,10 @@ class Login(SecretWidgetMetadata[LoginCredentialsInput]):
         widget.setProperty("_old_username", username)
 
 
+LOADED_PROPERTY: Final[str] = "_loaded_secret"
+LOAD_FAILED_PROPERTY: Final[str] = "_secret_load_failed"
+
+
 @dataclass(frozen=True, slots=True)
 class SecretLineEdit(SecretWidgetMetadata[QLineEdit]):
     """Secret LineEdit widget metadata stored in SecretsManager."""
@@ -240,23 +244,20 @@ class SecretLineEdit(SecretWidgetMetadata[QLineEdit]):
     to_ui: None = None
     from_ui: None = None
 
-    LOADED_PROPERTY: ClassVar[Final[str]] = "_loaded_secret"
-    LOAD_FAILED_PROPERTY: ClassVar[Final[str]] = "_secret_load_failed"
-
     @override
     def create_widget(self, parent: QWidget | None = None) -> QLineEdit:
         return QLineEdit(parent, echoMode=self.echo_mode, placeholderText=self.placeholder_text)
 
     @override
     def load_value(self, widget: QLineEdit, value: Any) -> None:
-        widget.setProperty(SecretLineEdit.LOADED_PROPERTY, None)
-        widget.setProperty(SecretLineEdit.LOAD_FAILED_PROPERTY, True)
+        widget.setProperty(LOADED_PROPERTY, None)
+        widget.setProperty(LOAD_FAILED_PROPERTY, True)
 
         secret = SecretsManager.get(self.namespace, self.context, self.key) or ""
         widget.setText(secret)
 
-        widget.setProperty(SecretLineEdit.LOADED_PROPERTY, secret)
-        widget.setProperty(SecretLineEdit.LOAD_FAILED_PROPERTY, False)
+        widget.setProperty(LOADED_PROPERTY, secret)
+        widget.setProperty(LOAD_FAILED_PROPERTY, False)
 
     @override
     def read_value(self, widget: QLineEdit) -> Any:
@@ -265,14 +266,14 @@ class SecretLineEdit(SecretWidgetMetadata[QLineEdit]):
     @override
     def store_secret(self, widget: QLineEdit) -> None:
         # After a failed load the field is empty, so writing it would delete the stored secret
-        if widget.property(SecretLineEdit.LOAD_FAILED_PROPERTY):
+        if widget.property(LOAD_FAILED_PROPERTY):
             logger.warning("Skipping the secret %s/%s: it could not be loaded", self.namespace, self.key)
             return
 
         secret = widget.text().strip() if self.strip else widget.text()
 
         # Only touch the keyring on a real change, so Apply keeps working when no backend is available
-        if secret == widget.property(SecretLineEdit.LOADED_PROPERTY):
+        if secret == widget.property(LOADED_PROPERTY):
             return
 
         if secret:
@@ -280,7 +281,7 @@ class SecretLineEdit(SecretWidgetMetadata[QLineEdit]):
         else:
             SecretsManager.delete(self.namespace, self.context, self.key)
 
-        widget.setProperty(SecretLineEdit.LOADED_PROPERTY, secret)
+        widget.setProperty(LOADED_PROPERTY, secret)
 
 
 @dataclass(frozen=True, slots=True)
