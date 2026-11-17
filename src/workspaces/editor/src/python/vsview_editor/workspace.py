@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from jetpytools import SPath, fallback
 from PySide6.QtCore import QSize, Qt, QTimer, QUrl, QUrlQuery, Signal, Slot
-from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDragMoveEvent, QDropEvent, QPalette, QShowEvent
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QPalette, QShowEvent
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -811,13 +811,6 @@ class EditorWorkspace(
         if not self._initial_docks_resized:
             self._initial_docks_resized = True
             QTimer.singleShot(0, self._apply_default_dock_sizes)
-
-    @override
-    def closeEvent(self, event: QCloseEvent) -> None:
-        if self.confirm_close():
-            super().closeEvent(event)
-        else:
-            event.ignore()
 
     @override
     def deleteLater(self) -> None:
