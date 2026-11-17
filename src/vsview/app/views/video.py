@@ -453,7 +453,7 @@ class BaseGraphicsView(QGraphicsView):
         center = self.mapToScene(self.viewport().rect().center())
 
         return ViewState(
-            self.pixmap_item.pixmap().copy(),
+            self.pixmap_item.pixmap().copy() if Shiboken.isValid(self.pixmap_item) else QPixmap(),
             self.current_zoom,
             self.autofit,
             center.x(),
@@ -686,6 +686,9 @@ class BaseGraphicsView(QGraphicsView):
         Set the current frame.
         If hdr_image is provided and HDR is enabled, it will use the HDR viewport.
         """
+        if not Shiboken.isValid(self.pixmap_item):
+            return
+
         pixmap.setDevicePixelRatio(self.devicePixelRatio())
         old_size = self.pixmap_item.pixmap().deviceIndependentSize()
         self.pixmap_item.setPixmap(pixmap)
@@ -779,8 +782,12 @@ class BaseGraphicsView(QGraphicsView):
             point: The point in viewport or widget local coordinates.
 
         Returns:
-            The corresponding point in the source image's pixel coordinates.
+            The corresponding point in the source image's pixel coordinates,
+            or (-1, -1) when the scene has been cleared.
         """
+        if not Shiboken.isValid(self.pixmap_item):
+            return QPointF(-1, -1)
+
         # PySide6 has no QPointF overload of mapToScene,
         # and rounding to QPoint loses sub-pixel positions at fractional device pixel ratios.
         view_to_scene, _ = self.viewportTransform().inverted()

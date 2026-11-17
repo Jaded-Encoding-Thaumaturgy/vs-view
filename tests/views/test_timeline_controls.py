@@ -6,7 +6,7 @@ from typing import Any, Literal, NamedTuple
 
 import pytest
 from jetpytools import complex_hash
-from PySide6.QtCore import QEvent, QLineF, QPoint, QPointF, QRectF, QSize, Qt, QTime
+from PySide6.QtCore import QAbstractAnimation, QEvent, QLineF, QPoint, QPointF, QRectF, QSize, Qt, QTime
 from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
@@ -728,7 +728,7 @@ def test_hover_popup_draws_only_notches_in_the_zoomed_range(
 
     drawn = sorted(call.args[0].label for call in draw_spy.call_args_list)
     visible = sorted(n.label for n in timeline.custom_notches["keyframes"] if 488 <= n.line.x1() <= 512)
-    assert len(visible) == 50
+    assert len(visible) == 51
     assert drawn == visible
 
 
@@ -1308,6 +1308,31 @@ def test_spinbox_show_focus_for_user(qtbot: QtBot) -> None:
     t_edit.show_focus_for_user()
     assert isinstance(f_edit.graphicsEffect(), QGraphicsDropShadowEffect)
     assert isinstance(t_edit.graphicsEffect(), QGraphicsDropShadowEffect)
+
+
+def test_spinbox_focus_animation_is_deleted_when_it_stops(qtbot: QtBot) -> None:
+    parent = PlaybackContainer()
+    qtbot.addWidget(parent)
+    f_edit = FrameEdit(parent)
+    qtbot.addWidget(f_edit)
+
+    f_edit.show_focus_for_user()
+    assert f_edit.findChildren(QAbstractAnimation) != []
+
+    qtbot.waitUntil(lambda: f_edit.findChildren(QAbstractAnimation) == [], timeout=3000)
+
+
+@pytest.mark.parametrize(("total_frames", "width"), [(7, 10), (3, 10), (99, 100), (10, 10)])
+def test_timeline_frame_to_x_to_frame_round_trip(
+    timeline_control_bar: TimelineControlBar, total_frames: int, width: int
+) -> None:
+    timeline = timeline_control_bar.timeline
+    timeline_control_bar.set_data(total_frames, [(i + 1) / 25.0 for i in range(total_frames)])
+    timeline.rect_f = QRectF(0, 0, width, 33)
+
+    round_trip = [int(timeline.x_to_frame(timeline.cursor_to_x(Frame(f)))) for f in range(total_frames)]
+
+    assert round_trip == list(range(total_frames))
 
 
 def test_frame_edit_validation_clamp_max(qtbot: QtBot) -> None:

@@ -813,3 +813,21 @@ def test_dpr_change_with_the_same_pixel_size_updates_the_scene_rect(qtbot: QtBot
     view.set_pixmap(same_size)
 
     assert view.sceneRect() == QRectF(0, 0, 50, 40)
+
+
+def test_view_tolerates_a_cleared_scene(qtbot: QtBot) -> None:
+    view = GraphicsView()
+    qtbot.addWidget(view)
+    view.resize(200, 200)
+    view.show()
+    pixmap = QPixmap(50, 40)
+    pixmap.fill(Qt.GlobalColor.white)
+    view.set_pixmap(pixmap)
+    view.clear_scene()
+
+    view.set_pixmap(pixmap)
+    mapped = view.map_to_image(QPointF(10, 10))
+    state = view.state
+
+    assert mapped == QPointF(-1, -1)
+    assert state.pixmap.isNull() is True
