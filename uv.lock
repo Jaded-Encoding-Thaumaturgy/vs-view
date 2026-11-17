@@ -3017,7 +3017,7 @@ full = [
     { name = "vsview-graph" },
     { name = "vsview-histogram" },
     { name = "vsview-nativeres", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
-    { name = "vsview-nativeres", version = "0.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+    { name = "vsview-nativeres", version = "0.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
     { name = "vsview-remote" },
     { name = "vsview-split-planes" },
 ]
@@ -3056,7 +3056,7 @@ dev = [
     { name = "vsview-graph" },
     { name = "vsview-histogram" },
     { name = "vsview-nativeres", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
-    { name = "vsview-nativeres", version = "0.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+    { name = "vsview-nativeres", version = "0.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
     { name = "vsview-pyapp" },
     { name = "vsview-remote" },
     { name = "vsview-split-planes" },
@@ -3077,7 +3077,7 @@ plugins = [
     { name = "vsview-graph" },
     { name = "vsview-histogram" },
     { name = "vsview-nativeres", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
-    { name = "vsview-nativeres", version = "0.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+    { name = "vsview-nativeres", version = "0.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
     { name = "vsview-remote" },
     { name = "vsview-split-planes" },
 ]
@@ -3311,7 +3311,7 @@ wheels = [
 
 [[package]]
 name = "vsview-nativeres"
-version = "0.5.1"
+version = "0.5.2"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -3321,9 +3321,9 @@ dependencies = [
     { name = "nativeres", version = "0.5.0", source = { registry = "https://pypi.org/simple" } },
     { name = "vsview" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/95/8a/915ba71636bc224a7e8a7d7d509ca77638af1fb1a4298d903de0bea9c90a/vsview_nativeres-0.5.1.tar.gz", hash = "sha256:81b24a2fae7b134bb37b77b99d324d1b27116a3c5779ba75f8d3e0b25916e4af", size = 16764, upload-time = "2026-11-06T23:03:32.6Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cf/96/60d7e3bc47af1b24bc661826b57647917a546e9eed827a01bbfa58d14838/vsview_nativeres-0.5.2.tar.gz", hash = "sha256:ccb26a8e982ca11764161b998eb305bc4d4374327a14aee3b8da07b704db76d9", size = 16772, upload-time = "2026-11-17T20:01:17.022Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/18/f0/4198fbebfe0887e51f5a1177de8b4a181a32a66d441c7dfde26dd3b1612e/vsview_nativeres-0.5.1-py3-none-any.whl", hash = "sha256:21abe1f3a00b2c406786c0b898fee975808f09ca1f97d2c250b6c0f929b6fafc", size = 18252, upload-time = "2026-11-06T23:03:31.142Z" },
+    { url = "https://files.pythonhosted.org/packages/85/f8/71d1b7604569cebdc7762dab8fa7ce9a6ad46a1356d2ed49504b61221349/vsview_nativeres-0.5.2-py3-none-any.whl", hash = "sha256:bf39ed8586c2d7554be78bed496359bb809bddb648e9d903554a853b82bb223e", size = 18259, upload-time = "2026-11-17T20:01:15.876Z" },
 ]
 
 [[package]]
