@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import weakref
 from bisect import bisect_left, bisect_right
 from collections.abc import Hashable, Iterator, Sequence
@@ -210,7 +211,6 @@ class HoverLabelIndex(NamedTuple):
     colors: list[QColor]
     widths: list[int]
     run_positions: list[int]
-    first_run_end: int
     max_width: int
 
 
@@ -223,7 +223,6 @@ class TimelineHoverPopup(QWidget):
     LABEL_PADDING_V = 2
     LABEL_STAGGER_OFFSETS = (0, -20, -40)
     LABEL_SPACING = 10
-    STAGGER_START_X = -9999.0
     ZOOMED_NOTCH_SPACING = 75
     RANGE_FILL_ALPHA = 80
 
@@ -388,16 +387,12 @@ class TimelineHoverPopup(QWidget):
             start = bisect_left(labels.xs, to_timeline.map(QPointF(popup_rect.left() - margin, 0)).x())
             end = bisect_right(labels.xs, to_timeline.map(QPointF(popup_rect.right() + margin, 0)).x())
 
-            first_x = to_popup.map(QPointF(labels.xs[0], 0)).x()
-            first_run_shift = int(first_x - self.STAGGER_START_X < labels.widths[0] + self.LABEL_SPACING)
-
             for i in range(start, end):
-                level = labels.run_positions[i] + (first_run_shift if i < labels.first_run_end else 0)
                 lbl = HoverLabel(
                     labels.texts[i],
                     to_popup.map(QPointF(labels.xs[i], 0)).x(),
                     labels.colors[i],
-                    self.LABEL_STAGGER_OFFSETS[level % len(self.LABEL_STAGGER_OFFSETS)],
+                    self.LABEL_STAGGER_OFFSETS[labels.run_positions[i] % len(self.LABEL_STAGGER_OFFSETS)],
                 )
                 self._draw_label_pill(painter, lbl, popup_rect, y_offset, fm, timeline)
 
@@ -439,8 +434,6 @@ class TimelineHoverPopup(QWidget):
             close = i > 0 and (x - xs[i - 1]) * self.zoom_factor < width + self.LABEL_SPACING
             run_positions.append(run_positions[-1] + 1 if close else 0)
 
-        first_run_end = next((i for i in range(1, len(xs)) if run_positions[i] == 0), len(xs))
-
         self._label_index = HoverLabelIndex(
             key,
             xs,
@@ -448,7 +441,6 @@ class TimelineHoverPopup(QWidget):
             [color for _, _, color in entries],
             widths,
             run_positions,
-            first_run_end,
             max(widths, default=0),
         )
         return self._label_index
@@ -492,7 +484,7 @@ class TimelineHoverPopup(QWidget):
 
         staggered = list[HoverLabel]()
         level_index = 0
-        last_x = self.STAGGER_START_X
+        last_x = -math.inf
 
         for lbl in labels:
             if lbl.x - last_x < fm.horizontalAdvance(lbl.text) + self.LABEL_SPACING:

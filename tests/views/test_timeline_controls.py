@@ -782,6 +782,42 @@ def test_hover_popup_visible_labels_match_full_staggering(
     assert drawn == expected
 
 
+@pytest.mark.parametrize("x", [-9_990.0, -10_000.0, -50_000.0, 0.0, 500.0])
+def test_hover_popup_first_label_starts_at_the_lowest_level(timeline_control_bar: TimelineControlBar, x: float) -> None:
+    popup = timeline_control_bar.timeline.hover_popup
+    fm = QFontMetrics(popup.font())
+    labels = [HoverLabel("A", x, QColor("red")), HoverLabel("B", x + 2.0, QColor("blue"))]
+
+    staggered = popup.apply_staggering(labels, fm)
+
+    assert [lbl.y_offset for lbl in staggered] == [0, -20]
+
+
+def test_hover_popup_stagger_levels_do_not_depend_on_the_hover_position(
+    timeline_control_bar: TimelineControlBar, mocker: MockerFixture
+) -> None:
+    timeline = timeline_control_bar.timeline
+    timeline.set_data(1000)
+    timeline.rect_f = QRectF(0, 0, 1000, 33)
+    # One notch per pixel: at zoom 20 every label is close to the previous one, so all labels form one run from x=0.
+    for i in range(1000):
+        timeline.add_notch("keyframes", Frame(i), label=f"n{i:04d}")
+    # The radius shows +-20 timeline pixels, so n0520 is on screen at both hover positions.
+    _set_hover_zoom(20.0, 400)
+    popup = timeline.hover_popup
+    pill_spy = mocker.spy(popup, "_draw_label_pill")
+
+    def level_of(text: str, hover_x: int) -> float:
+        pill_spy.reset_mock()
+        popup.update_state(hover_x)
+        popup.grab()
+        return next(call.args[1].y_offset for call in pill_spy.call_args_list if call.args[1].text == text)
+
+    levels = {hover_x: level_of("n0520", hover_x) for hover_x in (505, 535)}
+
+    assert levels == {505: -20, 535: -20}
+
+
 def test_hover_popup_culling_follows_notch_changes(
     timeline_control_bar: TimelineControlBar, mocker: MockerFixture
 ) -> None:
