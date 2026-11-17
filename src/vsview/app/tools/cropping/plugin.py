@@ -20,7 +20,7 @@ from vsview.api import (
 )
 
 from .settings import GlobalSettings
-from .utils import CommandLabel, CommandRow, CropValues, CustomRect, CustomSize
+from .utils import CommandLabel, CommandRow, CropValues, CustomRect, CustomSize, crop_mods
 
 logger = getLogger(__name__)
 
@@ -93,6 +93,7 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         )
         self.cmd_group_layout = QVBoxLayout(self.cmd_group)
         self.cmd_labels = list[CommandLabel]()
+        self.cmd_rows = list[CommandRow]()
         self._setup_cmd_labels()
 
         self.main_layout.addWidget(self.cmd_group)
@@ -155,6 +156,7 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
                 w.deleteLater()
 
         self.cmd_labels.clear()
+        self.cmd_rows.clear()
 
         for code_fmt in self.settings.global_.code_format:
             copy_btn = self.make_tool_button(
@@ -166,7 +168,18 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             row.copied.connect(self._on_command_copied)
 
             self.cmd_labels.append(row.cmd_label)
+            self.cmd_rows.append(row)
             self.cmd_group_layout.addWidget(row)
+
+        self._update_cmd_rows(None)
+
+    def _update_cmd_rows(self, values: CropValues | None) -> None:
+        for row in self.cmd_rows:
+            if values is None:
+                row.cmd_label.show_placeholder()
+            else:
+                row.cmd_label.format(**values._asdict())
+            row.copy_btn.setEnabled(values is not None)
 
     # Plugin API Hooks
     @override
@@ -228,14 +241,15 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
     @run_in_loop(return_future=False)
     def _apply_view_selection(self, rect: QRect) -> None:
-        image_size = CustomSize.from_clip(self.api.current_voutput.vs_output.clip)
+        clip = self.api.current_voutput.vs_output.clip
+        image_size = CustomSize.from_clip(clip)
 
         if rect.isEmpty():
             snapped_rect = QRect()
         else:
             snapped_rect = CustomRect(rect)
             try:
-                snapped_rect.sanitize(image_size, self.settings.global_.mod)
+                snapped_rect.sanitize(image_size, *crop_mods(clip.format, self.settings.global_.mod))
                 if snapped_rect.isNull() or snapped_rect.width() <= 0 or snapped_rect.height() <= 0:
                     snapped_rect = QRect()
             except ValueError:
@@ -249,20 +263,24 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         self._update_fields()
 
     def _update_fields(self) -> None:
-        image_size = CustomSize.from_clip(self.api.current_voutput.vs_output.clip)
+        clip = self.api.current_voutput.vs_output.clip
+        image_size = CustomSize.from_clip(clip)
         image_w = image_size.width()
         image_h = image_size.height()
 
+        # A smaller step would be snapped back by the subsampling, so the arrows would not move.
+        mod_x, mod_y = crop_mods(clip.format, self.settings.global_.mod)
+        for spin in (self.left_spin, self.right_spin, self.width_spin):
+            spin.setSingleStep(mod_x)
+        for spin in (self.top_spin, self.bottom_spin, self.height_spin):
+            spin.setSingleStep(mod_y)
+
         if self.crop_rect.isEmpty():
             values = CropValues()
-
-            for label in self.cmd_labels:
-                label.reset_text()
+            self._update_cmd_rows(None)
         else:
             values = CropValues.from_rect(self.crop_rect, image_size)
-
-            for label in self.cmd_labels:
-                label.format(**values._asdict())
+            self._update_cmd_rows(values)
 
         left_max = max(image_w - values.right - 1, 0)
         right_max = max(image_w - values.left - 1, 0)
@@ -295,7 +313,9 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
     @Slot(int)
     def _on_crop_spin_changed(self, value: int) -> None:
-        image_size = CustomSize.from_clip(self.api.current_voutput.vs_output.clip)
+        clip = self.api.current_voutput.vs_output.clip
+        image_size = CustomSize.from_clip(clip)
+
         image_w = image_size.width()
         image_h = image_size.height()
 
@@ -313,7 +333,14 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         bottom = clamp(bottom, 0, image_h - top - 1)
 
         try:
-            rect = CustomRect.from_crop(left, top, right, bottom, image_size, self.settings.global_.mod)
+            rect = CustomRect.from_crop(
+                left,
+                top,
+                right,
+                bottom,
+                image_size,
+                *crop_mods(clip.format, self.settings.global_.mod),
+            )
         except ValueError:
             rect = QRect()
         self.api.current_view.set_rect_selection(rect, finished=True)

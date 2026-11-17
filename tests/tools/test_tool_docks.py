@@ -98,8 +98,8 @@ def test_region_selector_selection_update_and_mod_clamping(plugin_controller: Ha
 def test_region_selector_aspect_ratio_and_command_labels(plugin_controller: HarnessPluginController) -> None:
     plugin = plugin_controller.create_plugin(RegionSelectorPlugin)
 
-    # Before selection, command label shows unformatted template
-    assert plugin.command_label.text() == "std.Crop({left}, {right}, {top}, {bottom})"
+    # Before selection, the command labels show a placeholder, not the raw template
+    assert [label.text() for label in plugin.cmd_labels] == ["No selection"] * 3
 
     # Set selection and verify crop script label formatting
     test_rect = QRect(10, 10, 30, 30)
@@ -121,10 +121,54 @@ def test_region_selector_aspect_ratio_and_command_labels(plugin_controller: Harn
     plugin_controller.set_rect_selection(rect_4_3)
     assert plugin.command_label.text() == "std.Crop(16, 16, 20, 20)"
 
-    # Clear selection resets command labels
+    # Clear selection shows the placeholder again
     plugin.clear_btn.click()
     assert plugin.crop_rect.isEmpty()
-    assert plugin.command_label.text() == "std.Crop({left}, {right}, {top}, {bottom})"
+    assert plugin.command_label.text() == "No selection"
+
+
+def test_region_selector_copy_buttons_follow_the_selection(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(RegionSelectorPlugin)
+    copy_buttons = [row.copy_btn for row in plugin.cmd_rows]
+    assert [btn.isEnabled() for btn in copy_buttons] == [False] * 3
+
+    plugin_controller.set_rect_selection(QRect(10, 10, 30, 30))
+    assert [btn.isEnabled() for btn in copy_buttons] == [True] * 3
+
+    plugin.clear_btn.click()
+    assert [btn.isEnabled() for btn in copy_buttons] == [False] * 3
+
+
+@pytest.mark.parametrize(
+    ("fmt", "mod", "selection", "expected", "expected_steps"),
+    [
+        (vs.YUV420P8, 1, QRect(9, 7, 31, 25), QRect(8, 6, 32, 26), (2, 2)),
+        (vs.YUV422P8, 1, QRect(9, 7, 31, 25), QRect(8, 7, 32, 25), (2, 1)),
+        (vs.YUV411P8, 2, QRect(10, 7, 31, 25), QRect(8, 6, 36, 26), (4, 2)),
+        (vs.YUV420P8, 3, QRect(9, 7, 31, 25), QRect(6, 6, 36, 30), (6, 6)),
+        (vs.YUV444P8, 1, QRect(9, 7, 31, 25), QRect(9, 7, 31, 25), (1, 1)),
+    ],
+    ids=["420-mod1", "422-mod1", "411-mod2", "420-mod3", "444-mod1"],
+)
+def test_region_selector_mod_follows_the_clip_subsampling(
+    plugin_controller: HarnessPluginController,
+    fmt: vs.PresetVideoFormat,
+    mod: int,
+    selection: QRect,
+    expected: QRect,
+    expected_steps: tuple[int, int],
+) -> None:
+    assert plugin_controller.env
+
+    voutput = _make_colored_voutput(plugin_controller.env, fmt, [16, 128, 128], _Matrix=vs.MATRIX_BT709)
+    plugin_controller.set_current_voutput(voutput)
+    plugin = plugin_controller.create_plugin(RegionSelectorPlugin)
+    plugin.update_global_settings(mod=mod)
+
+    plugin_controller.set_rect_selection(selection)
+
+    assert plugin.crop_rect == expected
+    assert (plugin.left_spin.singleStep(), plugin.top_spin.singleStep()) == expected_steps
 
 
 def test_region_selector_toggle_action_and_shortcut(plugin_controller: HarnessPluginController) -> None:

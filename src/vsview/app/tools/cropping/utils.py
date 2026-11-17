@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import contextlib
+import math
 from typing import NamedTuple, Self
 
 from jetpytools import clamp
 from PySide6.QtCore import QRect, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QToolButton, QToolTip, QWidget
-from vapoursynth import VideoNode
+from vapoursynth import PresetVideoFormat, VideoFormat, VideoNode
 
 from vsview.assets.utils import get_monospace_font
 
@@ -39,6 +40,8 @@ class CropValues(NamedTuple):
 
 
 class CommandLabel(QLabel):
+    PLACEHOLDER = "No selection"
+
     def __init__(self, text: str, parent: QWidget) -> None:
         super().__init__(text, parent, wordWrap=True, textInteractionFlags=Qt.TextInteractionFlag.TextSelectableByMouse)
         self.original_text = text
@@ -52,6 +55,9 @@ class CommandLabel(QLabel):
 
     def reset_text(self) -> None:
         self.setText(self.original_text)
+
+    def show_placeholder(self) -> None:
+        self.setText(self.PLACEHOLDER)
 
 
 class CommandRow(QWidget):
@@ -87,6 +93,14 @@ class CustomSize(QSize):
         return cls(clip.width, clip.height)
 
 
+def crop_mods(format: VideoFormat, mod: int) -> tuple[int, int]:
+    """Horizontal and vertical crop steps: the user mod, raised to a multiple of the chroma subsampling."""
+    if format.id == PresetVideoFormat.NONE:
+        return mod, mod
+
+    return math.lcm(mod, 1 << format.subsampling_w), math.lcm(mod, 1 << format.subsampling_h)
+
+
 class CustomRect(QRect):
     def clamp(self, size: QSize) -> None:
         image_w = size.width()
@@ -105,16 +119,17 @@ class CustomRect(QRect):
         self.setWidth(x1 - x0)
         self.setHeight(y1 - y0)
 
-    def sanitize(self, size: QSize, mod: int) -> None:
-        mod = max(mod, 1)
+    def sanitize(self, size: QSize, mod: int, mod_y: int | None = None) -> None:
+        mod_x = max(mod, 1)
+        mod_y = max(mod if mod_y is None else mod_y, 1)
 
         image_w = size.width()
         image_h = size.height()
 
-        x0 = self.x() - self.x() % mod
-        y0 = self.y() - self.y() % mod
-        x1 = ((self.x() + self.width() + mod - 1) // mod) * mod
-        y1 = ((self.y() + self.height() + mod - 1) // mod) * mod
+        x0 = self.x() - self.x() % mod_x
+        y0 = self.y() - self.y() % mod_y
+        x1 = ((self.x() + self.width() + mod_x - 1) // mod_x) * mod_x
+        y1 = ((self.y() + self.height() + mod_y - 1) // mod_y) * mod_y
 
         x0 = clamp(x0, 0, image_w)
         y0 = clamp(y0, 0, image_h)
@@ -130,7 +145,16 @@ class CustomRect(QRect):
         self.setHeight(y1 - y0)
 
     @classmethod
-    def from_crop(cls, left: int, top: int, right: int, bottom: int, size: QSize, mod: int) -> Self:
+    def from_crop(
+        cls,
+        left: int,
+        top: int,
+        right: int,
+        bottom: int,
+        size: QSize,
+        mod: int,
+        mod_y: int | None = None,
+    ) -> Self:
         image_w = size.width()
         image_h = size.height()
 
@@ -140,5 +164,5 @@ class CustomRect(QRect):
         y1 = clamp(image_h - bottom, 0, image_h)
 
         rect = cls(x0, y0, x1 - x0, y1 - y0)
-        rect.sanitize(size, mod)
+        rect.sanitize(size, mod, mod_y)
         return rect
