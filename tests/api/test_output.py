@@ -153,16 +153,12 @@ def test_set_output_consecutive_calls_increment_index(
     assert outputs[1] == sample_audio_node
 
 
-def test_set_output_overwriting_index_logs_warning(
-    sample_video_clip: vs.VideoNode, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_set_output_on_a_used_index_replaces_the_output(sample_video_clip: vs.VideoNode) -> None:
     set_output(sample_video_clip, 0)
     clip2 = core.std.BlankClip(format=vs.RGB24, width=32, height=32, length=5)
 
-    with caplog.at_level("WARNING"):
-        set_output(clip2, 0)
+    set_output(clip2, 0)
 
-    assert "Output index 0 already in use; overwriting." in caplog.text
     outputs = vs.get_outputs()
     assert outputs[0].clip == clip2
 

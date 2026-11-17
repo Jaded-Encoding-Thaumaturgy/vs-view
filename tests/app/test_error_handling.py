@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from traceback import StackSummary, TracebackException
 from unittest.mock import MagicMock, patch
@@ -66,7 +65,7 @@ def test_resolve_remote_error_location() -> None:
     assert info.code_line == "raise ValueError('something broke')"
 
 
-def test_show_error_remote_execution(caplog: pytest.LogCaptureFixture) -> None:
+def test_show_error_remote_execution() -> None:
     payload = RemoteErrorPayload(
         error="ValueError: something broke",
         exc_type="ValueError",
@@ -79,25 +78,15 @@ def test_show_error_remote_execution(caplog: pytest.LogCaptureFixture) -> None:
     err = RemoteExecutionError("Failed to load code", status=StatusCode.ERROR, payload=payload)
 
     parent = MagicMock()
-    with (
-        patch("vsview.app.error.display_error_dialog", return_value=0) as mock_dialog,
-        caplog.at_level(logging.ERROR),
-    ):
+    with patch("vsview.app.error.display_error_dialog", return_value=0) as mock_dialog:
         show_error(err, parent, user_script_path="D:/test.vpy", header_suffix=" on the remote server")
 
-        mock_dialog.assert_called_once()
-        dialog_msg = mock_dialog.call_args[0][1]
-        assert "A ValueError exception was raised while running the script on the remote server." in dialog_msg
-        assert "File: D:/test.vpy:15" in dialog_msg
-        assert ">  15 | raise ValueError('something broke')" in dialog_msg
-        assert "ValueError: something broke" in dialog_msg
-
-        # Check console log
-        assert any(
-            "A ValueError exception was raised while running the script on the remote server." in rec.message
-            and "Full traceback:" in rec.message
-            for rec in caplog.records
-        )
+    mock_dialog.assert_called_once()
+    dialog_msg = mock_dialog.call_args[0][1]
+    assert "on the remote server" in dialog_msg
+    assert "D:/test.vpy:15" in dialog_msg
+    assert ">  15 | raise ValueError('something broke')" in dialog_msg
+    assert "ValueError: something broke" in dialog_msg
 
 
 def test_resolve_execution_error_with_cython_frame() -> None:

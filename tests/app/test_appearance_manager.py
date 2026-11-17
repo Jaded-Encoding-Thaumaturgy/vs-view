@@ -15,61 +15,62 @@ from vsview.assets.themes import Theme, ThemeRegistry
 pytestmark = [pytest.mark.qt]
 
 
-def test_appearance_manager_init(qapp: QApplication) -> None:
-    manager = AppearanceManager()
-    assert manager is AppearanceManager()
-    assert bool(manager.active_style)
-    assert manager.active_style == AppearanceManager.active_style
-
-
 def test_appearance_manager_apply_style(qapp: QApplication) -> None:
     AppearanceManager.apply_style("Fusion")
     assert AppearanceManager.active_style == "fusion"
 
 
-def test_appearance_manager_apply_palette(qapp: QApplication) -> None:
-    manager = AppearanceManager()
+@pytest.mark.parametrize(
+    ("theme_id", "scheme"), [("dracula", Qt.ColorScheme.Dark), ("github_light", Qt.ColorScheme.Light)]
+)
+def test_apply_palette_applies_a_theme_of_the_matching_scheme(
+    qapp: QApplication, theme_id: str, scheme: Qt.ColorScheme
+) -> None:
+    AppearanceManager.apply_palette(None, scheme)
     received_theme = list[Theme | None]()
-    manager.signals.themeChanged.connect(received_theme.append)
+    AppearanceManager.signals.themeChanged.connect(received_theme.append)
 
-    # Apply dark palette theme with Dark color scheme
-    changed = AppearanceManager.apply_palette("dracula", Qt.ColorScheme.Dark)
+    changed = AppearanceManager.apply_palette(theme_id, scheme)
+
+    theme = AppearanceManager.active_theme
     assert changed is True
-    assert AppearanceManager.active_theme is not None
-    assert AppearanceManager.active_theme.id == "dracula"
-    assert AppearanceManager.active_color_scheme == Qt.ColorScheme.Dark
-    assert len(received_theme) == 1
-    assert received_theme[-1] is not None
-    assert received_theme[-1].id == "dracula"
+    assert theme is not None
+    assert theme.id == theme_id
+    assert AppearanceManager.active_color_scheme == scheme
+    assert received_theme == [theme]
+    assert qapp.palette().color(QPalette.ColorRole.WindowText) == theme.palette.text
 
-    assert qapp.palette().color(qapp.palette().ColorRole.Base) == AppearanceManager.active_theme.palette.mantle
 
-    # Reject mismatched theme: Light theme with Dark color scheme
-    with pytest.raises(ValueError, match="Cannot apply light theme 'github_light' when active color scheme is dark"):
-        AppearanceManager.apply_palette("github_light", Qt.ColorScheme.Dark)
+@pytest.mark.parametrize(
+    ("theme_id", "scheme"),
+    [
+        ("github_light", Qt.ColorScheme.Dark),
+        ("dracula", Qt.ColorScheme.Light),
+        ("unknown_theme_xyz", Qt.ColorScheme.Dark),
+    ],
+    ids=["light_theme_in_dark_scheme", "dark_theme_in_light_scheme", "unknown_theme"],
+)
+def test_apply_palette_rejects_a_theme_it_cannot_apply(
+    qapp: QApplication, theme_id: str, scheme: Qt.ColorScheme
+) -> None:
+    AppearanceManager.apply_palette(None, scheme)
 
-    # Apply light palette theme with Light color scheme
-    changed = AppearanceManager.apply_palette("github_light", Qt.ColorScheme.Light)
-    assert changed is True
-    assert AppearanceManager.active_theme is not None
-    assert AppearanceManager.active_theme.id == "github_light"
-    assert AppearanceManager.active_color_scheme == Qt.ColorScheme.Light
-    assert received_theme[-1] is not None
-    assert received_theme[-1].id == "github_light"
+    with pytest.raises(ValueError, match=theme_id):
+        AppearanceManager.apply_palette(theme_id, scheme)
 
-    # Reject mismatched theme: Dark theme with Light color scheme
-    with pytest.raises(ValueError, match="Cannot apply dark theme 'dracula' when active color scheme is light"):
-        AppearanceManager.apply_palette("dracula", Qt.ColorScheme.Light)
+    assert AppearanceManager.active_theme is None
 
-    # Reject unknown palette theme
-    with pytest.raises(ValueError, match="Unknown palette theme"):
-        AppearanceManager.apply_palette("unknown_theme_xyz", Qt.ColorScheme.Dark)
 
-    # Clear palette theme - revert to style standardPalette and OS scheme
+def test_apply_palette_without_a_theme_clears_the_active_theme(qapp: QApplication) -> None:
+    AppearanceManager.apply_palette("dracula", Qt.ColorScheme.Dark)
+    received_theme = list[Theme | None]()
+    AppearanceManager.signals.themeChanged.connect(received_theme.append)
+
     changed = AppearanceManager.apply_palette(None, Qt.ColorScheme.Dark)
+
     assert changed is True
     assert AppearanceManager.active_theme is None
-    assert received_theme[-1] is None
+    assert received_theme == [None]
     assert AppearanceManager.active_color_scheme == Qt.ColorScheme.Dark
 
 

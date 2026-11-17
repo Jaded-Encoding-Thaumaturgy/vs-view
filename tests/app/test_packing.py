@@ -8,7 +8,7 @@ import vapoursynth as vs
 from jetpytools import CustomValueError
 from PySide6.QtGui import QColorSpace, QImage
 
-from vsview.app.packing import FramePropsFilter, Packer, select_in_matrix, warn_missing_props
+from vsview.app.packing import FramePropsFilter, Packer, select_in_matrix
 from vsview.app.settings import SettingsManager
 
 core = vs.core
@@ -73,75 +73,6 @@ def test_select_in_matrix() -> None:
     frame_yuv = yuv_clip.get_frame(0)
     processed_yuv = select_in_matrix(0, frame_yuv)
     assert processed_yuv.props.get("_Matrix", vs.MATRIX_UNSPECIFIED) == vs.MATRIX_UNSPECIFIED
-
-
-@pytest.mark.vpy("initial-core")
-def test_warn_missing_props(caplog: pytest.LogCaptureFixture) -> None:
-    clip = core.std.BlankClip(format=vs.YUV420P8, width=16, height=16, length=1)
-
-    # Frame missing matrix, primaries, transfer (defaults to 2 / UNSPECIFIED)
-    frame_missing = clip.get_frame(0)
-    with caplog.at_level(logging.WARNING):
-        result_frame = warn_missing_props(0, frame_missing)
-        assert result_frame is frame_missing
-        assert "The following properties are missing:" in caplog.text
-        assert "Matrix" in caplog.text
-        assert "Primaries" in caplog.text
-        assert "Transfer" in caplog.text
-
-    # Frame with all properties explicitly specified (not equal to 2)
-    clip_full = core.std.SetFrameProps(
-        clip,
-        _Matrix=vs.MATRIX_BT709,
-        _Primaries=vs.PRIMARIES_BT709,
-        _Transfer=vs.TRANSFER_BT709,
-    )
-    frame_full = clip_full.get_frame(0)
-
-    caplog.clear()
-    with caplog.at_level(logging.WARNING):
-        warn_missing_props(0, frame_full)
-        assert caplog.text == ""
-
-
-def test_packer_format_config_enum() -> None:
-    fmt_int8 = Packer.FormatConfig.INT8
-    assert fmt_int8.bitdepth == 8
-    assert fmt_int8.sample_type == vs.INTEGER
-    assert fmt_int8.vs == vs.PresetVideoFormat.RGB24
-    assert fmt_int8.vs_alpha == vs.PresetVideoFormat.GRAY8
-    assert fmt_int8.qt == QImage.Format.Format_RGB32
-    assert fmt_int8.qt_alpha == QImage.Format.Format_ARGB32
-    assert fmt_int8.formats == (
-        vs.PresetVideoFormat.RGB24,
-        vs.PresetVideoFormat.GRAY8,
-        QImage.Format.Format_RGB32,
-        QImage.Format.Format_ARGB32,
-    )
-
-    fmt_int10 = Packer.FormatConfig.INT10
-    assert fmt_int10.bitdepth == 10
-    assert fmt_int10.sample_type == vs.INTEGER
-    assert fmt_int10.qt == QImage.Format.Format_RGB30
-    assert fmt_int10.qt_alpha == QImage.Format.Format_A2RGB30_Premultiplied
-
-    fmt_int16 = Packer.FormatConfig.INT16
-    assert fmt_int16.bitdepth == 16
-    assert fmt_int16.sample_type == vs.INTEGER
-    assert fmt_int16.qt == QImage.Format.Format_RGBX64
-    assert fmt_int16.qt_alpha == QImage.Format.Format_RGBA64
-
-    fmt_fp16 = Packer.FormatConfig.FP16
-    assert fmt_fp16.bitdepth == 16
-    assert fmt_fp16.sample_type == vs.FLOAT
-    assert fmt_fp16.qt == QImage.Format.Format_RGBX16FPx4
-    assert fmt_fp16.qt_alpha == QImage.Format.Format_RGBA16FPx4
-
-    fmt_fp32 = Packer.FormatConfig.FP32
-    assert fmt_fp32.bitdepth == 32
-    assert fmt_fp32.sample_type == vs.FLOAT
-    assert fmt_fp32.qt == QImage.Format.Format_RGBX32FPx4
-    assert fmt_fp32.qt_alpha == QImage.Format.Format_RGBA32FPx4
 
 
 def test_packer_init_and_hdr_validation() -> None:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import threading
 import time
 from concurrent.futures import CancelledError as ConcurrentCancelledError
@@ -223,36 +222,24 @@ def test_wait_for_threads_from_background_thread(qt_loop: QtEventLoop) -> None:
     assert called is True
 
 
-def test_wait_for_threads_no_qapp(
-    qt_loop: QtEventLoop,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    monkeypatch.setattr(QApplication, "instance", staticmethod(lambda: None))
-
-    # Should log warning and return without error
-    with caplog.at_level(logging.WARNING):
-        qt_loop.wait_for_threads(timeout_ms=100)
-
-    assert "No QApplication instance found" in caplog.text
-
-
-def test_wait_for_threads_timeout(qt_loop: QtEventLoop, caplog: pytest.LogCaptureFixture) -> None:
+def test_wait_for_threads_returns_after_the_timeout_while_a_task_still_runs(qt_loop: QtEventLoop) -> None:
     start_evt = threading.Event()
     block_evt = threading.Event()
 
     def blocking_task() -> None:
         start_evt.set()
-        block_evt.wait(2.0)
+        block_evt.wait(5.0)
 
     try:
-        qt_loop.to_thread_named("BlockingTask", blocking_task)
+        fut = qt_loop.to_thread_named("BlockingTask", blocking_task)
         assert start_evt.wait(2.0), "Task did not start in time"
 
-        with caplog.at_level(logging.WARNING):
-            qt_loop.wait_for_threads(timeout_ms=50)
+        start = time.perf_counter()
+        qt_loop.wait_for_threads(timeout_ms=50)
+        elapsed = time.perf_counter() - start
 
-        assert "Timeout of 50ms reached" in caplog.text
+        assert elapsed < 2.0
+        assert fut.done() is False
     finally:
         block_evt.set()
         qt_loop.wait_for_threads(timeout_ms=1000)

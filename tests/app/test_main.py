@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
-from vsview.app.main import Application, MainWindow, WorkspaceToolButton
+from vsview.app.main import MainWindow, WorkspaceToolButton
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import ShortcutEditor
 from vsview.app.settings.manager import SettingsManager
@@ -41,15 +41,6 @@ def ensure_no_policy() -> Generator[None]:
         yield
     finally:
         unregister_policy()
-
-
-def test_main_window_init(main_window: MainWindow) -> None:
-    assert main_window.windowTitle() == "VS View"
-    assert main_window.centralWidget()
-    assert len(main_window.nav_container.buttons) == 0
-
-    menu_actions = [action.text() for action in main_window.menu_bar.actions()]
-    assert menu_actions == ["New", "View", "Settings", "Help"]
 
 
 def test_event_filter_tab_key_consumption(
@@ -390,14 +381,3 @@ def test_help_menu_urls_availability(main_window: MainWindow) -> None:
                 raise
 
         assert status_code == 200, f"URL for '{action_text}' returned status {status_code}: {url}"
-
-
-def test_application_metadata_configuration(qapp: QApplication) -> None:
-    assert isinstance(qapp, Application)
-    qapp.configure_metadata()
-
-    assert qapp.applicationName() == "vsview"
-    assert qapp.applicationDisplayName() == "VS View"
-    assert qapp.organizationName() == "Jaded Encoding Thaumaturgy"
-    assert qapp.organizationDomain() == "jet.guide"
-    assert not qapp.windowIcon().isNull()

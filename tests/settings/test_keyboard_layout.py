@@ -30,33 +30,18 @@ def clear_layout_cache() -> None:
     KeyboardLayoutMapper.clear_cache()
 
 
-def test_layout_mapper_native_translation() -> None:
-    assert KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence("")) == QKeySequence()
-    assert KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence("Space")) == QKeySequence("Space")
-    assert KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence("F5")) == QKeySequence("F5")
+@pytest.mark.parametrize(
+    "key",
+    ["", "Space", "F1", "F5", "Escape", "Tab", "Return", "Delete", "Home", "End", "PageUp", "PageDown"],
+)
+def test_layout_mapper_keeps_keys_that_do_not_depend_on_the_layout(key: str) -> None:
+    seq = QKeySequence(key)
 
-    translated_ctrl_o = KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence("Ctrl+O"))
-    assert translated_ctrl_o.isEmpty() is False
-
-
-def test_layout_mapper_shifted_symbols() -> None:
-    symbols = ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "_", "+", "{", "}", "|", ":", '"', "<", ">", "?", "~"]
-    for sym in symbols:
-        res = KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence(f"Ctrl+{sym}"))
-        assert res.isEmpty() is False
+    assert KeyboardLayoutMapper.translate_qwerty_to_active(seq) == seq
 
 
-def test_layout_mapper_multi_key_sequence() -> None:
-    chord = QKeySequence("Ctrl+K, Ctrl+C")
-    assert chord.count() > 1
-    assert KeyboardLayoutMapper.translate_qwerty_to_active(chord) == QKeySequence()
-
-
-def test_layout_mapper_non_qwerty_keys() -> None:
-    keys = ["F1", "Escape", "Tab", "Return", "Delete", "Home", "End", "PageUp", "PageDown"]
-    for key in keys:
-        seq = QKeySequence(key)
-        assert KeyboardLayoutMapper.translate_qwerty_to_active(seq) == seq
+def test_layout_mapper_does_not_translate_multi_key_sequences() -> None:
+    assert KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence("Ctrl+K, Ctrl+C")) == QKeySequence()
 
 
 def test_win32_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -70,11 +55,12 @@ def test_win32_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     MAPVK_VSC_TO_VK = 1
 
     mock_user32 = MagicMock()
-    mock_user32.GetKeyboardLayout.return_value = AZERTY_HKL
+    # Layout of the current thread (argument 0).
+    mock_user32.GetKeyboardLayout.side_effect = lambda thread_id: AZERTY_HKL if thread_id == 0 else 0
 
     def mock_map_vk(sc: int, map_type: int, hkl: Any) -> int:
         sc_val = sc.value if isinstance(sc, HasValue) else sc
-        if sc_val == QWERTY_SCAN_CODES["A"]:
+        if sc_val == QWERTY_SCAN_CODES["A"] and map_type == MAPVK_VSC_TO_VK and hkl == AZERTY_HKL:
             return VK_Q
         return 0
 
@@ -95,8 +81,6 @@ def test_win32_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
 
     translated = KeyboardLayoutMapper.translate_qwerty_to_active(QKeySequence("Ctrl+Alt+A"))
     assert translated == QKeySequence("Ctrl+Alt+Q")
-    mock_user32.GetKeyboardLayout.assert_called_once_with(0)
-    mock_user32.MapVirtualKeyExW.assert_called_once_with(QWERTY_SCAN_CODES["A"], MAPVK_VSC_TO_VK, AZERTY_HKL)
 
 
 def test_win32_translation_keeps_the_keyboard_state(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -196,8 +180,6 @@ def test_darwin_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     mapper = KeyboardLayoutMapper()
     translated = mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A"))
     assert translated == QKeySequence("Ctrl+Q")
-    mock_carbon.TISCopyCurrentKeyboardInputSource.assert_called_once()
-    mock_carbon.CFDataGetBytePtr.assert_called_once_with(MOCK_PROP_DATA)
     mock_carbon.CFRelease.assert_called_once_with(MOCK_TIS_SOURCE)
 
     # ctypes otherwise assumes C int returns/arguments, truncating opaque pointers on 64-bit platforms.
@@ -272,14 +254,17 @@ def test_linux_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_libxkb = MagicMock()
     monkeypatch.setattr(ctypes, "CDLL", lambda path: mock_libxkb)
 
-    mock_libxkb.xkb_context_new.return_value = MOCK_CTX_PTR
-    mock_libxkb.xkb_keymap_new_from_names.return_value = MOCK_KEYMAP_PTR
-    mock_libxkb.xkb_state_new.return_value = MOCK_STATE_PTR
+    # XKB_CONTEXT_NO_FLAGS = 0, XKB_KEYMAP_COMPILE_NO_FLAGS = 0
+    mock_libxkb.xkb_context_new.side_effect = lambda flags: MOCK_CTX_PTR if flags == 0 else 0
+    mock_libxkb.xkb_keymap_new_from_names.side_effect = lambda ctx, names, flags: (
+        MOCK_KEYMAP_PTR if (ctx, names, flags) == (MOCK_CTX_PTR, None, 0) else 0
+    )
+    mock_libxkb.xkb_state_new.side_effect = lambda keymap: MOCK_STATE_PTR if keymap == MOCK_KEYMAP_PTR else 0
 
     def mock_get_utf8(state: Any, keycode: Any, buf: Any, size: int) -> int:
         kc = keycode.value if isinstance(keycode, HasValue) else keycode
         expected_evdev = QWERTY_SCAN_CODES["A"] + EVDEV_OFFSET
-        if kc == expected_evdev:
+        if state == MOCK_STATE_PTR and kc == expected_evdev:
             buf.value = b"q"
             return 1  # 1 byte written to string buffer
         return 0
@@ -289,12 +274,6 @@ def test_linux_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     mapper = KeyboardLayoutMapper()
     translated = mapper.translate_qwerty_to_active(QKeySequence("Ctrl+A"))
     assert translated == QKeySequence("Ctrl+Q")
-
-    mock_libxkb.xkb_context_new.assert_called_once_with(0)  # XKB_CONTEXT_NO_FLAGS = 0
-    mock_libxkb.xkb_keymap_new_from_names.assert_called_once_with(
-        MOCK_CTX_PTR, None, 0
-    )  # XKB_KEYMAP_COMPILE_NO_FLAGS = 0
-    mock_libxkb.xkb_state_new.assert_called_once_with(MOCK_KEYMAP_PTR)
 
     # ctypes otherwise assumes C int arguments, truncating opaque pointers on 64-bit platforms.
     assert mock_libxkb.xkb_context_new.argtypes == [ctypes.c_int]

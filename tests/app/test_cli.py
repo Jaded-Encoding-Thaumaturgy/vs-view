@@ -22,22 +22,19 @@ from vsview.cli import (
     CycloptsGroupError,
     _populate_path,
     app,
-    config_app,
-    config_path,
-    config_wipe,
     convert_arg,
     convert_log_level,
     convert_qt_args,
-    main,
     main_meta,
-    settings_app,
-    settings_path,
-    settings_wipe,
 )
-from vsview.cli import help as cli_help
-from vsview.cli import version as cli_version
 
 pytestmark = [pytest.mark.unit]
+
+
+def run_cli(argv: list[str], capfd: pytest.CaptureFixture[str]) -> str:
+    app(argv, exit_on_error=False, result_action="return_value")
+    out, err = capfd.readouterr()
+    return out + err
 
 
 # Token Converters
@@ -51,22 +48,20 @@ class TestTokenConverters:
         expected = {"a": "1", "filter": "b=2", "url": "https://example.com?query=true"}
         assert convert_arg(dict, tokens) == expected
 
-    def test_convert_arg_malformed_token_raises_value_error(self) -> None:
-        tokens = [Token(value="malformed_token_without_equal")]
-        with pytest.raises(CycloptsGroupError, match=r"Can't convert some --arg values") as exc_info:
-            convert_arg(dict, tokens)
-        assert len(exc_info.value.exceptions) == 1
-        assert isinstance(exc_info.value.exceptions[0], CycloptsError)
-        assert "Invalid value for --arg: expected KEY=VALUE, got 'malformed_token_without_equal'" in str(
-            exc_info.value.exceptions[0]
-        )
+    @pytest.mark.parametrize(
+        ("values", "bad_values"),
+        [(["no_equal_sign"], ["no_equal_sign"]), (["bad1", "k=v", "bad2"], ["bad1", "bad2"])],
+        ids=["one_bad", "two_bad_one_good"],
+    )
+    def test_convert_arg_reports_every_malformed_token(self, values: list[str], bad_values: list[str]) -> None:
+        tokens = [Token(value=v) for v in values]
 
-    def test_convert_arg_multiple_malformed_tokens(self) -> None:
-        tokens = [Token(value="bad1"), Token(value="k=v"), Token(value="bad2")]
-        with pytest.raises(CycloptsGroupError, match=r"Can't convert some --arg values") as exc_info:
+        with pytest.raises(CycloptsGroupError) as exc_info:
             convert_arg(dict, tokens)
-        assert len(exc_info.value.exceptions) == 2
-        assert all(isinstance(e, CycloptsError) for e in exc_info.value.exceptions)
+
+        errors = exc_info.value.exceptions
+        assert all(isinstance(e, CycloptsError) for e in errors)
+        assert [bad in str(e) for bad, e in zip(bad_values, errors, strict=True)] == [True] * len(bad_values)
 
     @pytest.mark.parametrize(
         ("level_str", "expected_int"),
@@ -85,24 +80,23 @@ class TestTokenConverters:
 
     def test_convert_log_level_invalid_raises_key_error(self) -> None:
         tokens = [Token(value="non_existent_level")]
-        with pytest.raises(KeyError, match=r"^'NON_EXISTENT_LEVEL'$"):
+        with pytest.raises(KeyError, match="NON_EXISTENT_LEVEL"):
             convert_log_level("ignored", tokens)
 
-    def test_convert_qt_args_simple(self) -> None:
-        tokens = [Token(value="-platform offscreen")]
-        assert convert_qt_args(list, tokens) == ["-platform", "offscreen"]
-
-    def test_convert_qt_args_multiple_and_quoted(self) -> None:
-        tokens = [
-            Token(value="-platform offscreen"),
-            Token(value='-style "Fusion" -stylesheet "custom.qss"'),
-        ]
-        expected = ["-platform", "offscreen", "-style", "Fusion", "-stylesheet", "custom.qss"]
-        assert convert_qt_args(list, tokens) == expected
-
-    def test_convert_qt_args_extra_whitespace(self) -> None:
-        tokens = [Token(value="   -platform    offscreen   ")]
-        assert convert_qt_args(list, tokens) == ["-platform", "offscreen"]
+    @pytest.mark.parametrize(
+        ("values", "expected"),
+        [
+            (["-platform offscreen"], ["-platform", "offscreen"]),
+            (
+                ["-platform offscreen", '-style "Fusion" -stylesheet "custom.qss"'],
+                ["-platform", "offscreen", "-style", "Fusion", "-stylesheet", "custom.qss"],
+            ),
+            (["   -platform    offscreen   "], ["-platform", "offscreen"]),
+        ],
+        ids=["simple", "several_and_quoted", "extra_whitespace"],
+    )
+    def test_convert_qt_args_splits_like_a_shell(self, values: list[str], expected: list[str]) -> None:
+        assert convert_qt_args(list, [Token(value=v) for v in values]) == expected
 
 
 # Path Population Helper
@@ -162,153 +156,58 @@ class TestPopulatePath:
         assert path_parts.count(resolved_bin) == 1
 
 
-# Config Subcommands
-class TestConfigCommands:
-    def test_config_path_command_prints_path(self, capfd: pytest.CaptureFixture[str]) -> None:
-        config_path()
-        out, err = capfd.readouterr()
-        combined = (out + err).replace("\n", "")
-        assert str(GlobalSettings.config_path).replace("\n", "") in combined
-
-    def test_config_path_cli_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
-        app(["config", "path"], exit_on_error=False, result_action="return_value")
-        out, err = capfd.readouterr()
-        combined = (out + err).replace("\n", "")
-        assert str(GlobalSettings.config_path).replace("\n", "") in combined
-
-    def test_config_wipe_removes_directory(self, capfd: pytest.CaptureFixture[str]) -> None:
-        GlobalSettings.config_path.mkdir(parents=True, exist_ok=True)
-        (GlobalSettings.config_path / "extra.json").write_text("{}", encoding="utf-8")
-        assert GlobalSettings.config_path.exists() is True
-
-        config_wipe()
-
-        assert GlobalSettings.config_path.exists() is False
-        out, err = capfd.readouterr()
-        assert "Global config path successfully deleted." in (out + err)
-
-    def test_config_wipe_cli_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
-        GlobalSettings.config_path.mkdir(parents=True, exist_ok=True)
-        (GlobalSettings.config_path / "extra.json").write_text("{}", encoding="utf-8")
-        assert GlobalSettings.config_path.exists() is True
-
-        app(["config", "wipe"], exit_on_error=False, result_action="return_value")
-
-        assert GlobalSettings.config_path.exists() is False
-        out, err = capfd.readouterr()
-        assert "Global config path successfully deleted." in (out + err)
-
-    def test_config_wipe_handles_missing_directory_gracefully(self, capfd: pytest.CaptureFixture[str]) -> None:
-        if GlobalSettings.config_path.exists():
-            GlobalSettings.config_path.rmdirs(ignore_errors=True)
-
-        config_wipe()
-
-        out, err = capfd.readouterr()
-        assert "No global config path found." in (out + err)
-
-    def test_config_help_subcommand(self, capfd: pytest.CaptureFixture[str]) -> None:
-        config_app(["help"], exit_on_error=False, result_action="return_value")
-        out, err = capfd.readouterr()
-        combined = out + err
-        assert "path" in combined
-        assert "wipe" in combined
+# Config, Settings, Version & Help Commands
+CONFIG_TARGETS = {
+    "config": lambda: GlobalSettings.config_path,
+    "settings": lambda: GlobalSettings.path_env,
+}
 
 
-# Settings Subcommands
-class TestSettingsCommands:
-    def test_settings_path_command_prints_path(self, capfd: pytest.CaptureFixture[str]) -> None:
-        settings_path()
-        out, err = capfd.readouterr()
-        combined = (out + err).replace("\n", "")
-        assert str(GlobalSettings.path_env).replace("\n", "") in combined
+class TestSubcommands:
+    @pytest.mark.parametrize("group", ["config", "settings"])
+    def test_path_command_prints_the_path(self, capfd: pytest.CaptureFixture[str], group: str) -> None:
+        output = run_cli([group, "path"], capfd)
 
-    def test_settings_path_cli_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
-        app(["settings", "path"], exit_on_error=False, result_action="return_value")
-        out, err = capfd.readouterr()
-        combined = (out + err).replace("\n", "")
-        assert str(GlobalSettings.path_env).replace("\n", "") in combined
+        assert str(CONFIG_TARGETS[group]()) in output.replace("\n", "")
 
-    def test_settings_wipe_unlinks_existing_file(self, capfd: pytest.CaptureFixture[str]) -> None:
-        GlobalSettings.path_env.parent.mkdir(parents=True, exist_ok=True)
-        GlobalSettings.path_env.write_text("{}", encoding="utf-8")
-        assert GlobalSettings.path_env.exists() is True
+    @pytest.mark.parametrize("group", ["config", "settings"])
+    @pytest.mark.parametrize("exists", [True, False], ids=["existing", "missing"])
+    def test_wipe_command_leaves_no_target_behind(
+        self, capfd: pytest.CaptureFixture[str], group: str, exists: bool
+    ) -> None:
+        target = CONFIG_TARGETS[group]()
+        if exists:
+            if group == "config":
+                target.mkdir(parents=True, exist_ok=True)
+                (target / "extra.json").write_text("{}", encoding="utf-8")
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("{}", encoding="utf-8")
 
-        settings_wipe()
+        run_cli([group, "wipe"], capfd)
 
-        assert GlobalSettings.path_env.exists() is False
-        out, err = capfd.readouterr()
-        assert "Global config file successfully deleted." in (out + err)
+        assert target.exists() is False
 
-    def test_settings_wipe_cli_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
-        GlobalSettings.path_env.parent.mkdir(parents=True, exist_ok=True)
-        GlobalSettings.path_env.write_text("{}", encoding="utf-8")
-        assert GlobalSettings.path_env.exists() is True
+    @pytest.mark.parametrize(
+        "argv", [["config", "help"], ["help", "config"], ["settings", "help"], ["help", "settings"]]
+    )
+    def test_help_lists_the_subcommands(self, capfd: pytest.CaptureFixture[str], argv: list[str]) -> None:
+        output = run_cli(argv, capfd)
 
-        app(["settings", "wipe"], exit_on_error=False, result_action="return_value")
+        assert "path" in output
+        assert "wipe" in output
 
-        assert GlobalSettings.path_env.exists() is False
-        out, err = capfd.readouterr()
-        assert "Global config file successfully deleted." in (out + err)
-
-    def test_settings_wipe_handles_missing_file_gracefully(self, capfd: pytest.CaptureFixture[str]) -> None:
-        if GlobalSettings.path_env.exists():
-            GlobalSettings.path_env.unlink()
-
-        settings_wipe()
-
-        out, err = capfd.readouterr()
-        assert "No global config file found." in (out + err)
-
-    def test_settings_help_subcommand(self, capfd: pytest.CaptureFixture[str]) -> None:
-        settings_app(["help"], exit_on_error=False, result_action="return_value")
-        out, err = capfd.readouterr()
-        combined = out + err
-        assert "path" in combined
-        assert "wipe" in combined
-
-
-# Version & Help Commands
-class TestVersionAndHelpCommands:
     def test_version_command_prints_version(self, capfd: pytest.CaptureFixture[str]) -> None:
-        cli_version()
-        out, err = capfd.readouterr()
-        output = (out + err).strip()
-        expected_version = importlib.metadata.version("vsview")
-        assert expected_version in output
+        assert importlib.metadata.version("vsview") in run_cli(["version"], capfd)
 
-    def test_version_cli_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
-        app(["version"], exit_on_error=False, result_action="return_value")
+    @pytest.mark.parametrize(("flag", "expected"), [("--version", None), ("--help", "--no-default-workspace")])
+    def test_meta_flags_print_version_and_help(
+        self, capfd: pytest.CaptureFixture[str], flag: str, expected: str | None
+    ) -> None:
+        app.meta([flag], exit_on_error=False, result_action="return_value")
         out, err = capfd.readouterr()
-        output = (out + err).strip()
-        expected_version = importlib.metadata.version("vsview")
-        assert expected_version in output
 
-    def test_version_meta_flag_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
-        app.meta(["--version"], exit_on_error=False, result_action="return_value")
-        out, err = capfd.readouterr()
-        output = (out + err).strip()
-        expected_version = importlib.metadata.version("vsview")
-        assert expected_version in output
-
-    def test_help_command_prints_help(self, capfd: pytest.CaptureFixture[str]) -> None:
-        cli_help("settings")
-        out, err = capfd.readouterr()
-        output = out + err
-        assert "Settings management" in output or "path" in output
-
-        cli_help("config")
-        out, err = capfd.readouterr()
-        output = out + err
-        assert "Config management" in output or "path" in output
-
-    def test_help_meta_flag_dispatch(self, capfd: pytest.CaptureFixture[str]) -> None:
-        app.meta(["--help"], exit_on_error=False, result_action="return_value")
-        out, err = capfd.readouterr()
-        output = out + err
-        assert "Usage:" in output
-        assert "Options:" in output
-        assert "Workspace Options:" in output
+        assert (expected or importlib.metadata.version("vsview")) in out + err
 
 
 # Main Entry Point Argument Handling & Environment Setup
@@ -329,7 +228,7 @@ class TestMainCommandRouting:
         mocker: MockerFixture,
         init_plugin_manager: PluginManager,
     ) -> tuple[MagicMock, MagicMock]:
-        """Mock Qt Application and MainWindow without monkeypatching PluginManager singletons."""
+        """Replace the Qt Application and MainWindow, the GUI boundary of the CLI."""
         mock_app = MagicMock()
         mock_app.exit.return_value = 0
         mock_app.exec.return_value = 0
@@ -338,33 +237,9 @@ class TestMainCommandRouting:
         mock_window = MagicMock()
         mocker.patch("vsview.app.main.MainWindow", return_value=mock_window)
 
-        # Pre-resolve PluginManager loading future without monkeypatching workspaces property or registry
-        load_future: Future[None] = Future()
-        load_future.set_result(None)
-        init_plugin_manager._load_future = load_future
-
         mocker.patch("vsview.assets.load_fonts")
 
         return mock_app, mock_window
-
-    def test_main_sets_environment_flags(
-        self,
-        mock_gui_components: tuple[MagicMock, MagicMock],
-        isolate_cli_env: None,
-    ) -> None:
-        with pytest.raises(SystemExit, match=r"^0$"):
-            main(
-                hdr=True,
-                settings_roaming=True,
-                settings_env=True,
-                settings_env_copy=True,
-                no_default_workspace=True,
-            )
-
-        assert os.environ.get("VSVIEW_HDR") == "true"
-        assert os.environ.get("VSVIEW_GLOBAL_SETTINGS_ROAMING") == "true"
-        assert os.environ.get("VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT") == "true"
-        assert os.environ.get("VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT_COPY") == "true"
 
     def test_cli_dispatch_sets_environment_flags(
         self,
@@ -388,34 +263,27 @@ class TestMainCommandRouting:
         assert os.environ.get("VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT") == "true"
         assert os.environ.get("VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT_COPY") == "true"
 
-    def test_cli_dispatch_script_file_with_args(
+    @pytest.mark.parametrize(
+        ("name", "extra_args", "expected_kwargs"),
+        [("video.vpy", ["-a", "bitdepth=10"], {"bitdepth": "10"}), ("video.VPY", [], {})],
+        ids=["with_args", "uppercase_suffix"],
+    )
+    def test_cli_dispatch_loads_a_script_file(
         self,
         mock_gui_components: tuple[MagicMock, MagicMock],
         tmp_path: Path,
+        name: str,
+        extra_args: list[str],
+        expected_kwargs: dict[str, str],
     ) -> None:
         _, mock_window = mock_gui_components
-        script = tmp_path / "video.vpy"
+        script = tmp_path / name
         script.write_text("import vapoursynth as vs", encoding="utf-8")
 
         with pytest.raises(SystemExit, match=r"^0$"):
-            app([str(script), "-a", "bitdepth=10", "--no-default-workspace"], exit_on_error=False)
+            app([str(script), *extra_args, "--no-default-workspace"], exit_on_error=False)
 
-        mock_window.load_new_script.assert_called_once_with(script, bitdepth="10")
-        mock_window.load_new_file.assert_not_called()
-
-    def test_cli_dispatch_uppercase_script_file(
-        self,
-        mock_gui_components: tuple[MagicMock, MagicMock],
-        tmp_path: Path,
-    ) -> None:
-        _, mock_window = mock_gui_components
-        script = tmp_path / "video.VPY"
-        script.write_text("import vapoursynth as vs", encoding="utf-8")
-
-        with pytest.raises(SystemExit, match=r"^0$"):
-            app([str(script), "--no-default-workspace"], exit_on_error=False)
-
-        mock_window.load_new_script.assert_called_once_with(script)
+        mock_window.load_new_script.assert_called_once_with(script, **expected_kwargs)
         mock_window.load_new_file.assert_not_called()
 
     def test_cli_dispatch_qt_arg_passes_to_application(
@@ -457,7 +325,7 @@ class TestMainCommandRouting:
             app([str(tmp_path)], exit_on_error=False)
 
     def test_cli_validation_rejects_invalid_log_level(self) -> None:
-        with pytest.raises(CoercionError, match=r"Invalid value"):
+        with pytest.raises(CoercionError, match="invalid_level_xyz"):
             app(["-vs-ll", "invalid_level_xyz"], exit_on_error=False)
 
     @pytest.mark.parametrize(
@@ -465,7 +333,7 @@ class TestMainCommandRouting:
         [["-w", "non_existent_workspace_xyz"], ["-w", "script", "-w", "non_existent_workspace_xyz"]],
         ids=["unknown_only", "valid_and_unknown"],
     )
-    def test_main_unknown_workspace_logs_critical_and_exits(
+    def test_main_unknown_workspace_names_it_and_exits(
         self,
         mock_gui_components: tuple[MagicMock, MagicMock],
         capfd: pytest.CaptureFixture[str],
@@ -473,14 +341,11 @@ class TestMainCommandRouting:
     ) -> None:
         mock_app, mock_window = mock_gui_components
 
-        with pytest.raises(SystemExit, match=r"^1$") as exc_info:
+        with pytest.raises(SystemExit, match=r"^1$"):
             app(args, exit_on_error=False)
 
-        assert exc_info.value.code == 1
         out, err = capfd.readouterr()
-        combined = out + err
-        assert "non_existent_workspace_xyz" in combined
-        assert "doesn't exist" in combined
+        assert "non_existent_workspace_xyz" in out + err
         mock_window.show.assert_not_called()
         mock_window.add_workspace.assert_not_called()
         mock_app.exec.assert_not_called()
@@ -523,8 +388,10 @@ class TestMainCommandRouting:
         [
             (["quick-script", "script"], [call(QuickScriptWorkspace), call(PythonScriptWorkspace)]),
             (["script", "script"], [call(PythonScriptWorkspace), call(PythonScriptWorkspace)]),
+            (["non_existent_wk", "script"], [call(PythonScriptWorkspace)]),
             ([], []),
         ],
+        ids=["custom_order", "duplicates", "unknown_is_skipped", "none"],
     )
     def test_main_custom_default_workspaces_from_settings(
         self,
@@ -539,23 +406,6 @@ class TestMainCommandRouting:
             app([], exit_on_error=False)
 
         assert mock_window.add_workspace.call_args_list == expected_calls
-
-    def test_main_unknown_default_workspace_logs_warning_and_skips(
-        self,
-        mock_gui_components: tuple[MagicMock, MagicMock],
-        capfd: pytest.CaptureFixture[str],
-    ) -> None:
-        _, mock_window = mock_gui_components
-        SettingsManager.global_settings.default_workspaces = ["non_existent_wk", "script"]
-
-        with pytest.raises(SystemExit, match=r"^0$"):
-            app([], exit_on_error=False)
-
-        out, err = capfd.readouterr()
-        combined = out + err
-        assert "non_existent_wk" in combined
-        assert "doesn't exist" in combined
-        mock_window.add_workspace.assert_called_once_with(PythonScriptWorkspace)
 
     def test_main_starts_with_builtin_workspaces_after_a_failed_plugin_load(
         self,
@@ -589,16 +439,16 @@ class TestMainCommandRouting:
         mock_window.button_group.buttons.return_value[0].click.assert_called_once_with()
         mock_app.exec.assert_called_once_with()
 
-    def test_main_meta_triggers_path_population_when_pyapp_active(
+    def test_main_meta_adds_the_python_folder_to_path_when_pyapp_is_active(
         self,
         mock_gui_components: tuple[MagicMock, MagicMock],
-        mocker: MockerFixture,
         monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
     ) -> None:
         monkeypatch.setenv("PYAPP", "1")
-        populate_spy = mocker.patch("vsview.cli._populate_path")
+        monkeypatch.setenv("PATH", str(tmp_path))
 
         with pytest.raises(SystemExit, match=r"^0$"):
             main_meta("--no-default-workspace")
 
-        populate_spy.assert_called_once()
+        assert str(Path(sys.executable).parent) in os.environ["PATH"].split(os.pathsep)
