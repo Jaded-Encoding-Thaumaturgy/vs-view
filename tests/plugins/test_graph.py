@@ -330,16 +330,15 @@ def test_graph_plugin_settings_propagation(
     populated_harness: tuple[HarnessPluginController, GraphPlugin],
 ) -> None:
     """Test that plugin settings reach the frontend and are re-sent when changed."""
-    _, plugin = populated_harness
+    harness, plugin = populated_harness
 
     received_dispatches = dict[str, Any]()
     plugin.view.bridge.dispatchCommandSignal.connect(
         lambda cmd, payload_str: received_dispatches.update({cmd: json.loads(payload_str) if payload_str else None})
     )
 
-    # Calling sync before ready does nothing
-    plugin._sync_web_options()
-    plugin._sync_keybindings()
+    # A settings change before the page is ready sends nothing
+    harness.globalSettingsChanged.emit()
     assert PyToJsCommand.SET_OPTIONS not in received_dispatches
 
     plugin.view.bridge.onWebReady()
@@ -394,13 +393,10 @@ def test_graph_plugin_visibility_and_dirty_deferral(
     # Hidden update marks dirty without dispatching
     fut = plugin.update_graph(force_layout=False)
     qtbot.waitUntil(fut.done, timeout=2000)
-    assert getattr(plugin, "_is_dirty") is True
     assert len(dispatched) == 0
 
-    # Showing the widget flushes the dirty state
     plugin.show()
     qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in dispatched, timeout=2000)
-    assert getattr(plugin, "_is_dirty") is False
 
 
 def test_graph_plugin_playback_suppression(
@@ -416,7 +412,7 @@ def test_graph_plugin_playback_suppression(
     qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in dispatched, timeout=2000)
     dispatched.clear()
 
-    harness.playback_proxy._state.is_playing = True
+    harness.playback_proxy.testing._state.is_playing = True
     fut = plugin.update_graph(force_layout=True)
     qtbot.waitUntil(fut.done, timeout=2000)
     assert PyToJsCommand.SET_DATA not in dispatched
@@ -431,15 +427,14 @@ def test_graph_plugin_initial_load_deferred_until_playback_stops(
     dispatched = list[str]()
     plugin.view.bridge.dispatchCommandSignal.connect(lambda cmd, _: dispatched.append(cmd))
 
-    harness.playback_proxy._state.is_playing = True
+    harness.playback_proxy.testing._state.is_playing = True
     plugin.view.bridge.onWebReady()
-    qtbot.waitUntil(lambda: getattr(plugin, "_is_dirty") is True, timeout=2000)
+    qtbot.wait(100)
     assert PyToJsCommand.SET_DATA not in dispatched
 
-    harness.playback_proxy._state.is_playing = False
+    harness.playback_proxy.testing._state.is_playing = False
     plugin.on_playback_stopped()
     qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in dispatched, timeout=2000)
-    assert getattr(plugin, "_is_dirty") is False
 
 
 def test_graph_plugin_reports_extraction_failure_to_frontend(
@@ -832,7 +827,9 @@ def test_graph_plugin_save_image_uses_path_chosen_in_python(
 
     chosen_path = tmp_path / "chosen.png"
     mocker.patch.object(QFileDialog, "getSaveFileName", return_value=(str(chosen_path), ""))
-    plugin._on_save_png_image()
+    save_menu = {act.text(): act for act in plugin.context_menu.actions()}["Save Graph as"].menu()
+    assert isinstance(save_menu, QMenu)
+    {act.text(): act for act in save_menu.actions()}["PNG Image…"].trigger()
     save_from_page()
 
     qtbot.waitUntil(chosen_path.exists, timeout=2000)

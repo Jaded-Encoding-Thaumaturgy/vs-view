@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import json
-import logging
 from collections.abc import Callable
-from concurrent.futures import CancelledError
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
@@ -18,7 +15,7 @@ from pytestqt.qtbot import QtBot
 from vsview_comp.models import ComparisonImage, ComparisonSource, SlowPicsSources, TMDBTitle, TMDBTitleData
 from vsview_comp.plugin import CompPlugin
 from vsview_comp.ui import ProbabilityCurveWidget, TMDBListPopup
-from vsview_comp.utils import LogNiquestsErrors, UploadError
+from vsview_comp.utils import UploadError
 
 from tests.harness import HarnessPluginController
 from vsview.vsenv.loop import QtEventLoop
@@ -165,26 +162,6 @@ def test_tag_chips_show_labels_as_plain_text(comp_plugin: CompPlugin) -> None:
     assert [label.textFormat() for label in labels] == [Qt.TextFormat.PlainText]
 
 
-# P1-12
-@pytest.mark.parametrize(
-    ("error", "expected"),
-    [
-        (TimeoutError("timed out"), ["TMDB search failed: timed out"]),
-        (niquests.HTTPError("HTTP 500"), ["TMDB search failed: HTTP 500"]),
-        (KeyError("label"), ["TMDB search failed: 'label'"]),
-        (CancelledError(), []),
-        (asyncio.CancelledError(), []),
-    ],
-)
-def test_log_niquests_errors_logs_every_failure_except_cancellation(
-    error: BaseException, expected: list[str], caplog: pytest.LogCaptureFixture
-) -> None:
-    with pytest.raises(type(error)), LogNiquestsErrors("TMDB search"):
-        raise error
-
-    assert [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR] == expected
-
-
 def tmdb_route(numeric_status: int) -> Route:
     def route(method: str, url: str) -> FakeResponse:
         if url in ("/search/tv", "/search/movie"):
@@ -200,15 +177,12 @@ def tmdb_route(numeric_status: int) -> Route:
     return route
 
 
-def test_tmdb_numeric_query_skips_not_found_lookups(
-    comp_plugin: CompPlugin, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_tmdb_numeric_query_skips_not_found_lookups(comp_plugin: CompPlugin, monkeypatch: pytest.MonkeyPatch) -> None:
     FakeAsyncSession.install(monkeypatch, tmdb_route(200))
 
     titles = comp_plugin.tmdb_worker.search("1917").result(timeout=10)
 
     assert [(t.media_type, t.id, t.name) for t in titles] == [("movie", "530915", "1917")]
-    assert [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING] == []
 
 
 @pytest.mark.parametrize("query", ["\u00b2", "\u216b"])

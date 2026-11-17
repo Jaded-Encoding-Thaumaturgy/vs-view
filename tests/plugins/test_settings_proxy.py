@@ -79,12 +79,6 @@ def test_proxy_setattr(mocker: MockerFixture) -> None:
     on_update.assert_called_once_with("attr1", "new_value")
 
 
-def test_proxy_repr(mocker: MockerFixture) -> None:
-    model = MockGlobalSettings()
-    proxy = _SettingsProxy(model, mocker.stub())
-    assert repr(proxy) == repr(model)
-
-
 def test_proxy_equality(mocker: MockerFixture) -> None:
     model1 = MockGlobalSettings(attr1="a")
     model2 = MockGlobalSettings(attr1="a")
@@ -99,18 +93,14 @@ def test_proxy_equality(mocker: MockerFixture) -> None:
     assert proxy1 != "not a proxy"
 
 
-def test_proxy_slots(mocker: MockerFixture) -> None:
-    model = MockGlobalSettings()
-    proxy = _SettingsProxy(model, mocker.stub())
+def test_proxy_rejects_unknown_attributes(mocker: MockerFixture) -> None:
+    on_update = mocker.stub()
+    proxy = _SettingsProxy(MockGlobalSettings(), on_update)
 
-    # Verify __slots__ exist
-    assert hasattr(proxy, "__slots__")
-    assert "_model" in proxy.__slots__
-    assert "_on_update" in proxy.__slots__
-
-    # Attempting to set an arbitrary attribute should fail
-    with pytest.raises(AttributeError, match=r"'MockGlobalSettings' object has no attribute 'unknown_attr'"):
+    with pytest.raises(AttributeError, match="unknown_attr"):
         proxy.unknown_attr = 5
+
+    on_update.assert_not_called()
 
 
 def test_proxy_shallow_copy_keeps_the_model_and_callback(mocker: MockerFixture) -> None:

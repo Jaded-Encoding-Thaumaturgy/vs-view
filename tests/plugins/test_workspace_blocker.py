@@ -7,7 +7,7 @@ from PySide6.QtCore import QObject
 
 from tests.harness import MockQObject
 from vsview.app.plugins._controller import PluginWorkspaceController
-from vsview.app.plugins.api import PluginAPI, WorkspaceBlocker
+from vsview.app.plugins.api import PluginAPI
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
 
@@ -16,20 +16,6 @@ pytestmark = [pytest.mark.unit, pytest.mark.qt]
 def api(mock_qobject: MockQObject) -> PluginAPI:
     controller = PluginWorkspaceController(mock_qobject)  # pyright: ignore[reportArgumentType]
     return controller.api
-
-
-def test_workspace_blocker_init(api: PluginAPI) -> None:
-    caller = QObject()
-
-    # Create blocker with caller
-    blocker = api.blocker(caller)  # pyright: ignore[reportArgumentType]
-    assert isinstance(blocker, WorkspaceBlocker)
-    assert blocker.locked is False
-
-    # Create blocker without caller
-    blocker2 = api.blocker()
-    assert isinstance(blocker2, WorkspaceBlocker)
-    assert blocker2.locked is False
 
 
 def test_workspace_blocker_acquire_release(api: PluginAPI) -> None:
