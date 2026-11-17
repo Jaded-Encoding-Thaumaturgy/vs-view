@@ -10,7 +10,8 @@ from typing import Any
 import pytest
 import vapoursynth as vs
 import vsgraph
-from PySide6.QtCore import QBuffer, QCoreApplication, QEvent, QIODevice, Qt
+import vsview_graph.plugin
+from PySide6.QtCore import QBuffer, QCoreApplication, QEvent, QIODevice, Qt, QUrl
 from PySide6.QtGui import QImage, QKeySequence
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QWidget
 from pytest_mock import MockerFixture
@@ -55,6 +56,24 @@ def cleanup_webengine() -> Generator[None]:
     finally:
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         QCoreApplication.processEvents()
+
+
+class StubGraphWebView(QWidget):
+    """GraphWebView with the real bridge and theme sync, but no Chromium page behind it."""
+
+    sync_theme = GraphWebView.sync_theme
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.bridge = GraphBridge(self)
+
+    def load(self, url: QUrl) -> None: ...
+
+
+@pytest.fixture(autouse=True)
+def stub_graph_web_view(mocker: MockerFixture) -> None:
+    # Loading the real frontend in headless CI corrupts the heap inside QtWebEngine and aborts the run.
+    mocker.patch.object(vsview_graph.plugin, "GraphWebView", StubGraphWebView)
 
 
 def make_video_output(clip: vs.VideoNode, index: int = 0) -> VideoOutput:
