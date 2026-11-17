@@ -5,10 +5,13 @@ from itertools import count
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QMenu, QWidget
 from pytestqt.qtbot import QtBot
 
+from vsview.app.settings import SettingsManager
+from vsview.app.settings.action import ActionID
+from vsview.app.settings.models import ShortcutConfig
 from vsview.app.settings.shortcuts import ShortcutManager
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
@@ -113,3 +116,21 @@ def test_scopes_overlap_without_live_registration_is_conservative(tree: dict[str
     ShortcutManager.register_shortcut(registered_id, lambda: None, tree["plugin"])
 
     assert ShortcutManager.scopes_overlap(registered_id, unregistered_id) is True
+
+
+def test_cleared_shortcut_restores_the_original_tooltip(qtbot: QtBot) -> None:
+    action_id = ActionID.LOAD_SCRIPT.value
+    owner = QWidget()
+    qtbot.addWidget(owner)
+    action = QAction("Load Script", owner)
+    action.setToolTip("Load a script")
+    ShortcutManager.register_action(action_id, action)
+    assert action.toolTip() == f"Load a script ({action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)})"
+
+    shortcuts = SettingsManager.global_settings.shortcuts
+    shortcuts[:] = [s for s in shortcuts if s.action_id != action_id]
+    shortcuts.append(ShortcutConfig(action_id=action_id, key_sequence=QKeySequence(), is_custom=True))
+    ShortcutManager.register_action(action_id, action)
+
+    assert action.shortcut().isEmpty()
+    assert action.toolTip() == "Load a script"

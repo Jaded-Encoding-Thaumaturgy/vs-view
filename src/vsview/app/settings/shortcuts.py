@@ -226,14 +226,15 @@ class ShortcutManager(Singleton):
         key = self.get_key(action_id)
         action.setShortcut(key)
 
-        if key.isEmpty():
-            return
-
-        native = key.toString(QKeySequence.SequenceFormat.NativeText)
-
         if (original := action.property("original_tooltip")) is None:
             original = action.toolTip()
             action.setProperty("original_tooltip", original)
+
+        if key.isEmpty():
+            action.setToolTip(original)
+            return
+
+        native = key.toString(QKeySequence.SequenceFormat.NativeText)
 
         action.setToolTip(f"{original} ({native})" if original else f"({native})")
 
@@ -534,7 +535,8 @@ class KeyboardLayoutMapper(Singleton):
         if vk > 0:
             key_state = (ctypes.c_ubyte * 256)()
             buf = ctypes.create_unicode_buffer(5)
-            ret = u32.ToUnicodeEx(vk, sc, key_state, buf, 5, 0, hkl)
+            # 0x4: do not change the keyboard state (Windows 10 1607+), so a dead key leaves no pending accent.
+            ret = u32.ToUnicodeEx(vk, sc, key_state, buf, 5, 0x4, hkl)
             if ret > 0 and buf.value:
                 return buf.value
         return None
