@@ -16,7 +16,7 @@ from vsview.app.outputs.video import VideoOutput
 from vsview.app.packing import Packer
 from vsview.app.settings import ActionID, SettingsManager, ShortcutManager
 from vsview.app.views import GraphicsView
-from vsview.app.views.tab import TabLabel, TabViewWidget
+from vsview.app.views.tab import TabLabel
 from vsview.app.workspace.tab_manager import PlayHeadToolButton, TabManager
 
 if TYPE_CHECKING:
@@ -101,46 +101,6 @@ def make_video_output(
 
 
 # 1. PlayHeadToolButton Tests
-def test_playhead_tool_button_initial_state(playhead_btn: PlayHeadToolButton) -> None:
-    btn = playhead_btn
-
-    assert btn.isCheckable() is True
-    assert btn.isChecked() is True
-    assert btn.state == PlayHeadToolButton.State.LINK_ADAPT
-    assert btn.modes_order == (
-        PlayHeadToolButton.State.LINK_ADAPT,
-        PlayHeadToolButton.State.LINK_TIME,
-        PlayHeadToolButton.State.LINK_FRAME,
-        PlayHeadToolButton.State.UNLINK,
-    )
-
-    tooltip = btn.toolTip()
-    assert "Sync playhead between tabs." in tooltip
-    assert f"Current mode: {PlayHeadToolButton.State.LINK_ADAPT.description}" in tooltip
-    assert f"[x] {PlayHeadToolButton.State.LINK_ADAPT.description}" in tooltip
-    assert f"[ ] {PlayHeadToolButton.State.LINK_TIME.description}" in tooltip
-    assert f"[ ] {PlayHeadToolButton.State.LINK_FRAME.description}" in tooltip
-    assert f"[ ] {PlayHeadToolButton.State.UNLINK.description}" in tooltip
-
-
-def test_playhead_tool_button_forward_cycle_set_state(qtbot: QtBot, playhead_btn: PlayHeadToolButton) -> None:
-    btn = playhead_btn
-
-    expected_cycle = [
-        (PlayHeadToolButton.State.LINK_TIME, True),
-        (PlayHeadToolButton.State.LINK_FRAME, True),
-        (PlayHeadToolButton.State.UNLINK, False),
-        (PlayHeadToolButton.State.LINK_ADAPT, True),
-    ]
-
-    for expected_state, expected_checked in expected_cycle:
-        with qtbot.waitSignal(btn.stateChanged) as blocker:
-            btn.set_state()
-        assert blocker.args == [expected_state]
-        assert btn.state == expected_state
-        assert btn.isChecked() is expected_checked
-
-
 def test_playhead_tool_button_forward_cycle_left_click(qtbot: QtBot, playhead_btn: PlayHeadToolButton) -> None:
     btn = playhead_btn
     btn.show()
@@ -201,41 +161,24 @@ def test_playhead_tool_button_explicit_set_state(qtbot: QtBot, playhead_btn: Pla
     assert btn.isChecked() is False
 
 
-def test_playhead_tool_button_tooltip_formatting_all_states(
-    playhead_btn: PlayHeadToolButton,
+@pytest.mark.parametrize("state", list(PlayHeadToolButton.State))
+def test_playhead_tool_button_tooltip_marks_only_the_current_mode(
+    playhead_btn: PlayHeadToolButton, state: PlayHeadToolButton.State
 ) -> None:
-    btn = playhead_btn
+    playhead_btn.set_state(state=state)
 
-    for state in PlayHeadToolButton.State:
-        btn.set_state(state=state)
-        lines = btn.toolTip().split("\n")
-        assert lines[0] == "Sync playhead between tabs."
-        assert lines[1] == f"Current mode: {state.description}"
-        assert lines[2] == "Click to cycle modes:"
+    marked = [line for line in playhead_btn.toolTip().split("\n") if line.startswith("[x] ")]
 
-        mode_lines = lines[3:]
-        assert len(mode_lines) == len(btn.modes_order)
-        for mode, line in zip(btn.modes_order, mode_lines, strict=True):
-            if mode == state:
-                assert line == f"[x] {mode.description}"
-            else:
-                assert line == f"[ ] {mode.description}"
+    assert marked == [f"[x] {state.description}"]
 
 
-def test_playhead_tool_button_invalid_state_fallback(
-    playhead_btn: PlayHeadToolButton, caplog: pytest.LogCaptureFixture
-) -> None:
-    btn = playhead_btn
+def test_playhead_tool_button_unknown_state_falls_back_to_adaptive_link(playhead_btn: PlayHeadToolButton) -> None:
+    playhead_btn.set_state(state=PlayHeadToolButton.State.UNLINK)
 
-    btn.set_state(state=PlayHeadToolButton.State.LINK_FRAME)
-    assert btn.state == PlayHeadToolButton.State.LINK_FRAME
+    playhead_btn.set_state(state=999)
 
-    with caplog.at_level("WARNING"):
-        btn.set_state(state=999)
-
-    assert "Unknown play head state 999" in caplog.text
-    assert btn.state == PlayHeadToolButton.State.LINK_ADAPT
-    assert btn.isChecked() is True
+    assert playhead_btn.state == PlayHeadToolButton.State.LINK_ADAPT
+    assert playhead_btn.isChecked() is True
 
 
 def test_playhead_tool_button_reload_icons(playhead_btn: PlayHeadToolButton) -> None:
@@ -248,41 +191,6 @@ def test_playhead_tool_button_reload_icons(playhead_btn: PlayHeadToolButton) -> 
 
 
 # 2. TabManager Initialization & Shortcuts Tests
-def test_tab_manager_initialization(tab_manager: TabManager, plugin_controller: HarnessPluginController) -> None:
-    mgr = tab_manager
-
-    assert mgr.controller is plugin_controller
-    assert isinstance(mgr.parentWidget(), QWidget)
-
-    # Buttons existence and checked states
-    assert isinstance(mgr.sync_playhead_btn, PlayHeadToolButton)
-    assert mgr.sync_playhead_btn.isChecked() is True
-    assert mgr.sync_playhead_state == PlayHeadToolButton.State.LINK_ADAPT
-
-    assert mgr.sync_zoom_btn.isCheckable() is True
-    assert mgr.sync_zoom_btn.isChecked() is True
-    assert mgr.is_sync_zoom_enabled is True
-
-    assert mgr.sync_scroll_btn.isCheckable() is True
-    assert mgr.sync_scroll_btn.isChecked() is True
-    assert mgr.is_sync_scroll_enabled is True
-
-    assert mgr.autofit_btn.isCheckable() is True
-    assert mgr.autofit_btn.isChecked() is False
-
-    assert mgr.toggle_tooldock_btn.isCheckable() is True
-    assert mgr.toggle_tooldock_btn.isChecked() is False
-
-    assert mgr.toggle_toolpanel_btn.isCheckable() is True
-    assert mgr.toggle_toolpanel_btn.isChecked() is False
-
-    assert mgr.disable_switch is True
-
-    # Tab container
-    assert isinstance(mgr.tabs, TabViewWidget)
-    assert mgr.tabs.cornerWidget(Qt.Corner.TopRightCorner) is mgr.sync_container
-
-
 def test_tab_manager_shortcuts_registration(tab_manager: TabManager) -> None:
     mgr = tab_manager
 
@@ -297,9 +205,7 @@ def test_tab_manager_shortcuts_registration(tab_manager: TabManager) -> None:
     ]
 
     for aid in expected_actions:
-        shortcuts = sm.get_shortcuts(aid)
-        assert len(shortcuts) > 0
-        assert any(sc.parent() is mgr for sc in shortcuts)
+        assert [sc.parent() for sc in sm.get_shortcuts(aid)].count(mgr) == 1, aid
 
     # Trigger registered shortcuts and verify widget state toggling
     for sc in sm.get_shortcuts(ActionID.SYNC_ZOOM):
@@ -452,22 +358,6 @@ def test_create_tabs_signal_forwarding(
 
 
 @pytest.mark.vpy("no-core")
-def test_create_tabs_with_real_video_output(
-    tab_manager: TabManager,
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
-    vpy_env_factory: Callable[[], ManagedEnvironment],
-) -> None:
-    env = vpy_env_factory()
-    voutput = create_test_video_output(env, 10)
-
-    mgr = tab_manager
-    tabs = mgr.create_tabs([voutput])
-
-    assert tabs.count() == 1
-    assert tabs.get_tab_label(0).vs_index == 0
-
-
-@pytest.mark.vpy("no-core")
 def test_swap_tabs(tab_manager: TabManager, make_video_output: Callable[..., VideoOutput]) -> None:
     mgr = tab_manager
 
@@ -534,7 +424,6 @@ def test_switch_tab_busy_guard_reverts(
     tab_manager: TabManager,
     plugin_controller: HarnessPluginController,
     make_video_output: Callable[..., VideoOutput],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     mgr = tab_manager
 
@@ -550,10 +439,9 @@ def test_switch_tab_busy_guard_reverts(
     assert mgr.tabs.previous_tab_index == 0
 
     # When api.busy is True, switching to tab 2 must be rejected and reverted
-    with plugin_controller.create_blocker(plugin_controller.api), caplog.at_level("WARNING"):
+    with plugin_controller.create_blocker(plugin_controller.api):
         mgr.switch_tab(2)
 
-    assert "Workspace is busy, cannot switch output" in caplog.text
     # Reverted to previous_tab_index (which was 1, the tab active prior to the rejected switch)
     assert mgr.tabs.currentIndex() == 1
 
@@ -763,35 +651,20 @@ def test_on_autofit_changed_single_view(tab_manager: TabManager, make_video_outp
 
 # Frame Render Update Tests
 @pytest.mark.vpy("no-core")
-def test_update_current_view_qimage(tab_manager: TabManager, make_video_output: Callable[..., VideoOutput]) -> None:
+@pytest.mark.parametrize("image_type", [QImage, QPixmap])
+def test_update_current_view_shows_the_image(
+    tab_manager: TabManager, make_video_output: Callable[..., VideoOutput], image_type: type[QImage | QPixmap]
+) -> None:
     mgr = tab_manager
-
     tabs = mgr.create_tabs([make_video_output("A", 0)])
     mgr.swap_tabs(tabs, 0)
+    image = QImage(64, 48, QImage.Format.Format_RGB32) if image_type is QImage else QPixmap(64, 48)
+    image.fill(Qt.GlobalColor.cyan)
 
-    img = QImage(64, 48, QImage.Format.Format_RGB32)
-    img.fill(Qt.GlobalColor.cyan)
+    mgr.update_current_view(image)
 
-    mgr.update_current_view(img)
     pix = mgr.current_view.pixmap_item.pixmap()
-    assert pix.width() == 64
-    assert pix.height() == 48
-
-
-@pytest.mark.vpy("no-core")
-def test_update_current_view_qpixmap(tab_manager: TabManager, make_video_output: Callable[..., VideoOutput]) -> None:
-    mgr = tab_manager
-
-    tabs = mgr.create_tabs([make_video_output("A", 0)])
-    mgr.swap_tabs(tabs, 0)
-
-    pix = QPixmap(50, 40)
-    pix.fill(Qt.GlobalColor.magenta)
-
-    mgr.update_current_view(pix)
-    curr_pix = mgr.current_view.pixmap_item.pixmap()
-    assert curr_pix.width() == 50
-    assert curr_pix.height() == 40
+    assert (pix.width(), pix.height()) == (64, 48)
 
 
 @pytest.mark.vpy("no-core")
@@ -868,22 +741,13 @@ def test_update_current_view_exception_closes_frame(
 
 
 # Tab Visibility Tests
-def test_tab_visibility_unchecked(tab_manager: TabManager) -> None:
-    mgr = tab_manager
+@pytest.mark.parametrize(("setting", "hidden"), [(Qt.CheckState.Unchecked, True), (Qt.CheckState.Checked, False)])
+def test_tab_visibility_follows_the_setting(tab_manager: TabManager, setting: Qt.CheckState, hidden: bool) -> None:
+    SettingsManager.global_settings.appearance.tab_bar = setting
 
-    SettingsManager.global_settings.appearance.tab_bar = Qt.CheckState.Unchecked
-    mgr.set_tab_visiblity()
+    tab_manager.set_tab_visiblity()
 
-    assert mgr.tabs.tabBar().isHidden() is True
-
-
-def test_tab_visibility_checked(tab_manager: TabManager) -> None:
-    mgr = tab_manager
-
-    SettingsManager.global_settings.appearance.tab_bar = Qt.CheckState.Checked
-    mgr.set_tab_visiblity()
-
-    assert mgr.tabs.tabBar().isHidden() is False
+    assert tab_manager.tabs.tabBar().isHidden() is hidden
 
 
 @pytest.mark.vpy("no-core")

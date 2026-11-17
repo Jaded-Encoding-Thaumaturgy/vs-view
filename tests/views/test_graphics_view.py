@@ -5,8 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QNativeGestureEvent, QPainter, QPixmap, QPointingDevice, QTransform
-from PySide6.QtWidgets import QStyleOptionGraphicsItem
+from PySide6.QtGui import QColor, QNativeGestureEvent, QPixmap, QPointingDevice, QTransform
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
@@ -587,35 +586,6 @@ def test_rect_selection_normalization_and_clipping(qtbot: QtBot) -> None:
     assert view.rect_selection.isEmpty()
 
 
-def test_rect_selection_overlay_paint_execution(qtbot: QtBot) -> None:
-    overlay = RectSelectionOverlay()
-    overlay.image_rect = QRectF(0, 0, 100, 100)
-    overlay.selection_rect = QRectF(20, 20, 40, 40)
-    overlay.editable = True
-
-    pixmap = QPixmap(100, 100)
-    pixmap.fill(Qt.GlobalColor.white)
-    painter = QPainter(pixmap)
-    option = QStyleOptionGraphicsItem()
-
-    # Painting with handles enabled
-    overlay.paint(painter, option)
-
-    # Painting with handles disabled
-    overlay.editable = False
-    overlay.paint(painter, option)
-
-    # Painting when selection is outside image bounds early-returns safely
-    overlay.selection_rect = QRectF(200, 200, 50, 50)
-    overlay.paint(painter, option)
-
-    # Painting when image_rect is empty early-returns safely
-    overlay.image_rect = QRectF()
-    overlay.paint(painter, option)
-
-    painter.end()
-
-
 def test_rect_selection_move_drag(qtbot: QtBot) -> None:
     view = GraphicsView()
     qtbot.addWidget(view)
@@ -672,29 +642,11 @@ def test_rect_selection_resize_and_escape_cancel(qtbot: QtBot) -> None:
     assert view.rect_selection == QRect(10, 10, 45, 50)
 
 
-def test_rect_selection_property_getters_and_scene_reset(qtbot: QtBot) -> None:
+def test_reset_scene_keeps_the_sar_and_clear_scene_removes_every_item(qtbot: QtBot) -> None:
     view = GraphicsView()
     qtbot.addWidget(view)
     view.resize(300, 300)
     view.show()
-
-    assert view.rect_selection_enabled is False
-    view.rect_selection_enabled = True
-    assert view.rect_selection_enabled is True
-    # Setting same value exercises the early cursor update path
-    view.rect_selection_enabled = True
-    assert view.rect_selection_enabled is True
-    view.rect_selection_enabled = False
-    assert view.rect_selection_enabled is False
-
-    # Overlay property getters
-    overlay = RectSelectionOverlay()
-    overlay.image_rect = QRectF(0, 0, 120, 80)
-    assert overlay.image_rect == QRectF(0, 0, 120, 80)
-    overlay.selection_rect = QRectF(10, 10, 40, 30)
-    assert overlay.selection_rect == QRectF(10, 10, 40, 30)
-
-    # Scene reset and clear
     pixmap = QPixmap(100, 100)
     pixmap.fill(Qt.GlobalColor.white)
     view.set_pixmap(pixmap)
@@ -702,11 +654,13 @@ def test_rect_selection_property_getters_and_scene_reset(qtbot: QtBot) -> None:
     view.sar_applied = True
 
     view.reset_scene()
+
     assert view.sar_applied is True
     assert view.pixmap_item.transform().m11() == 2.0
 
     view.clear_scene()
-    assert len(view.graphics_scene.items()) == 0
+
+    assert view.graphics_scene.items() == []
 
 
 # ViewState

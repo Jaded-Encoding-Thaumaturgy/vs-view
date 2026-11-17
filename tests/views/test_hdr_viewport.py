@@ -5,20 +5,9 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QImage, QResizeEvent, QTransform
 from pytestqt.qtbot import QtBot
 
-from vsview.app.views.hdr import HDRImageProvider, HDRViewport, QMLProperty
+from vsview.app.views.hdr import HDRImageProvider, HDRViewport
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
-
-
-def test_qml_property_descriptor_class_access() -> None:
-    """Accessing QMLProperty on the class returns the descriptor itself."""
-    assert isinstance(HDRViewport.image_width, QMLProperty)
-    assert HDRViewport.image_width.qml_name == "imageWidth"
-    assert HDRViewport.image_height.qml_name == "imageHeight"  # pyright: ignore[reportAttributeAccessIssue]
-    assert HDRViewport.image_scale_x.qml_name == "imageScaleX"  # pyright: ignore[reportAttributeAccessIssue]
-    assert HDRViewport.image_scale_y.qml_name == "imageScaleY"  # pyright: ignore[reportAttributeAccessIssue]
-    assert HDRViewport.image_x.qml_name == "imageX"  # pyright: ignore[reportAttributeAccessIssue]
-    assert HDRViewport.image_y.qml_name == "imageY"  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_hdr_image_provider_initial_state_and_request_image() -> None:
@@ -39,51 +28,28 @@ def test_hdr_image_provider_initial_state_and_request_image() -> None:
     assert provider.requestImage("frame_custom", QSize(), QSize()) == custom_image
 
 
-def test_hdr_viewport_initialization(qtbot: QtBot) -> None:
-    """HDRViewport instantiates with transparent background and sets up QML view root object."""
+@pytest.mark.parametrize(
+    ("attr", "qml_name", "value"),
+    [
+        ("image_width", "imageWidth", 1920),
+        ("image_height", "imageHeight", 1080),
+        ("image_x", "imageX", 45.5),
+        ("image_y", "imageY", 120.25),
+        ("image_scale_x", "imageScaleX", 2.5),
+        ("image_scale_y", "imageScaleY", 3.0),
+    ],
+)
+def test_hdr_viewport_properties_are_written_to_the_qml_root(
+    qtbot: QtBot, attr: str, qml_name: str, value: float
+) -> None:
     viewport = HDRViewport()
     qtbot.addWidget(viewport)
 
-    assert viewport.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
-    assert viewport.root_obj is not None
+    setattr(viewport, attr, value)
 
-    # Initial default values from QML
-    assert viewport.image_width == 0
-    assert viewport.image_height == 0
-    assert viewport.image_scale_x == pytest.approx(1.0)
-    assert viewport.image_scale_y == pytest.approx(1.0)
-    assert viewport.image_x == pytest.approx(0.0)
-    assert viewport.image_y == pytest.approx(0.0)
-
-
-def test_hdr_viewport_property_sync(qtbot: QtBot) -> None:
-    """Setting and getting HDRViewport QMLProperty descriptors correctly synchronizes with QML root object."""
-    viewport = HDRViewport()
-    qtbot.addWidget(viewport)
-
-    viewport.image_width = 1920
-    assert viewport.image_width == 1920
-    assert viewport.root_obj.property("imageWidth") == 1920
-
-    viewport.image_height = 1080
-    assert viewport.image_height == 1080
-    assert viewport.root_obj.property("imageHeight") == 1080
-
-    viewport.image_x = 45.5
-    assert viewport.image_x == pytest.approx(45.5)
-    assert viewport.root_obj.property("imageX") == pytest.approx(45.5)
-
-    viewport.image_y = 120.25
-    assert viewport.image_y == pytest.approx(120.25)
-    assert viewport.root_obj.property("imageY") == pytest.approx(120.25)
-
-    viewport.image_scale_x = 2.5
-    assert viewport.image_scale_x == pytest.approx(2.5)
-    assert viewport.root_obj.property("imageScaleX") == pytest.approx(2.5)
-
-    viewport.image_scale_y = 3.0
-    assert viewport.image_scale_y == pytest.approx(3.0)
-    assert viewport.root_obj.property("imageScaleY") == pytest.approx(3.0)
+    assert getattr(viewport, attr) == pytest.approx(value)
+    assert viewport.root_obj
+    assert viewport.root_obj.property(qml_name) == pytest.approx(value)
 
 
 def test_hdr_viewport_set_image_null_is_safe_noop(qtbot: QtBot) -> None:

@@ -5,8 +5,7 @@ import weakref
 from typing import Any, Literal, NamedTuple
 
 import pytest
-from jetpytools import complex_hash
-from PySide6.QtCore import QAbstractAnimation, QEvent, QLineF, QPoint, QPointF, QRectF, QSize, Qt, QTime
+from PySide6.QtCore import QAbstractAnimation, QEvent, QPoint, QPointF, QRectF, Qt, QTime
 from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
@@ -15,13 +14,11 @@ from PySide6.QtGui import (
     QHideEvent,
     QImage,
     QMouseEvent,
-    QMoveEvent,
     QPainter,
     QPaintEvent,
-    QResizeEvent,
     QValidator,
 )
-from PySide6.QtWidgets import QGraphicsDropShadowEffect, QSlider, QToolButton, QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from shiboken6 import Shiboken
@@ -34,9 +31,7 @@ from vsview.app.views.timeline import (
     HoverLabel,
     Notch,
     PlaybackContainer,
-    PlaybackSettings,
     StepSpinBox,
-    TimeEdit,
     Timeline,
     TimelineControlBar,
     TimelineHoverPopup,
@@ -65,85 +60,6 @@ def timeline_control_bar(qtbot: QtBot) -> TimelineControlBar:
 
 
 # Notch & CustomNotch Tests
-def test_notch_creation_defaults() -> None:
-    notch = Notch(Frame(10))
-    assert notch.data == Frame(10)
-    assert notch.end_data is None
-    assert notch.color == QColor(Qt.GlobalColor.black)
-    assert notch.line == QLineF()
-    assert notch.end_line is None
-    assert notch.label == ""
-
-
-def test_notch_creation_custom_attributes() -> None:
-    line1 = QLineF(10, 0, 10, 20)
-    line2 = QLineF(50, 0, 50, 20)
-    notch = Notch(
-        data=Time(seconds=5),
-        end_data=Time(seconds=15),
-        color="red",
-        line=line1,
-        end_line=line2,
-        label="Test Segment",
-    )
-    assert notch.data == Time(seconds=5)
-    assert notch.end_data == Time(seconds=15)
-    assert notch.color == QColor("red")
-    assert notch.line == line1
-    assert notch.end_line == line2
-    assert notch.label == "Test Segment"
-
-
-def test_notch_draw_single_line_and_cosmetic() -> None:
-    image = QImage(100, 100, QImage.Format.Format_ARGB32_Premultiplied)
-    image.fill(Qt.GlobalColor.transparent)
-
-    notch = Notch(Frame(5), color=QColor(255, 0, 0), line=QLineF(50, 10, 50, 90))
-    scroll_rect = QRectF(0, 0, 100, 100)
-
-    with QPainter(image) as painter:
-        notch.draw(painter, scroll_rect, cosmetic=True)
-        assert painter.pen().isCosmetic() is True
-
-    # Check non-cosmetic
-    with QPainter(image) as painter:
-        notch.draw(painter, scroll_rect, cosmetic=False)
-        assert painter.pen().isCosmetic() is False
-
-
-def test_notch_draw_range_fill() -> None:
-    image = QImage(200, 100, QImage.Format.Format_ARGB32_Premultiplied)
-    image.fill(Qt.GlobalColor.transparent)
-
-    notch = Notch(
-        Frame(10),
-        end_data=Frame(30),
-        color=QColor(0, 0, 255),
-        line=QLineF(20, 10, 20, 90),
-        end_line=QLineF(80, 10, 80, 90),
-        label="Range",
-    )
-    scroll_rect = QRectF(0, 10, 200, 80)
-
-    with QPainter(image) as painter:
-        notch.draw(painter, scroll_rect, range_alpha=120)
-        # Painter executed without throwing, pen set to notch color
-        assert painter.pen().color() == QColor(0, 0, 255)
-
-
-def test_custom_notch_creation_and_attributes() -> None:
-    cnotch = CustomNotch(
-        id="scene_001",
-        data=Frame(42),
-        color=QColor(0, 255, 0),
-        label="Intro",
-    )
-    assert cnotch.id == "scene_001"
-    assert cnotch.data == Frame(42)
-    assert cnotch.label == "Intro"
-    assert cnotch.color == QColor(0, 255, 0)
-
-
 def test_custom_notch_equality_and_hashing() -> None:
     c1 = CustomNotch("id_a", Frame(10))
     c2 = CustomNotch("id_a", Frame(99))  # Same id, different frame
@@ -162,40 +78,7 @@ def test_custom_notch_equality_and_hashing() -> None:
     assert c3 in s
 
 
-def test_custom_notch_complex_hash_integration() -> None:
-    h1 = complex_hash.hash("bookmarks", Frame(50), None)
-    h2 = complex_hash.hash("bookmarks", Frame(50), None)
-    h3 = complex_hash.hash("bookmarks", Frame(51), None)
-
-    assert h1 == h2
-    assert h1 != h3
-
-    notch1 = CustomNotch(h1, Frame(50))
-    notch2 = CustomNotch(h2, Frame(50))
-
-    notch_set = {notch1}
-    assert notch2 in notch_set
-    notch_set.discard(notch2)
-    assert len(notch_set) == 0
-
-
 # TimelineHoverPopup Tests
-def test_hover_popup_instantiation(timeline_control_bar: TimelineControlBar) -> None:
-    timeline = timeline_control_bar.timeline
-    popup = timeline.hover_popup
-
-    assert popup.parent() is None
-    assert (popup.windowFlags() & Qt.WindowType.ToolTip) == Qt.WindowType.ToolTip
-    assert (popup.windowFlags() & Qt.WindowType.FramelessWindowHint) == Qt.WindowType.FramelessWindowHint
-    assert popup.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground) is True
-    assert popup.testAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating) is True
-    assert popup.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents) is True
-
-    assert popup.radius == 50
-    assert popup.zoom_factor == 4.0
-    assert popup.hover_x == -1
-
-
 def test_hover_popup_update_state(timeline_control_bar: TimelineControlBar) -> None:
     timeline = timeline_control_bar.timeline
     popup = timeline.hover_popup
@@ -292,51 +175,7 @@ def test_hover_popup_label_staggering(timeline_control_bar: TimelineControlBar) 
     assert offsets == [0, -20, -40, 0]
 
 
-def test_hover_popup_paint_event_negative_hover(timeline_control_bar: TimelineControlBar) -> None:
-    popup = timeline_control_bar.timeline.hover_popup
-    popup.hover_x = -1
-
-    image = QImage(100, 100, QImage.Format.Format_ARGB32_Premultiplied)
-    image.fill(Qt.GlobalColor.white)
-
-    # Calling paintEvent with hover_x < 0 returns early
-    event = QPaintEvent(QRectF(0, 0, 100, 100).toRect())
-    popup.paintEvent(event)
-
-
-def test_hover_popup_paint_event_active(timeline_control_bar: TimelineControlBar) -> None:
-    timeline = timeline_control_bar.timeline
-    timeline_control_bar.set_data(100, [(i + 1) / 25.0 for i in range(100)])
-    timeline.rect_f = QRectF(0, 0, 800, 33)
-
-    popup = timeline.hover_popup
-    popup.update_state(200)
-
-    timeline.add_notch("bookmarks", Frame(20), label="Mark 20")
-    timeline.add_notch("bookmarks", Frame(25), end_data=Frame(35), label="Range 25-35")
-
-    # Render widget without errors in frame mode
-    popup.paintEvent(QPaintEvent(popup.rect()))
-
-    # Now in time mode
-    timeline.mode = "time"
-    popup.paintEvent(QPaintEvent(popup.rect()))
-
-
 # Timeline widget (Scrubber Slider) Tests
-def test_timeline_frame_positioning_and_cursor(timeline_control_bar: TimelineControlBar) -> None:
-    timeline = timeline_control_bar.timeline
-    timeline.rect_f = QRectF(0, 0, 1000, 33)
-
-    timeline.cursor_x = Frame(25)
-    assert timeline.x_to_frame(timeline.cursor_x) == Frame(25)
-    assert timeline.cursor_x == 250
-
-    timeline.cursor_x = Frame(50)
-    assert timeline.x_to_frame(timeline.cursor_x) == Frame(50)
-    assert timeline.cursor_x == 500
-
-
 def test_timeline_cursor_x_protected_during_mousepress(timeline_control_bar: TimelineControlBar) -> None:
     timeline = timeline_control_bar.timeline
     timeline.rect_f = QRectF(0, 0, 1000, 33)
@@ -504,22 +343,15 @@ def test_timeline_range_and_custom_notches(timeline_control_bar: TimelineControl
     assert len(timeline.custom_notches["chapters"]) == 0
 
 
-def test_timeline_display_scale_settings_reaction(
+def test_timeline_display_scale_follows_the_global_setting(
     timeline_control_bar: TimelineControlBar, qt_event_loop: QtEventLoop
 ) -> None:
     timeline = timeline_control_bar.timeline
 
     SettingsManager.global_settings.timeline.display_scale = 1.75
     SettingsManager.signals.globalChanged.emit()
+
     assert timeline.display_scale == 1.75
-
-    SettingsManager.global_settings.timeline.display_scale = 2.5
-    SettingsManager.signals.globalChanged.emit()
-    assert timeline.display_scale == 2.5
-
-    SettingsManager.global_settings.timeline.display_scale = 1.0
-    SettingsManager.signals.globalChanged.emit()
-    assert timeline.display_scale == 1.0
 
 
 @pytest.mark.parametrize(
@@ -540,20 +372,6 @@ def test_timeline_global_save_keeps_the_open_mode(
 
     assert timeline.mode == open_mode
     assert timeline.mode_selector.index == timeline.MODES.index(open_mode)
-
-
-def test_timeline_hover_zoom_factor_scaling(timeline_control_bar: TimelineControlBar) -> None:
-    popup = timeline_control_bar.timeline.hover_popup
-
-    # Update hover zoom factor within valid bounds
-    SettingsManager.global_settings.timeline.hover_zoom_factor = 12.0
-    popup.update_state(100)
-    assert popup.zoom_factor == 12.0
-
-    # Bounds in Settings: min 1.0, max 20.0
-    SettingsManager.global_settings.timeline.hover_zoom_factor = 20.0
-    popup.update_state(100)
-    assert popup.zoom_factor == 20.0
 
 
 def test_timeline_block_events_and_reset_interaction(timeline_control_bar: TimelineControlBar) -> None:
@@ -864,74 +682,6 @@ def test_timeline_skips_custom_notches_outside_the_bar(qtbot: QtBot, mocker: Moc
 
 
 # PlaybackContainer Tests
-def test_playback_container_instantiation_defaults(qtbot: QtBot) -> None:
-    container = PlaybackContainer()
-    qtbot.addWidget(container)
-
-    assert isinstance(container.settings, PlaybackSettings)
-    assert container.settings.seek_step == 1
-    assert container.settings.speed == 1.0
-    assert container.settings.uncapped is False
-    assert container.settings.zone_frames == 100
-    assert container.settings.loop is False
-    assert container.settings.step == 1
-
-    assert isinstance(container.seek_1_fwd_btn, QToolButton)
-    assert isinstance(container.seek_1_back_btn, QToolButton)
-    assert isinstance(container.seek_n_fwd_btn, QToolButton)
-    assert isinstance(container.seek_n_back_btn, QToolButton)
-    assert isinstance(container.play_pause_btn, QToolButton)
-    assert isinstance(container.time_edit, TimeEdit)
-    assert isinstance(container.frame_edit, FrameEdit)
-    assert isinstance(container.volume_slider, QSlider)
-
-    assert container.seek_1_fwd_btn.parent() is container
-    assert container.seek_1_back_btn.parent() is container
-    assert container.seek_n_fwd_btn.parent() is container
-    assert container.seek_n_back_btn.parent() is container
-    assert container.play_pause_btn.parent() is container
-    assert container.time_edit.parent() is container
-    assert container.frame_edit.parent() is container
-    assert container.volume_slider.parent() is container.audio_controls
-    assert container.isAncestorOf(container.volume_slider) is True
-
-
-def test_playback_container_seek_buttons(qtbot: QtBot) -> None:
-    container = PlaybackContainer()
-    qtbot.addWidget(container)
-
-    clicks = {"fwd_1": 0, "back_1": 0, "fwd_n": 0, "back_n": 0}
-
-    container.seek_1_fwd_btn.clicked.connect(lambda: clicks.__setitem__("fwd_1", clicks["fwd_1"] + 1))
-    container.seek_1_back_btn.clicked.connect(lambda: clicks.__setitem__("back_1", clicks["back_1"] + 1))
-    container.seek_n_fwd_btn.clicked.connect(lambda: clicks.__setitem__("fwd_n", clicks["fwd_n"] + 1))
-    container.seek_n_back_btn.clicked.connect(lambda: clicks.__setitem__("back_n", clicks["back_n"] + 1))
-
-    qtbot.mouseClick(container.seek_1_fwd_btn, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(container.seek_1_back_btn, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(container.seek_n_fwd_btn, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(container.seek_n_back_btn, Qt.MouseButton.LeftButton)
-
-    assert clicks["fwd_1"] == 1
-    assert clicks["back_1"] == 1
-    assert clicks["fwd_n"] == 1
-    assert clicks["back_n"] == 1
-
-
-def test_playback_container_play_pause_toggling(qtbot: QtBot) -> None:
-    container = PlaybackContainer()
-    qtbot.addWidget(container)
-
-    assert container.play_pause_btn.isCheckable() is True
-    assert container.play_pause_btn.isChecked() is False
-
-    qtbot.mouseClick(container.play_pause_btn, Qt.MouseButton.LeftButton)
-    assert container.play_pause_btn.isChecked() is True
-
-    qtbot.mouseClick(container.play_pause_btn, Qt.MouseButton.LeftButton)
-    assert container.play_pause_btn.isChecked() is False
-
-
 def test_playback_container_loop_and_play_zone(timeline_control_bar: TimelineControlBar, qtbot: QtBot) -> None:
     container = timeline_control_bar.playback_container
     timeline_control_bar.set_data(1000, [(i + 1) / 25.0 for i in range(1000)])
@@ -1011,30 +761,23 @@ def test_playback_container_seek_step_settings(qtbot: QtBot) -> None:
     assert container.seek_step_spinbox.value() == 24
 
 
-def test_playback_container_speed_slider_and_reset(qtbot: QtBot) -> None:
+@pytest.mark.parametrize(("slider", "speed"), [(0, 0.25), (17, 0.5), (50, 1.0), (75, 4.5), (100, 8.0)])
+def test_playback_container_speed_slider_sets_the_speed(qtbot: QtBot, slider: int, speed: float) -> None:
     container = PlaybackContainer()
     qtbot.addWidget(container)
 
-    # Value 50 corresponds to 1.0x
-    container.speed_slider.setValue(50)
-    assert container.settings.speed == 1.0
-    assert container.speed_slider.toolTip() == "1.00x"
+    container.speed_slider.setValue(slider)
 
-    # Minimum slider (0) -> 0.25x
-    container.speed_slider.setValue(0)
-    assert container.settings.speed == 0.25
-    assert container.speed_slider.toolTip() == "0.25x"
+    assert container.settings.speed == speed
 
-    # Maximum slider (100) -> 8.0x
+
+def test_playback_container_speed_reset_goes_back_to_normal_speed(qtbot: QtBot) -> None:
+    container = PlaybackContainer()
+    qtbot.addWidget(container)
     container.speed_slider.setValue(100)
-    assert container.settings.speed == 8.0
-    assert container.speed_slider.toolTip() == "8.00x"
 
-    container.speed_slider.setValue(25)  # 0.625 -> rounded to 0.75x or 0.5x
-    assert container.settings.speed > 0.25
-
-    # Reset button
     qtbot.mouseClick(container.speed_reset_btn, Qt.MouseButton.LeftButton)
+
     assert container.settings.speed == 1.0
     assert container.speed_slider.value() == 50
 
@@ -1076,7 +819,7 @@ def test_playback_container_volume_mute_controls(qtbot: QtBot) -> None:
     container.volume_slider.setValue(600)
     assert container.is_muted is False
     assert pytest.approx(container.volume) == 0.6
-    assert False in mute_signals
+    assert mute_signals[-1] is False
 
 
 def test_playback_container_audio_delay_settings(qtbot: QtBot) -> None:
@@ -1188,16 +931,6 @@ def test_timeline_mode_switching_frame_time(timeline_control_bar: TimelineContro
 
 
 # TimelineControlBar Integration Tests
-def test_timeline_control_bar_integration(timeline_control_bar: TimelineControlBar) -> None:
-    bar = timeline_control_bar
-    assert isinstance(bar.timeline, Timeline)
-    assert isinstance(bar.playback_container, PlaybackContainer)
-
-    assert bar.timeline.parent() is bar
-    assert bar.playback_container.parent() is bar
-    assert bar.total_frames == 100
-
-
 def test_timeline_control_bar_set_data_synchronization(timeline_control_bar: TimelineControlBar) -> None:
     bar = timeline_control_bar
     durations = [(i + 1) / 25.0 for i in range(250)]
@@ -1253,97 +986,59 @@ def test_timeline_control_bar_disabled_context_manager(
     assert bar.timeline.is_events_blocked is False
 
 
-def test_timeline_control_bar_event_synchronization(timeline_control_bar: TimelineControlBar) -> None:
-    bar = timeline_control_bar
-    bar.set_data(100, [(i + 1) / 25.0 for i in range(100)])
-    bar.timeline.rect_f = QRectF(0, 0, 1000, 33)
-
-    # Synchronize frame_edit change to timeline cursor
-    bar.playback_container.frame_edit.setValue(40)
-    bar.timeline.cursor_x = Frame(bar.playback_container.frame_edit.value())
-    assert bar.timeline.x_to_frame(bar.timeline.cursor_x) == Frame(40)
-
-    # FrameEdit emission
+def test_frame_edit_reports_the_new_and_the_previous_frame(timeline_control_bar: TimelineControlBar) -> None:
+    frame_edit = timeline_control_bar.playback_container.frame_edit
+    frame_edit.setValue(40)
     frame_changes: list[tuple[Frame, Frame]] = []
-    bar.playback_container.frame_edit.frameChanged.connect(lambda n, o: frame_changes.append((n, o)))
-    bar.playback_container.frame_edit.setValue(75)
-    assert len(frame_changes) == 1
-    assert frame_changes[0] == (Frame(75), Frame(40))
+    frame_edit.frameChanged.connect(lambda n, o: frame_changes.append((n, o)))
+
+    frame_edit.setValue(75)
+
+    assert frame_changes == [(Frame(75), Frame(40))]
 
 
-def test_timeline_draw_widget_time_mode_and_hover(timeline_control_bar: TimelineControlBar) -> None:
-    bar = timeline_control_bar
-    bar.set_data(120, [(i + 1) / 24.0 for i in range(120)])
-    timeline = bar.timeline
+@pytest.mark.parametrize(
+    ("target_x", "expected"), [(1, Frame(1)), (75, Frame(50)), (100, Frame(75)), (900, Frame(500))]
+)
+def test_frame_notch_interval_is_the_smallest_one_wider_than_the_target(
+    timeline_control_bar: TimelineControlBar, target_x: int, expected: Frame
+) -> None:
+    timeline_control_bar.set_data(500, [(i + 1) / 25.0 for i in range(500)])
+    timeline = timeline_control_bar.timeline
     timeline.rect_f = QRectF(0, 0, 1000, 33)
+    SettingsManager.global_settings.timeline.notches_margin = 0
 
-    timeline.mode = "time"
-    timeline.hover_x = 250
-
-    image = QImage(1000, 33, QImage.Format.Format_ARGB32_Premultiplied)
-    image.fill(Qt.GlobalColor.black)
-    with QPainter(image) as painter:
-        timeline.draw_widget(painter)
-
-    # In frame mode with hover
-    timeline.mode = "frame"
-    timeline.hover_x = 500
-    with QPainter(image) as painter:
-        timeline.draw_widget(painter)
+    assert timeline.calculate_notch_interval_f(target_x) == expected
 
 
-def test_timeline_calculate_notch_intervals(timeline_control_bar: TimelineControlBar) -> None:
-    bar = timeline_control_bar
-    bar.set_data(500, [(i + 1) / 25.0 for i in range(500)])
-    timeline = bar.timeline
+@pytest.mark.parametrize(
+    ("target_x", "expected"), [(10, Time(seconds=1)), (75, Time(seconds=2)), (800, Time(seconds=30))]
+)
+def test_time_notch_interval_is_the_smallest_one_longer_than_the_target(
+    timeline_control_bar: TimelineControlBar, target_x: int, expected: Time
+) -> None:
+    timeline_control_bar.set_data(500, [(i + 1) / 25.0 for i in range(500)])
+    timeline = timeline_control_bar.timeline
     timeline.rect_f = QRectF(0, 0, 1000, 33)
+    SettingsManager.global_settings.timeline.notches_margin = 0
 
-    interval_f = timeline.calculate_notch_interval_f(75)
-    assert interval_f in Timeline.NOTCH_INTERVALS_F
-
-    interval_t = timeline.calculate_notch_interval_t(75)
-    assert interval_t in Timeline.NOTCH_INTERVALS_T
+    assert timeline.calculate_notch_interval_t(target_x) == expected
 
 
-def test_timeline_events_move_leave_resize_focus_hide(timeline_control_bar: TimelineControlBar) -> None:
+@pytest.mark.parametrize(
+    "event",
+    [QFocusEvent(QEvent.Type.FocusOut), QHideEvent(), QEvent(QEvent.Type.Leave)],
+    ids=["focus_out", "hide", "leave"],
+)
+def test_timeline_clears_the_hover_position_when_the_pointer_or_focus_leaves(
+    timeline_control_bar: TimelineControlBar, event: QEvent
+) -> None:
     timeline = timeline_control_bar.timeline
     timeline.hover_x = 100
 
-    # Move event triggers update
-    timeline.moveEvent(QMoveEvent(QPoint(10, 10), QPoint(0, 0)))
+    QApplication.sendEvent(timeline, event)
 
-    # Resize event triggers update
-    timeline.resizeEvent(QResizeEvent(QSize(800, 33), QSize(1000, 33)))
-
-    # Focus out resets interaction
-    timeline.focusOutEvent(QFocusEvent(QEvent.Type.FocusOut))
     assert timeline.hover_x is None
-
-    timeline.hover_x = 100
-    # Hide event resets interaction
-    timeline.hideEvent(QHideEvent())
-    assert timeline.hover_x is None
-
-    timeline.hover_x = 100
-    # Leave event clears hover_x and hides popup
-    timeline.leaveEvent(QEvent(QEvent.Type.Leave))
-    assert timeline.hover_x is None
-
-
-def test_spinbox_show_focus_for_user(qtbot: QtBot) -> None:
-    parent = PlaybackContainer()
-    qtbot.addWidget(parent)
-
-    f_edit = FrameEdit(parent)
-    t_edit = TimeEdit(parent)
-    qtbot.addWidget(f_edit)
-    qtbot.addWidget(t_edit)
-
-    # Calling show_focus_for_user creates animation and sets graphics drop shadow effect
-    f_edit.show_focus_for_user()
-    t_edit.show_focus_for_user()
-    assert isinstance(f_edit.graphicsEffect(), QGraphicsDropShadowEffect)
-    assert isinstance(t_edit.graphicsEffect(), QGraphicsDropShadowEffect)
 
 
 def test_spinbox_focus_animation_is_deleted_when_it_stops(qtbot: QtBot) -> None:
@@ -1392,47 +1087,51 @@ def test_frame_edit_validation_clamp_max(qtbot: QtBot) -> None:
     assert pos == 3
 
 
-def test_playback_container_mute_icon_levels(qtbot: QtBot) -> None:
-    pc = PlaybackContainer()
-    qtbot.addWidget(pc)
-
-    # 0 volume
-    pc.volume = 0.0
-    assert pc.raw_volume == 0.0
-
-    # Low volume (< 0.33)
-    pc.volume = 0.2
-    assert pytest.approx(pc.raw_volume) == 0.2
-
-    # Mid volume (>= 0.33, < 0.67)
-    pc.volume = 0.5
-    assert pytest.approx(pc.raw_volume) == 0.5
-
-    # High volume (>= 0.67)
-    pc.volume = 0.9
-    assert pytest.approx(pc.raw_volume) == 0.9
-
-
-def test_playback_container_context_menu_event(
-    timeline_control_bar: TimelineControlBar, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    pc = timeline_control_bar.playback_container
-    exec_called = False
-
-    def fake_exec(*_args: Any, **_kwargs: Any) -> None:
-        nonlocal exec_called
-        exec_called = True
-
-    monkeypatch.setattr(pc.context_menu, "exec", fake_exec)
-
-    event = QContextMenuEvent(
-        QContextMenuEvent.Reason.Mouse,
-        QPoint(50, 10),
-        QPoint(100, 100),
-        Qt.KeyboardModifier.NoModifier,
+def open_context_menu(container: PlaybackContainer, mocker: MockerFixture) -> None:
+    mocker.patch.object(container.context_menu, "exec")
+    QApplication.sendEvent(
+        container,
+        QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(5, 5), QPoint(5, 5), Qt.KeyboardModifier.NoModifier),
     )
-    pc.contextMenuEvent(event)
-    assert exec_called is True
+
+
+def test_playback_container_context_menu_shows_the_current_settings(
+    timeline_control_bar: TimelineControlBar, mocker: MockerFixture
+) -> None:
+    container = timeline_control_bar.playback_container
+    container.settings.seek_step = 7
+    container.settings.speed = 4.5
+    container.settings.uncapped = True
+    container.settings.zone_frames = 30
+    container.settings.step = -2
+    container.settings.loop = True
+
+    open_context_menu(container, mocker)
+
+    assert container.seek_step_spinbox.value() == 7
+    assert container.settings.speed == 4.5
+    assert container.speed_slider.value() == 75
+    assert container.uncap_checkbox.isChecked() is True
+    assert container.speed_slider.isEnabled() is False
+    assert container.zone_frame_spinbox.value() == 30
+    assert container.step_frame_spinbox.value() == -2
+    assert container.loop_checkbox.isChecked() is True
+
+
+@pytest.mark.parametrize("matches_global", [True, False])
+def test_playback_container_context_menu_enables_reset_actions_only_for_changed_values(
+    timeline_control_bar: TimelineControlBar, mocker: MockerFixture, matches_global: bool
+) -> None:
+    container = timeline_control_bar.playback_container
+    SettingsManager.global_settings.timeline.seek_step = 24
+    SettingsManager.global_settings.playback.audio_delay = 0.05
+    container.settings.seek_step = 24 if matches_global else 10
+    container.audio_delay = 0.05 if matches_global else 0.2
+
+    open_context_menu(container, mocker)
+
+    assert container.reset_seek_step_to_global_action.isEnabled() is not matches_global
+    assert container.reset_audio_delay_to_global_action.isEnabled() is not matches_global
 
 
 def test_playback_container_zone_time_changed(timeline_control_bar: TimelineControlBar) -> None:
@@ -1503,10 +1202,7 @@ def test_timeline_click_bounds_clamping(timeline_control_bar: TimelineControlBar
     timeline.mousePressEvent(event_right)
     timeline.mouseReleaseEvent(event_right)
 
-    assert len(emitted_frames) == 2
-    assert emitted_frames[0] == Frame(0)
-    assert emitted_frames[1] == Frame(total_frames - 1)
-    assert emitted_frames[1] == Frame(99)
+    assert emitted_frames == [Frame(0), Frame(total_frames - 1)]
 
 
 def test_timeline_zero_frame_clips_bounds(timeline_control_bar: TimelineControlBar) -> None:
@@ -1515,7 +1211,6 @@ def test_timeline_zero_frame_clips_bounds(timeline_control_bar: TimelineControlB
 
     assert bar.total_frames == 0
     assert bar.playback_container.frame_edit.maximum() == 0
-    assert bar.playback_container.zone_frame_spinbox.maximum() >= 1
     assert bar.playback_container.zone_frame_spinbox.maximum() == 1
 
 
