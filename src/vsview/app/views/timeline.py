@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from functools import cache
 from itertools import chain
 from logging import getLogger
-from math import floor
 from operator import itemgetter
 from typing import Any, Literal, NamedTuple, override
 
@@ -1126,7 +1125,7 @@ class Timeline(QWidget):
                 )
 
             if isinstance(cursor, Frame):
-                return floor(cursor / self.total_frames * width)
+                return round(cursor / self.total_frames * width)
 
             return cursor
 
