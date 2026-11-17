@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from logging import getLogger
@@ -86,8 +87,7 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
 
         if self._client and not self._client.is_running:
             logger.warning("Remote client transport is not running; resetting client.")
-            self._client.close()
-            self._client = None
+            self._discard_client()
 
         if self._client:
             return self._client
@@ -120,9 +120,7 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
 
     @override
     def deleteLater(self) -> None:
-        if self._client:
-            self._client.close()
-            self._client = None
+        self._discard_client()
         super().deleteLater()
 
     @override
@@ -215,9 +213,8 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         self.dialog.set_status(message, "#e74c3c")
 
     def _apply_config(self, config: ConnectionConfig) -> None:
-        if config != self._config and self._client is not None:
-            self._client.close()
-            self._client = None
+        if config != self._config:
+            self._discard_client()
 
         self._config = config
 
@@ -227,6 +224,14 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
 
         self._apply_config(config)
         self.load_content(path)
+
+    def _discard_client(self) -> None:
+        if (client := self._client) is None:
+            return
+
+        self._client = None
+        # Closes the client in a fire and forget background task so the GUI thread does not wait for it
+        threading.Thread(target=client.close, name="CloseRemoteClient", daemon=True).start()
 
     @Slot()
     @override

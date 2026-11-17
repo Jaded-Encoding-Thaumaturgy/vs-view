@@ -492,6 +492,58 @@ def test_dialog_blocks_connect_until_the_secrets_are_read(
     assert workspace.auth_token == "stored-token"
 
 
+def _record_close_threads(remote_client: MagicMock, error: Exception | None = None) -> list[threading.Thread]:
+    closed_on = list[threading.Thread]()
+
+    def close() -> None:
+        closed_on.append(threading.current_thread())
+        if error is not None:
+            raise error
+
+    remote_client.return_value.close.side_effect = close
+    return closed_on
+
+
+def _join_close_threads() -> None:
+    # A thread join, not a Qt wait: processing a deferred delete here would leave qtbot a dead widget at teardown.
+    for thread in threading.enumerate():
+        if thread.name == "CloseRemoteClient":
+            thread.join(5)
+
+
+def test_deleting_the_workspace_closes_the_client_off_the_gui_thread(
+    workspace: RemoteWorkspace, script: Path, mocker: MockerFixture
+) -> None:
+    remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
+    closed_on = _record_close_threads(remote_client)
+    connect_through_load_button(workspace, script, mocker)
+    assert workspace.client is remote_client.return_value.start.return_value
+
+    workspace.deleteLater()
+    _join_close_threads()
+
+    assert len(closed_on) == 1
+    assert closed_on[0] is not threading.main_thread()
+
+
+def test_a_stopped_client_is_closed_off_the_gui_thread_and_replaced(
+    workspace: RemoteWorkspace, script: Path, mocker: MockerFixture
+) -> None:
+    remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
+    closed_on = _record_close_threads(remote_client)
+    connect_through_load_button(workspace, script, mocker)
+    first = workspace.client
+    remote_client.return_value.is_running = False
+
+    second = workspace.client
+    _join_close_threads()
+
+    assert len(closed_on) == 1
+    assert closed_on[0] is not threading.main_thread()
+    assert remote_client.call_count == 2
+    assert second is first
+
+
 def test_a_failed_keyring_read_never_deletes_the_stored_secret(
     workspace: RemoteWorkspace,
     isolate_secrets: Any,
