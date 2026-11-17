@@ -128,7 +128,7 @@ The Scening dock tool is designed for creating, managing, and exporting scene ra
 The upper panel manages **scenes**, which are named containers for ranges. Each scene has a customizable color, can be bound to specific outputs, and has a display toggle to control timeline visibility.
 
 - **:lucide-plus: Create new scene** adds a new scene.
-- **:lucide-x: Delete** removes a scene.
+- **:lucide-x: Delete** removes a scene. If the scene has ranges, Scening asks first.
 - The **Color** swatch changes the scene's color.
 - The **Outputs** column restricts a scene to specific video outputs.
 - The **Display** checkbox toggles the scene's visibility on the timeline.
