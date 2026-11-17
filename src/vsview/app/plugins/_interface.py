@@ -52,6 +52,9 @@ class _SettingsProxy[T: BaseModel]:
         object.__setattr__(self, "_path", path)
 
     def __getattr__(self, name: str) -> Any:
+        if name in _SettingsProxy.__slots__:
+            raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+
         attr = getattr(self._model, name)
         if isinstance(attr, BaseModel):
             sub_path = f"{self._path}.{name}" if self._path else name

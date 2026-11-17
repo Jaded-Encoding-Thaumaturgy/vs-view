@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import cast, override
 from unittest.mock import MagicMock
@@ -112,9 +113,20 @@ def test_proxy_slots(mocker: MockerFixture) -> None:
         proxy.unknown_attr = 5
 
 
-# --- _PluginSettingsStore Tests ---
+def test_proxy_shallow_copy_keeps_the_model_and_callback(mocker: MockerFixture) -> None:
+    model = MockGlobalSettings(attr1="copied")
+    on_update = mocker.stub()
+    proxy = _SettingsProxy(model, on_update)
+
+    copied = copy.copy(proxy)
+    copied.attr2 = 20
+
+    assert copied.attr1 == "copied"
+    assert copied == proxy
+    on_update.assert_called_once_with("attr2", 20)
 
 
+# _PluginSettingsStore Tests
 @pytest.fixture
 def mock_workspace(mocker: MockerFixture) -> MagicMock:
     return mocker.MagicMock()
