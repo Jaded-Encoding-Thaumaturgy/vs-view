@@ -112,6 +112,7 @@ class Parser(ABC):
             Get a suggested color for the new scene row.
 
             This method is monkey-patched onto parser instances by the scening tool during the import process.
+            It exists only while `parse` runs, so call it from `parse` and not from `__init__` or later.
             It uses a golden-ratio-based generator to ensure distinct colors for adjacent scenes.
 
             Returns:
