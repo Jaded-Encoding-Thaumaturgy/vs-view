@@ -75,16 +75,20 @@ def resolve_sourcemap_location(source_id: str, line_number: int) -> tuple[str, i
 
     import urllib.parse
 
-    path = urllib.parse.urlsplit(source_id).path
+    parts = urllib.parse.urlsplit(source_id)
+    path = parts.path
     if "/node_modules/" in path or path.startswith(("/@vite/", "/@id/")):
         return None
 
+    # HMR adds a new query string on every update, so a full-URL key would grow the cache forever.
+    cache_key = urllib.parse.urlunsplit(parts._replace(query="", fragment=""))
+
     now = time.monotonic()
-    if (entry := SOURCEMAP_CACHE.get(source_id)) and (now - entry[1] < CACHE_TTL):
+    if (entry := SOURCEMAP_CACHE.get(cache_key)) and (now - entry[1] < CACHE_TTL):
         cached_map = entry[0]
     else:
         cached_map = _fetch_sourcemap(source_id)
-        SOURCEMAP_CACHE[source_id] = (cached_map, now)
+        SOURCEMAP_CACHE[cache_key] = (cached_map, now)
 
     if not cached_map:
         return None
