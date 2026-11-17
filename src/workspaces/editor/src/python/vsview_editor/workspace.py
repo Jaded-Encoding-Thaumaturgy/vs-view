@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import linecache
 import subprocess
 from collections.abc import Sequence
@@ -108,13 +109,21 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         query.addQueryItem("windowTextRole", self.palette().color(QPalette.ColorRole.WindowText).name())
         query.addQueryItem("accentColor", self.palette().color(QPalette.ColorRole.Accent).name())
 
-        url = (
-            QUrl(DEV_SERVER_ORIGIN)
-            if getenv_bool("VSVIEW_EDITOR_DEV")
-            else QUrl.fromLocalFile(MonacoEditorDock.INDEX_PATH)
-        )
-        url.setQuery(query)
-        self.editor.load(url)
+        if getenv_bool("VSVIEW_EDITOR_DEV"):
+            url = QUrl(DEV_SERVER_ORIGIN)
+        elif MonacoEditorDock.INDEX_PATH.is_file():
+            url = QUrl.fromLocalFile(MonacoEditorDock.INDEX_PATH)
+        else:
+            logger.error("The editor frontend is not built: %s is missing", MonacoEditorDock.INDEX_PATH)
+            self.editor.setHtml(
+                "<h3>The editor frontend is not built.</h3>"
+                f"<p><code>{html.escape(str(MonacoEditorDock.INDEX_PATH))}</code> is missing.</p>"
+            )
+            url = None
+
+        if url is not None:
+            url.setQuery(query)
+            self.editor.load(url)
 
         # Initialize LSP Process Manager
         self.lsp_manager = LSPProcessManager(self)

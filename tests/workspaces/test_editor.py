@@ -797,3 +797,33 @@ class TestEditorDragAndDrop:
         stack_dock = StackDock(parent, stack)
 
         assert stack_dock.acceptDrops() is False
+
+
+class TestEditorFrontendMissing:
+    def test_missing_index_shows_an_error_page(
+        self,
+        qtbot: QtBot,
+        mocker: MockerFixture,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        monkeypatch.delenv("VSVIEW_EDITOR_DEV", raising=False)
+        monkeypatch.setattr(MonacoEditorDock, "INDEX_PATH", tmp_path / "web_dist" / "index.html")
+        # The web engine is a rendering boundary; only what is sent to it matters here.
+        load = mocker.patch.object(MonacoEditorWidget, "load")
+        set_html = mocker.patch.object(MonacoEditorWidget, "setHtml")
+        parent = QWidget()
+        qtbot.addWidget(parent)
+        settings = mocker.MagicMock()
+        settings.global_.options.theme = "dark"
+
+        dock = MonacoEditorDock(parent, mocker.MagicMock(), mocker.MagicMock(), settings)
+
+        try:
+            load.assert_not_called()
+            set_html.assert_called_once()
+        finally:
+            dock.editor.page().deleteLater()
+            dock.deleteLater()
+            parent.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
