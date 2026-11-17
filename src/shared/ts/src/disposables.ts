@@ -29,6 +29,10 @@ export class DisposableStore implements IDisposable {
   /** Add a disposable resource to the store. */
   public add<T extends IDisposable>(disposable: T): T {
     if (this.isDisposed) {
+      console.warn(
+        'Adding a disposable to a disposed DisposableStore; it is disposed at once. ' +
+          'This is likely a use-after-dispose bug.',
+      );
       disposable.dispose();
     } else {
       this.disposables.push(disposable);

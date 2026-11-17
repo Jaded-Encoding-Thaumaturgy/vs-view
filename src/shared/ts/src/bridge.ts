@@ -32,6 +32,7 @@ declare global {
 }
 
 export type CommandHandler<T> = (payload: T) => void;
+export type SyncReturn<R> = R & (R extends PromiseLike<unknown> ? never : unknown);
 
 export const INVOKE_TIMEOUT_MS = 30_000;
 
@@ -63,9 +64,9 @@ export class WebChannelBridge<
     return this.initResult;
   }
 
-  public onCommand<K extends keyof PyToJsMap & string>(
+  public onCommand<K extends keyof PyToJsMap & string, R>(
     command: K,
-    handler: CommandHandler<PyToJsMap[K]>,
+    handler: (payload: PyToJsMap[K]) => SyncReturn<R>,
   ): IDisposable {
     const erasedHandler = handler as CommandHandler<unknown>;
     const handlers = this.commandHandlers.get(command) ?? [];

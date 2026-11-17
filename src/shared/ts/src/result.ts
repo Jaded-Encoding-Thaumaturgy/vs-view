@@ -51,13 +51,6 @@ export class Ok<T, E = never> {
   unwrapOr(_fallback: unknown): T {
     return this.value;
   }
-
-  /**
-   * Converts the Result into a plain JSON-serializable object.
-   */
-  toPlain() {
-    return { ok: true as const, value: this.value };
-  }
 }
 
 export class Err<E = Error> {
@@ -101,12 +94,14 @@ export class Err<E = Error> {
 
   /**
    * Returns the contained Ok value, or throws the error if Err.
+   *
+   * A non-`Error` payload is wrapped in an `Error` that keeps it as `cause`.
    */
   unwrap(): never {
     if (this.error instanceof Error) {
       throw this.error;
     }
-    throw new Error(String(this.error));
+    throw new Error(String(this.error), { cause: this.error });
   }
 
   /**
@@ -114,13 +109,6 @@ export class Err<E = Error> {
    */
   unwrapOr<U>(fallback: U): U {
     return fallback;
-  }
-
-  /**
-   * Converts the Result into a plain JSON-serializable object.
-   */
-  toPlain() {
-    return { ok: false as const, error: this.error };
   }
 }
 
@@ -228,13 +216,6 @@ export class ResultAsync<T, E = Error> implements PromiseLike<Result<T, E>> {
       return res.value;
     }
     return fallback;
-  }
-
-  /**
-   * Converts the Result into a plain JSON-serializable object asynchronously.
-   */
-  async toPlain(): Promise<{ ok: true; value: T } | { ok: false; error: E }> {
-    return (await this.promise).toPlain();
   }
 }
 

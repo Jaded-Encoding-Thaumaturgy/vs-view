@@ -130,18 +130,17 @@ describe('Result utility', () => {
       expect(() => Result.err(new Error('boom')).unwrap()).toThrow('boom');
     });
 
+    it('should keep a non-Error payload as the cause when unwrapping err', () => {
+      const payload = { code: 7 };
+      const thrown = Result.fromThrowable(() => Result.err(payload).unwrap());
+
+      expect(thrown.ok).toBe(false);
+      expect(thrown.ok ? undefined : thrown.error.message).toBe('[object Object]');
+      expect(thrown.ok ? undefined : thrown.error.cause).toBe(payload);
+    });
+
     it('should return fallback on err for unwrapOr', () => {
       expect(Result.err('fail').unwrapOr('fallback')).toBe('fallback');
-    });
-  });
-
-  describe('toPlain serialization', () => {
-    it('should convert Ok to plain object', () => {
-      expect(Result.ok(123).toPlain()).toEqual({ ok: true, value: 123 });
-    });
-
-    it('should convert Err to plain object', () => {
-      expect(Result.err('err').toPlain()).toEqual({ ok: false, error: 'err' });
     });
   });
 
@@ -167,7 +166,7 @@ describe('Result utility', () => {
 
   describe('fromThrowable', () => {
     it('should return ok result when function succeeds', () => {
-      expect(Result.fromThrowable(() => JSON.parse('{"a":1}')).toPlain()).toEqual({
+      expect(Result.fromThrowable(() => JSON.parse('{"a":1}'))).toEqual({
         ok: true,
         value: { a: 1 },
       });
@@ -177,7 +176,7 @@ describe('Result utility', () => {
       const res = Result.fromThrowable(() => {
         throw new Error('Parse error');
       });
-      expect(res.toPlain()).toEqual({ ok: false, error: new Error('Parse error') });
+      expect(res).toEqual({ ok: false, error: new Error('Parse error') });
     });
 
     it('should convert non-Error throws into Error instances', () => {
@@ -185,7 +184,7 @@ describe('Result utility', () => {
         // eslint-disable-next-line @typescript-eslint/only-throw-error
         throw 'String error';
       });
-      expect(res.toPlain()).toEqual({ ok: false, error: new Error('String error') });
+      expect(res).toEqual({ ok: false, error: new Error('String error') });
     });
 
     it('should use custom error mapper when provided', () => {
@@ -195,31 +194,31 @@ describe('Result utility', () => {
         },
         (e) => `Custom: ${(e as Error).message}`,
       );
-      expect(res.toPlain()).toEqual({ ok: false, error: 'Custom: Original' });
+      expect(res).toEqual({ ok: false, error: 'Custom: Original' });
     });
   });
 
   describe('fromPromise', () => {
     it('should handle resolved promises', async () => {
       const res = await Result.fromPromise(Promise.resolve(100));
-      expect(res.toPlain()).toEqual({ ok: true, value: 100 });
+      expect(res).toEqual({ ok: true, value: 100 });
     });
 
     it('should handle async functions', async () => {
       const res = await Result.fromPromise(async () => 'async result');
-      expect(res.toPlain()).toEqual({ ok: true, value: 'async result' });
+      expect(res).toEqual({ ok: true, value: 'async result' });
     });
 
     it('should handle rejected promises', async () => {
       const res = await Result.fromPromise(Promise.reject(new Error('Network fail')));
-      expect(res.toPlain()).toEqual({ ok: false, error: new Error('Network fail') });
+      expect(res).toEqual({ ok: false, error: new Error('Network fail') });
     });
 
     it('should apply custom error mapper on rejection', async () => {
       const res = await Result.fromPromise(Promise.reject(new Error('Timeout')), (e) =>
         (e as Error).message.toUpperCase(),
       );
-      expect(res.toPlain()).toEqual({ ok: false, error: 'TIMEOUT' });
+      expect(res).toEqual({ ok: false, error: 'TIMEOUT' });
     });
   });
 
@@ -239,9 +238,9 @@ describe('Result utility', () => {
         .unwrap();
       expect(okRes).toBe(15);
 
-      const errRes = await ResultAsync.fromResult(Result.err('fail'))
-        .mapErr(async (e) => `async-${e}`)
-        .toPlain();
+      const errRes = await ResultAsync.fromResult(Result.err('fail')).mapErr(
+        async (e) => `async-${e}`,
+      );
       expect(errRes).toEqual({ ok: false, error: 'async-fail' });
     });
 
