@@ -244,7 +244,7 @@ class QtEventLoop(QObject, EventLoop):
                     fut
                     for fut, info in self._tracked_tasks.items()
                     if fut is not current_fut
-                    and (owner is None or info.owner == owner)
+                    and (owner is None or info.owner is owner)
                     and (names is None or info.name in names)
                 ]
 
