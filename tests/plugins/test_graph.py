@@ -103,7 +103,6 @@ def populated_harness(
     harness.set_current_voutput(voutput)
 
     plugin = harness.create_plugin(GraphPlugin)
-    qtbot.addWidget(plugin)
     plugin.show()
 
     return harness, plugin
@@ -569,7 +568,6 @@ def test_graph_plugin_output_selection_and_follow_mode(
     harness.set_current_voutput(voutput0)
 
     plugin = harness.create_plugin(GraphPlugin)
-    qtbot.addWidget(plugin)
 
     received_dispatches = dict[str, Any]()
     plugin.view.bridge.dispatchCommandSignal.connect(
@@ -635,7 +633,6 @@ def test_graph_plugin_output_change_during_extraction_resends_data(
     harness.set_current_voutput(voutput0)
 
     plugin = harness.create_plugin(GraphPlugin)
-    qtbot.addWidget(plugin)
     plugin.show()
 
     received = dict[str, Any]()
