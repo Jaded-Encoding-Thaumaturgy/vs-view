@@ -87,7 +87,7 @@ class ColorPickerInput(QWidget):
         self.swatch.clicked.connect(self._pick_color)
         layout.addWidget(self.swatch)
 
-        self.hex_edit = QLineEdit(self, maxLength=9, placeholderText="#RRGGBBAA", alignment=Qt.AlignmentFlag.AlignRight)
+        self.hex_edit = QLineEdit(self, maxLength=9, placeholderText="#RRGGBB", alignment=Qt.AlignmentFlag.AlignRight)
         self.hex_edit.setFont(get_monospace_font())
         self.hex_edit.setFixedWidth(self.hex_edit.fontMetrics().horizontalAdvance("#FFFFFFFF") + 5)
         self.hex_edit.editingFinished.connect(self._on_hex_edited)
@@ -127,12 +127,7 @@ class ColorPickerInput(QWidget):
 
     @Slot()
     def _pick_color(self) -> None:
-        color = QColorDialog.getColor(
-            self._color,
-            self,
-            "Select Color",
-            QColorDialog.ColorDialogOption.ShowAlphaChannel,
-        )
+        color = QColorDialog.getColor(self._color, self, "Select Color")
         if color.isValid():
             self.color = color
 
