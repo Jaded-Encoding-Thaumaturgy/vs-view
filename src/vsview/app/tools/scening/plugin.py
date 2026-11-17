@@ -56,7 +56,15 @@ from .constants import PLUGIN_DISPLAY_NAME, PLUGIN_IDENTIFIER
 from .models import AbstractRange, RangeFrame, RangeTime, SceneRow, UnifiedRange
 from .parsers import PythonListFramesParser, internal_parsers
 from .serializer import PythonListFramesSerializer, internal_serializers
-from .ui import Col, RangeCol, RangeTableDelegate, RangeTableModel, SceneTableDelegate, SceneTableModel
+from .ui import (
+    Col,
+    RangeCol,
+    RangeTableDelegate,
+    RangeTableModel,
+    SceneTableDelegate,
+    SceneTableModel,
+    confirm_scene_removal,
+)
 from .utils import ColorGenerator, monkey_patch_parser
 from .worker import FFV1_ARGS, H264_ARGS, ExportQueueManager
 
@@ -615,7 +623,11 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         if not (selected_indexes := self.scenes_view.selectionModel().selectedRows()):
             return
 
-        rows = sorted((idx.row() for idx in selected_indexes), reverse=True)
+        scenes = [idx.data(self.scenes_model.SceneRowRole) for idx in selected_indexes]
+        if not confirm_scene_removal(self, scenes):
+            return
+
+        rows = sorted((idx.row() for idx in self.scenes_view.selectionModel().selectedRows()), reverse=True)
 
         self.scenes_model.remove_scene(rows)
 

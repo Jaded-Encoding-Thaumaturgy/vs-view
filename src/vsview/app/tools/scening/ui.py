@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QColorDialog,
     QLineEdit,
+    QMessageBox,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
@@ -337,7 +338,12 @@ class SceneTableDelegate(QStyledItemDelegate):
 
             case Col.DELETE, QEvent.Type.MouseButtonPress | QEvent.Type.MouseButtonDblClick:
                 if isinstance(model, SceneTableModel):
-                    model.remove_scene(index.row())
+                    row = QPersistentModelIndex(index)
+                    if (
+                        confirm_scene_removal(option.widget, [index.data(SceneTableModel.SceneRowRole)])
+                        and row.isValid()
+                    ):
+                        model.remove_scene(row.row())
                 return True
 
             case Col.DISPLAY | Col.DELETE, QEvent.Type.MouseButtonRelease:
@@ -776,3 +782,22 @@ class RangeTableDelegate(QStyledItemDelegate):
                     return
 
         super().setModelData(editor, model, index)
+
+
+def confirm_scene_removal(parent: QWidget | None, scenes: Sequence[SceneRow]) -> bool:
+    if not (n_ranges := sum(len(scene.ranges) for scene in scenes)):
+        return True
+
+    if len(scenes) == 1:
+        text = f'Delete the scene "{scenes[0].name}" and its {n_ranges} range(s)?'
+    else:
+        text = f"Delete {len(scenes)} scene(s) and their {n_ranges} range(s)?"
+
+    answer = QMessageBox.question(
+        parent,
+        "Delete Scene?",
+        text,
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.No,
+    )
+    return answer == QMessageBox.StandardButton.Yes
