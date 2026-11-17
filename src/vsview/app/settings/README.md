@@ -49,17 +49,47 @@ class GlobalSettings(BaseModel):
 
 Defined in `metadata.py`:
 
-| Type             | Annotation Example                                                                               |
-| ---------------- | ------------------------------------------------------------------------------------------------ |
-| `Checkbox`       | `Annotated[bool, Checkbox(label="Enabled", text="Check me")]`                                    |
-| `Dropdown`       | `Annotated[str, Dropdown(label="Mode", items=[("A", "a")])]`                                     |
-| `Spin`           | `Annotated[int, Spin(label="Size", min=0, max=100, suffix="px")]`                                |
-| `DoubleSpin`     | `Annotated[float, DoubleSpin(label="Val", min=0, max=1)]`                                        |
-| `PlainTextEdit`  | `Annotated[list[float], PlainTextEdit(label="List", value_type=float)]`                          |
-| `WidgetTimeEdit` | `Annotated[QTime, WidgetTimeEdit(label="Interval", display_format="mm:ss")]`                     |
-| `ColorPicker`    | `Annotated[str, ColorPicker(label="Color")]`                                                     |
-| `Login`          | `Annotated[str, Login(label="API Key", namespace="...", context="...")]`                         |
-| `SecretLineEdit` | `Annotated[str \| None, SecretLineEdit(label="Key", namespace="...", context="...", key="...")]` |
+| Type             | Annotation Example                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Checkbox`       | `Annotated[bool, Checkbox(label="Enabled", text="Check me")]`                                                                                     |
+| `LineEdit`       | `Annotated[str, LineEdit(label="Name", default_value="vsview")]`                                                                                  |
+| `Dropdown`       | `Annotated[str, Dropdown(label="Mode", items=[("A", "a")])]`                                                                                      |
+| `Spin`           | `Annotated[int, Spin(label="Size", min=0, max=100, suffix="px")]`                                                                                 |
+| `DoubleSpin`     | `Annotated[float, DoubleSpin(label="Val", min=0, max=1)]`                                                                                         |
+| `PlainTextEdit`  | `Annotated[list[float], PlainTextEdit(label="List", value_type=float)]`                                                                           |
+| `ListEdit`       | `Annotated[list[str], ListEdit(label="Names", value_type=str)]`                                                                                   |
+| `PathListEdit`   | `Annotated[list[str], PathListEdit(label="Folders")]`                                                                                             |
+| `FilePicker`     | `Annotated[str \| None, FilePicker(label="Binary", file_filter="Programs (*.exe)")]`                                                              |
+| `WidgetTimeEdit` | `Annotated[time, WidgetTimeEdit(label="Interval", display_format="mm:ss", to_ui=lambda t: QTime(0, t.minute, t.second), from_ui=QTime.toPython)]` |
+| `ColorPicker`    | `Annotated[str, ColorPicker(label="Color")]` (stored as `#RRGGBB`, no alpha)                                                                      |
+| `Login`          | `Annotated[str, Login(label="API Key", namespace="...", context="...")]`                                                                          |
+| `SecretLineEdit` | `Annotated[str \| None, SecretLineEdit(label="Key", namespace="...", context="...", key="...")]`                                                  |
+
+`WidgetTimeEdit` works on `QTime`. Store a `datetime.time` and convert it with `to_ui` / `from_ui`, as in the example.
+
+### Secrets
+
+`Login` and `SecretLineEdit` keep the secret in the OS keyring through `SecretsManager`.
+The keyring is written when the user clicks **Apply** or **OK**, not while they type.
+`Login` stores only the user name in the settings file. `SecretLineEdit` stores nothing in the settings file.
+
+### Dependent Dropdowns (`depends_on`)
+
+A `Dropdown` can list items that depend on another setting:
+
+```python
+icon_weight: Annotated[
+    str,
+    Dropdown(label="Icon Weight", depends_on="appearance.icon_provider", items=_get_icon_weights, default_value="regular"),
+] = "regular"
+```
+
+Rules:
+
+- Only `Dropdown` supports `depends_on`. The value is the dotted key of the other setting.
+- The other setting must also be a `Dropdown`, in the same scope (global or local).
+- `items` must be a callable with one parameter. It receives the value of the other setting.
+- When the other dropdown changes, the items are built again. `default_value` is selected if it is in the list, else the first item.
 
 ### Value Transforms (for unit conversion)
 

@@ -90,13 +90,12 @@ class SettingsManager(Singleton):
 
     @inject_self.property
     def default_global_settings(self) -> GlobalSettings:
-        """Get the default global settings, lazily initialized."""
-
+        """Build a new model with the default global settings on each access."""
         return GlobalSettings()
 
     @inject_self.property
     def default_local_settings(self) -> LocalSettings:
-        """Get the default local settings, lazily initialized."""
+        """Build a new model with the default local settings on each access."""
         return LocalSettings()
 
     @inject_self
