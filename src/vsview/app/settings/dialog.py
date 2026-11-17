@@ -256,12 +256,6 @@ class SettingsDialog(QDialog, IconReloadMixin):
 
         self._script_path = Path(script_path) if script_path else None
 
-        # Store original settings for cancel
-        self._original_global = SettingsManager.global_settings.model_copy(deep=True)
-        self._original_local = (
-            SettingsManager.get_local_settings(script_path).model_copy(deep=True) if script_path else None
-        )
-
         self._global_widgets = dict[str, QWidget]()
         self._local_widgets = dict[str, QWidget]()
         self._wheel_filter = WheelEventFilter(self)
