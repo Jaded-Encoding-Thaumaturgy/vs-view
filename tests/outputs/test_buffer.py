@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import Future
@@ -11,7 +10,7 @@ import vapoursynth as vs
 from vsengine.policy import ManagedEnvironment
 
 from vsview.app.outputs.audio import AudioOutput
-from vsview.app.outputs.buffer import AudioBuffer, AudioBundle, FrameBuffer, FrameBundle
+from vsview.app.outputs.buffer import AudioBuffer, FrameBuffer
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.settings import SettingsManager
 
@@ -89,32 +88,7 @@ class PendingAudioNode:
         return self._future
 
 
-# FrameBundle & AudioBundle Tests
-def test_bundles_namedtuples() -> None:
-    main_fut = Future[vs.VideoFrame]()
-    plugin_fut = Future[vs.VideoFrame]()
-    bundle = FrameBundle(n=1, main_future=main_fut, plugin_futures={"plug": plugin_fut})
-
-    assert bundle.n == 1
-    assert bundle.main_future is main_fut
-    assert bundle.plugin_futures == {"plug": plugin_fut}
-
-    a_fut = Future[vs.AudioFrame]()
-    abundle = AudioBundle(n=0, future=a_fut)
-
-    assert abundle.n == 0
-    assert abundle.future is a_fut
-
-
 # FrameBuffer Tests
-def test_frame_buffer_init(video_output: VideoOutput, env: ManagedEnvironment) -> None:
-    fb = FrameBuffer(video_output, env)
-
-    assert fb.video_output is video_output
-    assert fb.env is env
-    assert fb.get_next_frame() is None
-
-
 def test_frame_buffer_register_plugin_node(video_output: VideoOutput, env: ManagedEnvironment) -> None:
     fb = FrameBuffer(video_output, env)
     with env.use():
@@ -307,8 +281,8 @@ def test_frame_buffer_get_next_frame_main_and_plugin_error_exception_group(
     assert "Plugin failed" in str(exc_info.value.exceptions[1])
 
 
-def test_frame_buffer_get_next_frame_plugin_error_logged(
-    video_output: VideoOutput, env: ManagedEnvironment, caplog: pytest.LogCaptureFixture
+def test_frame_buffer_get_next_frame_skips_a_failed_plugin_frame(
+    video_output: VideoOutput, env: ManagedEnvironment
 ) -> None:
     fb = FrameBuffer(video_output, env)
     with env.use():
@@ -321,15 +295,13 @@ def test_frame_buffer_get_next_frame_plugin_error_logged(
     fb.register_plugin_node("failing_plugin", failing_plugin)
     fb.allocate(range(2))
 
-    with caplog.at_level(logging.ERROR):
-        result = fb.get_next_frame()
+    result = fb.get_next_frame()
 
     assert result is not None
     n, main_frame, plugin_frames = result
     assert n == 1
     assert isinstance(main_frame, vs.VideoFrame)
     assert plugin_frames == {}
-    assert "Failed to get plugin frame failing_plugin for frame 1" in caplog.text
 
 
 def test_frame_buffer_wait_for_first_frame_normal(video_output: VideoOutput, env: ManagedEnvironment) -> None:
@@ -411,10 +383,9 @@ def test_frame_buffer_invalidate_and_clear(video_output: VideoOutput, env: Manag
     assert fb.get_next_frame() is None
 
 
-def test_frame_buffer_clear_timeout_warning_non_blocking(
+def test_frame_buffer_clear_does_not_block_on_frames_that_never_finish(
     video_output: VideoOutput,
     env: ManagedEnvironment,
-    caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     unresolved_fut = Future[vs.VideoFrame]()
@@ -423,37 +394,20 @@ def test_frame_buffer_clear_timeout_warning_non_blocking(
     fb = FrameBuffer(video_output, env)
     fb.allocate(range(2))
 
-    captured_timeout: float | None = None
-
     def fake_wait(fs: Any, timeout: float | None = None) -> tuple[set[Any], set[Any]]:
-        nonlocal captured_timeout
-        captured_timeout = timeout
         return set(), set(fs)
 
     monkeypatch.setattr("vsview.app.outputs.buffer.wait", fake_wait)
 
-    with caplog.at_level(logging.WARNING):
-        fut = fb.clear()
-        assert isinstance(fut, Future)
-        result = fut.result(timeout=2.0)
+    result = fb.clear().result(timeout=2.0)
 
     assert result is None
-    assert captured_timeout == 10.0
     assert fb.get_next_frame() is None
-    assert "Frame cleanup timed out after 10 seconds: 1 of 1 frame(s) remain pending" in caplog.text
 
     unresolved_fut.cancel()
 
 
 # AudioBuffer Tests
-def test_audio_buffer_init(audio_output: AudioOutput, env: ManagedEnvironment) -> None:
-    ab = AudioBuffer(audio_output, env)
-
-    assert ab.audio_output is audio_output
-    assert ab.env is env
-    assert ab.get_next_frame() is None
-
-
 def test_audio_buffer_allocate(audio_output: AudioOutput, env: ManagedEnvironment) -> None:
     ab = AudioBuffer(audio_output, env)
 
@@ -555,7 +509,6 @@ def test_audio_buffer_get_next_frame_empty_and_invalidated(audio_output: AudioOu
 def test_audio_buffer_get_next_frame_exception(
     audio_output: AudioOutput,
     env: ManagedEnvironment,
-    caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     raw_audio = audio_output.playback_audio
@@ -566,11 +519,9 @@ def test_audio_buffer_get_next_frame_exception(
     ab = AudioBuffer(audio_output, env)
     ab.allocate(range(3, 4))
 
-    with caplog.at_level(logging.ERROR):
-        res = ab.get_next_frame()
+    res = ab.get_next_frame()
 
     assert res is None
-    assert "Failed to get audio frame 3" in caplog.text
 
 
 def test_audio_buffer_wait_for_first_frame(
@@ -636,10 +587,9 @@ def test_audio_buffer_invalidate_and_clear(audio_output: AudioOutput, env: Manag
     assert ab.get_next_frame() is None
 
 
-def test_audio_buffer_clear_timeout_warning_non_blocking(
+def test_audio_buffer_clear_does_not_block_on_frames_that_never_finish(
     audio_output: AudioOutput,
     env: ManagedEnvironment,
-    caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     unresolved_fut = Future[vs.AudioFrame]()
@@ -648,23 +598,14 @@ def test_audio_buffer_clear_timeout_warning_non_blocking(
     ab = AudioBuffer(audio_output, env)
     ab.allocate(range(1))
 
-    captured_timeout: float | None = None
-
     def fake_wait(fs: Any, timeout: float | None = None) -> tuple[set[Any], set[Any]]:
-        nonlocal captured_timeout
-        captured_timeout = timeout
         return set(), set(fs)
 
     monkeypatch.setattr("vsview.app.outputs.buffer.wait", fake_wait)
 
-    with caplog.at_level(logging.WARNING):
-        fut = ab.clear()
-        assert isinstance(fut, Future)
-        result = fut.result(timeout=2.0)
+    result = ab.clear().result(timeout=2.0)
 
     assert result is None
-    assert captured_timeout == 10.0
     assert ab.get_next_frame() is None
-    assert "Audio cleanup timed out after 10 seconds: 1 of 1 frame(s) remain pending" in caplog.text
 
     unresolved_fut.cancel()

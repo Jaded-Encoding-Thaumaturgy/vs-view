@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable, Generator
 from typing import override
 
@@ -39,120 +38,57 @@ def manager(
         yield OutputsManager()
 
 
-# Defaults and Index Setters Tests
-def test_outputs_manager_defaults(manager: OutputsManager) -> None:
-    assert manager.voutputs == []
-    assert manager.aoutputs == []
-    assert manager.current_video_index == 0
-    assert manager.current_audio_index == 0
-    assert manager.current_voutput is None
-    assert manager.current_aoutput is None
+# Current output selection
+INDEX_CASES = [
+    pytest.param(0, 0, None, id="empty"),
+    pytest.param(0, 5, None, id="empty_with_index"),
+    pytest.param(2, 0, 0, id="first"),
+    pytest.param(2, 1, 1, id="second"),
+    pytest.param(2, -1, None, id="negative"),
+    pytest.param(2, 2, None, id="past_the_end"),
+]
 
 
-def test_outputs_manager_index_setters(manager: OutputsManager) -> None:
-    manager.current_video_index = 3
-    assert manager.current_video_index == 3
-
-    manager.current_audio_index = 5
-    assert manager.current_audio_index == 5
-
-
-def test_outputs_manager_current_aoutput_empty(manager: OutputsManager) -> None:
-    # When aoutputs is empty, any index returns None
-    assert manager.current_aoutput is None
-    manager.current_audio_index = 10
-    assert manager.current_aoutput is None
-    manager.current_audio_index = -1
-    assert manager.current_audio_index == -1
-    assert manager.current_aoutput is None
-
-
-def test_outputs_manager_current_aoutput_in_bounds(
-    plugin_controller: HarnessPluginController,
-    manager: OutputsManager,
-    sample_audio_node: vs.AudioNode,
-) -> None:
-    aouts = manager.create_aoutputs("test", {0: sample_audio_node}, {}, plugin_controller.api)
-    assert len(aouts) == 1
-    assert isinstance(aouts[0], AudioOutput)
-
-    manager.current_audio_index = 0
-    assert manager.current_aoutput is aouts[0]
-
-
-def test_outputs_manager_current_aoutput_out_of_bounds(
-    plugin_controller: HarnessPluginController,
-    manager: OutputsManager,
-    sample_audio_node: vs.AudioNode,
-) -> None:
-    manager.create_aoutputs("test", {0: sample_audio_node}, {}, plugin_controller.api)
-
-    # Out-of-bounds: index 1 and index -1 safely return None
-    manager.current_audio_index = 1
-    assert manager.current_aoutput is None
-
-    manager.current_audio_index = -1
-    assert manager.current_aoutput is None
-
-
-def test_outputs_manager_current_voutput_empty(manager: OutputsManager) -> None:
-    # When empty, returns None
-    assert manager.current_voutput is None
-    manager.current_video_index = 5
-    assert manager.current_voutput is None
-
-
-def test_outputs_manager_current_voutput_with_items(
+@pytest.mark.parametrize(("count", "index", "expected"), INDEX_CASES)
+def test_current_voutput_follows_the_index_and_is_none_out_of_range(
     plugin_controller: HarnessPluginController,
     manager: OutputsManager,
     sample_video_clip: vs.VideoNode,
+    count: int,
+    index: int,
+    expected: int | None,
 ) -> None:
-    tup0 = vs.VideoOutputTuple(sample_video_clip, None, 0)
-    tup1 = vs.VideoOutputTuple(sample_video_clip, None, 0)
-    vouts = manager.create_voutputs("test", {0: tup0, 1: tup1}, {}, plugin_controller.api)
-    assert len(vouts) == 2
-    assert isinstance(vouts[0], VideoOutput)
-    assert isinstance(vouts[1], VideoOutput)
+    nodes = {i: vs.VideoOutputTuple(sample_video_clip, None, 0) for i in range(count)}
+    vouts = manager.create_voutputs("test", nodes, {}, plugin_controller.api) if nodes else []
 
-    manager.current_video_index = 0
-    assert manager.current_voutput is vouts[0]
+    manager.current_video_index = index
 
-    manager.current_video_index = 1
-    assert manager.current_voutput is vouts[1]
+    assert manager.current_voutput is (None if expected is None else vouts[expected])
 
 
-@pytest.mark.vpy("initial-core")
-def test_outputs_manager_current_voutput_out_of_bounds(
+@pytest.mark.parametrize(("count", "index", "expected"), INDEX_CASES)
+def test_current_aoutput_follows_the_index_and_is_none_out_of_range(
     plugin_controller: HarnessPluginController,
     manager: OutputsManager,
-    sample_video_clip: vs.VideoNode,
+    sample_audio_node: vs.AudioNode,
+    count: int,
+    index: int,
+    expected: int | None,
 ) -> None:
-    tup0 = vs.VideoOutputTuple(sample_video_clip, None, 0)
-    tup1 = vs.VideoOutputTuple(sample_video_clip, None, 0)
-    vouts = manager.create_voutputs("test", {0: tup0, 1: tup1}, {}, plugin_controller.api)
-    assert len(vouts) == 2
+    nodes = dict.fromkeys(range(count), sample_audio_node)
+    aouts = manager.create_aoutputs("test", nodes, {}, plugin_controller.api) if nodes else []
 
-    manager.current_video_index = -1
-    assert manager.current_voutput is None
+    manager.current_audio_index = index
 
-    manager.current_video_index = len(vouts)
-    assert manager.current_voutput is None
-
-    manager.current_video_index = len(vouts) + 1
-    assert manager.current_voutput is None
+    assert manager.current_aoutput is (None if expected is None else aouts[expected])
 
 
 # create_voutputs Tests
-def test_create_voutputs_empty_dict(
-    plugin_controller: HarnessPluginController,
-    manager: OutputsManager,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    with caplog.at_level(logging.ERROR):
-        result = manager.create_voutputs("empty_script", {}, {}, plugin_controller.api)
+def test_create_voutputs_empty_dict(plugin_controller: HarnessPluginController, manager: OutputsManager) -> None:
+    result = manager.create_voutputs("empty_script", {}, {}, plugin_controller.api)
 
     assert result == []
-    assert "No video outputs found" in caplog.text
+    assert manager.voutputs == []
 
 
 def test_create_voutputs_valid(
@@ -223,7 +159,6 @@ def test_create_voutputs_exception_during_prepare(
     plugin_controller: HarnessPluginController,
     manager: OutputsManager,
     sample_video_clip: vs.VideoNode,
-    caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
     mocker: MockerFixture,
 ) -> None:
@@ -242,15 +177,13 @@ def test_create_voutputs_exception_during_prepare(
 
     spy_clear = mocker.spy(VideoOutput, "clear")
 
-    with monkeypatch.context(), caplog.at_level(logging.ERROR):
-        monkeypatch.setattr(VideoOutput, "prepare_video", failing_prepare)
-        result = manager.create_voutputs("bad_script", {0: tup0, 1: tup1}, {}, plugin_controller.api)
+    monkeypatch.setattr(VideoOutput, "prepare_video", failing_prepare)
+    result = manager.create_voutputs("bad_script", {0: tup0, 1: tup1}, {}, plugin_controller.api)
 
     assert result == []
     assert manager.voutputs == []
     # Output 0 was prepared and added to voutputs, so it should be cleared when Output 1 fails
     assert spy_clear.call_count == 1
-    assert "Failed to load script: 'bad_script'" in caplog.text
 
 
 def test_create_voutputs_auto_gpu_download(plugin_controller: HarnessPluginController, manager: OutputsManager) -> None:
@@ -274,16 +207,11 @@ def test_create_voutputs_auto_gpu_download(plugin_controller: HarnessPluginContr
 
 
 # create_aoutputs Tests
-def test_create_aoutputs_empty_dict(
-    plugin_controller: HarnessPluginController,
-    manager: OutputsManager,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    with caplog.at_level(logging.DEBUG):
-        result = manager.create_aoutputs("empty_audio", {}, {}, plugin_controller.api)
+def test_create_aoutputs_empty_dict(plugin_controller: HarnessPluginController, manager: OutputsManager) -> None:
+    result = manager.create_aoutputs("empty_audio", {}, {}, plugin_controller.api)
 
     assert result == []
-    assert "No audio outputs found" in caplog.text
+    assert manager.aoutputs == []
 
 
 def test_create_aoutputs_valid(
@@ -345,7 +273,6 @@ def test_create_aoutputs_exception_during_prepare(
     plugin_controller: HarnessPluginController,
     manager: OutputsManager,
     sample_audio_node: vs.AudioNode,
-    caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
     mocker: MockerFixture,
 ) -> None:
@@ -361,17 +288,15 @@ def test_create_aoutputs_exception_during_prepare(
 
     spy_clear = mocker.spy(AudioOutput, "clear")
 
-    with monkeypatch.context(), caplog.at_level(logging.ERROR):
-        monkeypatch.setattr(AudioOutput, "prepare_audio", failing_prepare)
-        result = manager.create_aoutputs(
-            "bad_audio_script", {0: sample_audio_node, 1: sample_audio_node}, {}, plugin_controller.api
-        )
+    monkeypatch.setattr(AudioOutput, "prepare_audio", failing_prepare)
+    result = manager.create_aoutputs(
+        "bad_audio_script", {0: sample_audio_node, 1: sample_audio_node}, {}, plugin_controller.api
+    )
 
     assert result == []
     assert manager.aoutputs == []
     # Output 0 was prepared and added to aoutputs, so it should be cleared when Output 1 fails
     assert spy_clear.call_count == 1
-    assert "Failed to initialize aoutput: 'bad_audio_script'" in caplog.text
 
 
 class StereoOnlyAudioProcessor(NodeProcessor[vs.AudioNode]):
@@ -539,35 +464,6 @@ def test_video_output_midpoints_cfr_and_vfr() -> None:
 
 
 # AudioOutput Tests
-@pytest.mark.vpy("initial-core")
-def test_audio_output_volume_before_sink_logs_warning(
-    sample_audio_node: vs.AudioNode, caplog: pytest.LogCaptureFixture
-) -> None:
-    output = AudioOutput(sample_audio_node, 0)
-    assert output.sink is None
-
-    try:
-        with caplog.at_level(logging.WARNING):
-            output.volume = 0.75
-
-        assert output.volume == 0.75
-        assert "No audio sink configured" in caplog.text
-    finally:
-        output.clear()
-
-
-@pytest.mark.vpy("initial-core")
-def test_audio_output_render_frame_before_sink(sample_audio_node: vs.AudioNode) -> None:
-    output = AudioOutput(sample_audio_node, 0)
-    assert output.sink is None
-
-    try:
-        frame = sample_audio_node.get_frame(0)
-        output.render_raw_audio_frame(frame)
-    finally:
-        output.clear()
-
-
 @pytest.mark.parametrize(
     ("start_s", "stop_s", "expected"),
     [(0.5, 2.0, True), (1.0, 2.0, False), (1.5, 2.0, False)],

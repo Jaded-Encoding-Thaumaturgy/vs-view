@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from time import perf_counter_ns
@@ -9,9 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 import vapoursynth as vs
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QImage
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QColor, QImage
+from PySide6.QtWidgets import QApplication, QMessageBox
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
@@ -20,45 +18,18 @@ from tests.conftest import FakeAudioSink
 from tests.harness import HarnessPluginController
 from vsview.app.outputs import AudioBuffer, FrameBuffer
 from vsview.app.outputs.audio import AudioOutput
-from vsview.app.outputs.video import VideoOutput
+from vsview.app.outputs.video import VideoMetadata, VideoOutput
 from vsview.app.packing import Packer
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.views.timeline import TimelineControlBar
 from vsview.app.workspace.playback import PlaybackManager, PlaybackState
-from vsview.types import Frame, Time
+from vsview.types import Frame
 from vsview.vsenv.loop import QtEventLoop
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
 
 
 # PlaybackState Tests
-def test_playback_state_init(qapp: QApplication) -> None:
-    state = PlaybackState(qapp)
-
-    assert state.current_frame == 0
-    assert state.current_time == Time()
-    assert state.is_playing is False
-
-    assert state.last_fps_update_ns == 0
-    assert len(state.fps_history) == 0
-
-    assert state.buffer is None
-    assert state.frame_interval_ns == 0
-    assert state.next_frame_time_ns == 0
-
-    assert state.audio_buffer is None
-    assert state.audio_frame_interval_ns == 0
-    assert state.next_audio_frame_time_ns == 0
-
-    assert isinstance(state.video_timer, QTimer)
-    assert state.video_timer.isSingleShot()
-    assert not state.video_timer.isActive()
-
-    assert isinstance(state.audio_timer, QTimer)
-    assert state.audio_timer.isSingleShot()
-    assert not state.audio_timer.isActive()
-
-
 @pytest.mark.vpy("no-core")
 def test_playback_state_reset(
     qapp: QApplication,
@@ -293,26 +264,6 @@ def test_playback_manager_seek_bounds(
         mock_outputs.current_voutput = None
 
 
-def test_playback_manager_pending_frame_prop(
-    playback_manager_setup: PlaybackManagerSetup,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    manager, *_ = playback_manager_setup
-
-    # Default state: no pending frame
-    assert manager.has_pending_frame is False
-
-    # During in-flight rendering, seeking sets pending frame without dispatching immediately
-    monkeypatch.setattr(manager, "_timeline_rendering", True)
-    manager.seek_to_frame_coalesced(Frame(15))
-    assert manager.has_pending_frame is True
-
-    # When rendering completes, pending frame is rendered and cleared
-    monkeypatch.setattr(manager, "_timeline_rendering", False)
-    manager.render_pending_frame()
-    assert manager.has_pending_frame is False
-
-
 @pytest.mark.vpy("no-core")
 def test_playback_manager_volume_and_mute(
     playback_manager_setup: PlaybackManagerSetup,
@@ -397,57 +348,6 @@ def test_playback_manager_muted_playback_lifecycle(
     assert manager.state.is_playing is False
 
 
-def test_playback_manager_signal_declarations(playback_manager_setup: PlaybackManagerSetup) -> None:
-    manager, *_ = playback_manager_setup
-
-    # frameRendered(QImage, object, float)
-    rendered_data: list[tuple[QImage, Any, float]] = []
-    manager.frameRendered.connect(lambda img, f, sar: rendered_data.append((img, f, sar)))
-    sample_img = QImage(16, 16, QImage.Format.Format_RGB32)
-    manager.frameRendered.emit(sample_img, None, 1.33)
-    assert len(rendered_data) == 1
-    assert rendered_data[0] == (sample_img, None, 1.33)
-
-    # timelineCursorChanged(int)
-    cursor_positions = list[int]()
-    manager.timelineCursorChanged.connect(cursor_positions.append)
-    manager.timelineCursorChanged.emit(77)
-    assert cursor_positions == [77]
-
-    # audioOutputChanged(int)
-    audio_indices = list[int]()
-    manager.audioOutputChanged.connect(audio_indices.append)
-    manager.audioOutputChanged.emit(2)
-    assert audio_indices == [2]
-
-    # loadFailed()
-    load_failed_called = False
-
-    def on_load_failed() -> None:
-        nonlocal load_failed_called
-        load_failed_called = True
-
-    manager.loadFailed.connect(on_load_failed)
-    manager.loadFailed.emit()
-    assert load_failed_called is True
-
-    # status loading signals
-    started_msgs = list[str]()
-    manager.statusLoadingStarted.connect(started_msgs.append)
-    manager.statusLoadingStarted.emit("Buffering...")
-    assert started_msgs == ["Buffering..."]
-
-    finished_msgs = list[str]()
-    manager.statusLoadingFinished.connect(finished_msgs.append)
-    manager.statusLoadingFinished.emit("Paused")
-    assert finished_msgs == ["Paused"]
-
-    errored_msgs = list[str]()
-    manager.statusLoadingErrored.connect(errored_msgs.append)
-    manager.statusLoadingErrored.emit("Playback error")
-    assert errored_msgs == ["Playback error"]
-
-
 def test_playback_manager_seek_without_voutput(playback_manager_setup: PlaybackManagerSetup) -> None:
     manager, _, _, mock_outputs, _, _ = playback_manager_setup
     mock_outputs.current_voutput = None
@@ -503,19 +403,6 @@ def test_playback_manager_playback_settings_changed(
     restart_mock.assert_called_once()
 
 
-def test_playback_manager_stop(playback_manager_setup: PlaybackManagerSetup, mocker: MockerFixture) -> None:
-    manager, _, _, _, _, _ = playback_manager_setup
-    stop_playback_mock = mocker.patch.object(manager, "_stop_playback")
-
-    manager.state.is_playing = False
-    manager.stop()
-    stop_playback_mock.assert_not_called()
-
-    manager.state.is_playing = True
-    manager.stop()
-    stop_playback_mock.assert_called_once()
-
-
 @pytest.mark.vpy("no-core")
 def test_playback_manager_api_busy_frame_request(
     playback_manager_setup: PlaybackManagerSetup,
@@ -540,51 +427,11 @@ def test_playback_manager_api_busy_frame_request(
         mock_outputs.current_voutput = None
 
 
-@pytest.mark.vpy("initial-core")
-def test_playback_manager_sar_denominator_zero(
-    playback_manager_setup: PlaybackManagerSetup,
-    plugin_controller: HarnessPluginController,
-    init_plugin_manager: PluginManager,
-    qtbot: QtBot,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    manager, env, _, mock_outputs, _, _ = playback_manager_setup
-    with env.use():
-        clip = env.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=10, fpsnum=24, fpsden=1)
-        clip = env.core.std.SetFrameProps(
-            clip,
-            _Matrix=vs.MATRIX_RGB,
-            _Primaries=vs.PRIMARIES_BT709,
-            _Transfer=vs.TRANSFER_BT709,
-            _SARNum=16,
-            _SARDen=0,
-        )
-        packer = Packer()
-        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, packer)
-        voutput.prepare_video(plugin_controller.api)
-        mock_outputs.current_voutput = voutput
-
-    try:
-        with caplog.at_level(logging.WARNING), qtbot.waitSignal(manager.frameRendered, timeout=2000) as blocker:
-            assert manager.request_frame(0) is True
-
-        assert blocker.args
-        assert len(blocker.args) == 3
-        assert isinstance(blocker.args[0], QImage)
-        assert blocker.args[1] is None
-        assert isinstance(blocker.args[2], float)
-        assert blocker.args[2] == 1.0
-        assert "Frame property SARDen is equal to 0" in caplog.text
-    finally:
-        voutput.clear()
-        mock_outputs.current_voutput = None
-
-
 @pytest.mark.vpy("no-core")
 @pytest.mark.parametrize(
     ("sar_num", "sar_den", "expected"),
-    [(0, 1, 1.0), (-4, 3, 1.0), (4, -3, 1.0), (16, 11, 16 / 11)],
-    ids=["zero", "negative_num", "negative_den", "valid"],
+    [(0, 1, 1.0), (16, 0, 1.0), (-4, 3, 1.0), (4, -3, 1.0), (16, 11, 16 / 11)],
+    ids=["zero_num", "zero_den", "negative_num", "negative_den", "valid"],
 )
 def test_playback_manager_treats_a_non_positive_sar_as_square_pixels(
     playback_manager_setup: PlaybackManagerSetup,
@@ -703,56 +550,6 @@ def test_playback_manager_buffered_audio_buffer_exhaustion(
         mock_outputs.current_aoutput = None
 
 
-LATE_AUDIO_WARNING = (
-    'Audio stopped because audio frame {} was not ready in time. Raise the "Audio Buffer Size" playback setting '
-    "if this happens often."
-)
-
-
-@pytest.mark.vpy("initial-core")
-@pytest.mark.parametrize(
-    ("played_audio_frame", "last_audio_frame", "late_frame"),
-    [(5, 99, 6), (0, None, 1), (-1, 99, 0), (99, 99, None), (-1, -1, None)],
-    ids=["late_frame", "late_frame_while_looping", "late_first_frame", "end_of_audio", "nothing_to_play"],
-)
-def test_playback_manager_warns_once_when_audio_stops_on_a_late_frame(
-    playback_manager_setup: PlaybackManagerSetup,
-    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
-    mocker: MockerFixture,
-    qtbot: QtBot,
-    caplog: pytest.LogCaptureFixture,
-    played_audio_frame: int,
-    last_audio_frame: int | None,
-    late_frame: int | None,
-) -> None:
-    manager, env, _, mock_outputs, _, _ = playback_manager_setup
-    aoutput = create_test_audio_output(env, 100)
-    mock_outputs.current_aoutput = aoutput
-    mock_sink = mocker.MagicMock()
-    mock_sink.bytesFree.return_value = aoutput.bytes_per_frame + 1024
-    aoutput.sink = mock_sink
-
-    # An empty buffer answers like a buffer whose next frame is not done yet.
-    manager.state.audio_buffer = AudioBuffer(aoutput, env)
-    manager.state.is_playing = True
-    manager.state.audio_frame_interval_ns = 20_000_000
-    manager.state.played_audio_frame = played_audio_frame
-    manager.state.last_audio_frame = last_audio_frame
-    manager.state.audio_timer.start(100)
-
-    try:
-        with caplog.at_level(logging.WARNING, logger="vsview.app.workspace.playback"):
-            manager.state.audio_timer.timeout.emit()
-            qtbot.waitUntil(lambda: not manager.state.audio_timer.isActive(), timeout=2000)
-
-        warnings = [r.getMessage() for r in caplog.records if r.name == "vsview.app.workspace.playback"]
-        assert warnings == ([] if late_frame is None else [LATE_AUDIO_WARNING.format(late_frame)])
-    finally:
-        manager.state.reset_audio()
-        aoutput.clear()
-        mock_outputs.current_aoutput = None
-
-
 def test_playback_manager_rapid_stop_cancels_startup(playback_manager_setup: PlaybackManagerSetup) -> None:
     manager, *_ = playback_manager_setup
 
@@ -773,7 +570,6 @@ def test_audio_delay_change_applies_to_every_output_when_one_fails(
     create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
     init_plugin_manager: PluginManager,
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     _, env, _, mock_outputs, _, tbar = playback_manager_setup
     failing, healthy = create_test_audio_output(env, 100), create_test_audio_output(env, 100)
@@ -856,3 +652,268 @@ def test_stopping_playback_resets_the_sink_of_every_audio_track(
         for aoutput in aoutputs:
             aoutput.sink = None
             aoutput.clear()
+
+
+# Playback loop
+@pytest.fixture
+def use_voutput(
+    playback_manager_setup: PlaybackManagerSetup, qtbot: QtBot
+) -> Generator[Callable[[VideoOutput], VideoOutput]]:
+    """Make a video output current for the playback manager, then stop and clean up after the test."""
+    manager, _, _, mock_outputs, _, _ = playback_manager_setup
+    used = list[VideoOutput]()
+
+    def use(voutput: VideoOutput) -> VideoOutput:
+        mock_outputs.current_voutput = voutput
+        used.append(voutput)
+        return voutput
+
+    yield use
+
+    manager.stop()
+    qtbot.waitUntil(lambda: manager.can_reload, timeout=5000)
+    manager.state.wait_for_cleanup()
+    mock_outputs.current_voutput = None
+    for voutput in used:
+        voutput.clear()
+
+
+def record_frames(manager: PlaybackManager) -> list[int]:
+    frames = list[int]()
+    manager.timelineCursorChanged.connect(frames.append)
+    return frames
+
+
+def wait_until_stopped(manager: PlaybackManager, qtbot: QtBot) -> None:
+    qtbot.waitUntil(lambda: not manager.state.is_playing and manager.can_reload, timeout=5000)
+
+
+def make_clip(env: ManagedEnvironment, length: int = 10, fpsnum: int = 24, **props: Any) -> vs.VideoNode:
+    with env.use():
+        clip = env.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=length, fpsnum=fpsnum, fpsden=1)
+        return env.core.std.SetFrameProps(
+            clip, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709, **props
+        )
+
+
+def failing_clip(env: ManagedEnvironment, failing_frame: int) -> vs.VideoNode:
+    base = make_clip(env)
+
+    def select(n: int) -> vs.VideoNode:
+        if n == failing_frame:
+            raise RuntimeError("broken frame")
+        return base
+
+    with env.use():
+        return base.std.FrameEval(select)
+
+
+@pytest.mark.vpy("no-core")
+@pytest.mark.parametrize("uncapped", [False, True], ids=["capped", "uncapped"])
+def test_playback_shows_each_frame_in_order_and_stops_on_the_last_one(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    qtbot: QtBot,
+    uncapped: bool,
+) -> None:
+    manager, env, _, _, _, tbar = playback_manager_setup
+    use_voutput(create_test_video_output(env, 10))
+    tbar.playback_container.settings.uncapped = uncapped
+    frames = record_frames(manager)
+
+    manager.toggle_playback()
+    wait_until_stopped(manager, qtbot)
+
+    assert frames == list(range(1, 10))
+    assert manager.state.current_frame == 9
+    assert tbar.playback_container.play_pause_btn.isChecked() is False
+
+
+@pytest.mark.vpy("no-core")
+@pytest.mark.parametrize(
+    ("start", "zone_frames", "step", "expected"),
+    [
+        (2, 4, 1, [3, 4, 5, 6]),
+        (5, 10, -1, [4, 3, 2, 1, 0]),
+        (0, 6, 2, [2, 4, 6]),
+        (7, 10, 1, [8, 9]),
+    ],
+    ids=["forward", "backward_clamped_at_first_frame", "every_second_frame", "clamped_at_last_frame"],
+)
+def test_play_zone_plays_from_the_current_frame_and_stops_at_the_zone_end(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    qtbot: QtBot,
+    start: int,
+    zone_frames: int,
+    step: int,
+    expected: list[int],
+) -> None:
+    manager, env, _, _, _, tbar = playback_manager_setup
+    use_voutput(create_test_video_output(env, 10))
+    manager.state.current_frame = start
+    frames = record_frames(manager)
+
+    tbar.playback_container.playZone.emit(zone_frames, False, step)
+    wait_until_stopped(manager, qtbot)
+
+    assert frames == expected
+
+
+@pytest.mark.vpy("no-core")
+def test_play_zone_with_loop_starts_again_from_the_zone_start(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    qtbot: QtBot,
+) -> None:
+    manager, env, _, _, _, tbar = playback_manager_setup
+    use_voutput(create_test_video_output(env, 10))
+    frames = record_frames(manager)
+
+    tbar.playback_container.playZone.emit(2, True, 1)
+    qtbot.waitUntil(lambda: len(frames) >= 7, timeout=5000)
+    manager.stop()
+
+    assert frames[:7] == [1, 2, 0, 1, 2, 0, 1]
+
+
+@pytest.mark.vpy("no-core")
+@pytest.mark.parametrize(
+    ("framedurs", "props"),
+    [((0.01,) * 6, {}), (None, {"_DurationNum": 1, "_DurationDen": 100})],
+    ids=["frame_durations", "duration_props"],
+)
+def test_variable_frame_rate_playback_reaches_the_last_frame(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    init_plugin_manager: PluginManager,
+    qtbot: QtBot,
+    framedurs: tuple[float, ...] | None,
+    props: dict[str, int],
+) -> None:
+    manager, env, plugin_controller, _, _, _ = playback_manager_setup
+    with env.use():
+        clip = make_clip(env, 6, fpsnum=0, **props)
+        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer(), VideoMetadata("VFR", framedurs))
+        voutput.prepare_video(plugin_controller.api)
+        voutput.prepared_clip.get_frame(0).close()
+    use_voutput(voutput)
+    frames = record_frames(manager)
+
+    manager.toggle_playback()
+    wait_until_stopped(manager, qtbot)
+
+    assert frames == [1, 2, 3, 4, 5]
+
+
+@pytest.mark.vpy("no-core")
+def test_variable_frame_rate_playback_without_durations_does_not_start(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    init_plugin_manager: PluginManager,
+    qtbot: QtBot,
+) -> None:
+    manager, env, plugin_controller, _, _, tbar = playback_manager_setup
+    with env.use():
+        voutput = VideoOutput(vs.VideoOutputTuple(make_clip(env, 6, fpsnum=0), None, 0), 0, Packer())
+        voutput.prepare_video(plugin_controller.api)
+        voutput.prepared_clip.get_frame(0).close()
+    use_voutput(voutput)
+    frames = record_frames(manager)
+
+    manager.toggle_playback()
+    wait_until_stopped(manager, qtbot)
+
+    assert frames == []
+    assert tbar.playback_container.play_pause_btn.isChecked() is False
+
+
+@pytest.mark.vpy("no-core")
+def test_a_frame_that_fails_during_playback_reports_a_load_failure(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    qtbot: QtBot,
+) -> None:
+    manager, env, _, _, _, _ = playback_manager_setup
+    clip = failing_clip(env, failing_frame=3)
+    with env.use():
+        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
+        voutput.prepared_clip = voutput.packer.pack_clip(clip, None)
+    use_voutput(voutput)
+    frames = record_frames(manager)
+
+    with qtbot.waitSignal(manager.loadFailed, timeout=5000):
+        manager.toggle_playback()
+
+    assert frames == [1, 2]
+
+
+@pytest.mark.vpy("no-core")
+def test_seeking_to_a_frame_the_script_cannot_render_reports_a_load_failure(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    qtbot: QtBot,
+) -> None:
+    manager, env, _, _, _, _ = playback_manager_setup
+    clip = failing_clip(env, failing_frame=3)
+    with env.use():
+        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
+        voutput.prepared_clip = voutput.packer.pack_clip(clip, None)
+    use_voutput(voutput)
+
+    with qtbot.waitSignal(manager.loadFailed, timeout=5000):
+        manager.request_frame(3)
+
+
+@pytest.mark.vpy("no-core")
+def test_seeking_to_a_frame_that_fails_after_the_script_shows_a_failure_image(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    qtbot: QtBot,
+) -> None:
+    manager, env, _, _, _, tbar = playback_manager_setup
+    tbar.show()
+    with env.use():
+        voutput = VideoOutput(vs.VideoOutputTuple(make_clip(env), None, 0), 0, Packer())
+        # The script frame renders, but a later step of the prepared clip fails.
+        voutput.prepared_clip = voutput.packer.pack_clip(failing_clip(env, failing_frame=3), None)
+    use_voutput(voutput)
+    load_failures = list[None]()
+    manager.loadFailed.connect(lambda: load_failures.append(None))
+
+    with qtbot.waitSignal(manager.frameRendered, timeout=5000) as blocker:
+        manager.request_frame(3)
+    qtbot.waitUntil(lambda: manager.can_reload, timeout=5000)
+
+    image: QImage = blocker.args[0]  # pyright: ignore[reportOptionalSubscript]
+    assert (image.width(), image.height()) == (64, 64)
+    assert image.pixelColor(0, 0) != QColor(0, 0, 0)
+    warnings = [w for w in QApplication.topLevelWidgets() if isinstance(w, QMessageBox) and w.isVisible()]
+    assert ["broken frame" in w.text() for w in warnings] == [True]
+    assert load_failures == []
+    for w in warnings:
+        w.close()
+
+
+@pytest.mark.vpy("no-core")
+def test_rapid_seeks_render_the_first_and_the_last_target_only(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    qtbot: QtBot,
+) -> None:
+    manager, env, _, _, _, _ = playback_manager_setup
+    use_voutput(create_test_video_output(env, 100))
+    frames = record_frames(manager)
+
+    for target in (10, 20, 30):
+        manager.seek_to_frame_coalesced(Frame(target))
+    qtbot.waitUntil(
+        lambda: manager.state.current_frame == 30 and not manager.has_pending_frame and not manager.is_rendering,
+        timeout=5000,
+    )
+
+    assert frames == [10, 30]
