@@ -6,7 +6,7 @@ from typing import Any, Self, overload, override
 from jetpytools import SPath
 from PySide6.QtCore import QMetaObject, QSize, Qt, QUrl
 from PySide6.QtGui import QImage, QResizeEvent, QTransform
-from PySide6.QtQuick import QQuickImageProvider, QQuickView
+from PySide6.QtQuick import QQuickImageProvider, QQuickItem, QQuickView
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 logger = getLogger(__name__)
@@ -21,10 +21,10 @@ class QMLProperty[T]:
     @overload
     def __get__(self, instance: HDRViewport, owner: type | None = None) -> T: ...
     def __get__(self, instance: HDRViewport | None, owner: type | None = None) -> Any:
-        return self if instance is None else instance.root_obj.property(self.qml_name)
+        return self if instance is None else instance.qml_root.property(self.qml_name)
 
     def __set__(self, instance: HDRViewport, value: T) -> None:
-        instance.root_obj.setProperty(self.qml_name, value)
+        instance.qml_root.setProperty(self.qml_name, value)
 
 
 class HDRImageProvider(QQuickImageProvider):
@@ -71,7 +71,7 @@ class HDRViewport(QWidget):
             for error in self._view.errors():
                 logger.error("QML Error: %s", error.toString())
 
-        self.root_obj = self._view.rootObject()
+        self.root_obj: QQuickItem | None = self._view.rootObject()
 
         self._container = QWidget.createWindowContainer(self._view, self)
         self._container.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -86,6 +86,13 @@ class HDRViewport(QWidget):
         return self._provider.image
 
     @property
+    def qml_root(self) -> QQuickItem:
+        """The QML root item. Raises RuntimeError when the QML failed to load."""
+        if self.root_obj is None:
+            raise RuntimeError("The HDR QML view failed to load")
+        return self.root_obj
+
+    @property
     def quick_view(self) -> QQuickView:
         """The underlying QQuickView instance."""
         return self._view
@@ -96,7 +103,7 @@ class HDRViewport(QWidget):
         self._view.resize(self.size())
 
     def set_image(self, frame: QImage) -> None:
-        if frame.isNull():
+        if frame.isNull() or self.root_obj is None:
             return
 
         self._provider.image = frame
@@ -109,6 +116,9 @@ class HDRViewport(QWidget):
         QMetaObject.invokeMethod(self.root_obj, "refresh")
 
     def set_video_transform(self, transform: QTransform) -> None:
+        if self.root_obj is None:
+            return
+
         self.image_x = transform.dx()
         self.image_y = transform.dy()
         self.image_scale_x = transform.m11()
