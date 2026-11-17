@@ -367,8 +367,7 @@ class MainWindow(QMainWindow):
         if workspace and Shiboken.isValid(workspace):
             workspace.deleteLater()
 
-        with QSignalBlocker(self.settings_manager.signals):
-            self.settings_manager.save_global()
+        self.settings_manager.save_global(emit_changed=False)
 
         super().closeEvent(event)
 

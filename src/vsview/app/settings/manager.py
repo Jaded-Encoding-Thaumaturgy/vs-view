@@ -124,6 +124,7 @@ class SettingsManager(Singleton):
         self,
         settings: GlobalSettings | Callable[[], GlobalSettings] | None = None,
         path: os.PathLike[str] | None = None,
+        emit_changed: bool = True,
     ) -> bool:
         """
         Save global settings to disk.
@@ -132,6 +133,7 @@ class SettingsManager(Singleton):
             settings: The global settings to save, or a callable returning them.
                 A callable is called after `aboutToSaveGlobal`, so it sees the writes made by its slots.
             path: The file to write. Defaults to the global settings path.
+            emit_changed: Emit `globalChanged` after a successful write. `aboutToSaveGlobal` is always emitted.
 
         Returns:
             False when the file could not be written, True otherwise.
@@ -152,7 +154,8 @@ class SettingsManager(Singleton):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 atomic_write(path, self._global_settings.model_dump_json(indent=2))
                 logger.debug("Saved global settings to: %s", path)
-            self._signals.globalChanged.emit()
+            if emit_changed:
+                self._signals.globalChanged.emit()
         except Exception:
             logger.exception("Failed to save global settings")
             return False

@@ -287,6 +287,31 @@ def test_close_event_clean_teardown(main_window: MainWindow) -> None:
     btn.workspace.confirm_close.assert_called_once()
 
 
+def test_closing_the_window_saves_global_writes_made_in_about_to_save_global(main_window: MainWindow) -> None:
+    main_window.add_workspace(PythonScriptWorkspace)
+
+    def flush() -> None:
+        SettingsManager.global_settings.plugins["flushing_plugin"] = {"state": "flushed"}
+
+    SettingsManager.signals.aboutToSaveGlobal.connect(flush)
+
+    main_window.closeEvent(QCloseEvent())
+
+    saved = json.loads(GlobalSettings.path_env.read_text(encoding="utf-8"))
+    assert saved["plugins"]["flushing_plugin"] == {"state": "flushed"}
+
+
+def test_closing_the_window_does_not_announce_changed_global_settings(main_window: MainWindow) -> None:
+    main_window.add_workspace(PythonScriptWorkspace)
+    changes = list[None]()
+    SettingsManager.signals.globalChanged.connect(lambda: changes.append(None))
+
+    main_window.closeEvent(QCloseEvent())
+
+    assert GlobalSettings.path_env.is_file() is True
+    assert changes == []
+
+
 def test_workspace_clear_action(main_window: MainWindow) -> None:
     btn1 = main_window.add_workspace(PythonScriptWorkspace)
     btn2 = main_window.add_workspace(VideoFileWorkspace)
