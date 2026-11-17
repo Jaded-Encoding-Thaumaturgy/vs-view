@@ -268,6 +268,10 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
     @override
     def on_view_mouse_moved(self, event: QMouseEvent) -> None:
+        if self.tracking == TrackingState.DEACTIVATING and event.buttons() == Qt.MouseButton.NoButton:
+            self.tracking = TrackingState.ACTIVE
+            self.api.current_view.viewport.set_cursor(Qt.CursorShape.CrossCursor)
+
         if self.tracking == TrackingState.ACTIVE and not self.api.is_playing:
             self.update_labels(event.position().toPoint())
 
@@ -346,7 +350,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
                 local_pos = self.api.current_view.viewport.cursor_pos
 
             pos_f = self.api.current_view.map_to_image(local_pos)
-            pos = QPoint(int(pos_f.x()), int(pos_f.y()))
+            pos = QPoint(floor(pos_f.x()), floor(pos_f.y()))
 
             if (image := self.api.current_view.image).isNull() or not image.valid(pos):
                 return
