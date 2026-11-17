@@ -441,6 +441,18 @@ def test_frameprops_load_properties_on_frame_change(plugin_controller: HarnessPl
     assert "Frame 1 (Current)" in plugin.history_combo.currentText()
 
 
+
+def test_frameprops_destroy_clears_both_models(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(FramePropsPlugin)
+    plugin_controller.set_current_frame(0)
+    assert plugin.raw_table.current_model.rowCount() > 0
+    assert plugin.categorize_tree.current_model.rowCount() > 0
+
+    plugin_controller.destroy()
+
+    assert plugin.raw_table.current_model.rowCount() == 0
+    assert plugin.categorize_tree.current_model.rowCount() == 0
+
 def test_frameprops_search_filter_box(plugin_controller: HarnessPluginController) -> None:
     plugin = plugin_controller.create_plugin(FramePropsPlugin)
     plugin_controller.set_current_frame(0)

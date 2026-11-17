@@ -673,7 +673,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
         layout.addWidget(self.splitter)
 
-        self.api.register_on_destroy(lambda: setattr(self, "_current_props", None))
+        self.api.register_on_destroy(self._on_env_destroyed)
         self.api.register_on_destroy(close_btn.click)
 
         # Restore column widths
@@ -843,6 +843,12 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
         with suppress(AttributeError):
             del self.current_preview_key
+
+    def _on_env_destroyed(self) -> None:
+        # The model items hold raw prop values, which can be frames or nodes of the disposed environment.
+        self._current_props = None
+        self.categorize_tree.current_model.clear_props()
+        self.raw_table.current_model.clear_rows()
 
     @Slot(int, int)
     def _on_tree_column_resized(self, index: int, size: int) -> None:
