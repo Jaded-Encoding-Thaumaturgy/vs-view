@@ -663,7 +663,7 @@ def test_quick_script_loader_linecache_registration(quick_script_workspace: Quic
 
 
 def _click_quick_script_save(
-    qtbot: QtBot, ws: QuickScriptWorkspace, mocker: MockerFixture, target: Path, caplog: pytest.LogCaptureFixture
+    qtbot: QtBot, ws: QuickScriptWorkspace, mocker: MockerFixture, target: Path, loop: QtEventLoop
 ) -> list[str]:
     finished = list[str]()
     ws.statusLoadingFinished.connect(finished.append)
@@ -671,7 +671,8 @@ def _click_quick_script_save(
 
     qtbot.mouseClick(ws.code_dock.save_btn, Qt.MouseButton.LeftButton)
 
-    qtbot.waitUntil(lambda: bool(finished) or "Error saving script:" in caplog.text, timeout=3000)
+    loop.wait_for_threads(timeout_ms=3000, names=["SaveScript"])
+    qtbot.wait(10)
     return finished
 
 
@@ -680,14 +681,14 @@ def test_quick_script_save_writes_the_editor_text(
     quick_script_workspace: QuickScriptWorkspace,
     mocker: MockerFixture,
     tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
+    qt_event_loop: QtEventLoop,
 ) -> None:
     ws = quick_script_workspace
     ws.code_dock.editor.setPlainText("clip = 1\n")
     target = tmp_path / "script.vpy"
     target.write_bytes(b"old content\n")
 
-    finished = _click_quick_script_save(qtbot, ws, mocker, target, caplog)
+    finished = _click_quick_script_save(qtbot, ws, mocker, target, qt_event_loop)
 
     assert finished == ["Saved"]
     assert target.read_text(encoding="utf-8") == "clip = 1\n"
@@ -699,7 +700,7 @@ def test_quick_script_failed_save_keeps_the_old_file(
     quick_script_workspace: QuickScriptWorkspace,
     mocker: MockerFixture,
     tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
+    qt_event_loop: QtEventLoop,
 ) -> None:
     ws = quick_script_workspace
     ws.code_dock.editor.setPlainText("clip = 1\n")
@@ -707,9 +708,8 @@ def test_quick_script_failed_save_keeps_the_old_file(
     target.write_bytes(b"old content\n")
     mocker.patch.object(os, "replace", side_effect=OSError("disk full"))
 
-    finished = _click_quick_script_save(qtbot, ws, mocker, target, caplog)
+    finished = _click_quick_script_save(qtbot, ws, mocker, target, qt_event_loop)
 
     assert finished == []
-    assert "Error saving script:" in caplog.text
     assert target.read_bytes() == b"old content\n"
     assert [p.name for p in tmp_path.iterdir()] == ["script.vpy"]

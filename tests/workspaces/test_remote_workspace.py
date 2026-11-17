@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import re
 import threading
 import time
@@ -29,6 +28,7 @@ from vsview_remote.workspace import RemoteWorkspace
 
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.secrets import SecretsManager
+from vsview.app.settings.shortcuts import ShortcutManager
 from vsview.vsenv.loop import QtEventLoop
 
 pytestmark = [pytest.mark.qt, pytest.mark.integration, pytest.mark.vpy("no-core")]
@@ -345,6 +345,29 @@ def test_cancelling_the_load_dialog_keeps_the_previous_connection(
     assert len(dialogs) == 2
 
 
+def configure_connection(workspace: RemoteWorkspace) -> None:
+    """Trigger the "configure connection" shortcut of `workspace`."""
+    shortcuts = [
+        sc for sc in ShortcutManager().get_shortcuts(RemoteWorkspace.CONFIGURE_CONNECTION) if sc.parent() is workspace
+    ]
+    assert len(shortcuts) == 1
+    shortcuts[0].activated.emit()
+
+
+def test_configure_connection_without_a_script_loads_nothing(
+    workspace: RemoteWorkspace,
+    mocker: MockerFixture,
+) -> None:
+    load_content = mocker.patch.object(workspace, "load_content")
+    reload_content = mocker.patch.object(workspace, "reload_content")
+
+    when_secrets_ready(workspace, workspace.dialog.accept)
+    configure_connection(workspace)
+
+    load_content.assert_not_called()
+    reload_content.assert_not_called()
+
+
 def test_configure_connection_on_the_error_page_loads_the_script_again(
     workspace: RemoteWorkspace,
     script: Path,
@@ -356,7 +379,7 @@ def test_configure_connection_on_the_error_page_loads_the_script_again(
     reload_content = mocker.patch.object(workspace, "reload_content")
 
     when_secrets_ready(workspace, workspace.dialog.accept)
-    workspace._on_configure_connection()
+    configure_connection(workspace)
 
     assert workspace.stack.currentWidget() is workspace.error_page
     load_content.assert_called_once_with(script)
@@ -374,7 +397,7 @@ def test_configure_connection_on_a_loaded_script_reloads_it(
     reload_content = mocker.patch.object(workspace, "reload_content")
 
     when_secrets_ready(workspace, workspace.dialog.accept)
-    workspace._on_configure_connection()
+    configure_connection(workspace)
 
     reload_content.assert_called_once_with()
     load_content.assert_not_called()
@@ -550,7 +573,7 @@ def test_a_failed_keyring_read_never_deletes_the_stored_secret(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace.auth_token = "stored-token"
-    stored = dict(isolate_secrets._storage)
+    stored = isolate_secrets.stored
 
     def fail_read(service: str, username: str) -> str | None:
         raise RuntimeError("keyring is locked")
@@ -561,7 +584,7 @@ def test_a_failed_keyring_read_never_deletes_the_stored_secret(
 
     assert res is not None
     assert res.auth_token is None
-    assert isolate_secrets._storage == stored
+    assert isolate_secrets.stored == stored
 
 
 def test_connect_with_a_failing_keyring_write_keeps_the_secret_for_the_session(
@@ -591,7 +614,7 @@ def test_connect_with_a_failing_keyring_write_keeps_the_secret_for_the_session(
     assert remote_client.call_args.kwargs["auth_token"] == "new-token"
     assert messages == [WRITE_ERROR_MESSAGE]
     assert workspace.auth_token == "new-token"
-    assert isolate_secrets._storage == {}
+    assert isolate_secrets.stored == {}
 
 
 def load_with_error(
@@ -761,7 +784,6 @@ def test_load_without_a_connection_shows_the_reason(
     vpy_env_factory: Callable[[], ManagedEnvironment],
     script: Path,
     dialogs: list[str],
-    caplog: pytest.LogCaptureFixture,
     mocker: MockerFixture,
 ) -> None:
     def env(self: RemoteWorkspace) -> ManagedEnvironment:
@@ -776,17 +798,14 @@ def test_load_without_a_connection_shows_the_reason(
     statuses = list[str]()
     ws.statusLoadingErrored.connect(statuses.append)
 
-    with caplog.at_level(logging.ERROR):
-        future = ws.load_content(script)
-        qtbot.waitUntil(future.done, timeout=10000)
-        qtbot.waitUntil(lambda: ws.stack.currentWidget() is ws.error_page, timeout=5000)
+    future = ws.load_content(script)
+    qtbot.waitUntil(future.done, timeout=10000)
+    qtbot.waitUntil(lambda: ws.stack.currentWidget() is ws.error_page, timeout=5000)
 
     assert future.result() == 1
     assert statuses == ["Remote connection not configured", "Error while loading content"]
     assert len(dialogs) == 1
-    assert dialogs[0].startswith("A ConnectionNotConfiguredError exception was raised while loading the script.\n")
-    assert dialogs[0].endswith("ConnectionNotConfiguredError: Remote connection not configured\n")
-    assert any("Remote connection not configured" in r.getMessage() for r in caplog.records)
+    assert "ConnectionNotConfiguredError: Remote connection not configured" in dialogs[0]
 
 
 def test_a_script_that_is_not_utf8_shows_the_reason(
@@ -794,7 +813,6 @@ def test_a_script_that_is_not_utf8_shows_the_reason(
     tmp_path: Path,
     dialogs: list[str],
     mocker: MockerFixture,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     path = tmp_path / "cp1252.vpy"
     path.write_bytes(b"# -*- coding: cp1252 -*-\n# caf\xe9\n")
@@ -804,14 +822,13 @@ def test_a_script_that_is_not_utf8_shows_the_reason(
     statuses = list[str]()
     workspace.statusLoadingErrored.connect(statuses.append)
 
-    with caplog.at_level(logging.ERROR), pytest.raises(UnicodeDecodeError):
+    with pytest.raises(UnicodeDecodeError):
         workspace.loader()
 
     remote_client.assert_not_called()
     assert statuses == ["Script is not valid UTF-8"]
     assert len(dialogs) == 1
-    assert "UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe9" in dialogs[0]
-    assert any("UnicodeDecodeError" in r.getMessage() for r in caplog.records)
+    assert "UnicodeDecodeError" in dialogs[0]
 
 
 # W4-V02

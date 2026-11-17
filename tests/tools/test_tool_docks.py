@@ -7,7 +7,7 @@ import pytest
 import vapoursynth as vs
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
-from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QLineEdit, QToolButton
+from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QLineEdit, QSpinBox, QToolButton
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
@@ -16,6 +16,7 @@ from vsview.app.outputs.video import VideoOutput
 from vsview.app.packing import Packer
 from vsview.app.tools.colorpicker.plugin import ColorPickerPlugin, TrackingState
 from vsview.app.tools.cropping.plugin import RegionSelectorPlugin
+from vsview.app.tools.frame_strip.constants import MAX_NEIGHBOR_COUNT
 from vsview.app.tools.frame_strip.plugin import FrameStripPlugin
 from vsview.app.tools.frameprops.plugin import FramePropPreviewGraphicsView, FramePropsModel, FramePropsPlugin
 
@@ -832,7 +833,9 @@ def test_frame_strip_neighbor_count_cache_invalidation(
     assert plugin.neighbor_count_cached == 2
 
     # Changing neighbor count invalidates old cache and creates a newly sized cache node
-    plugin._on_count_changed(3)
+    # Every thumbnail menu has the same "Neighbors" spin box.
+    count_spin = next(s for s in plugin.findChildren(QSpinBox) if s.maximum() == MAX_NEIGHBOR_COUNT)
+    count_spin.setValue(3)
     assert plugin.neighbor_count_cached == 3
     assert plugin.outputs[vo] is not old_cached_node
 

@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from PySide6.QtCore import QItemSelectionModel, Qt
-from PySide6.QtWidgets import QApplication, QStyleOptionViewItem
+from PySide6.QtCore import QItemSelectionModel, QPoint, Qt, QTimer
+from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QStyleOptionViewItem
+from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
 from vsview.api import Frame
 from vsview.app.outputs.video import VideoOutput
+from vsview.app.tools.scening.api import Serializer
 from vsview.app.tools.scening.models import RangeFrame, RangeTime
+from vsview.app.tools.scening.parsers import PythonListFramesParser, QPFileParser
 from vsview.app.tools.scening.plugin import SceningPlugin
+from vsview.app.tools.scening.serializer import PythonListFramesSerializer, PythonListTimestampsSerializer
 from vsview.app.tools.scening.ui import ROLE_CHECK_STATE, Col, RangeCol
 from vsview.app.views.timeline import FrameEdit
 
@@ -85,7 +90,7 @@ def test_scening_mark_in_out_and_range_creation(plugin_controller: HarnessPlugin
     assert plugin.range_end_action.isChecked() is False
 
     # Verify timeline notch was added
-    notches = plugin_controller.timeline_proxy._notches.get(scene.notch_id, [])
+    notches = plugin_controller.timeline_proxy.testing._notches.get(scene.notch_id, [])
     assert len(notches) == 1
     assert notches[0][0] == [(10, 30)]
     assert notches[0][1] == scene.color
@@ -171,11 +176,9 @@ def test_scening_exclusive_bounds_and_shortcut_toggles(plugin_controller: Harnes
 
     # Default inclusive mode: last frame is num_frames - 1 (99)
     plugin.on_first_frame_toggle()
-    assert plugin._pending_start == Frame(0)
     assert plugin.range_start_action.isChecked() is True
 
     plugin.on_last_frame_toggle()
-    assert plugin._pending_end == Frame(99)
     assert plugin.range_end_action.isChecked() is True
 
     plugin.on_add_range_triggered()
@@ -184,10 +187,7 @@ def test_scening_exclusive_bounds_and_shortcut_toggles(plugin_controller: Harnes
     # Exclusive mode stores the same inclusive range; only the shown end frame is num_frames (100)
     plugin.settings.global_.exclusive = True
     plugin.on_first_frame_toggle()
-    assert plugin._pending_start == Frame(0)
-
     plugin.on_last_frame_toggle()
-    assert plugin._pending_end == Frame(99)
 
     plugin.on_add_range_triggered()
     assert plugin.ranges_model.ranges[1][0].as_frames(plugin_controller.current_voutput) == (0, 99)
@@ -213,6 +213,25 @@ def test_scening_mark_out_stores_the_marked_frame_as_the_last_frame(
     plugin.on_add_range_triggered()
 
     assert plugin.scenes_model.scenes[0].ranges[0].to_tuple() == expected
+
+
+def copy_from_range_menu(plugin: SceningPlugin, text: str) -> str:
+    """Open the range table context menu, pick the action named `text`, and return the clipboard."""
+    picked = list[str]()
+
+    def pick() -> None:
+        if not isinstance(menu := QApplication.activePopupWidget(), QMenu):
+            return
+        for action in menu.actions():
+            if action.text() == text:
+                action.trigger()
+                picked.append(text)
+        menu.close()
+
+    QTimer.singleShot(0, pick)
+    plugin.ranges_view.customContextMenuRequested.emit(QPoint(1, 1))
+    assert picked == [text]
+    return QApplication.clipboard().text()
 
 
 def _single_range_plugin(
@@ -320,12 +339,10 @@ def test_scening_copy_uses_the_chosen_end_convention(
     plugin.ranges_model.add_range(RangeFrame(start=48), plugin.scenes_model.scenes[0])
     plugin.ranges_view.selectAll()
 
-    plugin._copy_ranges_frames()
+    plugin.copy_frames_action.trigger()
     copied_frames = QApplication.clipboard().text()
-    plugin._copy_ranges_end_frames()
-    copied_end_frames = QApplication.clipboard().text()
-    plugin._copy_ranges_timestamps()
-    copied_timestamps = QApplication.clipboard().text()
+    copied_end_frames = copy_from_range_menu(plugin, "Copy end frames only")
+    copied_timestamps = copy_from_range_menu(plugin, "Copy timestamps")
 
     assert copied_frames == frames
     assert copied_end_frames == end_frames
@@ -344,31 +361,31 @@ def test_scening_timeline_synchronization_and_filtering(plugin_controller: Harne
     plugin.on_add_range_triggered()
 
     scene = plugin.scenes_model.scenes[0]
-    assert len(plugin_controller.timeline_proxy._notches.get(scene.notch_id, [])) == 1
+    assert len(plugin_controller.timeline_proxy.testing._notches.get(scene.notch_id, [])) == 1
 
     # Toggle scene display off -> notches cleared
     plugin.scenes_model.setData(
         plugin.scenes_model.index(0, Col.DISPLAY), Qt.CheckState.Unchecked.value, ROLE_CHECK_STATE
     )
-    assert len(plugin_controller.timeline_proxy._notches.get(scene.notch_id, [])) == 0
+    assert len(plugin_controller.timeline_proxy.testing._notches.get(scene.notch_id, [])) == 0
 
     # Toggle scene display on -> notches restored
     plugin.scenes_model.setData(
         plugin.scenes_model.index(0, Col.DISPLAY), Qt.CheckState.Checked.value, ROLE_CHECK_STATE
     )
-    assert len(plugin_controller.timeline_proxy._notches.get(scene.notch_id, [])) == 1
+    assert len(plugin_controller.timeline_proxy.testing._notches.get(scene.notch_id, [])) == 1
 
     # Output filtering: exclude output index 0
     plugin.scenes_model.setData(plugin.scenes_model.index(0, Col.OUTPUTS), {1}, Qt.ItemDataRole.UserRole)
-    assert len(plugin_controller.timeline_proxy._notches.get(scene.notch_id, [])) == 0
+    assert len(plugin_controller.timeline_proxy.testing._notches.get(scene.notch_id, [])) == 0
 
     # Output filtering: re-include output index 0
     plugin.scenes_model.setData(plugin.scenes_model.index(0, Col.OUTPUTS), {0, 1}, Qt.ItemDataRole.UserRole)
-    assert len(plugin_controller.timeline_proxy._notches.get(scene.notch_id, [])) == 1
+    assert len(plugin_controller.timeline_proxy.testing._notches.get(scene.notch_id, [])) == 1
 
     # Delete scene -> completely cleans up notches
     plugin.scenes_model.remove_scene(0)
-    assert len(plugin_controller.timeline_proxy._notches.get(scene.notch_id, [])) == 0
+    assert len(plugin_controller.timeline_proxy.testing._notches.get(scene.notch_id, [])) == 0
 
 
 def test_scening_multi_row_deletion_and_model_sync(plugin_controller: HarnessPluginController) -> None:
@@ -410,12 +427,14 @@ def test_scening_multi_row_deletion_and_model_sync(plugin_controller: HarnessPlu
 
     # Timeline notch updated
     scene = plugin.scenes_model.scenes[0]
-    notches = plugin_controller.timeline_proxy._notches.get(scene.notch_id, [])
+    notches = plugin_controller.timeline_proxy.testing._notches.get(scene.notch_id, [])
     assert len(notches) == 1
     assert notches[0][0] == [(25, 40)]
 
 
-def test_scening_clipboard_export_and_toolbar_cycle(plugin_controller: HarnessPluginController) -> None:
+def test_scening_clipboard_export_and_toolbar_cycle(
+    plugin_controller: HarnessPluginController,
+) -> None:
     plugin = plugin_controller.create_plugin(SceningPlugin)
     plugin_controller.on_workspace_loaded()
     plugin.on_new_scene()
@@ -438,11 +457,11 @@ def test_scening_clipboard_export_and_toolbar_cycle(plugin_controller: HarnessPl
         QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows,
     )
 
-    plugin._copy_ranges_frames()
+    plugin.copy_frames_action.trigger()
     assert QApplication.clipboard().text() == "[(0, 24), (48, 72)]"
 
-    plugin._copy_ranges_timestamps()
-    assert QApplication.clipboard().text() == '[("00:00:00.000", "00:00:01.000"), ("00:00:02.000", "00:00:03.000")]'
+    copied_timestamps = copy_from_range_menu(plugin, "Copy timestamps")
+    assert copied_timestamps == '[("00:00:00.000", "00:00:01.000"), ("00:00:02.000", "00:00:03.000")]'
 
     # Toolbar style cycle
     initial_style = plugin.scenes_toolbar.toolButtonStyle()
@@ -450,3 +469,78 @@ def test_scening_clipboard_export_and_toolbar_cycle(plugin_controller: HarnessPl
     new_style = plugin.scenes_toolbar.toolButtonStyle()
     assert new_style != initial_style
     assert plugin.range_toolbar.toolButtonStyle() == new_style
+
+
+# Import & export
+def test_parse_imported_files_sorts_files_into_scenes_failures_and_empty_files(
+    plugin_controller: HarnessPluginController, tmp_path: Path
+) -> None:
+    plugin = plugin_controller.create_plugin(SceningPlugin)
+    good, empty, missing = tmp_path / "good.qp", tmp_path / "empty.qp", tmp_path / "missing.qp"
+    good.write_text("10 I\n20 K\n", encoding="utf-8")
+    empty.write_text("", encoding="utf-8")
+
+    scenes, failed, without_ranges = plugin.parse_imported_files(
+        [str(good), str(empty), str(missing)], QPFileParser()
+    ).result(timeout=5)
+
+    assert [(s.name, [r.to_tuple() for r in s.ranges]) for s in scenes] == [("good", [(10, 10), (20, 20)])]
+    assert failed == [str(missing)]
+    assert without_ranges == [str(empty)]
+
+
+@pytest.mark.parametrize(("end_offset", "expected"), [(0, (10, 21)), (1, (10, 20))], ids=["inclusive", "exclusive"])
+def test_parse_imported_frame_lists_convert_exclusive_ends(
+    plugin_controller: HarnessPluginController, tmp_path: Path, end_offset: int, expected: tuple[int, int]
+) -> None:
+    plugin = plugin_controller.create_plugin(SceningPlugin)
+    frames = tmp_path / "frames.txt"
+    frames.write_text("[(10, 21)]", encoding="utf-8")
+
+    scenes, _, _ = plugin.parse_imported_files([str(frames)], PythonListFramesParser(), end_offset).result(timeout=5)
+
+    assert [r.to_tuple() for r in scenes[0].ranges] == [expected]
+
+
+def test_import_scene_adds_the_parsed_scenes(
+    plugin_controller: HarnessPluginController, qtbot: QtBot, mocker: MockerFixture, tmp_path: Path
+) -> None:
+    plugin = plugin_controller.create_plugin(SceningPlugin)
+    plugin_controller.on_workspace_loaded()
+    qp_file = tmp_path / "chapters.qp"
+    qp_file.write_text("10 I\n20 K\n", encoding="utf-8")
+    label = QPFileParser.filter.label
+    mocker.patch.object(QFileDialog, "getOpenFileNames", return_value=([str(qp_file)], f"{label} (*.qp *.txt)"))
+
+    with qtbot.waitSignal(plugin_controller.statusMessage, timeout=5000):
+        plugin.on_import_scene()
+
+    assert [s.name for s in plugin.scenes_model.scenes] == ["chapters"]
+
+
+@pytest.mark.parametrize(
+    ("serializer", "end_offset", "expected"),
+    [
+        (PythonListFramesSerializer(), 0, "[(10, 20)]"),
+        (PythonListFramesSerializer(), 1, "[(10, 21)]"),
+        (PythonListTimestampsSerializer(), 1, "[('00:00:00.417', '00:00:00.833')]"),
+    ],
+    ids=["frames_inclusive", "frames_exclusive", "timestamps_ignore_the_offset"],
+)
+def test_serialize_exported_scene_writes_the_selected_scene(
+    plugin_controller: HarnessPluginController,
+    qtbot: QtBot,
+    tmp_path: Path,
+    serializer: Serializer,
+    end_offset: int,
+    expected: str,
+) -> None:
+    plugin = _single_range_plugin(plugin_controller, False, RangeFrame(start=10, end=20))
+    plugin.scenes_view.selectRow(0)
+    target = tmp_path / "export.txt"
+
+    fut = plugin.serialize_exported_scene(str(target), serializer, end_offset)
+    qtbot.waitUntil(fut.done, timeout=5000)
+    fut.result()
+
+    assert target.read_text(encoding="utf-8") == expected

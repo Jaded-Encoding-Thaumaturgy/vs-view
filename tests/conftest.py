@@ -82,6 +82,11 @@ class InMemoryKeyring:
     def __init__(self) -> None:
         self._storage = dict[tuple[str, str], str]()
 
+    @property
+    def stored(self) -> dict[tuple[str, str], str]:
+        """Snapshot of every stored secret, keyed by (service, username)."""
+        return dict(self._storage)
+
     def get_password(self, service: str, username: str) -> str | None:
         return self._storage.get((service, username))
 

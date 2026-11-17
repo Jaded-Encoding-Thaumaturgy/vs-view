@@ -808,7 +808,6 @@ def test_load_content_skips_plugins_whose_constructor_raises(
     vpy_env_factory: Callable[[], ManagedEnvironment],
     tmp_path: Path,
     register_tools: Callable[..., None],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     register_tools(docks=[_BrokenDock, _GoodDock], panels=[_BrokenPanel, _GoodPanel])
     script_file = tmp_path / "plugins.vpy"
