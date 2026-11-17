@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import sys
 from bisect import bisect_left, bisect_right
+from collections.abc import Sequence
 from enum import StrEnum
 from functools import cache
 from itertools import chain, count, cycle, islice
@@ -554,9 +555,11 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
                 pfile = Path(file)
                 try:
                     with pfile.open("rb") as f:
-                        parsed = to_arr(parser.parse(f, pfile.stem, src_fps))
+                        result = parser.parse(f, pfile.stem, src_fps)
+                    parsed = result if isinstance(result, Sequence) else [result]
+                    for p in parsed:
                         if isinstance(parser, AssParser):
-                            AssParser.snap_to_frames(parsed, v)
+                            AssParser.snap_to_frames(p, v)
                 except Exception:
                     logger.exception("Error parsing file: %s", file)
                     failed.append(file)
