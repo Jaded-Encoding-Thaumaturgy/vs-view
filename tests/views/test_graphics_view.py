@@ -7,6 +7,7 @@ import pytest
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QNativeGestureEvent, QPainter, QPixmap, QPointingDevice, QTransform
 from PySide6.QtWidgets import QStyleOptionGraphicsItem
+from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
 from vsview.app.views.video import GraphicsView, RectSelectionHandle, RectSelectionOverlay, ViewState
@@ -793,3 +794,22 @@ def test_view_state_apply_frozen_state_with_sar_and_autofit(qt_event_loop: QtEve
     assert view2.autofit is True
     assert view2.sar_applied is False
     assert view2.slider_container.isEnabled() is False
+
+
+def test_dpr_change_with_the_same_pixel_size_updates_the_scene_rect(qtbot: QtBot, mocker: MockerFixture) -> None:
+    view = GraphicsView()
+    qtbot.addWidget(view)
+    view.resize(400, 300)
+    view.show()
+    pixmap = QPixmap(100, 80)
+    pixmap.fill(Qt.GlobalColor.white)
+    view.set_pixmap(pixmap)
+    assert view.sceneRect() == QRectF(0, 0, 100, 80)
+    # The offscreen platform has one screen, so moving to a 2x monitor is simulated here.
+    mocker.patch.object(view, "devicePixelRatio", return_value=2.0)
+
+    same_size = QPixmap(100, 80)
+    same_size.fill(Qt.GlobalColor.white)
+    view.set_pixmap(same_size)
+
+    assert view.sceneRect() == QRectF(0, 0, 50, 40)

@@ -687,7 +687,7 @@ class BaseGraphicsView(QGraphicsView):
         If hdr_image is provided and HDR is enabled, it will use the HDR viewport.
         """
         pixmap.setDevicePixelRatio(self.devicePixelRatio())
-        old_size = self.pixmap_item.pixmap().size()
+        old_size = self.pixmap_item.pixmap().deviceIndependentSize()
         self.pixmap_item.setPixmap(pixmap)
 
         if self._hdr_enabled and hdr_image and self._hdr_viewport:
@@ -699,7 +699,7 @@ class BaseGraphicsView(QGraphicsView):
 
         self._update_rect_selection_overlay()
 
-        if old_size != pixmap.size():
+        if old_size != pixmap.deviceIndependentSize():
             self.update_scene_rect()
 
             if self.autofit:
