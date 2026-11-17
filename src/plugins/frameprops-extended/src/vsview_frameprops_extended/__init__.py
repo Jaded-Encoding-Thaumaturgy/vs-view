@@ -56,7 +56,6 @@ VIDEO_CATEGORY = CategoryMatcher(
         "_SARNum",
         "_SARDen",
         "_FieldBased",
-        "_Field",
     },
 )
 
