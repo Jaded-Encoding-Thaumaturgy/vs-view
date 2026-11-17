@@ -3,7 +3,7 @@ from typing import Annotated, Any, Literal, assert_never, override
 
 from jetpytools import fallback
 from pydantic import BaseModel
-from PySide6.QtCore import QSignalBlocker, Slot
+from PySide6.QtCore import QSignalBlocker, QTimer, Slot
 from PySide6.QtWidgets import QBoxLayout, QDoubleSpinBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QWidgetAction
 from vapoursynth import VideoNode
 from vstools import scale_mask, stack_planes
@@ -169,6 +169,9 @@ class SplitPlanesView(PluginGraphicsView):
         action.setDefaultWidget(self._offset_container)
         self.context_menu.addAction(action)
 
+        self._offset_timer = QTimer(self, singleShot=True, interval=300)
+        self._offset_timer.timeout.connect(self._apply_offset_spinbox)
+
         # Connect signals
         self.offset_segment.segmentChanged.connect(self.on_offset_segment_changed)
         self.offset_spinbox.valueChanged.connect(self.on_offset_spinbox_changed)
@@ -234,8 +237,12 @@ class SplitPlanesView(PluginGraphicsView):
 
     @Slot(float)
     def on_offset_spinbox_changed(self, value: float) -> None:
+        self._offset_timer.start()
+
+    @Slot()
+    def _apply_offset_spinbox(self) -> None:
         if self.offset_segment.index == 0:
-            self.settings.local_.offset_chroma = value
+            self.settings.local_.offset_chroma = self.offset_spinbox.value()
             self.refresh()
 
     @override
