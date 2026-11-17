@@ -1245,7 +1245,7 @@ def _show_focus_for_user(self: QAbstractSpinBox) -> None:
     group.addAnimation(anim_in)
     group.addAnimation(anim_out)
     group.finished.connect(effect.deleteLater)
-    group.start()
+    group.start(QSequentialAnimationGroup.DeletionPolicy.DeleteWhenStopped)
 
 
 class FrameEdit(QSpinBox):
