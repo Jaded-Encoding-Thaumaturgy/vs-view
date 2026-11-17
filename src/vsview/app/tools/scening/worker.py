@@ -58,6 +58,7 @@ class ExportQueueManager:
         ffmpeg_args: list[str],
         fmt: Literal["h264", "ffv1"],
     ) -> None:
+        ranges = [r.model_copy() for r in ranges]
         self._queue.put(ExportJob(ranges, voutput, dest_files, ffmpeg_args, fmt))
         self._ensure_worker_started()
         self.api.statusMessage.emit(f"Queued export of {len(dest_files)} clip(s). Queue size: {self._queue.qsize()}")
