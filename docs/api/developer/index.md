@@ -103,6 +103,11 @@ Most of these symbols are re-exported through the top-level `vsview.api` module 
            - Packer
            - run_in_background
            - run_in_loop
+           - from_thread
+           - to_thread
+           - to_thread_named
+           - to_thread_scoped
+           - wait_for_threads
            - IconName
            - IconReloadMixin
            - load_icon

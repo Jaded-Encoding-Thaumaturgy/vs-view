@@ -13,7 +13,8 @@ from inspect import iscoroutinefunction
 from logging import DEBUG, getLogger
 from typing import Any, Literal, NamedTuple, Protocol, overload, override
 
-from jetpytools import CustomTypeError, clamp
+import vsengine
+from jetpytools import CustomTypeError, CustomValueError, clamp
 from PySide6.QtCore import QEventLoop, QObject, QRunnable, QThread, QThreadPool, Signal, Slot
 from PySide6.QtWidgets import QApplication
 from vsengine.futures import UnifiedFuture
@@ -219,34 +220,33 @@ class QtEventLoop(QObject, EventLoop):
         with self._lock:
             self._cancelled = False
 
-    def wait_for_threads(self, timeout_ms: int = 500, *, owner: Any = None, names: Sequence[str] | None = None) -> None:
+    def wait_for_threads(self, timeout_ms: int = 500, *, owner: Any = None, names: Sequence[str] | None = None) -> int:
         """
         Wait for background threads to finish.
+
+        When called from the main thread, Qt events (excluding user input) are processed while waiting.
 
         Args:
             timeout_ms: Maximum duration in milliseconds to wait.
             owner: Optional owner object (e.g. workspace) to restrict wait targets.
             names: Optional task names to restrict wait targets.
+
+        Returns:
+            The number of target tasks still running. 0 means every target finished.
         """
         _logger.debug("Calling wait_for_threads (owner=%r, names=%r)...", owner, names)
 
+        current_fut = _current_task_future.get() or self._thread_futures.get(threading.get_ident())
+
         if not (app := QApplication.instance()):
             _logger.warning("No QApplication instance found")
-            return
+            return len(self._find_tasks(owner, names, current_fut))
 
         is_main_thread = QThread.currentThread() == app.thread()
-        current_fut = _current_task_future.get() or self._thread_futures.get(threading.get_ident())
         deadline = time.perf_counter() + (timeout_ms / 1000.0)
 
         while True:
-            with self._tasks_lock:
-                targets = [
-                    fut
-                    for fut, info in self._tracked_tasks.items()
-                    if fut is not current_fut
-                    and (owner is None or info.owner is owner)
-                    and (names is None or info.name in names)
-                ]
+            targets = self._find_tasks(owner, names, current_fut)
 
             if not targets:
                 _logger.debug("Target thread count reached (0 remaining), breaking loop.")
@@ -280,6 +280,106 @@ class QtEventLoop(QObject, EventLoop):
             with self._tasks_lock:
                 _logger.debug("Final active threads count: %s", len(self._tracked_tasks))
                 _logger.debug("Remaining thread(s): %s", [k for k, v in self._active_tasks.items() if v > 0])
+
+        return sum(not fut.done() for fut in targets)
+
+    def _find_tasks(
+        self,
+        owner: Any,
+        names: Sequence[str] | None,
+        exclude: UnifiedFuture[Any] | None,
+    ) -> list[UnifiedFuture[Any]]:
+        with self._tasks_lock:
+            return [
+                fut
+                for fut, info in self._tracked_tasks.items()
+                if fut is not exclude
+                and (owner is None or info.owner is owner)
+                and (names is None or info.name in names)
+            ]
+
+
+def get_qt_loop() -> QtEventLoop:
+    if not isinstance(loop := get_loop(), QtEventLoop):
+        raise CustomTypeError("The current running loop isn't QtEventLoop")
+    return loop
+
+
+def from_thread[**P, R](func: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> UnifiedFuture[R]:
+    """
+    Schedule func to run on the main Qt thread.
+
+    Same as `vsengine.from_thread`, but requires the `QtEventLoop` and returns a `UnifiedFuture`.
+    This preserves the currently running VapourSynth environment (if any).
+    """
+
+    @wraps(func)
+    @vsengine.keep_environment
+    def wrapper() -> R:
+        return func(*args, **kwargs)
+
+    return get_qt_loop().from_thread(wrapper)
+
+
+def to_thread[**P, R](func: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> UnifiedFuture[R]:
+    """
+    Run func in Qt's global thread pool.
+
+    Same as `vsengine.to_thread`, but requires the `QtEventLoop` and returns a `UnifiedFuture`.
+    This preserves the currently running VapourSynth environment (if any).
+    """
+    return to_thread_named(func.__name__, func, *args, **kwargs)
+
+
+def to_thread_named[**P, R](name: str, func: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> UnifiedFuture[R]:
+    """
+    Run func in Qt's global thread pool with a custom thread name.
+
+    This preserves the currently running VapourSynth environment (if any).
+    """
+    return to_thread_scoped(None, name, func, *args, **kwargs)
+
+
+def to_thread_scoped[**P, R](
+    owner: object,
+    name: str,
+    func: Callable[P, R],
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> UnifiedFuture[R]:
+    """
+    Run func in Qt's global thread pool with a custom thread name and owner for scoped waits.
+
+    This preserves the currently running VapourSynth environment (if any).
+    """
+
+    @wraps(func)
+    @vsengine.keep_environment
+    def wrapper() -> R:
+        return func(*args, **kwargs)
+
+    return get_qt_loop().to_thread_scoped(owner, name, wrapper)
+
+
+def wait_for_threads(owner: object, timeout_ms: int = 500, *, names: Sequence[str] | None = None) -> int:
+    """
+    Wait for the background tasks started with `owner` to finish.
+
+    When called from the main thread, Qt events (excluding user input) are processed while waiting,
+    so the caller's own slots and queued callbacks may run before this returns.
+
+    Args:
+        owner: The owner passed to `to_thread_scoped` or `run_in_background`.
+        timeout_ms: Maximum duration in milliseconds to wait.
+        names: Optional task names to restrict wait targets.
+
+    Returns:
+        The number of target tasks still running. 0 means every target finished.
+    """
+    if owner is None:
+        raise CustomValueError("An owner is required to scope the wait", wait_for_threads)
+
+    return get_qt_loop().wait_for_threads(timeout_ms, owner=owner, names=names)
 
 
 class _DecoratorFuture(Protocol):
@@ -344,8 +444,7 @@ def run_in_loop(func: Any = None, *, return_future: bool = True) -> Any:
     def decorator(fn: Any) -> Any:
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if not isinstance(loop := get_loop(), QtEventLoop):
-                raise CustomTypeError("The current running loop isn't QtEventLoop")
+            loop = get_qt_loop()
 
             if iscoroutinefunction(fn):
                 if QThread.currentThread() == loop.thread() and (async_loop := _get_asyncio_running_loop()):
@@ -404,8 +503,7 @@ def run_in_background(func: Any = None, *, name: str | None = None, owner: objec
     def decorator(fn: Any) -> Any:
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if not isinstance(loop := get_loop(), QtEventLoop):
-                raise CustomTypeError("The current running loop isn't QtEventLoop")
+            loop = get_qt_loop()
 
             func_name = name or fn.__name__
             task_owner = owner if owner is not None else _detect_owner(args[0]) if args else None

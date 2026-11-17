@@ -56,7 +56,15 @@ from ..app.views.timeline import FrameEdit, TimeEdit
 from ..app.views.video import BaseGraphicsView
 from ..logging import get_console_level, setup_web_logger
 from ..types import Frame, Time
-from ..vsenv import run_in_background, run_in_loop
+from ..vsenv import (
+    from_thread,
+    run_in_background,
+    run_in_loop,
+    to_thread,
+    to_thread_named,
+    to_thread_scoped,
+    wait_for_threads,
+)
 from .info import Context, get_cached, get_reload_count, get_state, is_preview, is_reload, register_on_workspace_destroy
 from .output import catch_output, get_output, get_outputs, set_output
 
@@ -137,6 +145,7 @@ __all__ = [
     "WorkspaceBlocker",
     "cache_clip",
     "catch_output",
+    "from_thread",
     "get_cached",
     "get_console_level",
     "get_output",
@@ -153,6 +162,10 @@ __all__ = [
     "run_in_loop",
     "set_output",
     "setup_web_logger",
+    "to_thread",
+    "to_thread_named",
+    "to_thread_scoped",
+    "wait_for_threads",
 ]
 
 if not TYPE_CHECKING:
