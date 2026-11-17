@@ -21,6 +21,7 @@ __all__ = [
     "RangeFrame",
     "RangeTime",
     "SceneRow",
+    "Serializer",
     "UnifiedRange",
     "borrowed_text_wrapper",
     "hookimpl",
