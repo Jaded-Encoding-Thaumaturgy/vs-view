@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from PySide6.QtCore import QObject, QRect, Signal, Slot
 from PySide6.QtGui import QContextMenuEvent, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QDockWidget, QSplitter, QTabWidget, QWidget
+from shiboken6 import Shiboken
 from vsengine import UnifiedFuture
 
 from vsview.app.settings import SettingsManager
@@ -326,6 +327,11 @@ class PluginWorkspaceController(QObject):
             target_frame = current_frame
 
             def on_frame_ready(f: Future[vs.VideoFrame]) -> None:
+                if not Shiboken.isValid(view):
+                    if not f.exception():
+                        f.result().close()
+                    return
+
                 if exc := f.exception():
                     logger.error("Failed to render initial frame %d for view %s", target_frame, view, exc_info=exc)
                     return
