@@ -508,9 +508,9 @@ class PluginAPI(QObject):
         def recursive_ns(data: dict[str, Any]) -> SimpleNamespace:
             return SimpleNamespace(**{k: recursive_ns(v) if isinstance(v, dict) else v for k, v in data.items()})
 
-        global_ = SettingsManager.global_settings.model_copy(deep=True).model_dump(exclude={"plugins"})
+        global_ = SettingsManager.global_settings.model_dump(exclude={"plugins"})
         local_ = (
-            SettingsManager.get_local_settings(p).model_copy(deep=True).model_dump(exclude={"plugins"})
+            SettingsManager.get_local_settings(p).model_dump(exclude={"plugins"})
             if (p := self.file_path)
             else {}
         )
