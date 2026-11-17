@@ -101,23 +101,25 @@ def clear_environment(
 
     if not menv.vs_environment.alive:
         _logger.debug("VS environment not alive, skipping clear")
+        env.dispose()
         return
 
     if clear_caches or clear_outputs:
         _logger.debug("Clearing VS environment caches")
 
-    with menv.use():
-        if clear_outputs:
-            vs_clear_outputs()
-        if clear_caches:
-            for node in menv.outputs.values():
-                if isinstance(node, VideoOutputTuple):
-                    node.clip.clear_cache()
-                else:
-                    node.clear_cache()
-        menv.core.clear_cache()
-
-    env.dispose()
+    try:
+        with menv.use():
+            if clear_outputs:
+                vs_clear_outputs()
+            if clear_caches:
+                for node in menv.outputs.values():
+                    if isinstance(node, VideoOutputTuple):
+                        node.clip.clear_cache()
+                    else:
+                        node.clear_cache()
+            menv.core.clear_cache()
+    finally:
+        env.dispose()
 
     _logger.debug("VS environment cleared and deleted")
 
