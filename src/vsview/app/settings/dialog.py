@@ -560,7 +560,9 @@ class SettingsDialog(QDialog, IconReloadMixin):
         data = SettingsManager.global_settings.model_dump()
 
         for entry in self.global_settings_registry:
-            if (widget := self._global_widgets.get(entry.key)) is None:
+            if (widget := self._global_widgets.get(entry.key)) is None or (
+                isinstance(entry.metadata, Dropdown) and isinstance(widget, QComboBox) and widget.currentIndex() == -1
+            ):
                 continue
             try:
                 value = (
@@ -589,7 +591,9 @@ class SettingsDialog(QDialog, IconReloadMixin):
         data = local_settings.model_dump()
 
         for entry in self.local_settings_registry:
-            if (widget := self._local_widgets.get(entry.key)) is None:
+            if (widget := self._local_widgets.get(entry.key)) is None or (
+                isinstance(entry.metadata, Dropdown) and isinstance(widget, QComboBox) and widget.currentIndex() == -1
+            ):
                 continue
             try:
                 value = (

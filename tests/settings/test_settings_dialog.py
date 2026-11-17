@@ -203,6 +203,41 @@ def test_local_dependent_dropdown_is_populated_from_local_settings(
     assert combo.currentData() == "b-2"
 
 
+DEVICE = Dropdown(label="Device", items=[("A", "a"), ("B", "b")], tooltip="device")
+
+
+@pytest.mark.parametrize("scope", ["global", "local"])
+def test_apply_keeps_a_dropdown_value_that_is_no_longer_listed(
+    qtbot: QtBot, register_entries: RegisterEntries, script: Path, scope: str
+) -> None:
+    store = SettingsManager.global_settings if scope == "global" else SettingsManager.get_local_settings(script)
+    register_entries(*(([_entry("device", DEVICE)], []) if scope == "global" else ([], [_entry("device", DEVICE)])))
+    store.plugins[PLUGIN_ID] = {"device": "unplugged"}
+    dialog = _open_dialog(qtbot, script)
+    assert _find_by_tooltip(dialog, QComboBox, "device").currentIndex() == -1
+
+    _click_apply(dialog)
+
+    stored = SettingsManager.global_settings if scope == "global" else SettingsManager.get_local_settings(script)
+    assert stored.plugins[PLUGIN_ID] == {"device": "unplugged"}
+
+
+@pytest.mark.parametrize("scope", ["global", "local"])
+def test_apply_stores_a_dropdown_value_chosen_after_an_unlisted_one(
+    qtbot: QtBot, register_entries: RegisterEntries, script: Path, scope: str
+) -> None:
+    store = SettingsManager.global_settings if scope == "global" else SettingsManager.get_local_settings(script)
+    register_entries(*(([_entry("device", DEVICE)], []) if scope == "global" else ([], [_entry("device", DEVICE)])))
+    store.plugins[PLUGIN_ID] = {"device": "unplugged"}
+    dialog = _open_dialog(qtbot, script)
+    _find_by_tooltip(dialog, QComboBox, "device").setCurrentIndex(1)
+
+    _click_apply(dialog)
+
+    stored = SettingsManager.global_settings if scope == "global" else SettingsManager.get_local_settings(script)
+    assert stored.plugins[PLUGIN_ID] == {"device": "b"}
+
+
 def test_apply_keeps_global_writes_made_in_about_to_save_global(
     qtbot: QtBot, register_entries: RegisterEntries
 ) -> None:
