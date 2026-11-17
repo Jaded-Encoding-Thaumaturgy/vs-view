@@ -52,6 +52,8 @@ from vsview.api import (
 
 from .constants import (
     LOADING_DEBOUNCE_MS,
+    MAX_NEIGHBOR_COUNT,
+    MAX_STEP,
     PLUGIN_DISPLAY_NAME,
     PLUGIN_IDENTIFIER,
     SPINNER_FRAMES,
@@ -426,11 +428,11 @@ class FrameStripPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         form.setSpacing(4)
 
         count_spin = QSpinBox(container)
-        count_spin.setRange(1, 5)
+        count_spin.setRange(1, MAX_NEIGHBOR_COUNT)
         count_spin.setValue(self.neighbor_count)
 
         step_spin = QSpinBox(container)
-        step_spin.setRange(1, 1000)
+        step_spin.setRange(1, MAX_STEP)
         step_spin.setValue(self.step)
 
         current_check = QCheckBox("Show current frame", container)
