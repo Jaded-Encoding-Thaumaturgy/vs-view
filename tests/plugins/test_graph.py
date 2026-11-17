@@ -636,14 +636,15 @@ def test_graph_plugin_output_change_during_extraction_resends_data(
 
     mocker.patch.object(vsgraph, "get_graph", side_effect=get_graph_with_output_switch)
 
+    # dispatch() runs on the worker thread, so the signal reaches the test slot queued and can land after fut.done.
     received.clear()
-    fut = plugin.update_graph(force_layout=True, refresh=True)
-    qtbot.waitUntil(fut.done, timeout=2000)
+    plugin.update_graph(force_layout=True, refresh=True)
+    qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in received, timeout=2000)
     assert len(received[PyToJsCommand.SET_DATA]["nodes"]) == 1
 
     received.clear()
-    fut = plugin.update_graph()
-    qtbot.waitUntil(fut.done, timeout=2000)
+    plugin.update_graph()
+    qtbot.waitUntil(lambda: PyToJsCommand.SET_DATA in received, timeout=2000)
     assert len(received[PyToJsCommand.SET_DATA]["nodes"]) == 2
 
 
