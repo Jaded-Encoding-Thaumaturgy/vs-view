@@ -13,7 +13,7 @@ from PySide6 import QtWebEngineCore
 from PySide6.QtCore import QEvent, QFile, QIODevice, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QColor, QPalette, Qt
 from PySide6.QtWebChannel import QWebChannel
-from PySide6.QtWebEngineCore import QWebEnginePage
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QMessageBox, QWidget
 
@@ -204,6 +204,9 @@ class BaseWebEnginePage(QWebEnginePage):
         QWebEnginePage.JavaScriptConsoleMessageLevel.WarningMessageLevel: WARNING,
         QWebEnginePage.JavaScriptConsoleMessageLevel.ErrorMessageLevel: ERROR,
     }
+    ALLOWED_NAVIGATIONS: ClassVar[frozenset[QWebEnginePage.NavigationType]] = frozenset(
+        {QWebEnginePage.NavigationType.NavigationTypeTyped, QWebEnginePage.NavigationType.NavigationTypeReload}
+    )
 
     def __init__(
         self,
@@ -216,11 +219,20 @@ class BaseWebEnginePage(QWebEnginePage):
         if background_color is not None:
             self.setBackgroundColor(background_color)
 
+        self.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, False)
+
     @property
     def view(self) -> QWidget:
         if isinstance(view := self.parent(), QWidget):
             return view
         raise CustomNotImplementedError
+
+    @override
+    def acceptNavigationRequest(self, url: QUrl | str, type: QWebEnginePage.NavigationType, isMainFrame: bool) -> bool:
+        if isMainFrame and type not in self.ALLOWED_NAVIGATIONS:
+            logger.warning("Blocked a %s navigation of the web view to %s", type.name, QUrl(url).toDisplayString())
+            return False
+        return super().acceptNavigationRequest(url, type, isMainFrame)
 
     @override
     def javaScriptAlert(self, security_origin: QUrl | str, msg: str) -> None:
