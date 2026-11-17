@@ -402,6 +402,20 @@ class LRUCache[K, V](UserDict[K, V]):
         with self.lock:
             del self.data[key]
 
+    @overload
+    def get(self, key: K, default: None = None) -> V | None: ...
+    @overload
+    def get(self, key: K, default: V) -> V: ...
+    @overload
+    def get[T](self, key: K, default: T) -> V | T: ...
+    @override
+    def get(self, key: K, default: object = None) -> object:
+        with self.lock:
+            try:
+                return self[key]
+            except KeyError:
+                return default
+
     @override
     def __iter__(self) -> Iterator[K]:
         with self.lock:
