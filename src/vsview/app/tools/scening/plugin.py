@@ -45,6 +45,7 @@ from vsview.api import (
     VideoOutputProxy,
     WidgetPluginBase,
     run_in_background,
+    run_in_loop,
 )
 
 from ...plugins.entrypoints import collect_hook_results, load_entrypoints
@@ -455,6 +456,8 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         for scene in self.settings.local_.scenes:
             self.scenes_model.add_scene(scene, emit_signal=False)
 
+    # The loader calls this on a worker thread, and the scene table reads output_map on the main thread.
+    @run_in_loop(return_future=False)
     @override
     def on_workspace_loaded(self) -> None:
         self.output_map.clear()
