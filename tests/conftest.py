@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import faulthandler
 import importlib.metadata
 import logging
+import os
 import sys
 import threading
 import warnings
@@ -61,6 +63,8 @@ from vsview.app.tools.frameprops.formatters import FormatterRegistry
 from vsview.app.utils import path_to_hash
 from vsview.vsenv.loop import QtEventLoop
 
+faulthandler_fd_key = pytest.StashKey[int]()
+
 
 class QtThreadAffinityWarning(RuntimeWarning):
     """Warning emitted when a Qt UI object is accessed from a non-affinity background thread."""
@@ -109,9 +113,17 @@ class InMemoryKeyring:
         return None
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.stash[faulthandler_fd_key] = os.dup(sys.stderr.fileno())
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    os.close(config.stash[faulthandler_fd_key])
+
+
 # Logging Isolation
 @pytest.fixture(autouse=True)
-def isolate_logging() -> Generator[None]:
+def isolate_logging(request: pytest.FixtureRequest) -> Generator[None]:
     """Isolate logging configuration so tests that call setup_logging don't pollute subsequent tests."""
     root_logger = logging.getLogger()
     orig_handlers = root_logger.handlers[:]
@@ -120,6 +132,9 @@ def isolate_logging() -> Generator[None]:
     try:
         yield
     finally:
+        # setup_logging points faulthandler at the captured stderr, which is lost when the process crashes
+        faulthandler.enable(file=request.config.stash[faulthandler_fd_key])
+
         for h in root_logger.handlers[:]:
             if h not in orig_handlers:
                 root_logger.removeHandler(h)
