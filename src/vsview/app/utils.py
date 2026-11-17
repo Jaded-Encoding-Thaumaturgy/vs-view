@@ -184,7 +184,7 @@ def path_to_hash(path: AnyPath) -> str:
     Returns:
         A 16-character hexadecimal hash string.
     """
-    return hashlib.md5(str(Path(path).resolve()).encode()).hexdigest()[:16]
+    return hashlib.md5(str(Path(path).resolve()).encode(), usedforsecurity=False).hexdigest()[:16]
 
 
 @contextmanager
