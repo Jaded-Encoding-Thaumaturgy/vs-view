@@ -779,16 +779,17 @@ def test_drop_with_a_connection_loads_without_the_dialog(
     dialog_exec.assert_not_called()
 
 
+@pytest.mark.vpy("no-policy")
 def test_load_without_a_connection_shows_the_reason(
     qtbot: QtBot,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     script: Path,
     dialogs: list[str],
     mocker: MockerFixture,
 ) -> None:
     def env(self: RemoteWorkspace) -> ManagedEnvironment:
         if not self._env or self._env.disposed:
-            self._env = vpy_env_factory()
+            self._env = vsview_env_factory()
         return self._env
 
     # A subclass would lose the plugin settings model, so the property is replaced on the class itself.

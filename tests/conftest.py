@@ -61,6 +61,7 @@ from vsview.app.settings.secrets import SecretsManager
 from vsview.app.tools.frameprops.categories import CategoryRegistry
 from vsview.app.tools.frameprops.formatters import FormatterRegistry
 from vsview.app.utils import path_to_hash
+from vsview.vsenv import create_environment, get_policy, unregister_policy
 from vsview.vsenv.loop import QtEventLoop
 
 faulthandler_fd_key = pytest.StashKey[int]()
@@ -561,6 +562,30 @@ def create_test_audio_output() -> Callable[[ManagedEnvironment, int], AudioOutpu
             return voutput
 
     return create
+
+
+@pytest.fixture
+def vsview_env_factory() -> Generator[Callable[[], ManagedEnvironment]]:
+    """
+    Factory for environments owned by VSView's own policy. Requires `@pytest.mark.vpy("no-policy")`.
+
+    Used for tests that render frames on VapourSynth or background threads.
+    """
+    envs = list[ManagedEnvironment]()
+    get_policy()
+
+    def factory() -> ManagedEnvironment:
+        env = create_environment(set_logger=False)
+        envs.append(env)
+        return env
+
+    try:
+        yield factory
+    finally:
+        for env in envs:
+            if not env.disposed:
+                env.dispose()
+        unregister_policy()
 
 
 class FakeAudioSink:

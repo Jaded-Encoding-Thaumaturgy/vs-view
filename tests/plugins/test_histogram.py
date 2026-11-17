@@ -19,7 +19,7 @@ from vsview.app.outputs.video import VideoOutput
 from vsview.app.packing import Packer
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
 
 
 @pytest.fixture(autouse=True)
@@ -65,10 +65,10 @@ def make_video_output(
 
 @pytest.fixture
 def populated_controller(
-    plugin_controller: HarnessPluginController, vpy_env_factory: Callable[[], ManagedEnvironment]
+    plugin_controller: HarnessPluginController, vsview_env_factory: Callable[[], ManagedEnvironment]
 ) -> Generator[HarnessPluginController]:
     """Fixture providing a HarnessPluginController loaded with a valid RGB24 test VideoOutput."""
-    plugin_controller.env = vpy_env_factory()
+    plugin_controller.env = vsview_env_factory()
 
     with plugin_controller.env.use():
         voutput = make_video_output(vs.RGB24)
@@ -389,6 +389,7 @@ def test_cie_tab_rejects_unspecified_primaries_or_transfer(
 
 
 # Fault Tolerance: No Active Video Output
+@pytest.mark.vpy("no-core")
 def test_histogram_plugin_no_video_output_safety(plugin_controller: HarnessPluginController, qtbot: QtBot) -> None:
     # Arrange: Controller with no video output loaded
     plugin = plugin_controller.create_plugin(HistogramPlugin)
@@ -413,6 +414,7 @@ def test_histogram_frame_navigation(populated_controller: HarnessPluginControlle
 
 
 # CustomQImage Unit Tests
+@pytest.mark.vpy("no-core")
 def test_custom_qimage_properties_and_write_to() -> None:
     # Null image has ptr 0
     null_img = CustomQImage()

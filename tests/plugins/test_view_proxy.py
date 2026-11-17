@@ -15,7 +15,7 @@ from vsview.app.workspace.loader import VSEngineWorkspace
 from vsview.assets import IconName
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
 
 TAB_CHANGED = SIGNAL("tabChanged(int)")
 
@@ -53,13 +53,13 @@ def workspace(
     qtbot: QtBot,
     qt_event_loop: QtEventLoop,
     init_plugin_manager: PluginManager,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     tmp_path: Path,
 ) -> ScriptWorkspace:
     script_file = tmp_path / "dual_output.vpy"
     script_file.write_text(DUAL_OUTPUT_SCRIPT, encoding="utf-8")
 
-    ws = ScriptWorkspace(vpy_env_factory)
+    ws = ScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
 
     fut = ws.load_content(script_file)

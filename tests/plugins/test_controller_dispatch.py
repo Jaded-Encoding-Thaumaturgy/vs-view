@@ -171,11 +171,11 @@ def test_events_reach_only_plugins_the_user_can_see(
 
 
 @pytest.fixture
-def env(vpy_env_factory: Callable[[], ManagedEnvironment]) -> ManagedEnvironment:
-    return vpy_env_factory()
+def env(vsview_env_factory: Callable[[], ManagedEnvironment]) -> ManagedEnvironment:
+    return vsview_env_factory()
 
 
-@pytest.mark.vpy("no-core")
+@pytest.mark.vpy("no-policy")
 def test_each_visible_plugin_view_gets_its_own_frames_from_the_buffer(
     controller: PluginWorkspaceController,
     workspace: MockQObject,

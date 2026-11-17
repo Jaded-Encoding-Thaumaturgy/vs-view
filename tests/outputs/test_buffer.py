@@ -14,12 +14,12 @@ from vsview.app.outputs.buffer import AudioBuffer, FrameBuffer
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.settings import SettingsManager
 
-pytestmark = [pytest.mark.unit, pytest.mark.vpy("no-core")]
+pytestmark = [pytest.mark.unit, pytest.mark.vpy("no-policy")]
 
 
 @pytest.fixture
-def env(vpy_env_factory: Callable[[], ManagedEnvironment]) -> ManagedEnvironment:
-    return vpy_env_factory()
+def env(vsview_env_factory: Callable[[], ManagedEnvironment]) -> ManagedEnvironment:
+    return vsview_env_factory()
 
 
 @pytest.fixture

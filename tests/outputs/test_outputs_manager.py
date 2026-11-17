@@ -18,7 +18,7 @@ from vsview.app.plugins import PluginAPI, specs
 from vsview.app.plugins.api import NodeProcessor
 from vsview.app.plugins.manager import PluginManager
 
-pytestmark = [pytest.mark.integration, pytest.mark.qt, pytest.mark.vpy("no-core")]
+pytestmark = [pytest.mark.integration, pytest.mark.qt, pytest.mark.vpy("no-policy")]
 
 core = vs.core
 
@@ -30,9 +30,9 @@ def use_plugin_manager(init_plugin_manager: PluginManager) -> None: ...
 @pytest.fixture
 def manager(
     plugin_controller: HarnessPluginController,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
 ) -> Generator[OutputsManager]:
-    plugin_controller.env = vpy_env_factory()
+    plugin_controller.env = vsview_env_factory()
 
     with plugin_controller.env.use():
         yield OutputsManager()
@@ -392,7 +392,7 @@ def test_outputs_manager_clear(
 
 
 # VideoOutput Tests
-@pytest.mark.vpy("no-core")
+@pytest.mark.vpy("no-policy")
 @pytest.mark.parametrize(
     ("sar_num", "sar_den", "expected"),
     [(1, 0, 1.0), (0, 1, 1.0), (-4, 3, 1.0), (4, -3, 1.0), (16, 11, 16 / 11)],
@@ -400,12 +400,12 @@ def test_outputs_manager_clear(
 )
 def test_video_output_info_treats_an_invalid_sar_as_square_pixels(
     plugin_controller: HarnessPluginController,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     sar_num: int,
     sar_den: int,
     expected: float,
 ) -> None:
-    env = vpy_env_factory()
+    env = vsview_env_factory()
     plugin_controller.env = env
     with env.use():
         clip = env.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=10, fpsnum=24, fpsden=1)

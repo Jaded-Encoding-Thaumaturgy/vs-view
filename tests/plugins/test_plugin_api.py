@@ -13,16 +13,16 @@ from vsview.app.tools.cropping.plugin import RegionSelectorPlugin
 from vsview.types import Frame
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
 
 
 @pytest.fixture
 def harness(
     plugin_controller: HarnessPluginController,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
 ) -> HarnessPluginController:
-    plugin_controller.env = vpy_env_factory()
+    plugin_controller.env = vsview_env_factory()
     plugin_controller.set_current_voutput(create_test_video_output(plugin_controller.env, 100))
     return plugin_controller
 

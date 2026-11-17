@@ -29,7 +29,7 @@ from vsview.app.workspace.quick_script import QuickScriptWorkspace
 from vsview.app.workspace.utils import CodeContent
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
 
 output_metadata = OutputMetadata(dict)
 
@@ -38,7 +38,7 @@ output_metadata = OutputMetadata(dict)
 def video_workspace(
     qt_event_loop: QtEventLoop,
     qtbot: QtBot,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     init_plugin_manager: PluginManager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[VideoFileWorkspace]:
@@ -46,7 +46,7 @@ def video_workspace(
         @property
         def env(self) -> ManagedEnvironment:
             if not self._env or self._env.disposed:
-                self._env = vpy_env_factory()
+                self._env = vsview_env_factory()
             return self._env
 
         def get_output_metadata(self) -> dict[int, Any]:
@@ -77,14 +77,14 @@ def video_workspace(
 def python_workspace(
     qt_event_loop: QtEventLoop,
     qtbot: QtBot,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     init_plugin_manager: PluginManager,
 ) -> Generator[PythonScriptWorkspace]:
     class TestPythonScriptWorkspace(PythonScriptWorkspace):
         @property
         def env(self) -> ManagedEnvironment:
             if not self._env or self._env.disposed:
-                self._env = vpy_env_factory()
+                self._env = vsview_env_factory()
             return self._env
 
         def get_output_metadata(self) -> dict[int, Any]:
@@ -103,14 +103,14 @@ def python_workspace(
 def quick_script_workspace(
     qt_event_loop: QtEventLoop,
     qtbot: QtBot,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     init_plugin_manager: PluginManager,
 ) -> Generator[QuickScriptWorkspace]:
     class TestQuickScriptWorkspace(QuickScriptWorkspace):
         @property
         def env(self) -> ManagedEnvironment:
             if not self._env or self._env.disposed:
-                self._env = vpy_env_factory()
+                self._env = vsview_env_factory()
             return self._env
 
         def get_output_metadata(self) -> dict[int, Any]:
@@ -148,28 +148,33 @@ class DummyContentHolder:
         return f"{a}_{b}_{c}"
 
 
+@pytest.mark.vpy("no-core")
 def test_requires_content_executes_when_content_present() -> None:
     holder = DummyContentHolder(content=Path("sample.mp4"))
     assert holder.method_no_fallback() == "called_no_fallback"
 
 
+@pytest.mark.vpy("no-core")
 def test_requires_content_returns_none_when_content_missing_no_fallback() -> None:
     holder = DummyContentHolder()
     assert holder.method_no_fallback() is None
 
 
+@pytest.mark.vpy("no-core")
 def test_requires_content_returns_fallback_when_content_missing() -> None:
     holder = DummyContentHolder()
     assert holder.method_with_lambda_fallback() == "custom_fallback"
     assert holder.method_with_dict_fallback() == {}
 
 
+@pytest.mark.vpy("no-core")
 def test_requires_content_with_content_present_ignores_fallback() -> None:
     holder = DummyContentHolder(content=Path("sample.mp4"))
     assert holder.method_with_lambda_fallback() == "called_with_lambda"
     assert holder.method_with_dict_fallback() == {1: "actual"}
 
 
+@pytest.mark.vpy("no-core")
 def test_requires_content_forwards_arguments() -> None:
     holder = DummyContentHolder(content=Path("sample.mp4"))
     assert holder.method_with_args(42, "hello", c=True) == "42_hello_True"

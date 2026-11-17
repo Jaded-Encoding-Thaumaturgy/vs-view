@@ -26,20 +26,19 @@ from vsview.app.workspace.playback import PlaybackManager, PlaybackState
 from vsview.types import Frame
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
 
 
 # PlaybackState Tests
-@pytest.mark.vpy("no-core")
 def test_playback_state_reset(
     qapp: QApplication,
     qt_event_loop: QtEventLoop,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
     create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
 ) -> None:
     state = PlaybackState(qapp)
-    env = vpy_env_factory()
+    env = vsview_env_factory()
 
     # Mutate all fields from initial defaults
     state.last_fps_update_ns = 1_000_000
@@ -81,15 +80,14 @@ def test_playback_state_reset(
     state.wait_for_cleanup()
 
 
-@pytest.mark.vpy("no-core")
 def test_playback_state_reset_audio(
     qapp: QApplication,
     qt_event_loop: QtEventLoop,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
 ) -> None:
     state = PlaybackState(qapp)
-    env = vpy_env_factory()
+    env = vsview_env_factory()
 
     state.next_audio_frame_time_ns = 77_777_777
     state.audio_frame_interval_ns = 21_333_333
@@ -110,16 +108,15 @@ def test_playback_state_reset_audio(
     state.wait_for_cleanup()
 
 
-@pytest.mark.vpy("no-core")
 def test_playback_state_wait_for_cleanup(
     qapp: QApplication,
     qt_event_loop: QtEventLoop,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
     mocker: MockerFixture,
 ) -> None:
     state = PlaybackState(qapp)
-    env = vpy_env_factory()
+    env = vsview_env_factory()
 
     # 1. No pending futures - completes immediately
     state.wait_for_cleanup()
@@ -172,11 +169,11 @@ class PlaybackManagerSetup(NamedTuple):
 @pytest.fixture
 def playback_manager_setup(
     qt_event_loop: QtEventLoop,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
+    vsview_env_factory: Callable[[], ManagedEnvironment],
     plugin_controller: HarnessPluginController,
     qtbot: QtBot,
 ) -> Generator[PlaybackManagerSetup, None, None]:
-    env = vpy_env_factory()
+    env = vsview_env_factory()
 
     mock_outputs = MagicMock()
     mock_outputs.current_voutput = None
@@ -205,7 +202,6 @@ def playback_manager_setup(
 
 
 # PlaybackManager Tests
-@pytest.mark.vpy("no-core")
 def test_playback_manager_seek_bounds(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
@@ -264,7 +260,6 @@ def test_playback_manager_seek_bounds(
         mock_outputs.current_voutput = None
 
 
-@pytest.mark.vpy("no-core")
 def test_playback_manager_volume_and_mute(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
@@ -322,7 +317,6 @@ def test_playback_manager_volume_and_mute(
     assert not manager.state.audio_timer.isActive()
 
 
-@pytest.mark.vpy("no-core")
 def test_playback_manager_muted_playback_lifecycle(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
@@ -403,7 +397,6 @@ def test_playback_manager_playback_settings_changed(
     restart_mock.assert_called_once()
 
 
-@pytest.mark.vpy("no-core")
 def test_playback_manager_api_busy_frame_request(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
@@ -427,7 +420,6 @@ def test_playback_manager_api_busy_frame_request(
         mock_outputs.current_voutput = None
 
 
-@pytest.mark.vpy("no-core")
 @pytest.mark.parametrize(
     ("sar_num", "sar_den", "expected"),
     [(0, 1, 1.0), (16, 0, 1.0), (-4, 3, 1.0), (4, -3, 1.0), (16, 11, 16 / 11)],
@@ -468,7 +460,6 @@ def test_playback_manager_treats_a_non_positive_sar_as_square_pixels(
         mock_outputs.current_voutput = None
 
 
-@pytest.mark.vpy("initial-core")
 def test_playback_manager_buffered_audio_backpressure(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
@@ -506,7 +497,6 @@ def test_playback_manager_buffered_audio_backpressure(
         mock_outputs.current_aoutput = None
 
 
-@pytest.mark.vpy("initial-core")
 def test_playback_manager_buffered_audio_buffer_exhaustion(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
@@ -564,7 +554,6 @@ def test_playback_manager_rapid_stop_cancels_startup(playback_manager_setup: Pla
     assert manager.state.audio_timer.isActive() is False
 
 
-@pytest.mark.vpy("no-core")
 def test_audio_delay_change_applies_to_every_output_when_one_fails(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
@@ -590,7 +579,6 @@ def test_audio_delay_change_applies_to_every_output_when_one_fails(
     assert prepared == [("Healthy audio", 0.25)]
 
 
-@pytest.mark.vpy("no-core")
 def test_playback_starts_without_audio_past_the_end_of_a_shorter_audio_track(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
@@ -626,7 +614,6 @@ def test_playback_starts_without_audio_past_the_end_of_a_shorter_audio_track(
         aoutput.clear()
 
 
-@pytest.mark.vpy("no-core")
 def test_stopping_playback_resets_the_sink_of_every_audio_track(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
@@ -708,7 +695,6 @@ def failing_clip(env: ManagedEnvironment, failing_frame: int) -> vs.VideoNode:
         return base.std.FrameEval(select)
 
 
-@pytest.mark.vpy("no-core")
 @pytest.mark.parametrize("uncapped", [False, True], ids=["capped", "uncapped"])
 def test_playback_shows_each_frame_in_order_and_stops_on_the_last_one(
     playback_manager_setup: PlaybackManagerSetup,
@@ -730,7 +716,6 @@ def test_playback_shows_each_frame_in_order_and_stops_on_the_last_one(
     assert tbar.playback_container.play_pause_btn.isChecked() is False
 
 
-@pytest.mark.vpy("no-core")
 @pytest.mark.parametrize(
     ("start", "zone_frames", "step", "expected"),
     [
@@ -762,7 +747,6 @@ def test_play_zone_plays_from_the_current_frame_and_stops_at_the_zone_end(
     assert frames == expected
 
 
-@pytest.mark.vpy("no-core")
 def test_play_zone_with_loop_starts_again_from_the_zone_start(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
@@ -780,7 +764,6 @@ def test_play_zone_with_loop_starts_again_from_the_zone_start(
     assert frames[:7] == [1, 2, 0, 1, 2, 0, 1]
 
 
-@pytest.mark.vpy("no-core")
 @pytest.mark.parametrize(
     ("framedurs", "props"),
     [((0.01,) * 6, {}), (None, {"_DurationNum": 1, "_DurationDen": 100})],
@@ -809,7 +792,6 @@ def test_variable_frame_rate_playback_reaches_the_last_frame(
     assert frames == [1, 2, 3, 4, 5]
 
 
-@pytest.mark.vpy("no-core")
 def test_variable_frame_rate_playback_without_durations_does_not_start(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
@@ -831,7 +813,6 @@ def test_variable_frame_rate_playback_without_durations_does_not_start(
     assert tbar.playback_container.play_pause_btn.isChecked() is False
 
 
-@pytest.mark.vpy("no-core")
 def test_a_frame_that_fails_during_playback_reports_a_load_failure(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
@@ -851,7 +832,6 @@ def test_a_frame_that_fails_during_playback_reports_a_load_failure(
     assert frames == [1, 2]
 
 
-@pytest.mark.vpy("no-core")
 def test_seeking_to_a_frame_the_script_cannot_render_reports_a_load_failure(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
@@ -868,7 +848,6 @@ def test_seeking_to_a_frame_the_script_cannot_render_reports_a_load_failure(
         manager.request_frame(3)
 
 
-@pytest.mark.vpy("no-core")
 def test_seeking_to_a_frame_that_fails_after_the_script_shows_a_failure_image(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
@@ -898,7 +877,6 @@ def test_seeking_to_a_frame_that_fails_after_the_script_shows_a_failure_image(
         w.close()
 
 
-@pytest.mark.vpy("no-core")
 def test_rapid_seeks_render_the_first_and_the_last_target_only(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],

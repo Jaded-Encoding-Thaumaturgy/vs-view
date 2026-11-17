@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +16,7 @@ from PySide6.QtGui import QImage, QKeySequence
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
-from vsengine.policy import ManagedEnvironment, Policy
+from vsengine.policy import ManagedEnvironment
 from vsview_graph.analysis import (
     Severity,
     collect_media_transitions,
@@ -40,7 +40,7 @@ from vsview.app.packing import Packer
 from vsview.app.settings.manager import SettingsManager
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
 
 
 # Fixtures & Helpers
@@ -82,9 +82,8 @@ def make_video_output(clip: vs.VideoNode, index: int = 0) -> VideoOutput:
 
 
 @pytest.fixture
-def graph_env(vpy_policy: Policy) -> Generator[ManagedEnvironment]:
-    with vpy_policy.new_environment(vs.CoreCreationFlags.ENABLE_GRAPH_INSPECTION) as env:
-        yield env
+def graph_env(vsview_env_factory: Callable[[], ManagedEnvironment]) -> ManagedEnvironment:
+    return vsview_env_factory()
 
 
 @pytest.fixture
@@ -109,6 +108,7 @@ def populated_harness(
 
 
 # Command Bridge & Serialization
+@pytest.mark.vpy("no-core")
 def test_graph_bridge_dispatch_and_slots(qtbot: QtBot) -> None:
     """Test GraphBridge Command Bus dispatching, lifecycle, and slot handling."""
     bridge = GraphBridge()
@@ -211,6 +211,7 @@ def test_graph_bridge_dispatch_and_slots(qtbot: QtBot) -> None:
         ),
     ],
 )
+@pytest.mark.vpy("no-core")
 def test_graph_shortcut_to_rule_valid(
     shortcut: GraphShortcut,
     seq_str: str,
@@ -222,6 +223,7 @@ def test_graph_shortcut_to_rule_valid(
 
 
 @pytest.mark.skipif(os.getenv("CI", "").lower() in ["1", "true"], reason="CI segfault")
+@pytest.mark.vpy("no-core")
 def test_graph_web_view_theme_sync(qtbot: QtBot) -> None:
     """Verify GraphWebView.sync_theme returns False before readiness and dispatches theme update when ready."""
     widget = QWidget()
@@ -242,6 +244,7 @@ def test_graph_web_view_theme_sync(qtbot: QtBot) -> None:
 
 
 @pytest.mark.skipif(os.getenv("CI", "").lower() in ["1", "true"], reason="CI segfault")
+@pytest.mark.vpy("no-core")
 def test_graph_web_view_palette_change_event(qtbot: QtBot) -> None:
     """Verify PaletteChange event updates background color and triggers theme synchronization."""
     widget = QWidget()
@@ -959,6 +962,7 @@ def _make_graph_node(
         (vsgraph.FuncRef(id="fn_1"), '{"id": "fn_1", "type": "func"}'),
     ],
 )
+@pytest.mark.vpy("no-core")
 def test_format_python_value(raw_value: Any, expected: str) -> None:
     assert format_python_value(raw_value) == expected
 
@@ -1180,6 +1184,7 @@ def test_describe_media_delta_and_transitions(graph_env: ManagedEnvironment) -> 
         assert groups[0]["targetNodeIds"] == ["b", "d"]
 
 
+@pytest.mark.vpy("no-core")
 def test_compute_depth() -> None:
     """Verify Kahn topological longest-path depth across empty, branching, and cyclic graphs."""
     assert compute_depth(vsgraph.Graph(root_id="", nodes=[], edges=[])) == 0
@@ -1211,6 +1216,7 @@ def test_compute_depth() -> None:
     assert compute_depth(cyclic) == 1
 
 
+@pytest.mark.vpy("no-core")
 def test_compute_node_depths() -> None:
     """Verify per-node longest distance to the output across empty, branching, and cyclic graphs."""
     assert compute_node_depths(vsgraph.Graph(root_id="", nodes=[], edges=[])) == {}
@@ -1242,6 +1248,7 @@ def test_compute_node_depths() -> None:
     assert compute_node_depths(cyclic) == {"a": 0, "b": 0}
 
 
+@pytest.mark.vpy("no-core")
 def test_collect_and_group_warnings() -> None:
     """Verify concurrency and request-pattern warning collection and grouping."""
     graph = vsgraph.Graph(
