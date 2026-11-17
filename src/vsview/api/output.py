@@ -195,16 +195,27 @@ def set_output(
     else:
         index = index_or_name
 
+    func = kwargs.pop("func", set_output)
+    frame_depth = kwargs.pop("frame_depth", 1) + 1
+
     outputs = vs.get_outputs()
     nodes = list[vs.VideoNode | vs.AudioNode](flatten([node]))
 
     indices = to_arr(index) if index is not None else [max(outputs, default=-1) + 1]
 
+    if not indices:
+        raise CustomValueError("The index sequence must not be empty", func)
+
     while len(indices) < len(nodes):
         indices.append(indices[-1] + 1)
 
-    frame_depth = kwargs.pop("frame_depth", 1) + 1
     script_module = sys.modules.get("__vsview__")
+    file = getattr(script_module, "__file__", None) if script_module else None
+
+    if file and framedurs:
+        for n in nodes:
+            if isinstance(n, vs.VideoNode) and len(framedurs) != n.num_frames:
+                raise CustomValueError("framedurs length must match number of frames", func)
 
     for i, n in zip(indices[: len(nodes)], nodes):
         if i in outputs:
@@ -233,13 +244,8 @@ def set_output(
             case str():
                 effective_name = name
 
-        if file := getattr(script_module, "__file__", None):
+        if file:
             if isinstance(n, vs.VideoNode):
-                if framedurs and len(framedurs) != n.num_frames:
-                    raise CustomValueError(
-                        "framedurs length must match number of frames", kwargs.pop("func", set_output)
-                    )
-
                 _output_metadata[file][i] = VideoMetadata(
                     effective_name or f"{title} {i}",
                     tuple(float(f) for f in (framedurs or [])),
