@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from PySide6.QtGui import QColor
 
-from vsview.app.tools.scening.api import Parser, Serializer
+from vsview.app.tools.scening.api import Parser, Serializer, borrowed_text_wrapper
 from vsview.app.tools.scening.models import RangeFrame, RangeTime, UnifiedRange
 from vsview.app.tools.scening.parsers import OGMParser, PythonListTimestampsParser, QPFileParser
 from vsview.app.tools.scening.serializer import OGMSerializer, PythonListTimestampsSerializer, QPFileSerializer
@@ -119,3 +119,43 @@ class TestOGMSerializer:
         assert [(r.start, r.label) for r in scene.ranges] == [
             (timedelta(seconds=1), "a CHAPTER09=00:00:09.000 CHAPTER09NAME=evil")
         ]
+
+
+@pytest.mark.parametrize(
+    ("serializer", "expected"),
+    [
+        pytest.param(OGMSerializer(), b"CHAPTER01=00:00:00.000\nCHAPTER01NAME=A\n", id="ogm"),
+        pytest.param(QPFileSerializer(), b"0 K\n", id="qp"),
+    ],
+)
+def test_serializers_write_lf_line_endings(serializer: Serializer, expected: bytes) -> None:
+    ranges: list[RangeFrame | RangeTime] = [RangeFrame(start=0, label="A")]
+
+    out = serialize(serializer, ranges)
+
+    assert out == expected
+
+
+def test_borrowed_text_wrapper_writes_lf_line_endings() -> None:
+    buffer = io.BytesIO()
+
+    with borrowed_text_wrapper(buffer) as wrapper:
+        wrapper.write("a\nb\n")
+        wrapper.writelines(["c\n"])
+
+    assert buffer.getvalue() == b"a\nb\nc\n"
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(b"a\r\nb\r\n", id="crlf"),
+        pytest.param(b"a\rb\r", id="cr"),
+        pytest.param(b"a\nb\n", id="lf"),
+    ],
+)
+def test_borrowed_text_wrapper_still_reads_any_line_ending_as_lf(data: bytes) -> None:
+    with borrowed_text_wrapper(io.BytesIO(data)) as wrapper:
+        text = wrapper.read()
+
+    assert text == "a\nb\n"

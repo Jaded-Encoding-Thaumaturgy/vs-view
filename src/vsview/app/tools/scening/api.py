@@ -5,7 +5,7 @@ from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager
 from fractions import Fraction
 from io import TextIOWrapper
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, NamedTuple
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, NamedTuple, override
 
 import pluggy
 
@@ -44,6 +44,17 @@ class FileFilter(NamedTuple):
 _FileFilter = FileFilter
 
 
+class _LFTextIOWrapper(TextIOWrapper):
+    _writes_lf = False
+
+    @override
+    def write(self, s: str, /) -> int:
+        if not self._writes_lf:
+            self.reconfigure(newline="\n")
+            self._writes_lf = True
+        return super().write(s)
+
+
 @contextmanager
 def borrowed_text_wrapper(
     stream: BinaryIO,
@@ -52,7 +63,7 @@ def borrowed_text_wrapper(
 ) -> Generator[TextIOWrapper]:
     """A context manager that wraps a binary stream into a text stream without closing it."""
 
-    wrapper = TextIOWrapper(stream, encoding=encoding, errors=errors)
+    wrapper = _LFTextIOWrapper(stream, encoding=encoding, errors=errors)
     try:
         yield wrapper
     finally:
