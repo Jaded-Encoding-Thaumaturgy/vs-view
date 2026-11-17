@@ -52,6 +52,18 @@ class PrettyChannelsLayout(Enum):
         ),
         "5.1",
     )
+    # FFmpeg "5.1": back instead of side surrounds, common for AAC.
+    SURROUND_5_1_BACK = (
+        (
+            vs.AudioChannels.FRONT_LEFT,
+            vs.AudioChannels.FRONT_RIGHT,
+            vs.AudioChannels.FRONT_CENTER,
+            vs.AudioChannels.LOW_FREQUENCY,
+            vs.AudioChannels.BACK_LEFT,
+            vs.AudioChannels.BACK_RIGHT,
+        ),
+        "5.1",
+    )
     SURROUND_7_1 = (
         (
             vs.AudioChannels.FRONT_LEFT,
@@ -94,7 +106,7 @@ class AudioOutput:
             else SettingsManager.global_settings.playback.downmix
         )
         self.kwargs = metadata.kwargs if metadata and metadata.kwargs else {}
-        self.chanels_layout = PrettyChannelsLayout(tuple(self.vs_output.channels))
+        self.channels_layout = PrettyChannelsLayout(tuple(self.vs_output.channels))
         self.sink: AudioSink | None = None
 
         self._cache_delay_audio = LRUCache[float, vs.AudioNode]()

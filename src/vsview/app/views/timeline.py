@@ -1746,7 +1746,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         with QSignalBlocker(self.audio_output_combo):
             self.audio_output_combo.clear()
             self.audio_output_combo.addItems(
-                [f"{a.vs_index}: {a.vs_name} ({a.chanels_layout.pretty_name})" for a in aoutputs]
+                [f"{a.vs_index}: {a.vs_name} ({a.channels_layout.pretty_name})" for a in aoutputs]
             )
 
         if len(aoutputs) > 0:

@@ -51,7 +51,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.qt]
 class DummyAudioOutput(NamedTuple):
     vs_index: int
     vs_name: str
-    chanels_layout: PrettyChannelsLayout
+    channels_layout: PrettyChannelsLayout
 
 
 @pytest.fixture
