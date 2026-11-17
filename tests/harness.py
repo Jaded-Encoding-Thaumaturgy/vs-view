@@ -17,6 +17,7 @@ from PySide6.QtGui import QAction, QCursor, QImage, QPixmap, QShortcut
 from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 from vsengine import ManagedEnvironment
+from vsengine.loops import get_loop
 
 from vsview.app.outputs.audio import AudioOutput
 from vsview.app.outputs.video import VideoOutput
@@ -29,6 +30,7 @@ from vsview.app.plugins.exceptions import NoCurrentVideoOutputError
 from vsview.app.settings import SettingsManager
 from vsview.app.settings.shortcuts import ShortcutManager
 from vsview.types import Frame, Time
+from vsview.vsenv.loop import QtEventLoop
 
 
 class MockQObject(QObject):
@@ -364,7 +366,7 @@ class HarnessPluginController(QObject):
     def create_plugin[T: WidgetPluginBase[Any, Any]](self, plugin_cls: type[T]) -> T:
         """Instantiate a plugin widget, wire it to the harness API, and register it with qtbot."""
         plugin = plugin_cls(None, self.api)  # pyright: ignore[reportArgumentType]
-        self._qtbot.addWidget(plugin)
+        self._qtbot.addWidget(plugin, before_close_func=lambda _: self._wait_for_background_tasks())
 
         if hasattr(plugin_cls, "shortcuts"):
             ShortcutManager.register_definitions(plugin_cls.shortcuts)
@@ -482,6 +484,10 @@ class HarnessPluginController(QObject):
                     pf = prepared_clip.get_frame(frame)
                     qimg = self._current_raw_voutput.packer.frame_to_qimage(pf).copy()
                     self.current_view_proxy._set_image(qimg)
+
+    def _wait_for_background_tasks(self) -> None:
+        if isinstance(loop := get_loop(), QtEventLoop):
+            loop.wait_for_threads(5000)
 
     def _on_global_settings_changed(self) -> None:
         self._settings_store.invalidate("global")
