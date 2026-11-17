@@ -5,10 +5,11 @@ import os
 from collections.abc import Callable, Generator
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 import pytest
 import vapoursynth as vs
+from pydantic import BaseModel
 from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import QFileDialog
@@ -16,11 +17,13 @@ from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
+from vsview.api import WidgetPluginBase
 from vsview.api._helpers import OutputMetadata
 from vsview.api.output import VideoMetadata
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings import SettingsManager
+from vsview.app.settings.manager import SettingsManager as SettingsManagerType
 from vsview.app.workspace.file import PythonScriptWorkspace, VideoFileWorkspace, requires_content
 from vsview.app.workspace.quick_script import QuickScriptWorkspace
 from vsview.app.workspace.utils import CodeContent
@@ -244,6 +247,76 @@ def test_local_settings_lifecycle_and_autosave(video_workspace: VideoFileWorkspa
     # deleteLater cleans up content and stops timer
     ws.deleteLater()
     assert not hasattr(ws, "content")
+
+
+class _DestroyNoteLocal(BaseModel):
+    note: str = ""
+
+
+class _DestroyNotePlugin(WidgetPluginBase[None, _DestroyNoteLocal]):
+    identifier = "test_destroy_note_plugin"
+    display_name = "Destroy Note"
+    seen_paths: list[Path | None]
+
+    @override
+    def on_workspace_destroy(self) -> None:
+        self.seen_paths.append(self.api.file_path)
+        self.settings.local_.note = "written at destroy"
+
+
+def test_plugins_see_the_file_and_their_local_writes_are_saved_at_destroy(
+    video_workspace: VideoFileWorkspace,
+    tmp_path: Path,
+    fresh_settings_manager: Callable[[], SettingsManagerType],
+) -> None:
+    ws = video_workspace
+    test_file = tmp_path / "destroy_clip.mp4"
+    test_file.touch()
+    ws.content = test_file
+    plugin = _DestroyNotePlugin(ws, ws.plugin_controller.api)
+    plugin.seen_paths = []
+    ws.plugins.append(plugin)
+
+    ws.deleteLater()
+
+    assert plugin.seen_paths == [test_file]
+    assert fresh_settings_manager().get_local_settings(test_file).plugins[_DestroyNotePlugin.identifier] == {
+        "note": "written at destroy"
+    }
+
+
+class _ReenteringDestroyPlugin(_DestroyNotePlugin):
+    identifier = "test_reentering_destroy_plugin"
+    workspace: VideoFileWorkspace
+
+    @override
+    def on_workspace_destroy(self) -> None:
+        # Stands for a second close request delivered while the first teardown pumps events.
+        self.workspace.deleteLater()
+        super().on_workspace_destroy()
+
+
+def test_a_second_delete_during_teardown_keeps_the_file_until_the_first_one_ends(
+    video_workspace: VideoFileWorkspace,
+    tmp_path: Path,
+    fresh_settings_manager: Callable[[], SettingsManagerType],
+) -> None:
+    ws = video_workspace
+    test_file = tmp_path / "reentry_clip.mp4"
+    test_file.touch()
+    ws.content = test_file
+    plugin = _ReenteringDestroyPlugin(ws, ws.plugin_controller.api)
+    plugin.seen_paths = []
+    plugin.workspace = ws
+    ws.plugins.append(plugin)
+
+    ws.deleteLater()
+
+    assert plugin.seen_paths == [test_file]
+    assert not hasattr(ws, "content")
+    assert fresh_settings_manager().get_local_settings(test_file).plugins[_ReenteringDestroyPlugin.identifier] == {
+        "note": "written at destroy"
+    }
 
 
 def test_snapshot_settings(video_workspace: VideoFileWorkspace, tmp_path: Path) -> None:
