@@ -8,8 +8,9 @@ from datetime import timedelta
 from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Literal, override
+from typing import Any, ClassVar, Literal, override
 from unittest.mock import MagicMock
+from weakref import WeakSet
 
 from jetpytools import to_arr
 from PySide6.QtCore import QObject, QPoint, QPointF, QRect, Qt, Signal
@@ -209,6 +210,8 @@ class HarnessPluginController(QObject):
     and dock widgets without requiring a heavyweight LoaderWorkspace.
     """
 
+    instances: ClassVar[WeakSet[HarnessPluginController]] = WeakSet()
+
     statusMessage = Signal(str)
     globalSettingsChanged = Signal()
     localSettingsChanged = Signal(str)
@@ -252,6 +255,8 @@ class HarnessPluginController(QObject):
         SettingsManager.signals.connect_local_weak(self._on_local_settings_changed)
         SettingsManager.signals.connect_about_global_weak(self._on_about_to_save_global)
         SettingsManager.signals.connect_about_local_weak(self._on_about_to_save_local)
+
+        HarnessPluginController.instances.add(self)
 
     # PluginWorkspaceController properties
 

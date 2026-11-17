@@ -221,6 +221,14 @@ def fresh_settings_manager() -> Generator[Callable[[], SettingsManager], None, N
 
 # Qt Event Loop & Lifecycle
 @pytest.fixture(autouse=True)
+def delete_harnesses_on_main_thread() -> Generator[None]:
+    yield
+    for harness in list(HarnessPluginController.instances):
+        if Shiboken.isValid(harness):
+            Shiboken.delete(harness)
+
+
+@pytest.fixture(autouse=True)
 def warn_qt_thread_affinity() -> Generator[None]:
     """
     Warn whenever a Qt UI method or constructor is called from a background thread.
