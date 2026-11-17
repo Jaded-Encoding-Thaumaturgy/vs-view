@@ -13,7 +13,17 @@ import pluggy
 import vapoursynth as vs
 from jetpytools import fallback
 from pydantic import BaseModel
-from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QPoint, QSignalBlocker, QSize, Qt, Signal, Slot
+from PySide6.QtCore import (
+    QModelIndex,
+    QPersistentModelIndex,
+    QPoint,
+    QSignalBlocker,
+    QSize,
+    Qt,
+    QTimer,
+    Signal,
+    Slot,
+)
 from PySide6.QtGui import QAction, QImage, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QApplication,
@@ -106,6 +116,14 @@ class FramePropsViewMixin:
         if (item := self.current_model.itemFromIndex(index)) and item.data(ROLE_ITEM_TYPE) == ITEM_TYPE_CATEGORY:
             return
 
+        def to_text(value: Any) -> str:
+            if isinstance(value, (bytes, bytearray)):
+                try:
+                    return value.decode("utf-8")
+                except UnicodeDecodeError:
+                    return str(value)
+            return str(value)
+
         data = self.get_row_data(index)
 
         menu = QMenu(self)
@@ -121,11 +139,13 @@ class FramePropsViewMixin:
         menu.addAction(copy_key_action)
 
         copy_row_action = QAction("Copy as Key=Value", self)
-        copy_row_action.triggered.connect(lambda: self._copy_to_clipboard(f"{data.raw_key}={data.raw_value}", "row"))
+        copy_row_action.triggered.connect(
+            lambda: self._copy_to_clipboard(f"{data.raw_key}={to_text(data.raw_value)}", "row")
+        )
         menu.addAction(copy_row_action)
 
         copy_value_action = QAction("Copy Value", self)
-        copy_value_action.triggered.connect(lambda: self._copy_to_clipboard(str(data.raw_value), "value"))
+        copy_value_action.triggered.connect(lambda: self._copy_to_clipboard(to_text(data.raw_value), "value"))
         menu.addAction(copy_value_action)
 
         menu.exec(self.viewport().mapToGlobal(pos))
@@ -540,6 +560,8 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
     current_preview_key: str
 
+    MAX_DISPLAYED_PROPS = 100
+
     def __init__(self, parent: QWidget, api: PluginAPI) -> None:
         super().__init__(parent, api)
         IconReloadMixin.__init__(self)
@@ -745,7 +767,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         widths = self.settings.local_.tree_column_widths
         auto_resize = not (widths and 0 in widths)
 
-        if len(props) > 100:
+        if len(props) > self.MAX_DISPLAYED_PROPS:
             logger.warning("Too many frame properties, skipping loading.")
             self.categorize_tree.current_model.clear_props()
             self.raw_table.current_model.clear_rows()

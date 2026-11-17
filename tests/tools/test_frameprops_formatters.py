@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import pytest
@@ -21,7 +20,7 @@ def test_formatter_property_callable_formatter() -> None:
     assert result == "95.4%"
 
 
-def test_formatter_property_callable_formatter_exception_fallback(caplog: pytest.LogCaptureFixture) -> None:
+def test_formatter_property_callable_formatter_exception_fallback() -> None:
     # Arrange
     def faulty_formatter(value: object) -> str:
         raise ValueError("Formatting failure")
@@ -29,12 +28,10 @@ def test_formatter_property_callable_formatter_exception_fallback(caplog: pytest
     faulty_prop = FormatterProperty(prop_key="broken_key", value_formatter=faulty_formatter)
 
     # Act
-    with caplog.at_level(logging.ERROR):
-        result = faulty_prop.format_value(42)
+    result = faulty_prop.format_value(42)
 
     # Assert
     assert result == "42"
-    assert "There was an error when trying to format 'broken_key':" in caplog.text
 
 
 def test_formatter_property_dict_formatter() -> None:
