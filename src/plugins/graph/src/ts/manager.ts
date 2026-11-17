@@ -124,7 +124,11 @@ export class GraphManager extends Disposable {
         console.debug('Bridge initialized successfully');
       },
       err: (err) => {
-        console.warn('Bridge initialization failed (standalone browser mode?):', err);
+        if (window.ENV?.VSVIEW) {
+          this.showErrorBanner(`Could not connect to vsview: ${err.message}`);
+        } else {
+          console.warn('Bridge initialization failed (standalone browser mode?):', err);
+        }
         this.hideLoadingOverlay();
       },
     });
