@@ -2,13 +2,16 @@ import ast
 import json
 import re
 from bisect import bisect_left
+from collections.abc import Sequence
 from datetime import timedelta
 from fractions import Fraction
 from logging import getLogger
 from math import ceil
 from typing import Any, BinaryIO, override
 
-from jetpytools import fallback
+from jetpytools import fallback, to_arr
+
+from vsview.api import VideoOutputProxy
 
 from .api import Parser, borrowed_text_wrapper
 from .models import RangeFrame, RangeTime, SceneRow
@@ -24,26 +27,58 @@ class AssParser(Parser):
         with borrowed_text_wrapper(io, encoding="utf-8-sig") as wrapper:
             text = wrapper.read()
 
-        ranges = list[RangeFrame]()
+        ranges = list[RangeTime]()
 
         for matched in re.finditer(r"^Dialogue:\s\d+,([^,]+),([^,]+),(?:[^,]*,){6}(.*)$", text, re.MULTILINE):
             start_ts, end_ts, txt = matched.groups()
 
             h, m, s = start_ts.split(":")
-            start_seconds = int(h) * 3600 + int(m) * 60 + float(s)
+            start = timedelta(hours=int(h), minutes=int(m), seconds=float(s))
 
             h, m, s = end_ts.split(":")
-            end_seconds = int(h) * 3600 + int(m) * 60 + float(s)
+            end = timedelta(hours=int(h), minutes=int(m), seconds=float(s))
 
-            # formula is from videotimestamps with a rounding method of "round"
-            # https://github.com/moi15moi/VideoTimestamps/blob/9d8259a94d069d7f85d6ab502b6ded3bfb25145a/video_timestamps/fps_timestamps.py#L65-L85
-            start_frame = ceil(((ceil(start_seconds * 1000) - 0.5) / 1000) * fps + 1) - 1
-            end_frame = ceil(((ceil(end_seconds * 1000) - 0.5) / 1000) * fps) - 1
-            end_frame = max(start_frame, end_frame)
-
-            ranges.append(RangeFrame(start=start_frame, end=end_frame, label=txt))
+            ranges.append(RangeTime(start=start, end=end, label=txt))
 
         return SceneRow(color=self.get_color(), name=name, ranges=ranges)
+
+    @staticmethod
+    def snap_to_frames(parsed: SceneRow | Sequence[SceneRow], v: VideoOutputProxy) -> None:
+        """Move the ranges of parsed ASS scenes onto the frames of a video output."""
+        for scene in to_arr(parsed):
+            for r in scene.ranges:
+                if not isinstance(r, RangeTime):
+                    continue
+
+                start, end = r.to_tuple()
+
+                if (first := AssParser.first_frame_at_or_after(start, v)) is None:
+                    continue
+                if (after_last := AssParser.first_frame_at_or_after(end, v)) is None:
+                    continue
+
+                r.from_frames(first, max(first, after_last - 1), v)
+
+    @staticmethod
+    def first_frame_at_or_after(t: timedelta, v: VideoOutputProxy) -> int | None:
+        # Frame times are compared in whole milliseconds, like the "round" method of VideoTimestamps:
+        # https://github.com/moi15moi/VideoTimestamps/blob/9d8259a94d069d7f85d6ab502b6ded3bfb25145a/video_timestamps/fps_timestamps.py#L65-L85
+        ms = -(-t // timedelta(milliseconds=1))
+        threshold = Fraction(2 * ms - 1, 2000)
+
+        fps = v.vs_output.clip.fps
+
+        if not v.framedurs and fps > 0:
+            return max(0, ceil(threshold * fps))
+
+        if not v.cum_durations:
+            return None
+
+        if threshold <= 0:
+            return 0
+
+        # Frame n starts where frame n - 1 ends.
+        return min(bisect_left(v.cum_durations, threshold) + 1, len(v.cum_durations))
 
 
 class OGMParser(Parser):

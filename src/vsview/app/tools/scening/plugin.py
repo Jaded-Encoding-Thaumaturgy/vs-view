@@ -54,7 +54,7 @@ from . import specs
 from .api import Parser, Serializer
 from .constants import PLUGIN_DISPLAY_NAME, PLUGIN_IDENTIFIER
 from .models import AbstractRange, RangeFrame, RangeTime, SceneRow, UnifiedRange
-from .parsers import PythonListFramesParser, internal_parsers
+from .parsers import AssParser, PythonListFramesParser, internal_parsers
 from .serializer import PythonListFramesSerializer, internal_serializers
 from .ui import (
     Col,
@@ -542,7 +542,8 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
     def parse_imported_files(
         self, files: list[str], parser: Parser, end_offset: int = 0
     ) -> tuple[list[SceneRow], list[str], list[str]]:
-        src_fps = self.api.current_voutput.vs_output.clip.fps
+        v = self.api.current_voutput
+        src_fps = v.vs_output.clip.fps
 
         scenes = list[SceneRow]()
         failed = list[str]()
@@ -554,6 +555,8 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
                 try:
                     with pfile.open("rb") as f:
                         parsed = to_arr(parser.parse(f, pfile.stem, src_fps))
+                        if isinstance(parser, AssParser):
+                            AssParser.snap_to_frames(parsed, v)
                 except Exception:
                     logger.exception("Error parsing file: %s", file)
                     failed.append(file)

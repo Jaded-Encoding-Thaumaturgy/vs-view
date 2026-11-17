@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from PySide6.QtGui import QColor
 
-from vsview.app.tools.scening.models import RangeFrame, RangeTime, SceneRow
+from vsview.app.tools.scening.models import RangeTime, SceneRow
 from vsview.app.tools.scening.parsers import (
     AssParser,
     MatroskaXMLParser,
@@ -91,34 +91,32 @@ class TestAssParser:
         result = parse(ass_p, FIXTURES / "test_ass.ass")
         assert result.name == "test_ass"
         assert len(result.ranges) == 1072
-        assert all(isinstance(r, RangeFrame) for r in result.ranges)
+        assert all(isinstance(r, RangeTime) for r in result.ranges)
 
         # Boundary checks
         first, last = result.ranges[0], result.ranges[-1]
-        assert isinstance(first, RangeFrame)
-        assert isinstance(last, RangeFrame)
-        assert (first.start, first.end) == (2986, 3082)
-        assert (last.start, last.end) == (140081, 140118)
+        assert (first.start, first.end) == (
+            timedelta(minutes=2, seconds=4, milliseconds=540),
+            timedelta(minutes=2, seconds=8, milliseconds=580),
+        )
+        assert (last.start, last.end) == (
+            timedelta(hours=1, minutes=37, seconds=22, milliseconds=540),
+            timedelta(hours=1, minutes=37, seconds=24, milliseconds=120),
+        )
         assert "ll Y A DES MILLIONS" in first.label
         assert result.color == FIXED_COLOR
 
-    @pytest.mark.parametrize(
-        ("start", "end", "expected"),
-        [
-            pytest.param("0:00:03.00", "0:00:03.00", (72, 72), id="zero-length"),
-            pytest.param("0:00:03.00", "0:00:03.01", (72, 72), id="inside-one-frame"),
-            pytest.param("0:00:03.00", "0:00:04.00", (72, 95), id="normal"),
-        ],
-    )
-    def test_end_is_never_before_start(
-        self, ass_p: AssParser, tmp_path: Path, start: str, end: str, expected: tuple[int, int]
-    ) -> None:
+    @pytest.mark.parametrize("fps", [pytest.param(FPS_24, id="cfr"), pytest.param(Fraction(0), id="vfr")])
+    def test_keeps_the_times_of_the_file(self, ass_p: AssParser, tmp_path: Path, fps: Fraction) -> None:
         f = tmp_path / "lines.ass"
-        f.write_text(f"[Events]\nDialogue: 0,{start},{end},Default,,0,0,0,,Sign\n", encoding="utf-8")
+        f.write_text("[Events]\nDialogue: 0,0:00:03.00,0:00:04.50,Default,,0,0,0,,Sign\n", encoding="utf-8")
 
-        result = parse(ass_p, f)
+        with f.open("rb") as io:
+            result = ass_p.parse(io, "lines", fps)
 
-        assert [r.to_tuple() for r in result.ranges] == [expected]
+        assert [(r.start, r.end, r.label) for r in result.ranges] == [
+            (timedelta(seconds=3), timedelta(seconds=4.5), "Sign")
+        ]
 
 
 class TestOGMParser:
