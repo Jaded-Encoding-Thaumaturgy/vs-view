@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 from vsengine import UnifiedFuture
 from vsremote import RemoteAuthenticationError, RemoteClient, RemoteTimeoutError, TransportError, VSRemoteError
+from vsremote.protocol import validate_curve_key
 
 from vsview.api import CustomSpinBox, PluginSettings, run_in_background
 
@@ -190,7 +191,13 @@ class RemoteConnectionDialog(QDialog):
 
     @override
     def accept(self) -> None:
-        if self._confirm_insecure_connection(self.config):
+        cfg = self.config
+
+        if (problem := cfg.validate()) is not None:
+            self.set_status(problem, "#e74c3c")
+            return
+
+        if self._confirm_insecure_connection(cfg):
             super().accept()
 
     @override
@@ -246,6 +253,11 @@ class RemoteConnectionDialog(QDialog):
     @Slot()
     def _on_test_connection_clicked(self) -> None:
         cfg = self.config
+
+        if (problem := cfg.validate()) is not None:
+            self.set_status(problem, "#e74c3c")
+            return
+
         if not self._confirm_insecure_connection(cfg):
             return
 
@@ -253,11 +265,8 @@ class RemoteConnectionDialog(QDialog):
         self.test_btn.setDisabled(True)
         self.button_box.button(QDialogButtonBox.StandardButton.Ok).setDisabled(True)
 
-        def on_success(result: bool) -> None:
-            if result:
-                self.set_status("Connected successfully!", "#2ecc71", bold=True)
-            else:
-                self.set_status("Server did not respond to ping.", "#e74c3c")
+        def on_success(_: None) -> None:
+            self.set_status("Connected successfully!", "#2ecc71", bold=True)
 
         def on_error(e: BaseException) -> None:
             match e:
@@ -278,13 +287,13 @@ class RemoteConnectionDialog(QDialog):
             self._ping_worker = None
 
         self._ping_worker = (
-            self.ping(cfg)
+            self.check_connection(cfg)
             .then(on_success, on_error, cancel_cb=restore_state, on_loop=True)
             .add_loop_callback(restore_state)
         )
 
     @run_in_background(name="PingServer")
-    def ping(self, cfg: ConnectionConfig) -> bool:
+    def check_connection(self, cfg: ConnectionConfig) -> None:
         curve_server_key, curve_public_key, curve_secret_key = cfg.active_curve_keys
         with RemoteClient(
             cfg.address,
@@ -298,7 +307,7 @@ class RemoteConnectionDialog(QDialog):
             hwm=cfg.effective_hwm,
             tcp_keepalive=cfg.tcp_keepalive,
         ) as client:
-            return client.ping().result(timeout=5.0)
+            client.get_stats().result(timeout=5.0)
 
 
 class ConnectionConfig(NamedTuple):
@@ -331,6 +340,42 @@ class ConnectionConfig(NamedTuple):
         if not self.use_curve:
             return None, None, None
         return self.curve_server_key, self.curve_public_key, self.curve_secret_key
+
+    def validate(self) -> str | None:
+        """
+        Check the address and the CurveZMQ keys before they are saved.
+        Returns the problem, or None.
+        """
+        scheme, sep, rest = self.address.partition("://")
+        if not sep or not scheme:
+            return "Enter a ZeroMQ address with a scheme, for example tcp://127.0.0.1:5555."
+
+        if scheme == "tcp":
+            # The part before ";" is an optional local source address; only the destination is checked.
+            destination = rest.rpartition(";")[2]
+            host, colon, port = destination.rpartition(":")
+            if not destination or (colon and not host):
+                return "The tcp address needs a host, for example tcp://127.0.0.1:5555."
+            if not colon or not port.isdigit() or not 1 <= int(port) <= 65535:
+                return "The tcp address needs a port from 1 to 65535, for example tcp://127.0.0.1:5555."
+
+        server_key, public_key, secret_key = self.active_curve_keys
+        for label, name, key in (
+            ("Server key", "curve_server_key", server_key),
+            ("Client public key", "curve_public_key", public_key),
+            ("Client secret key", "curve_secret_key", secret_key),
+        ):
+            try:
+                validate_curve_key(key, name)
+            except ValueError as e:
+                return f"{label}: {e}"
+
+        if (public_key is None) != (secret_key is None):
+            return "Set both the client public key and the client secret key, or neither."
+        if public_key is not None and server_key is None:
+            return "The client keys need the server key."
+
+        return None
 
 
 def is_local_address(address: str) -> bool:

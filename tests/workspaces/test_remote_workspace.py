@@ -269,7 +269,7 @@ def test_client_uses_the_curve_keys_only_when_use_curve_is_set(
     ("use_curve", "expected_keys"),
     [(True, (SERVER_KEY, PUBLIC_KEY, SECRET_KEY)), (False, (None, None, None))],
 )
-def test_ping_uses_the_curve_keys_only_when_use_curve_is_set(
+def test_connection_check_uses_the_curve_keys_only_when_use_curve_is_set(
     workspace: RemoteWorkspace,
     mocker: MockerFixture,
     use_curve: bool,
@@ -277,11 +277,10 @@ def test_ping_uses_the_curve_keys_only_when_use_curve_is_set(
 ) -> None:
     store_curve_keys(workspace, use_curve=use_curve)
     remote_client = mocker.patch("vsview_remote.dialog.RemoteClient")
-    remote_client.return_value.__enter__.return_value.ping.return_value.result.return_value = True
     res = accept_dialog(workspace)
     assert res is not None
 
-    assert workspace.dialog.ping(res).result(timeout=5) is True
+    assert workspace.dialog.check_connection(res).result(timeout=5) is None
 
     kwargs = remote_client.call_args.kwargs
     assert (kwargs["curve_server_key"], kwargs["curve_public_key"], kwargs["curve_secret_key"]) == expected_keys
@@ -869,7 +868,6 @@ def test_client_hwm_follows_the_backlog_when_auto(
 ) -> None:
     remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
     ping_client = mocker.patch("vsview_remote.dialog.RemoteClient")
-    ping_client.return_value.__enter__.return_value.ping.return_value.result.return_value = True
     workspace.settings.global_.hwm = hwm
 
     def edit() -> None:
@@ -880,10 +878,9 @@ def test_client_hwm_follows_the_backlog_when_auto(
     res = accept_dialog(workspace)
     assert res is not None
     client = workspace.client
-    pinged = workspace.dialog.ping(res).result(timeout=5)
+    workspace.dialog.check_connection(res).result(timeout=5)
 
     assert client is remote_client.return_value.start.return_value
-    assert pinged is True
     assert remote_client.call_args.kwargs["hwm"] == expected_hwm
     assert ping_client.call_args.kwargs["hwm"] == expected_hwm
     assert workspace.settings.global_.hwm == hwm
@@ -1044,7 +1041,6 @@ def test_accepted_warning_is_asked_once_per_dialog(
     warnings: Callable[[QMessageBox.StandardButton], list[tuple[str, Qt.TextFormat]]],
 ) -> None:
     remote_client = mocker.patch("vsview_remote.dialog.RemoteClient")
-    remote_client.return_value.__enter__.return_value.ping.return_value.result.return_value = True
     shown = warnings(QMessageBox.StandardButton.Yes)
 
     def test_then_connect() -> None:
@@ -1061,3 +1057,117 @@ def test_accepted_warning_is_asked_once_per_dialog(
     assert second is not None
     assert remote_client.call_args.args == (REMOTE_ADDRESS,)
     assert len(shown) == 2
+
+
+def test_test_connection_reports_a_wrong_token(
+    qtbot: QtBot,
+    workspace: RemoteWorkspace,
+    servers: Callable[[Handler | None], FakeServer],
+) -> None:
+    unauthorized = RemoteErrorPayload("Unauthorized", "UNAUTHORIZED", "Unauthorized")
+
+    # Like the real server, every command is refused before dispatch when the token is wrong.
+    def refuse(cmd: Command, _: bytes, __: str | None) -> Reply:
+        return StatusCode.UNAUTHORIZED, msgspec.msgpack.encode(unauthorized)
+
+    server = servers(refuse)
+    status = list[str]()
+
+    def test_then_cancel() -> None:
+        enter_server(workspace, server, "wrong-token")()
+        workspace.dialog.test_btn.click()
+        qtbot.waitUntil(lambda: workspace.dialog.test_btn.isEnabled(), timeout=5000)
+        status.append(workspace.dialog.status_label.text())
+        workspace.dialog.reject()
+
+    QTimer.singleShot(0, test_then_cancel)
+    workspace.prompt_connection_dialog()
+
+    assert status == ["Authentication failed: invalid or missing auth token."]
+
+
+def test_test_connection_succeeds_when_the_server_answers(
+    qtbot: QtBot, workspace: RemoteWorkspace, mocker: MockerFixture
+) -> None:
+    remote_client = mocker.patch("vsview_remote.dialog.RemoteClient")
+    status = list[str]()
+
+    def test_then_cancel() -> None:
+        workspace.dialog.test_btn.click()
+        qtbot.waitUntil(lambda: workspace.dialog.test_btn.isEnabled(), timeout=5000)
+        status.append(workspace.dialog.status_label.text())
+        workspace.dialog.reject()
+
+    QTimer.singleShot(0, test_then_cancel)
+    workspace.prompt_connection_dialog()
+
+    assert status == ["Connected successfully!"]
+    remote_client.return_value.__enter__.return_value.get_stats.assert_called_once_with()
+
+
+@pytest.mark.parametrize(
+    ("address", "use_curve", "server_key", "public_key", "secret_key"),
+    [
+        ("", False, "", "", ""),
+        ("127.0.0.1:5555", False, "", "", ""),
+        ("tcp://", False, "", "", ""),
+        ("tcp://:5555", False, "", "", ""),
+        ("tcp://127.0.0.1", False, "", "", ""),
+        ("tcp://127.0.0.1:0", False, "", "", ""),
+        ("tcp://127.0.0.1:65536", False, "", "", ""),
+        ("tcp://127.0.0.1:abc", False, "", "", ""),
+        ("tcp://127.0.0.1:5555", True, "short", "", ""),
+        ("tcp://127.0.0.1:5555", True, SERVER_KEY, "short", SECRET_KEY),
+        ("tcp://127.0.0.1:5555", True, SERVER_KEY, PUBLIC_KEY, ""),
+        ("tcp://127.0.0.1:5555", True, "", PUBLIC_KEY, SECRET_KEY),
+    ],
+)
+def test_connect_with_invalid_input_keeps_the_dialog_open(
+    workspace: RemoteWorkspace,
+    address: str,
+    use_curve: bool,
+    server_key: str,
+    public_key: str,
+    secret_key: str,
+) -> None:
+    after_connect = list[bool]()
+
+    def connect_then_cancel() -> None:
+        workspace.dialog.address_edit.setText(address)
+        workspace.dialog.use_curve_cb.setChecked(use_curve)
+        workspace.dialog.curve_server_key_edit.setText(server_key)
+        workspace.dialog.curve_public_key_edit.setText(public_key)
+        workspace.dialog.curve_secret_key_edit.setText(secret_key)
+        workspace.dialog.accept()
+        after_connect.append(workspace.dialog.isVisible())
+        workspace.dialog.reject()
+
+    QTimer.singleShot(0, connect_then_cancel)
+    res = workspace.prompt_connection_dialog()
+
+    assert res is None
+    assert after_connect == [True]
+    assert workspace.settings.global_.address == "tcp://127.0.0.1:5555"
+
+
+@pytest.mark.parametrize(
+    "address",
+    ["tcp://127.0.0.1:5555", "tcp://[::1]:5555", "tcp://10.0.0.1;127.0.0.1:5555", "ipc:///tmp/vsremote.sock"],
+)
+def test_connect_accepts_valid_local_addresses(workspace: RemoteWorkspace, address: str) -> None:
+    res = accept_dialog(workspace, set_address(workspace, address))
+
+    assert res is not None
+    assert res.address == address
+
+
+def test_invalid_curve_keys_are_ignored_when_curve_is_off(workspace: RemoteWorkspace) -> None:
+    def edit() -> None:
+        workspace.dialog.use_curve_cb.setChecked(False)
+        workspace.dialog.curve_server_key_edit.setText("short")
+        workspace.dialog.curve_public_key_edit.setText(PUBLIC_KEY)
+
+    res = accept_dialog(workspace, edit)
+
+    assert res is not None
+    assert res.active_curve_keys == (None, None, None)
