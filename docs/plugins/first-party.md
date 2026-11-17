@@ -152,6 +152,10 @@ Use the single-frame workflow when the range should start and end on the same fr
 
 Each range displays its **Start Frame**, **End Frame**, **Start Time**, **End Time**, and an optional **Label**.
 
+The **End Frame** is the final frame in a range, and its **End Time** is when that frame starts.
+
+If you prefer Python-style ranges, go to **Settings** -> **Plugin - Scening** and turn on **Enable exclusive (Python-style) ranges**. This displays and handles end frames as `last frame + 1` (like a Python slice) without changing your stored data.
+
 ### Keyboard Shortcuts
 
 | Shortcut             | Action                           |

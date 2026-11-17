@@ -37,7 +37,7 @@ class AbstractRange[T](ABC, UUIDModel):
     start: T
     """The start point of the range."""
     end: T | None = None
-    """The end point of the range. If None, the range represents a single point (start)."""
+    """The inclusive end: the last frame, or its start time for time ranges. If None, the range is a single point."""
     label: str = ""
     """An optional description for this range."""
 
@@ -199,7 +199,7 @@ class UnifiedRange:
         self.label = self._r.label
 
     def as_frames(self) -> tuple[int, int]:
-        """Convert the range to a tuple of (start_frame, end_frame)."""
+        """Convert the range to a tuple of (start_frame, end_frame). The end frame is inclusive."""
         if isinstance(self._r, RangeFrame):
             return self._r.to_tuple()
 
@@ -208,7 +208,7 @@ class UnifiedRange:
         return self._time_to_frame(s), self._time_to_frame(e)
 
     def as_times(self) -> tuple[Time, Time]:
-        """Convert the range to a tuple of (Time, Time)."""
+        """Convert the range to a tuple of (Time, Time). The end time is the start time of the last frame."""
         if isinstance(self._r, RangeTime):
             s, e = self._r.to_tuple()
             return Time(seconds=s.total_seconds()), Time(seconds=e.total_seconds())

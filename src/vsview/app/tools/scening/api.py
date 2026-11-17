@@ -98,7 +98,7 @@ class Parser(ABC):
         Args:
             io: The input binary stream.
             name: The suggested name for the scene (usually the base filename).
-            fps: The frame rate of the current video project, used for frame conversions.
+            fps: The frame rate of the current video output, used for frame conversions.
 
         Returns:
             A single scene or a sequence of scenes.
