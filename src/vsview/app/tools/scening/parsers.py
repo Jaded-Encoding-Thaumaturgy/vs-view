@@ -39,6 +39,7 @@ class AssParser(Parser):
             # https://github.com/moi15moi/VideoTimestamps/blob/9d8259a94d069d7f85d6ab502b6ded3bfb25145a/video_timestamps/fps_timestamps.py#L65-L85
             start_frame = ceil(((ceil(start_seconds * 1000) - 0.5) / 1000) * fps + 1) - 1
             end_frame = ceil(((ceil(end_seconds * 1000) - 0.5) / 1000) * fps) - 1
+            end_frame = max(start_frame, end_frame)
 
             ranges.append(RangeFrame(start=start_frame, end=end_frame, label=txt))
 
@@ -215,6 +216,17 @@ class WobblyParser(Parser):
         except Exception as e:
             raise ValueError(f"Could not parse Wobbly file: {name}") from e
 
+        try:
+            scenes = self._parse_data(data, name)
+        except (AttributeError, TypeError, KeyError, IndexError, ValueError) as e:
+            raise ValueError(f"Invalid Wobbly file: {name}") from e
+
+        if not scenes:
+            raise ValueError(f"Could not find any sections nor bookmarks in Wobble file {name}")
+
+        return scenes
+
+    def _parse_data(self, data: Any, name: str) -> list[SceneRow]:
         decimations = sorted(data.get("decimated frames", []))
         scenes = list[SceneRow]()
 
@@ -237,17 +249,17 @@ class WobblyParser(Parser):
                         label = str(fallback(preset, ""))
                     labels.append(label)
 
-            trim = data.get("trim", [[0, 0]])
+            trim = data.get("trim")
             last_end = trim[0][1] if trim and isinstance(trim, list) and isinstance(trim[0], list) else starts[-1]
-            ends = [*starts[1:], last_end]
+            exclusive_ends = [*starts[1:], last_end + 1]
 
             ranges = list[RangeFrame]()
-            for start, end, label in zip(starts, ends, labels):
+            for start, exclusive_end, label in zip(starts, exclusive_ends, labels):
                 if decimations:
                     start -= bisect_left(decimations, start)
-                    end -= bisect_left(decimations, end)
+                    exclusive_end -= bisect_left(decimations, exclusive_end)
 
-                ranges.append(RangeFrame(start=start, end=end, label=label))
+                ranges.append(RangeFrame(start=start, end=max(start, exclusive_end - 1), label=label))
 
             scenes.append(SceneRow(color=self.get_color(), name=f"{name} (Sections)", ranges=ranges))
 
@@ -269,9 +281,6 @@ class WobblyParser(Parser):
 
             if bookmark_ranges:
                 scenes.append(SceneRow(color=self.get_color(), name=f"{name} (Bookmarks)", ranges=bookmark_ranges))
-
-        if not scenes:
-            raise ValueError(f"Could not find any sections nor bookmarks in Wobble file {name}")
 
         return scenes
 

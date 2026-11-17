@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from copy import copy
 from datetime import timedelta
 from enum import IntEnum
@@ -17,6 +17,7 @@ from PySide6.QtCore import (
     Qt,
     QTime,
     Signal,
+    Slot,
 )
 from PySide6.QtGui import QAction, QColor, QCursor, QPainter, QPixmap
 from PySide6.QtWidgets import (
@@ -456,10 +457,11 @@ class RangeTableModel(AbstractTableModel):
     rangesModified = Signal()
     rangeDataModified = Signal(AbstractRange, SceneRow)
 
-    def __init__(self, parent: QWidget, api: PluginAPI) -> None:
+    def __init__(self, parent: QWidget, api: PluginAPI, is_exclusive: Callable[[], bool]) -> None:
         super().__init__(parent)
         self._data = list[tuple[RangeFrame | RangeTime, SceneRow]]()
         self.api = api
+        self._is_exclusive = is_exclusive
         self._sort_column = -1
         self._sort_order = Qt.SortOrder.AscendingOrder
 
@@ -493,7 +495,7 @@ class RangeTableModel(AbstractTableModel):
                     case RangeCol.START_FRAME:
                         return str(range_item.as_frames(v)[0])
                     case RangeCol.END_FRAME:
-                        return str(range_item.as_frames(v)[1])
+                        return str(range_item.as_frames(v)[1] + self.end_offset)
                     case RangeCol.START_TIME:
                         return range_item.as_times(v)[0].to_ts("{H:02d}:{M:02d}:{S:02d}.{ms:03d}")
                     case RangeCol.END_TIME:
@@ -510,7 +512,7 @@ class RangeTableModel(AbstractTableModel):
                     case RangeCol.START_FRAME:
                         return range_item.as_frames(v)[0]
                     case RangeCol.END_FRAME:
-                        return range_item.as_frames(v)[1]
+                        return range_item.as_frames(v)[1] + self.end_offset
                     case RangeCol.START_TIME:
                         return range_item.as_times(v)[0]
                     case RangeCol.END_TIME:
@@ -559,7 +561,7 @@ class RangeTableModel(AbstractTableModel):
                 case RangeCol.START_FRAME:
                     range_item.from_frames(int(value), None, v)
                 case RangeCol.END_FRAME:
-                    range_item.from_frames(None, int(value), v)
+                    range_item.from_frames(None, int(value) - self.end_offset, v)
                 case RangeCol.START_TIME:
                     range_item.from_times(Time.from_qtime(value), None, v)
                 case RangeCol.END_TIME:
@@ -604,6 +606,10 @@ class RangeTableModel(AbstractTableModel):
         return self._data
 
     @property
+    def end_offset(self) -> int:
+        return self._is_exclusive()
+
+    @property
     def current_voutput(self) -> VideoOutputProxy | None:
         try:
             return self.api.current_voutput
@@ -615,6 +621,11 @@ class RangeTableModel(AbstractTableModel):
         self._sort_column = column
         self._sort_order = order
         self._apply_sort()
+
+    @Slot()
+    def refresh(self) -> None:
+        if self._data:
+            self.dataChanged.emit(self.index(0, 0), self.index(len(self._data) - 1, len(RangeCol) - 1))
 
     def set_scenes(self, scenes: list[SceneRow]) -> None:
         with self.reset_model():
@@ -683,6 +694,8 @@ class RangeTableModel(AbstractTableModel):
 
 
 class RangeTableDelegate(QStyledItemDelegate):
+    SHOWN_FRAME = "shownFrame"
+
     @override
     def createEditor(
         self,
@@ -698,7 +711,9 @@ class RangeTableDelegate(QStyledItemDelegate):
                 editor.setButtonSymbols(FrameEdit.ButtonSymbols.NoButtons)
 
                 if isinstance(model := index.model(), RangeTableModel) and (v := model.current_voutput):
-                    editor.setMaximum(v.vs_output.clip.num_frames - 1)
+                    offset = model.end_offset if col == RangeCol.END_FRAME else 0
+                    editor.setMinimum(offset)
+                    editor.setMaximum(v.vs_output.clip.num_frames - 1 + offset)
 
             case RangeCol.START_TIME | RangeCol.END_TIME:
                 editor = TimeEdit(parent)
@@ -718,6 +733,7 @@ class RangeTableDelegate(QStyledItemDelegate):
             case RangeCol.START_FRAME | RangeCol.END_FRAME:
                 if isinstance(editor, FrameEdit):
                     editor.setValue(int(value))
+                    editor.setProperty(RangeTableDelegate.SHOWN_FRAME, editor.value())
                     return
 
             case RangeCol.START_TIME | RangeCol.END_TIME:
@@ -745,7 +761,8 @@ class RangeTableDelegate(QStyledItemDelegate):
         match RangeCol(index.column()):
             case RangeCol.START_FRAME | RangeCol.END_FRAME:
                 if isinstance(editor, FrameEdit):
-                    model.setData(index, editor.value(), Qt.ItemDataRole.EditRole)
+                    if editor.value() != editor.property(RangeTableDelegate.SHOWN_FRAME):
+                        model.setData(index, editor.value(), Qt.ItemDataRole.EditRole)
                     return
 
             case RangeCol.START_TIME | RangeCol.END_TIME:

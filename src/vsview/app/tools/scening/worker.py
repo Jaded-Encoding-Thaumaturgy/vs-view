@@ -149,7 +149,7 @@ class ExportQueueManager:
 
             s, e = r.as_frames(job.voutput)
             try:
-                trimmed = job.voutput.vs_output.clip[s : e + (not self.settings.global_.exclusive)]
+                trimmed = job.voutput.vs_output.clip[s : e + 1]
             except vs.Error as exc:
                 logger.error("Failed to slice clip: %s", exc)
                 failed.append(dest_file.name[:100])

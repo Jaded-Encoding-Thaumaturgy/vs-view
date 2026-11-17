@@ -102,6 +102,24 @@ class TestAssParser:
         assert "ll Y A DES MILLIONS" in first.label
         assert result.color == FIXED_COLOR
 
+    @pytest.mark.parametrize(
+        ("start", "end", "expected"),
+        [
+            pytest.param("0:00:03.00", "0:00:03.00", (72, 72), id="zero-length"),
+            pytest.param("0:00:03.00", "0:00:03.01", (72, 72), id="inside-one-frame"),
+            pytest.param("0:00:03.00", "0:00:04.00", (72, 95), id="normal"),
+        ],
+    )
+    def test_end_is_never_before_start(
+        self, ass_p: AssParser, tmp_path: Path, start: str, end: str, expected: tuple[int, int]
+    ) -> None:
+        f = tmp_path / "lines.ass"
+        f.write_text(f"[Events]\nDialogue: 0,{start},{end},Default,,0,0,0,,Sign\n", encoding="utf-8")
+
+        result = parse(ass_p, f)
+
+        assert [r.to_tuple() for r in result.ranges] == [expected]
+
 
 class TestOGMParser:
     def test_parse_logic(self, ogm_p: OGMParser, tmp_path: Path) -> None:
@@ -293,8 +311,59 @@ class TestWobblyParser:
 
         [sections] = [s for s in results if "(Sections)" in s.name]
         assert len(sections.ranges) == 367
-        assert (sections.ranges[0].start, sections.ranges[0].end) == (0, 29)
+        assert (sections.ranges[0].start, sections.ranges[0].end) == (0, 28)
+        assert (sections.ranges[1].start, sections.ranges[1].end) == (29, 58)
         assert (sections.ranges[-1].start, sections.ranges[-1].end) == (36813, 36920)
+
+    @pytest.mark.parametrize(
+        ("data", "expected"),
+        [
+            pytest.param(
+                {"sections": [0, 100, 250], "trim": [[0, 399]]},
+                [(0, 99), (100, 249), (250, 399)],
+                id="inclusive-ends",
+            ),
+            pytest.param(
+                {"sections": [0, 10], "trim": [[0, 19]], "decimated frames": [9, 19]},
+                [(0, 8), (9, 17)],
+                id="decimated-last-frames",
+            ),
+            pytest.param(
+                {"sections": [0, 10], "trim": [[0, 19]], "decimated frames": [3]},
+                [(0, 8), (9, 18)],
+                id="decimated-inner-frame",
+            ),
+            pytest.param({"sections": [0, 100, 250]}, [(0, 99), (100, 249), (250, 250)], id="no-trim"),
+        ],
+    )
+    def test_section_ends_are_the_last_frame_of_the_section(
+        self, wob_p: WobblyParser, tmp_path: Path, data: dict[str, Any], expected: list[tuple[int, int]]
+    ) -> None:
+        f = tmp_path / "sections.wob"
+        f.write_text(json.dumps(data))
+
+        res = parse(wob_p, f)
+
+        [sections] = [s for s in res if "(Sections)" in s.name]
+        assert [r.to_tuple() for r in sections.ranges] == expected
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            pytest.param([1, 2], id="root-is-a-list"),
+            pytest.param({"sections": [0], "decimated frames": "abc"}, id="decimations-not-a-list"),
+            pytest.param({"user interface": [1]}, id="user-interface-not-a-dict"),
+            pytest.param({"user interface": {"bookmarks": [{"frame": None}]}}, id="bookmark-frame-null"),
+            pytest.param({"sections": [{"start": "x"}], "trim": [[0, 10]]}, id="section-start-not-an-int"),
+            pytest.param({"sections": [0], "trim": [["a", "b"]]}, id="trim-not-ints"),
+        ],
+    )
+    def test_invalid_shapes_raise_value_error(self, wob_p: WobblyParser, tmp_path: Path, data: Any) -> None:
+        f = tmp_path / "bad.wob"
+        f.write_text(json.dumps(data))
+
+        with pytest.raises(ValueError, match=r"^Invalid Wobbly file: bad$"):
+            parse(wob_p, f)
 
     def test_label_formatting(self, wob_p: WobblyParser, tmp_path: Path) -> None:
         data = {
@@ -396,7 +465,7 @@ def _ranges(result: Any) -> list[Any]:
         pytest.param(
             WobblyParser,
             b'{"sections": [0, 50], "trim": [[0, 99]]}',
-            [(0, 50, ""), (50, 99, "")],
+            [(0, 49, ""), (50, 99, "")],
             id="wobbly",
         ),
         pytest.param(PythonListFramesParser, b"[10, (20, 30)]", [(10, None, ""), (20, 30, "")], id="python-frames"),

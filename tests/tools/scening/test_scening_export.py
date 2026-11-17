@@ -375,6 +375,55 @@ def test_export_clip_pipes_frame_chunks_to_stdin(
     manager.shutdown(timeout=1.0)
 
 
+@pytest.mark.parametrize("exclusive", [False, True], ids=["inclusive", "exclusive"])
+@pytest.mark.parametrize(
+    ("r", "frames"),
+    [
+        pytest.param(RangeFrame(start=2, end=4), 3, id="range"),
+        pytest.param(RangeFrame(start=2), 1, id="point"),
+        pytest.param(RangeFrame(start=2, end=2), 1, id="one-frame"),
+    ],
+)
+def test_export_job_includes_the_last_frame_of_a_range(
+    tmp_path: Path,
+    qtbot: QtBot,
+    mocker: MockerFixture,
+    manager: ExportQueueManager,
+    export_harness: HarnessPluginController,
+    mock_settings: SimpleNamespace,
+    exclusive: bool,
+    r: RangeFrame,
+    frames: int,
+) -> None:
+    mock_settings.global_.exclusive = exclusive
+    written = bytearray()
+    mock_stdin = mocker.MagicMock()
+    mock_stdin.write.side_effect = lambda b: written.extend(b)
+    mock_stdin.closed = False
+    mock_proc = mocker.MagicMock()
+    mock_proc.__enter__.return_value = mock_proc
+    mock_proc.stdin = mock_stdin
+    mock_proc.returncode = 0
+    mock_proc.wait.return_value = 0
+
+    def fake_popen(cmd: Any, **kwargs: Any) -> Any:
+        Path(cmd[-1]).write_bytes(b"new clip")
+        return mock_proc
+
+    mocker.patch("subprocess.Popen", side_effect=fake_popen)
+    status_messages = list[str]()
+    export_harness.statusMessage.connect(status_messages.append)
+    clip = core.std.BlankClip(width=4, height=2, length=10, format=vs.GRAY8, fpsnum=24, fpsden=1)
+    voutput = make_voutput_proxy(make_video_output(clip=clip, num_frames=10))
+
+    manager.enqueue([r], voutput, [tmp_path / "clip.mp4"], [], "h264")
+
+    qtbot.waitUntil(lambda: "Successfully exported 1 clip(s)." in status_messages, timeout=3000)
+    manager.shutdown(timeout=1.0)
+
+    assert bytes(written).count(b"FRAME" + bytes([10])) == frames
+
+
 def test_export_clip_ffmpeg_error(
     tmp_path: Path,
     qtbot: QtBot,

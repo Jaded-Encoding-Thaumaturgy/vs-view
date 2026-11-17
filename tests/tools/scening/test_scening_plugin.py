@@ -5,14 +5,16 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from PySide6.QtCore import QItemSelectionModel, Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QStyleOptionViewItem
+from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
 from vsview.api import Frame
 from vsview.app.outputs.video import VideoOutput
-from vsview.app.tools.scening.models import RangeFrame
+from vsview.app.tools.scening.models import RangeFrame, RangeTime
 from vsview.app.tools.scening.plugin import SceningPlugin
 from vsview.app.tools.scening.ui import ROLE_CHECK_STATE, Col, RangeCol
+from vsview.app.views.timeline import FrameEdit
 
 if TYPE_CHECKING:
     from tests.harness import HarnessPluginController
@@ -179,16 +181,155 @@ def test_scening_exclusive_bounds_and_shortcut_toggles(plugin_controller: Harnes
     plugin.on_add_range_triggered()
     assert plugin.ranges_model.ranges[0][0].as_frames(plugin_controller.current_voutput) == (0, 99)
 
-    # Exclusive mode: last frame is num_frames (100)
+    # Exclusive mode stores the same inclusive range; only the shown end frame is num_frames (100)
     plugin.settings.global_.exclusive = True
     plugin.on_first_frame_toggle()
     assert plugin._pending_start == Frame(0)
 
     plugin.on_last_frame_toggle()
-    assert plugin._pending_end == Frame(100)
+    assert plugin._pending_end == Frame(99)
 
     plugin.on_add_range_triggered()
-    assert plugin.ranges_model.ranges[1][0].as_frames(plugin_controller.current_voutput) == (0, 100)
+    assert plugin.ranges_model.ranges[1][0].as_frames(plugin_controller.current_voutput) == (0, 99)
+    assert plugin.ranges_model.index(1, RangeCol.END_FRAME).data() == "100"
+
+
+@pytest.mark.parametrize(
+    ("exclusive", "expected"),
+    [pytest.param(False, (10, 20), id="inclusive"), pytest.param(True, (10, 20), id="exclusive")],
+)
+def test_scening_mark_out_stores_the_marked_frame_as_the_last_frame(
+    plugin_controller: HarnessPluginController, exclusive: bool, expected: tuple[int, int]
+) -> None:
+    plugin = plugin_controller.create_plugin(SceningPlugin)
+    plugin_controller.on_workspace_loaded()
+    plugin.settings.global_.exclusive = exclusive
+    plugin.on_new_scene()
+
+    plugin_controller.set_current_frame(10)
+    plugin.range_start_action.setChecked(True)
+    plugin_controller.set_current_frame(20)
+    plugin.range_end_action.setChecked(True)
+    plugin.on_add_range_triggered()
+
+    assert plugin.scenes_model.scenes[0].ranges[0].to_tuple() == expected
+
+
+def _single_range_plugin(
+    plugin_controller: HarnessPluginController, exclusive: bool, r: RangeFrame | RangeTime
+) -> SceningPlugin:
+    plugin = plugin_controller.create_plugin(SceningPlugin)
+    plugin_controller.on_workspace_loaded()
+    plugin.settings.global_.exclusive = exclusive
+    plugin.on_new_scene()
+    plugin.ranges_model.add_range(r, plugin.scenes_model.scenes[0])
+    return plugin
+
+
+@pytest.mark.parametrize(
+    ("exclusive", "end_frame"),
+    [pytest.param(False, 20, id="inclusive"), pytest.param(True, 21, id="exclusive")],
+)
+def test_scening_range_table_shows_the_end_frame_in_the_chosen_convention(
+    plugin_controller: HarnessPluginController, exclusive: bool, end_frame: int
+) -> None:
+    plugin = _single_range_plugin(plugin_controller, exclusive, RangeFrame(start=10, end=20))
+    model = plugin.ranges_model
+
+    cells = [model.index(0, col).data() for col in RangeCol]
+    edit_end = model.index(0, RangeCol.END_FRAME).data(Qt.ItemDataRole.EditRole)
+
+    assert cells == ["10", str(end_frame), "00:00:00.417", "00:00:00.833", ""]
+    assert edit_end == end_frame
+
+
+@pytest.mark.parametrize(
+    ("exclusive", "typed", "stored"),
+    [pytest.param(False, 30, 30, id="inclusive"), pytest.param(True, 30, 29, id="exclusive")],
+)
+def test_scening_range_table_stores_a_typed_end_frame_as_the_last_frame(
+    plugin_controller: HarnessPluginController, exclusive: bool, typed: int, stored: int
+) -> None:
+    plugin = _single_range_plugin(plugin_controller, exclusive, RangeFrame(start=10, end=20))
+
+    plugin.ranges_model.setData(plugin.ranges_model.index(0, RangeCol.END_FRAME), typed, Qt.ItemDataRole.EditRole)
+
+    assert plugin.scenes_model.scenes[0].ranges[0].to_tuple() == (10, stored)
+
+
+@pytest.mark.parametrize(
+    ("exclusive", "end", "maximum"),
+    [
+        pytest.param(False, 99, 99, id="inclusive-last-frame"),
+        pytest.param(True, 99, 100, id="exclusive-last-frame"),
+        pytest.param(False, 150, 99, id="inclusive-past-the-clip"),
+        pytest.param(True, 150, 100, id="exclusive-past-the-clip"),
+    ],
+)
+def test_scening_end_frame_editor_does_not_change_an_untouched_end(
+    plugin_controller: HarnessPluginController, exclusive: bool, end: int, maximum: int
+) -> None:
+    plugin = _single_range_plugin(plugin_controller, exclusive, RangeFrame(start=50, end=end))
+    index = plugin.ranges_model.index(0, RangeCol.END_FRAME)
+    modified = list[None]()
+    plugin.ranges_model.rangesModified.connect(lambda: modified.append(None))
+    editor = plugin.ranges_delegate.createEditor(plugin.ranges_view.viewport(), QStyleOptionViewItem(), index)
+    assert isinstance(editor, FrameEdit)
+
+    plugin.ranges_delegate.setEditorData(editor, index)
+    plugin.ranges_delegate.setModelData(editor, plugin.ranges_model, index)
+
+    assert editor.maximum() == maximum
+    assert plugin.scenes_model.scenes[0].ranges[0].to_tuple() == (50, end)
+    assert modified == []
+
+
+def test_scening_end_frame_editor_writes_a_changed_end(plugin_controller: HarnessPluginController) -> None:
+    plugin = _single_range_plugin(plugin_controller, True, RangeFrame(start=50, end=60))
+    index = plugin.ranges_model.index(0, RangeCol.END_FRAME)
+    editor = plugin.ranges_delegate.createEditor(plugin.ranges_view.viewport(), QStyleOptionViewItem(), index)
+    assert isinstance(editor, FrameEdit)
+    plugin.ranges_delegate.setEditorData(editor, index)
+
+    editor.setValue(100)
+    plugin.ranges_delegate.setModelData(editor, plugin.ranges_model, index)
+
+    assert plugin.scenes_model.scenes[0].ranges[0].to_tuple() == (50, 99)
+
+
+def test_scening_range_table_refreshes_when_the_settings_change(
+    qtbot: QtBot, plugin_controller: HarnessPluginController
+) -> None:
+    plugin = _single_range_plugin(plugin_controller, False, RangeFrame(start=10, end=20))
+
+    with qtbot.waitSignal(plugin.ranges_model.dataChanged, timeout=1000):
+        plugin_controller.globalSettingsChanged.emit()
+
+
+@pytest.mark.parametrize(
+    ("exclusive", "frames", "end_frames"),
+    [
+        pytest.param(False, "[(0, 24), (48, 48)]", "[24, 48]", id="inclusive"),
+        pytest.param(True, "[(0, 25), (48, 49)]", "[25, 49]", id="exclusive"),
+    ],
+)
+def test_scening_copy_uses_the_chosen_end_convention(
+    plugin_controller: HarnessPluginController, exclusive: bool, frames: str, end_frames: str
+) -> None:
+    plugin = _single_range_plugin(plugin_controller, exclusive, RangeFrame(start=0, end=24))
+    plugin.ranges_model.add_range(RangeFrame(start=48), plugin.scenes_model.scenes[0])
+    plugin.ranges_view.selectAll()
+
+    plugin._copy_ranges_frames()
+    copied_frames = QApplication.clipboard().text()
+    plugin._copy_ranges_end_frames()
+    copied_end_frames = QApplication.clipboard().text()
+    plugin._copy_ranges_timestamps()
+    copied_timestamps = QApplication.clipboard().text()
+
+    assert copied_frames == frames
+    assert copied_end_frames == end_frames
+    assert copied_timestamps == '[("00:00:00.000", "00:00:01.000"), ("00:00:02.000", "00:00:02.000")]'
 
 
 def test_scening_timeline_synchronization_and_filtering(plugin_controller: HarnessPluginController) -> None:

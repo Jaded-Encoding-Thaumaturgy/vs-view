@@ -5,7 +5,7 @@ import sys
 from bisect import bisect_left, bisect_right
 from enum import StrEnum
 from functools import cache
-from itertools import count, cycle, islice
+from itertools import chain, count, cycle, islice
 from logging import getLogger
 from pathlib import Path
 from typing import Annotated, Any, Literal, Self, override
@@ -53,8 +53,8 @@ from . import specs
 from .api import Parser, Serializer
 from .constants import PLUGIN_DISPLAY_NAME, PLUGIN_IDENTIFIER
 from .models import AbstractRange, RangeFrame, RangeTime, SceneRow, UnifiedRange
-from .parsers import internal_parsers
-from .serializer import internal_serializers
+from .parsers import PythonListFramesParser, internal_parsers
+from .serializer import PythonListFramesSerializer, internal_serializers
 from .ui import Col, RangeCol, RangeTableDelegate, RangeTableModel, SceneTableDelegate, SceneTableModel
 from .utils import ColorGenerator, monkey_patch_parser
 from .worker import FFV1_ARGS, H264_ARGS, ExportQueueManager
@@ -121,7 +121,11 @@ class GlobalSettings(BaseModel):
         Checkbox(
             label="Enable exclusive (Python-style) ranges",
             text="",
-            tooltip='If toggled, the "Toggle range end as last frame" will insert the last frame number + 1.',
+            tooltip=(
+                "If toggled, range end frames are shown, typed and copied as the last frame + 1,\n"
+                "like a Python slice. Clip export names and Python List (Frames) files use the same rule.\n"
+                "The stored ranges do not change."
+            ),
         ),
     ] = False
 
@@ -170,6 +174,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         self.register_icon_callback(self.on_reload_icon)
 
         self.api.globalSettingsChanged.connect(self._update_toolbar_style)
+        self.api.globalSettingsChanged.connect(self.ranges_model.refresh)
         self.api.register_on_destroy(self.export_manager.shutdown)
 
         self._update_toolbar_style()
@@ -305,7 +310,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             ]
         )
 
-        self.ranges_model = RangeTableModel(self.range_container, self.api)
+        self.ranges_model = RangeTableModel(self.range_container, self.api, lambda: self.settings.global_.exclusive)
         self.ranges_model.rangesModified.connect(self._persist_scenes)
         self.ranges_model.rangeDataModified.connect(self._refresh_range_on_timeline)
         self.ranges_model.modelReset.connect(self._update_ranges_header_width)
@@ -516,10 +521,16 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         def on_error(exc: BaseException) -> None:
             self.api.statusMessage.emit(f"Importing {', '.join(files)} failed: {exc}")
 
-        self.parse_imported_files(files, filters[selected_filter]).then(on_success, on_error, on_loop=True)
+        self.parse_imported_files(
+            files,
+            filters[selected_filter],
+            self.ranges_model.end_offset,
+        ).then(on_success, on_error, on_loop=True)
 
     @run_in_background(name="ParseImportedFiles")
-    def parse_imported_files(self, files: list[str], parser: Parser) -> tuple[list[SceneRow], list[str], list[str]]:
+    def parse_imported_files(
+        self, files: list[str], parser: Parser, end_offset: int = 0
+    ) -> tuple[list[SceneRow], list[str], list[str]]:
         src_fps = self.api.current_voutput.vs_output.clip.fps
 
         scenes = list[SceneRow]()
@@ -531,14 +542,18 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
                 pfile = Path(file)
                 try:
                     with pfile.open("rb") as f:
-                        parsed = parser.parse(f, pfile.stem, src_fps)
-                        file_scenes = [s for s in ([parsed] if isinstance(parsed, SceneRow) else parsed) if s.ranges]
+                        parsed = to_arr(parser.parse(f, pfile.stem, src_fps))
                 except Exception:
                     logger.exception("Error parsing file: %s", file)
                     failed.append(file)
                     continue
 
-                if file_scenes:
+                if end_offset and isinstance(parser, PythonListFramesParser):
+                    for r in chain.from_iterable(scene.ranges for scene in parsed):
+                        if isinstance(r, RangeFrame) and r.end is not None:
+                            r.end = max(r.start, r.end - 1)
+
+                if file_scenes := [s for s in parsed if s.ranges]:
                     scenes.extend(file_scenes)
                 else:
                     without_ranges.append(file)
@@ -564,21 +579,33 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             logger.info("Export aborted")
             return
 
-        self.serialize_exported_scene(file, filters[selected_filter]).then(
+        self.serialize_exported_scene(file, filters[selected_filter], self.ranges_model.end_offset).then(
             lambda _: self.api.statusMessage.emit(f"Exporting {file} completed"),
             lambda exc: self.api.statusMessage.emit(f"Exporting {file} failed: {exc}"),
         )
 
     @run_in_background(name="SerializeExportedScene")
-    def serialize_exported_scene(self, file: str, serializer: Serializer) -> None:
+    def serialize_exported_scene(self, file: str, serializer: Serializer, end_offset: int = 0) -> None:
         scene: SceneRow = vsengine.from_thread(
             lambda: self.scenes_view.selectionModel().selectedRows()[0].data(self.scenes_model.SceneRowRole)
         ).result()
 
         v = self.api.current_voutput
 
+        ranges = (UnifiedRange(r, v.frame_to_time, v.time_to_frame) for r in scene.ranges)
+
+        if end_offset and isinstance(serializer, PythonListFramesSerializer):
+            ranges = (
+                UnifiedRange(
+                    RangeFrame(start=ur.as_frames()[0], end=ur.as_frames()[1] + end_offset, label=ur.label),
+                    v.frame_to_time,
+                    v.time_to_frame,
+                )
+                for ur in ranges
+            )
+
         with atomic_open(file) as f:
-            serializer.serialize(f, (UnifiedRange(r, v.frame_to_time, v.time_to_frame) for r in scene.ranges))
+            serializer.serialize(f, ranges)
 
     @Slot()
     def on_remove_scene_triggered(self) -> None:
@@ -687,15 +714,9 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         v = self.api.current_voutput
         num_frames = v.vs_output.clip.num_frames
 
-        match self.settings.global_.exclusive, self.api.timeline.mode:
-            case False, "frame":
-                self._pending_end = Frame(num_frames - 1)
-            case True, "frame":
-                self._pending_end = Frame(num_frames)
-            case False, "time":
-                self._pending_end = v.frame_to_time(num_frames - 1)
-            case True, "time":
-                self._pending_end = v.frame_to_time(num_frames)
+        self._pending_end = (
+            Frame(num_frames - 1) if self.api.timeline.mode == "frame" else v.frame_to_time(num_frames - 1)
+        )
 
         if self.range_start_action.isChecked():
             self.add_range_action.setEnabled(True)
@@ -811,13 +832,17 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         if update:
             self.api.timeline.update()
 
+    def _shown_frames(self, r: AbstractRange[Any], v: VideoOutputProxy) -> tuple[int, int]:
+        s, e = r.as_frames(v)
+        return s, e + self.ranges_model.end_offset
+
     def _selected_ranges(self) -> list[RangeFrame | RangeTime]:
         return [idx.data(self.ranges_model.RangeRole) for idx in self.ranges_view.selectionModel().selectedRows()]
 
     @Slot()
     def _copy_ranges_frames(self) -> None:
         v = self.api.current_voutput
-        text = ", ".join(str(r.as_frames(v)) for r in self._selected_ranges())
+        text = ", ".join(str(self._shown_frames(r, v)) for r in self._selected_ranges())
 
         QApplication.clipboard().setText(f"[{text}]")
 
@@ -829,7 +854,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
     def _copy_ranges_end_frames(self) -> None:
         v = self.api.current_voutput
-        text = ", ".join(str(r.as_frames(v)[1]) for r in self._selected_ranges())
+        text = ", ".join(str(self._shown_frames(r, v)[1]) for r in self._selected_ranges())
 
         QApplication.clipboard().setText(f"[{text}]")
 
@@ -929,7 +954,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
         if len(selected_ranges) == 1:
             r = selected_ranges[0]
-            s, e = r.as_frames(voutput)
+            s, e = self._shown_frames(r, voutput)
             default_file = default_file.with_name(file_name(f"{default_file.stem}_{s}-{e}_{r.label}", ext))
             chosen, _ = QFileDialog.getSaveFileName(self, "Export Clip", str(default_file), filter=filter_str)
             if not chosen:
@@ -948,7 +973,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
             dest_files = list[Path]()
             for i, r in enumerate(selected_ranges, 1):
-                s, e = r.as_frames(voutput)
+                s, e = self._shown_frames(r, voutput)
                 dest_files.append(base.with_name(file_name(f"{base.stem}_{s}-{e}_{r.label or i}", base.suffix)))
 
             if (existing := [f for f in dest_files if f.exists()]) and not self._confirm_overwrite(existing):
