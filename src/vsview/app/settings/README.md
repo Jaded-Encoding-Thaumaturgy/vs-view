@@ -80,7 +80,9 @@ A `Dropdown` can list items that depend on another setting:
 ```python
 icon_weight: Annotated[
     str,
-    Dropdown(label="Icon Weight", depends_on="appearance.icon_provider", items=_get_icon_weights, default_value="regular"),
+    Dropdown(
+        label="Icon Weight", depends_on="appearance.icon_provider", items=_get_icon_weights, default_value="regular"
+    ),
 ] = "regular"
 ```
 

@@ -99,7 +99,6 @@ def test_win32_ctypes_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_user32.MapVirtualKeyExW.assert_called_once_with(QWERTY_SCAN_CODES["A"], MAPVK_VSC_TO_VK, AZERTY_HKL)
 
 
-
 def test_win32_translation_keeps_the_keyboard_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "platform", "win32")
     # Windows 10 1607+: do not change the keyboard state, so a dead key leaves no pending accent.
@@ -117,6 +116,7 @@ def test_win32_translation_keeps_the_keyboard_state(monkeypatch: pytest.MonkeyPa
 
     mock_user32.ToUnicodeEx.assert_called_once()
     assert mock_user32.ToUnicodeEx.call_args.args[5] == DONT_CHANGE_KEYBOARD_STATE
+
 
 def test_win32_ctypes_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "platform", "win32")
