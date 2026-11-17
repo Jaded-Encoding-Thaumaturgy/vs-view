@@ -994,7 +994,7 @@ class EditorWorkspace(
     @Slot(object)
     def _on_main_file_changed(self, new_path: Path | None) -> None:
         linecache.cache.pop(self.content.filename, None)
-        output_metadata.pop(self.content.filename, None)
+        output_names = output_metadata.pop(self.content.filename, None)
         if new_path:
             code = self.code_dock.editor.bridge.main_content
             if is_file := new_path.is_file():
@@ -1015,6 +1015,10 @@ class EditorWorkspace(
                 self.code_dock.editor.bridge.main_content,
                 f"<vsview editor {uuid4().hex[:4]}>",
             )
+
+        if self.loaded_once and output_names is not None:
+            output_metadata[self.content.filename] = output_names
+
         self._restore_dock_sizes()
 
     @Slot()
