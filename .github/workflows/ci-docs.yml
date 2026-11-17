@@ -9,6 +9,7 @@ on:
       - '**/*.py'
       - 'docs/**'
       - 'zensical.toml'
+      - '.github/workflows/ci-docs.yml'
 
 concurrency:
   group: ci-docs-${{ github.ref }}
