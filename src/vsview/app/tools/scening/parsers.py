@@ -301,9 +301,14 @@ class PythonListFramesParser(Parser):
         except Exception as e:
             raise ValueError(f"Could not parse Python List (Frames) file: {name}") from e
 
+        try:
+            items = iter(data)
+        except TypeError as e:
+            raise ValueError(f"Python List (Frames) file is not a list: {name}") from e
+
         ranges = list[RangeFrame]()
 
-        for item in data:
+        for item in items:
             try:
                 ranges.append(RangeFrame.model_validate(item))
             except Exception:
@@ -332,9 +337,14 @@ class PythonListTimestampsParser(Parser):
         except Exception as e:
             raise ValueError(f"Could not parse Python List (Timestamps) file: {name}") from e
 
+        try:
+            items = iter(data)
+        except TypeError as e:
+            raise ValueError(f"Python List (Timestamps) file is not a list: {name}") from e
+
         ranges = list[RangeTime]()
 
-        for item in data:
+        for item in items:
             try:
                 ranges.append(RangeTime.model_validate(item))
             except Exception:

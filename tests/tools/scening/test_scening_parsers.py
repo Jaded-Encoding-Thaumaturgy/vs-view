@@ -487,3 +487,21 @@ def test_text_parsers_ignore_a_utf8_bom(
     result = parse(_patch_parser(parser_cls()), f)
 
     assert _ranges(result) == expected
+
+
+@pytest.mark.parametrize(
+    ("parser_cls", "kind"),
+    [
+        pytest.param(PythonListFramesParser, "Frames", id="frames"),
+        pytest.param(PythonListTimestampsParser, "Timestamps", id="timestamps"),
+    ],
+)
+@pytest.mark.parametrize("literal", ["5", "None", "1.5"])
+def test_python_list_parsers_reject_a_non_iterable_literal(
+    tmp_path: Path, parser_cls: type[Any], kind: str, literal: str
+) -> None:
+    f = tmp_path / "input.txt"
+    f.write_text(literal)
+
+    with pytest.raises(ValueError, match=rf"^Python List \({kind}\) file is not a list: input$"):
+        parse(_patch_parser(parser_cls()), f)
