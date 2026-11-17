@@ -232,6 +232,7 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             self.groups_layout.setDirection(QBoxLayout.Direction.TopToBottom)
 
     # Plugin hooks
+    @run_in_loop(return_future=False)
     @override
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
         # TODO: Add support for HDR
@@ -241,7 +242,8 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
         else:
             self.setEnabled(True)
         if voutput not in self.outputs:
-            self.outputs[voutput] = cache_clip(voutput.vs_output.clip, 10)
+            with self.api.vs_context():
+                self.outputs[voutput] = cache_clip(voutput.vs_output.clip, 10)
 
         super().on_current_voutput_changed(voutput, tab_index)
 
