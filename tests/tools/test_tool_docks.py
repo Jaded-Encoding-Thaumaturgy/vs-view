@@ -8,6 +8,7 @@ import vapoursynth as vs
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
 from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QLineEdit, QToolButton
+from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
@@ -441,7 +442,6 @@ def test_frameprops_load_properties_on_frame_change(plugin_controller: HarnessPl
     assert "Frame 1 (Current)" in plugin.history_combo.currentText()
 
 
-
 def test_frameprops_destroy_clears_both_models(plugin_controller: HarnessPluginController) -> None:
     plugin = plugin_controller.create_plugin(FramePropsPlugin)
     plugin_controller.set_current_frame(0)
@@ -452,6 +452,23 @@ def test_frameprops_destroy_clears_both_models(plugin_controller: HarnessPluginC
 
     assert plugin.raw_table.current_model.rowCount() == 0
     assert plugin.categorize_tree.current_model.rowCount() == 0
+
+
+def test_frameprops_column_width_is_saved_once_after_a_resize(
+    qtbot: QtBot, plugin_controller: HarnessPluginController, mocker: MockerFixture
+) -> None:
+    plugin = plugin_controller.create_plugin(FramePropsPlugin)
+    plugin.categorize_toggle.setChecked(True)
+    spy = mocker.spy(plugin, "update_local_settings")
+    header = plugin.categorize_tree.header()
+
+    for width in (120, 130, 140):
+        header.resizeSection(0, width)
+
+    assert spy.call_count == 0
+    qtbot.waitUntil(lambda: spy.call_count == 1, timeout=2000)
+    assert plugin.settings.local_.tree_column_widths == {0: 140}
+
 
 def test_frameprops_search_filter_box(plugin_controller: HarnessPluginController) -> None:
     plugin = plugin_controller.create_plugin(FramePropsPlugin)

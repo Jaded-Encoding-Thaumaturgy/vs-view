@@ -474,6 +474,7 @@ def plugin_controller(qtbot: QtBot, tmp_path: Path) -> Generator[HarnessPluginCo
     try:
         yield controller
     finally:
+        controller.on_workspace_destroy()
         Shiboken.delete(controller)
 
 

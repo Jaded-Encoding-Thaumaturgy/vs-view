@@ -545,6 +545,9 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
         IconReloadMixin.__init__(self)
 
         self._current_props: Mapping[str, Any] | None = None
+        self._pending_tree_widths = dict[int, int]()
+        self._save_widths_timer = QTimer(self, singleShot=True, interval=300)
+        self._save_widths_timer.timeout.connect(self._save_tree_column_widths)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -681,6 +684,12 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
             self.categorize_tree.set_column_widths(widths)
 
         self.categorize_tree.treeColumnWidthChanged.connect(self._on_tree_column_resized)
+
+    @override
+    def on_workspace_destroy(self) -> None:
+        if self._save_widths_timer.isActive():
+            self._save_widths_timer.stop()
+            self._save_tree_column_widths()
 
     @override
     def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
@@ -852,6 +861,11 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
     @Slot(int, int)
     def _on_tree_column_resized(self, index: int, size: int) -> None:
-        widths = (self.settings.local_.tree_column_widths or {}).copy()
-        widths[index] = size
+        self._pending_tree_widths[index] = size
+        self._save_widths_timer.start()
+
+    @Slot()
+    def _save_tree_column_widths(self) -> None:
+        widths = (self.settings.local_.tree_column_widths or {}) | self._pending_tree_widths
+        self._pending_tree_widths.clear()
         self.update_local_settings(tree_column_widths=widths)
