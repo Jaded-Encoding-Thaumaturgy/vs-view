@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Generator, Sequence
+from concurrent.futures import wait
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from logging import getLogger
 from pathlib import Path
-from threading import Lock, Semaphore
+from threading import Condition, Event
 from typing import Any, NamedTuple, Self, overload, override
 from uuid import uuid4
 
@@ -92,8 +94,8 @@ from vsview.api import (
     Time,
     VideoOutputProxy,
     WidgetMetadata,
-    run_in_background,
     run_in_loop,
+    to_thread_scoped,
 )
 
 from .models import FrameSourceProvider, TMDBTitle
@@ -325,9 +327,11 @@ class FrameThumbnailList(QListWidget):
         super().__init__(parent)
         self.api = api
         self.included_outputs = list[VideoOutputProxy]()
-        self._sema = Semaphore(QThreadPool.globalInstance().maxThreadCount() // 2)
-        self._futures_lock = Lock()
-        self._active_thumbnail_futures = set[UnifiedFuture[None]]()
+        self._max_thumbnail_tasks = max(1, QThreadPool.globalInstance().maxThreadCount() // 2)
+        self._stop_thumbnails = Event()
+        self._thumbnails_cond = Condition()
+        self._queued_thumbnails = deque[ThumbnailItem]()
+        self._running_thumbnails = 0
         self._total_thumbnail_batch = 0
 
         self.setViewMode(QListWidget.ViewMode.IconMode)
@@ -355,10 +359,10 @@ class FrameThumbnailList(QListWidget):
 
     @override
     def clear(self) -> None:
-        with self._futures_lock:
-            self._active_thumbnail_futures.clear()
-            self._total_thumbnail_batch = 0
-        self.thumbnailProgress.emit(0, 0)
+        with self._thumbnails_cond:
+            self._queued_thumbnails.clear()
+            self._total_thumbnail_batch = self._running_thumbnails
+            self._schedule_thumbnails()
         super().clear()
 
     @override
@@ -429,8 +433,10 @@ class FrameThumbnailList(QListWidget):
         self.scrollToItem(item)
         self.listSizeChanged.emit(1)
 
-        fut = self.fetch_thumbnail(item)
-        self._register_thumbnail_future(fut)
+        with self._thumbnails_cond:
+            self._queued_thumbnails.append(item)
+            self._total_thumbnail_batch += 1
+            self._schedule_thumbnails()
 
     @Slot()
     def remove_selected(self) -> None:
@@ -482,35 +488,6 @@ class FrameThumbnailList(QListWidget):
             if isinstance(it := self.item(i), ThumbnailItem)
         ]
 
-    @run_in_background(name="FetchThumbnail")
-    def fetch_thumbnail(self, item: ThumbnailItem) -> None:
-        voutputs = {v.vs_index: v for v in self.included_outputs}
-
-        def on_success(frame: VideoFrame, idx: int) -> None:
-            if not (voutput := voutputs.get(idx)):
-                return
-            with frame:
-                image = voutput.packer_sdr.frame_to_qimage(frame).copy()
-                pict_type = get_prop(frame, "_PictType", str, default="?", func=self.fetch_thumbnail)
-            item.metadata[idx] = ThumbnailItem.Metadata(image, pict_type)
-
-            if idx == self.api.current_voutput.vs_index:
-                vsengine.from_thread(item.update_metadata, idx)
-
-        @run_in_loop
-        def on_error(e: BaseException, idx: int) -> None:
-            logger.warning("Failed to fetch thumbnail for output %d at frame %d: %s", idx, item.frame, e)
-            if Shiboken.isValid(self) and (row := self.row(item)) != -1:
-                self.takeItem(row)
-
-        with self.api.blocker(), self.api.vs_context(), self._sema:
-            for i, tclip in self.thumbnail_clips.items():
-                s = partial(on_success, idx=i)
-                e = partial(on_error, idx=i)
-                f = vsengine.video.frame(tclip, item.frame).map(s).catch(e)
-                f.add_done_callback(lambda _: get_loop().next_cycle())
-                f.result()
-
     @run_in_loop(return_future=False)
     def update_thumbnails(self, idx: int) -> None:
         for i in range(self.count()):
@@ -540,58 +517,75 @@ class FrameThumbnailList(QListWidget):
         menu.deleteLater()
 
     def has_pending_thumbnails(self) -> bool:
-        with self._futures_lock:
-            return bool(self._active_thumbnail_futures)
+        with self._thumbnails_cond:
+            return bool(self._queued_thumbnails or self._running_thumbnails)
 
     def wait_for_pending_thumbnails(self) -> UnifiedFuture[None]:
-        done_fut = UnifiedFuture[None]()
-        with self._futures_lock:
-            if not self._active_thumbnail_futures:
-                done_fut.set_result(None)
-                return done_fut
+        return to_thread_scoped(self, "WaitThumbnails", self._wait_thumbnails)
 
-            pending = list(self._active_thumbnail_futures)
-            remaining = len(pending)
+    def cancel_pending_thumbnails(self, timeout: float) -> None:
+        self._stop_thumbnails.set()
+        try:
+            with self._thumbnails_cond:
+                self._queued_thumbnails.clear()
+            self._wait_thumbnails(timeout)
+        finally:
+            self._stop_thumbnails.clear()
 
-        def check(_: Any) -> None:
-            nonlocal remaining
-            with self._futures_lock:
-                remaining -= 1
-                is_last = remaining <= 0
-            if is_last and not done_fut.done():
-                done_fut.set_result(None)
+    def _wait_thumbnails(self, timeout: float | None = None) -> None:
+        with self._thumbnails_cond:
+            self._thumbnails_cond.wait_for(lambda: not self.has_pending_thumbnails(), timeout)
 
-        for f in pending:
-            f.add_done_callback(check)
+    def _schedule_thumbnails(self) -> None:
+        with self._thumbnails_cond:
+            while self._queued_thumbnails and self._running_thumbnails < self._max_thumbnail_tasks:
+                self._running_thumbnails += 1
+                item = self._queued_thumbnails.popleft()
+                fut = to_thread_scoped(self, "FetchThumbnail", self._fetch_thumbnail, item)
+                fut.add_done_callback(self._on_thumbnail_done)
 
-        return done_fut
-
-    def _register_thumbnail_future(self, fut: UnifiedFuture[Any]) -> None:
-        if fut.done():
-            return
-
-        with self._futures_lock:
-            if not self._active_thumbnail_futures:
+            if not (pending := len(self._queued_thumbnails) + self._running_thumbnails):
                 self._total_thumbnail_batch = 0
+                self._thumbnails_cond.notify_all()
 
-            self._total_thumbnail_batch += 1
-            self._active_thumbnail_futures.add(fut)
-            pending_count = len(self._active_thumbnail_futures)
-            total_batch = self._total_thumbnail_batch
+            self.thumbnailProgress.emit(pending, self._total_thumbnail_batch)
 
-        def on_done(_: Any) -> None:
-            with self._futures_lock:
-                self._active_thumbnail_futures.discard(fut)
-                if not self._active_thumbnail_futures:
-                    self._total_thumbnail_batch = 0
-                    pending_now, total_now = 0, 0
-                else:
-                    pending_now = len(self._active_thumbnail_futures)
-                    total_now = self._total_thumbnail_batch
-            self.thumbnailProgress.emit(pending_now, total_now)
+    def _fetch_thumbnail(self, item: ThumbnailItem) -> None:
+        voutputs = {v.vs_index: v for v in self.included_outputs}
 
-        fut.add_done_callback(on_done)
-        self.thumbnailProgress.emit(pending_count, total_batch)
+        def on_success(frame: VideoFrame, idx: int) -> None:
+            if not (voutput := voutputs.get(idx)):
+                return
+            with frame:
+                image = voutput.packer_sdr.frame_to_qimage(frame).copy()
+                pict_type = get_prop(frame, "_PictType", str, default="?", func=self._fetch_thumbnail)
+            item.metadata[idx] = ThumbnailItem.Metadata(image, pict_type)
+
+            if idx == self.api.current_voutput.vs_index:
+                vsengine.from_thread(item.update_metadata, idx)
+
+        @run_in_loop
+        def on_error(e: BaseException, idx: int) -> None:
+            logger.warning("Failed to fetch thumbnail for output %d at frame %d: %s", idx, item.frame, e)
+            if Shiboken.isValid(self) and (row := self.row(item)) != -1:
+                self.takeItem(row)
+
+        futs = list[UnifiedFuture[Any]]()
+        with self.api.vs_context():
+            for i, tclip in self.thumbnail_clips.items():
+                if self._stop_thumbnails.is_set():
+                    return
+                s = partial(on_success, idx=i)
+                e = partial(on_error, idx=i)
+                f = vsengine.video.frame(tclip, item.frame).map(s).catch(e)
+                f.add_done_callback(lambda _: get_loop().next_cycle())
+                futs.append(f)
+        wait(futs)
+
+    def _on_thumbnail_done(self, _: UnifiedFuture[None]) -> None:
+        with self._thumbnails_cond:
+            self._running_thumbnails -= 1
+            self._schedule_thumbnails()
 
 
 class ProgressBar(QProgressBar):
