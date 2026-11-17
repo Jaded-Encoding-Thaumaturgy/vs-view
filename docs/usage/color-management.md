@@ -76,7 +76,9 @@ You can control how VSView reacts to missing properties via the **Settings Dialo
 
 -  **Warn**
 
-    If `_Transfer` or `_Primaries` are missing, no transfer or primaries conversion is performed and a warning is logged instead.
+    If `_Transfer` or `_Primaries` are missing, VSView assumes `BT709` for the missing values and a warning is logged.
+    The clip is still converted to the **Output Transfer** and **Output Primaries** (or the `set_output()` override).
+    So a conversion happens when these targets are not `BT709`, and always in HDR mode.
 
 -  **Ignore**
 
