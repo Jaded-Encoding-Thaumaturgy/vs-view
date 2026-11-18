@@ -567,6 +567,53 @@ def test_a_stopped_client_is_closed_off_the_gui_thread_and_replaced(
     assert second is first
 
 
+OLD_ADDRESS = "tcp://127.0.0.1:5001"
+NEW_ADDRESS = "tcp://127.0.0.1:5002"
+
+
+def _connect_then_configure_a_new_server(workspace: RemoteWorkspace, script: Path, mocker: MockerFixture) -> None:
+    connect_through_load_button(workspace, script, mocker, lambda: workspace.dialog.address_edit.setText(OLD_ADDRESS))
+    _ = workspace.client
+    workspace.content = script
+    workspace.set_loaded_page()
+    mocker.patch.object(workspace, "reload_content")
+
+    def enter_new_server() -> None:
+        workspace.dialog.address_edit.setText(NEW_ADDRESS)
+        workspace.dialog.accept()
+
+    when_secrets_ready(workspace, enter_new_server)
+    configure_connection(workspace)
+
+
+def test_configuring_a_new_server_keeps_the_old_client_for_the_loaded_outputs(
+    workspace: RemoteWorkspace, script: Path, mocker: MockerFixture
+) -> None:
+    remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
+    closed_on = _record_close_threads(remote_client)
+
+    _connect_then_configure_a_new_server(workspace, script, mocker)
+    _join_close_threads()
+
+    assert closed_on == []
+    assert [c.args[0] for c in remote_client.call_args_list] == [OLD_ADDRESS]
+
+
+def test_the_next_load_after_a_new_server_closes_the_old_client_and_connects_to_the_new_one(
+    workspace: RemoteWorkspace, script: Path, mocker: MockerFixture
+) -> None:
+    remote_client = mocker.patch("vsview_remote.workspace.RemoteClient")
+    closed_on = _record_close_threads(remote_client)
+    _connect_then_configure_a_new_server(workspace, script, mocker)
+
+    _ = workspace.client
+    _join_close_threads()
+
+    assert len(closed_on) == 1
+    assert closed_on[0] is not threading.main_thread()
+    assert [c.args[0] for c in remote_client.call_args_list] == [OLD_ADDRESS, NEW_ADDRESS]
+
+
 def test_a_failed_keyring_read_never_deletes_the_stored_secret(
     workspace: RemoteWorkspace,
     isolate_secrets: Any,

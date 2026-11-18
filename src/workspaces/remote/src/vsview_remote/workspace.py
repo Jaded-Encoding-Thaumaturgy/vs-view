@@ -57,6 +57,8 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._client: RemoteClient | None = None
+        self._client_config: ConnectionConfig | None = None
+        self._client_lock = threading.RLock()
         self._config: ConnectionConfig | None = None
         self._output_metadata = dict[int, VideoMetadata]()
         self._session_secrets = SessionSecrets(self.secrets, self._on_secrets_error)
@@ -82,32 +84,36 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
 
     @property
     def client(self) -> RemoteClient:
-        if self._config is None:
-            raise RuntimeError("This shouldn't happen")
+        with self._client_lock:
+            if (config := self._config) is None:
+                raise RuntimeError("This shouldn't happen")
 
-        if self._client and not self._client.is_running:
-            logger.warning("Remote client transport is not running; resetting client.")
-            self._discard_client()
+            if self._client and not self._client.is_running:
+                logger.warning("Remote client transport is not running; resetting client.")
+                self._discard_client()
+            elif self._client and self._client_config != config:
+                self._discard_client()
 
-        if self._client:
-            return self._client
+            if self._client:
+                return self._client
 
-        logger.info("Connecting to vsremote server at %s...", self._config.address)
-        curve_server_key, curve_public_key, curve_secret_key = self._config.active_curve_keys
-        self._client = RemoteClient(
-            self._config.address,
-            compression=self._config.compression,
-            auth_token=self._config.auth_token,
-            curve_server_key=curve_server_key,
-            curve_public_key=curve_public_key,
-            curve_secret_key=curve_secret_key,
-            forward_logs=self._config.forward_logs,
-            subscribe_streams=self._config.subscribe_streams,
-            replay_history=False,
-            hwm=self._config.effective_hwm,
-            tcp_keepalive=self._config.tcp_keepalive,
-        )
-        return self._client.start()
+            logger.info("Connecting to vsremote server at %s...", config.address)
+            curve_server_key, curve_public_key, curve_secret_key = config.active_curve_keys
+            self._client = RemoteClient(
+                config.address,
+                compression=config.compression,
+                auth_token=config.auth_token,
+                curve_server_key=curve_server_key,
+                curve_public_key=curve_public_key,
+                curve_secret_key=curve_secret_key,
+                forward_logs=config.forward_logs,
+                subscribe_streams=config.subscribe_streams,
+                replay_history=False,
+                hwm=config.effective_hwm,
+                tcp_keepalive=config.tcp_keepalive,
+            )
+            self._client_config = config
+            return self._client.start()
 
     @override
     def dropEvent(self, event: QDropEvent) -> None:
@@ -143,12 +149,13 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
                 raise ConnectionNotConfiguredError("Remote connection not configured")
 
             code = self.content.read_text(encoding="utf-8")
-            output_items = self.client.load_code(code, filename=str(self.content)).result(
+            client = self.client
+            output_items = client.load_code(code, filename=str(self.content)).result(
                 timeout=self.settings.global_.load_timeout
             )
             logger.info("Remote script execution completed successfully (%d outputs)", len(output_items))
 
-            for idx, clip in self.client.get_outputs(
+            for idx, clip in client.get_outputs(
                 config.prefetch,
                 config.backlog,
                 frame_timeout=config.frame_timeout,
@@ -212,24 +219,20 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         self.api.statusMessage.emit(message)
         self.dialog.set_status(message, "#e74c3c")
 
-    def _apply_config(self, config: ConnectionConfig) -> None:
-        if config != self._config:
-            self._discard_client()
-
-        self._config = config
-
     def _connect_and_load(self, path: Path) -> None:
         if (config := self.prompt_connection_dialog()) is None:
             return
 
-        self._apply_config(config)
+        self._config = config
         self.load_content(path)
 
     def _discard_client(self) -> None:
-        if (client := self._client) is None:
+        with self._client_lock:
+            client, self._client = self._client, None
+
+        if client is None:
             return
 
-        self._client = None
         # Closes the client in a fire and forget background task so the GUI thread does not wait for it
         threading.Thread(target=client.close, name="CloseRemoteClient", daemon=True).start()
 
@@ -239,7 +242,7 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         if (config := self.prompt_connection_dialog()) is None:
             return
 
-        self._apply_config(config)
+        self._config = config
         super()._on_open_file_button_clicked()
 
     @Slot()
@@ -247,7 +250,7 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         if (config := self.prompt_connection_dialog()) is None:
             return
 
-        self._apply_config(config)
+        self._config = config
         if not getattr(self, "content", None):
             return
 
