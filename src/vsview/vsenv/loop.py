@@ -290,9 +290,9 @@ class QtEventLoop(QObject, EventLoop):
 
         return sum(not fut.done() for fut in targets)
 
-    def pending_tasks(self, *, owner: Any = None, names: Sequence[str] | None = None) -> list[UnifiedFuture[Any]]:
+    def pending_tasks(self, *, owner: Any = None, names: Sequence[str] | None = None) -> list[TaskInfo]:
         """
-        Return the futures of the background tasks that are still running.
+        Return the background tasks that are still running.
 
         The task calling this method is never included.
 
@@ -301,7 +301,10 @@ class QtEventLoop(QObject, EventLoop):
             names: Optional task names to restrict the result.
         """
         current_fut = _current_task_future.get() or self._thread_futures.get(threading.get_ident())
-        return [fut for fut in self._find_tasks(owner, names, current_fut) if not fut.done()]
+        targets = self._find_tasks(owner, names, current_fut)
+
+        with self._tasks_lock:
+            return [info for fut in targets if not fut.done() and (info := self._tracked_tasks.get(fut)) is not None]
 
     def _find_tasks(
         self,

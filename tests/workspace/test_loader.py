@@ -7,7 +7,7 @@ from typing import Any, override
 
 import pytest
 from PySide6.QtCore import QRegularExpression
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from shiboken6 import Shiboken
@@ -19,6 +19,7 @@ from vsview.app.plugins.api import WidgetPluginBase
 from vsview.app.plugins.exceptions import NoEnvironmentError
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.views import PluginDock
+from vsview.app.views.video import GraphicsView
 from vsview.app.workspace.lifecycle import Phase
 from vsview.app.workspace.loader import LoaderWorkspace, VSEngineWorkspace
 from vsview.app.workspace.tab_manager import PlayHeadToolButton
@@ -623,8 +624,8 @@ def test_a_removed_release_callback_does_not_run_at_reload(
     assert calls == ["kept"]
 
 
-class _QuickTeardownScriptWorkspace(ConcreteScriptWorkspace):
-    teardown_timeout_ms = 100
+class _ShortTaskTimeoutScriptWorkspace(ConcreteScriptWorkspace):
+    task_timeout_ms = 100
 
 
 def test_closing_during_a_running_script_disposes_its_environment_after_the_script_ends(
@@ -642,7 +643,7 @@ def test_closing_during_a_running_script_disposes_its_environment_after_the_scri
         "vsview.register_on_unload(record, 'registered after the release')\n" + _make_valid_script_content(length=10),
         encoding="utf-8",
     )
-    ws = _QuickTeardownScriptWorkspace(vsview_env_factory)
+    ws = _ShortTaskTimeoutScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
     ws.vsargs = {"started": started, "gate": gate, "record": events.append}
     ws.load_content(script_file)
@@ -668,6 +669,150 @@ def test_unload_callbacks_are_dropped_when_there_is_no_environment(loader_worksp
     loader_workspace.teardown()
 
     assert calls == []
+
+
+# Load Pipeline Tests
+def test_loading_new_content_into_a_loaded_workspace_releases_the_old_run(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+) -> None:
+    events = list[str]()
+    first = tmp_path / "first.vpy"
+    first.write_text(
+        _make_valid_script_content(length=10) + "import vsview\nvsview.register_on_unload(record, 'first unloaded')\n",
+        encoding="utf-8",
+    )
+    second = tmp_path / "second.vpy"
+    second.write_text(_make_valid_script_content(length=20), encoding="utf-8")
+    ws = ConcreteScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+    ws.vsargs = {"record": events.append}
+    fut = ws.load_content(first)
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+    first_env = ws.env
+
+    fut_second = ws.load_content(second)
+    qtbot.waitUntil(lambda: fut_second.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+
+    assert fut_second.result() == 0
+    assert events == ["first unloaded"]
+    assert first_env.disposed is True
+    voutput = ws.outputs_manager.current_voutput
+    assert isinstance(voutput, VideoOutput)
+    assert voutput.vs_output.clip.num_frames == 20
+
+
+def test_a_reload_is_refused_while_a_task_of_the_workspace_still_runs(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+) -> None:
+    script_file = tmp_path / "refused.vpy"
+    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    ws = _ShortTaskTimeoutScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+    env_before = ws.env
+    gate = threading.Event()
+    task = ws.loop.to_thread_scoped(ws, "SlowPluginTask", gate.wait, 10)
+
+    fut_refused = ws.reload_content()
+    qtbot.waitUntil(fut_refused.done, timeout=5000)
+    popups = [
+        w
+        for w in QApplication.topLevelWidgets()
+        if isinstance(w, QMessageBox) and w.isVisible() and w.windowTitle() == "Reload Refused"
+    ]
+    gate.set()
+    task.result(timeout=5)
+
+    assert fut_refused.result() == 2
+    assert ws.lifecycle.phase is Phase.LOADED
+    assert ws.env is env_before
+    assert env_before.disposed is False
+    assert ws.reload_count == 0
+    assert ws.tbar.isEnabled() is True
+    assert ws.content_area.isEnabled() is True
+    assert len(popups) == 1
+    assert "SlowPluginTask" in popups[0].text()
+
+    for popup in popups:
+        popup.close()
+    fut_reload = ws.reload_content()
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+    assert fut_reload.result() == 0
+    assert ws.reload_count == 1
+
+
+def test_a_load_while_another_load_runs_is_refused(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+) -> None:
+    started, gate = threading.Event(), threading.Event()
+    slow = tmp_path / "slow.vpy"
+    slow.write_text("started.set()\ngate.wait(10)\n" + _make_valid_script_content(length=10), encoding="utf-8")
+    other = tmp_path / "other.vpy"
+    other.write_text(_make_valid_script_content(length=20), encoding="utf-8")
+    ws = ConcreteScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+    ws.vsargs = {"started": started, "gate": gate}
+    fut_slow = ws.load_content(slow)
+    qtbot.waitUntil(started.is_set, timeout=5000)
+
+    fut_other = ws.load_content(other)
+    qtbot.waitUntil(fut_other.done, timeout=5000)
+    gate.set()
+    qtbot.waitUntil(lambda: fut_slow.done() and ws.lifecycle.phase is Phase.LOADED, timeout=5000)
+
+    assert fut_other.result() == 2
+    assert fut_slow.result() == 0
+    assert ws.content == slow
+
+
+def test_a_busy_plugin_does_not_stop_the_render_at_the_end_of_a_load(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+) -> None:
+    script_file = tmp_path / "busy.vpy"
+    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    ws = ConcreteScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+
+    with ws.plugin_controller.api.blocker():
+        fut = ws.load_content(script_file)
+        qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+        pixmap_is_null = ws.tab_manager.current_view.pixmap_item.pixmap().isNull()
+
+    assert fut.result() == 0
+    assert pixmap_is_null is False
+
+
+class _BrokenViewsScriptWorkspace(ConcreteScriptWorkspace):
+    @override
+    def on_views_created(self, views: Sequence[GraphicsView]) -> None:
+        raise RuntimeError("views broken")
+
+
+def test_an_error_after_the_script_ran_ends_the_load_as_failed(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+) -> None:
+    script_file = tmp_path / "broken_views.vpy"
+    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    ws = _BrokenViewsScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.FAILED, timeout=3000)
+
+    with pytest.raises(RuntimeError, match="views broken"):
+        fut.result()
+    assert ws.stack.currentWidget() is ws.error_page
 
 
 # Error Recovery Lifecycle Tests

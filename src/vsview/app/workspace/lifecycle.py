@@ -104,18 +104,12 @@ class WorkspaceLifecycle:
         Start loading content.
 
         A workspace that holds loaded content moves to `RELOADING`, any other one to `LOADING`.
-        A load that starts while another load runs keeps the phase.
-        The `next_generation` call of the newer load then makes the older load stale.
 
         Returns:
-            False once the workspace is closing, True otherwise.
+            False while another load runs or once the workspace is closing, True otherwise.
         """
         with self._lock:
             current = self._phase
-
-            if current in (Phase.LOADING, Phase.RELOADING):
-                return True
-
             target = Phase.RELOADING if current is Phase.LOADED else Phase.LOADING
 
             if target not in current.transition:
@@ -133,6 +127,21 @@ class WorkspaceLifecycle:
             True when the workspace moved from `LOADED` to `RELOADING`, False otherwise.
         """
         return self._move(Phase.RELOADING)
+
+    def cancel_reload(self) -> bool:
+        """
+        Give up a reload before its new generation starts, and keep the loaded content.
+
+        Returns:
+            True when the workspace moved from `RELOADING` back to `LOADED`, False otherwise.
+        """
+        with self._lock:
+            if self._phase is not Phase.RELOADING:
+                return False
+
+            self._phase = Phase.LOADED
+
+        return True
 
     def next_generation(self) -> Generation:
         """Start a new generation. Every older `Generation` becomes stale."""

@@ -40,9 +40,9 @@ def _lifecycle_in(phase: Phase) -> WorkspaceLifecycle:
     ("start", "accepted", "end"),
     [
         (Phase.EMPTY, True, Phase.LOADING),
-        (Phase.LOADING, True, Phase.LOADING),
+        (Phase.LOADING, False, Phase.LOADING),
         (Phase.LOADED, True, Phase.RELOADING),
-        (Phase.RELOADING, True, Phase.RELOADING),
+        (Phase.RELOADING, False, Phase.RELOADING),
         (Phase.FAILED, True, Phase.LOADING),
         (Phase.CLOSING, False, Phase.CLOSING),
         (Phase.CLOSED, False, Phase.CLOSED),
@@ -110,11 +110,10 @@ def test_finish_marks_the_current_generation_as_loaded(start: Phase) -> None:
     assert lifecycle.phase is Phase.LOADED
 
 
-def test_a_load_that_was_replaced_cannot_finish() -> None:
+def test_an_older_generation_cannot_finish() -> None:
     lifecycle = WorkspaceLifecycle()
     lifecycle.try_begin_load()
     older = lifecycle.next_generation()
-    lifecycle.try_begin_load()
     newer = lifecycle.next_generation()
 
     older_result = lifecycle.finish(older)
@@ -125,6 +124,29 @@ def test_a_load_that_was_replaced_cannot_finish() -> None:
     assert phase_after_older is Phase.LOADING
     assert newer_result is True
     assert lifecycle.phase is Phase.LOADED
+
+
+@pytest.mark.parametrize(
+    ("start", "accepted", "end"),
+    [
+        (Phase.EMPTY, False, Phase.EMPTY),
+        (Phase.LOADING, False, Phase.LOADING),
+        (Phase.LOADED, False, Phase.LOADED),
+        (Phase.RELOADING, True, Phase.LOADED),
+        (Phase.FAILED, False, Phase.FAILED),
+        (Phase.CLOSING, False, Phase.CLOSING),
+        (Phase.CLOSED, False, Phase.CLOSED),
+    ],
+)
+def test_cancel_reload(start: Phase, accepted: bool, end: Phase) -> None:
+    lifecycle = _lifecycle_in(start)
+    generation_before = lifecycle.generation
+
+    result = lifecycle.cancel_reload()
+
+    assert result is accepted
+    assert lifecycle.phase is end
+    assert lifecycle.generation == generation_before
 
 
 @pytest.mark.parametrize("start", [Phase.EMPTY, Phase.LOADED, Phase.FAILED, Phase.CLOSING, Phase.CLOSED])

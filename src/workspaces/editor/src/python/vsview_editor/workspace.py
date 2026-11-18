@@ -43,7 +43,7 @@ from vsview.api.workspace import PluginWorkspace
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings import SettingsManager
 from vsview.app.utils import atomic_write
-from vsview.app.workspace import BaseGenericFileWorkspace, VSEngineWorkspace, get_default_script
+from vsview.app.workspace import BaseGenericFileWorkspace, Phase, VSEngineWorkspace, get_default_script
 from vsview.env import getenv_bool
 from vsview.vsenv import QtEventLoop, create_environment
 
@@ -757,7 +757,6 @@ class EditorWorkspace(
             get_default_script(),
             (SPath.cwd() / f"<vsview editor {uuid4().hex[:8].upper()}>").to_str(),
         )
-        self.loaded_once = False
         self._pending_reload_code: str | None = None
         self._initial_docks_resized = False
         self._saved_dock_sizes: tuple[int, int] | None = None
@@ -796,6 +795,11 @@ class EditorWorkspace(
     @override
     def current_file_path(self) -> Path | None:  # type: ignore[override]
         return p if (p := self.code_dock.main_filepath) and p.is_file() else None
+
+    @property
+    def _has_run(self) -> bool:
+        """Whether a run is loading or loaded. False before the first run and after a failed run."""
+        return self.lifecycle.phase not in (Phase.EMPTY, Phase.FAILED)
 
     @override
     def showEvent(self, event: QShowEvent) -> None:
@@ -920,8 +924,7 @@ class EditorWorkspace(
         self._save_current_dock_sizes()
         code = fallback(code, self.code_dock.editor.bridge.main_content)
 
-        if not self.loaded_once:
-            self.loaded_once = True
+        if not self._has_run:
             self._replace_content(code)
             return self.load_content(
                 self.content,
@@ -949,7 +952,6 @@ class EditorWorkspace(
         self.content_area.setVisible(False)
         self.tbar.setVisible(False)
         self.stack.setCurrentWidget(self.loaded_page)
-        self.loaded_once = False  # Reset so next run does fresh load_content
         if not self._initial_docks_resized:
             self._initial_docks_resized = True
             QTimer.singleShot(0, self._restore_dock_sizes)
@@ -1001,7 +1003,7 @@ class EditorWorkspace(
             self.content = ContentPath(code, str(new_path))
 
             if is_file:
-                if not self.loaded_once:
+                if not self._has_run:
                     self.init_load()
                 elif not PluginManager.load_failed:
                     PluginManager.populate_default_settings("local", new_path)
@@ -1012,7 +1014,7 @@ class EditorWorkspace(
                 f"<vsview editor {uuid4().hex[:4]}>",
             )
 
-        if self.loaded_once and output_names is not None:
+        if self._has_run and output_names is not None:
             output_metadata[self.content.filename] = output_names
 
         self._restore_dock_sizes()

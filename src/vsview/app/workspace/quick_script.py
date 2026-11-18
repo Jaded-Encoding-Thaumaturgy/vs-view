@@ -31,6 +31,7 @@ from ...vsenv import run_in_background, run_in_loop
 from ..icon import IconReloadMixin
 from ..settings import ActionID, SettingsManager, ShortcutManager
 from ..utils import atomic_write
+from .lifecycle import Phase
 from .loader import VSEngineWorkspace
 from .utils import CodeContent, get_default_script
 
@@ -425,7 +426,6 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.filename = (SPath.cwd() / f"<vsview quickscript {uuid4().hex[:8].upper()}>").to_str()
-        self.loaded_once = False
 
         self.tbar.setVisible(False)
         self.content_area.setVisible(False)
@@ -477,7 +477,8 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
         output_metadata.pop(self.filename, None)
         self.content = CodeContent(self.code_dock.editor.toPlainText(), self.filename)
 
-        if not self.loaded_once:
+        # Nothing is loaded yet, or the last run failed, so there is nothing to reload.
+        if self.lifecycle.phase in (Phase.EMPTY, Phase.FAILED):
             return self.load_content(
                 self.content,
                 self.playback.state.current_frame,
@@ -500,17 +501,10 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
         self.content_area.setVisible(False)
         self.tbar.setVisible(False)
         self.stack.setCurrentWidget(self.loaded_page)
-        self.loaded_once = False  # Reset so next run does fresh load_content
 
     @Slot()
     def _on_run_clicked(self) -> None:
-        self.content = CodeContent(self.code_dock.editor.toPlainText(), self.filename)
         self.code_dock.run_btn.setDisabled(True)
 
-        if not self.loaded_once:
-            f = self.load_content(self.content)
-            self.loaded_once = True  # Mark as loaded. Subsequent runs will reload
-        else:
-            f = self.reload_content()
-
+        f = self.reload_content()
         f.add_loop_callback(lambda _: self.code_dock.run_btn.setEnabled(True))

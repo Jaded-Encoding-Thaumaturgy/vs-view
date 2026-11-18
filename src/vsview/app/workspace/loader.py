@@ -37,6 +37,7 @@ from ...api.info import Context
 from ...env import getenv_bool
 from ...types import Frame
 from ...vsenv import run_in_background, run_in_loop, unset_environment
+from ...vsenv.loop import TaskInfo
 from ..outputs import AudioOutput, OutputsManager, VideoOutput
 from ..plugins._controller import PluginWorkspaceController
 from ..plugins.api import WidgetPluginBase
@@ -50,8 +51,8 @@ from ..views.timeline import TimelineControlBar
 from ..views.video import GraphicsView, ViewState
 from .base import BaseWorkspace
 from .callbacks import CallbackHandle, CallbackRegistry, run_callbacks
-from .lifecycle import Phase
-from .playback import PlaybackManager
+from .lifecycle import Phase, StaleGenerationError
+from .playback import PlaybackManager, show_warning
 from .tab_manager import PlayHeadToolButton, TabManager
 from .utils import State, evict_packages, find_local_packages
 
@@ -65,8 +66,8 @@ class LoaderWorkspace[T](BaseWorkspace):
     content: T
     """The content being loaded."""
 
-    teardown_timeout_ms: ClassVar[int] = 10_000
-    """How long the teardown waits for the workspace's tasks before it continues without them."""
+    task_timeout_ms: ClassVar[int] = 10_000
+    """How long a teardown or a reload waits for the workspace's tasks to end."""
 
     # Status bar signals
     statusLoadingStarted = Signal(str)  # message
@@ -336,8 +337,8 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.playback.stop()
         self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
         self.plugin_controller.on_workspace_destroy()
-        self.loop.wait_for_threads(self.teardown_timeout_ms, owner=self)
-        return list(self.loop.pending_tasks(owner=self))
+        self.loop.wait_for_threads(self.task_timeout_ms, owner=self)
+        return [task.future for task in self.loop.pending_tasks(owner=self)]
 
     @contextmanager
     def status_loading(self, loading_message: str, completed_message: str) -> Generator[None]:
@@ -392,75 +393,29 @@ class LoaderWorkspace[T](BaseWorkspace):
         time: float | None = None,
         tab_index: int | None = None,
     ) -> int:
+        """
+        Load `content`. A workspace that holds loaded content releases it first, as a reload does.
+
+        Returns:
+            0 when the content is rendering, 1 when the load failed, 2 when the load was refused or stopped.
+        """
         logger.debug("load_content called: path=%r, frame=%r, tab_index=%r", content, frame, tab_index)
 
         if not self.lifecycle.try_begin_load():
-            logger.debug("Workspace is closing, ignoring the load of %r", content)
+            logger.warning("Workspace is %s, cannot load %r", self.lifecycle.phase.name.lower(), content)
             return 2
 
-        generation = self.lifecycle.next_generation()
-
-        self.set_loading_page()
-        self.statusLoadingStarted.emit("Loading...")
-
-        self.content = content
-
-        unset_environment()
-        self.init_load(frame, time, tab_index)
-
-        outputs = self._get_outputs()
-
-        if not outputs:
-            self.clear_failed_load()
-            return 1
-
-        voutputs, aoutputs = outputs
-
-        self.outputs_manager.current_video_index = clamp(self.outputs_manager.current_video_index, 0, len(voutputs) - 1)
-        tabs = self.tab_manager.create_tabs(voutputs)
-        if has_overriding_method(LoaderWorkspace, self, "on_views_created"):
-            self.on_views_created(self.loop.from_thread(lambda: list(tabs.views())).result())
-
-        with QSignalBlocker(self.tab_manager):
-            self.tab_manager.swap_tabs(tabs, self.outputs_manager.current_video_index)
-
-        self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
-
-        # Load plugins in the load_content function so the plugins can get the file_path
-        # and do VS things in the init since the environment is already created.
-        self.load_plugins()
-
-        if self.lifecycle.closing:
-            return 2
-
-        self.plugin_controller.on_workspace_loaded()
-
-        @run_in_loop(return_future=False)
-        def on_complete(f: Future[int]) -> None:
-            if f.exception():
-                logger.error("Failed to load content: %r", self.content)
-                self.clear_failed_load()
-                return
-
-            self.content_area.setEnabled(True)
-            self.tab_manager.disable_switch = False
-            self.playback.can_reload = True
-            self.lifecycle.finish(generation)
-
-            self.on_content_loaded()
-            logger.info("Content loaded successfully: %r", self.content)
-            self.statusLoadingFinished.emit("Completed")
-
-        self._on_tab_changed(
-            self.loop.from_thread(lambda: self.tab_manager.tabs.currentIndex()).result(),
-            cb_render=on_complete,
-        )
-
-        return 0
+        return self._run_generation(content, reload=False, frame=frame, time=time, tab_index=tab_index)
 
     @Slot()
     @run_in_background(name="ReloadContent")
     def reload_content(self) -> int:
+        """
+        Reload the loaded content, and keep the current tab, frame and view.
+
+        Returns:
+            0 when the content is rendering, 1 when the reload failed, 2 when the reload was refused or stopped.
+        """
         if not self.playback.can_reload:
             logger.warning("Workspace is busy, cannot reload content")
             return 2
@@ -474,104 +429,184 @@ class LoaderWorkspace[T](BaseWorkspace):
             return 2
 
         logger.debug("Reloading content: %r", self.content)
-        is_debug = getenv_bool("VSVIEW_DEBUG")
+        return self._run_generation(self.content, reload=True)
 
-        self.on_before_reload()
+    def _run_generation(
+        self,
+        content: T,
+        *,
+        reload: bool,
+        frame: int | None = None,
+        time: float | None = None,
+        tab_index: int | None = None,
+    ) -> int:
+        # A load into a workspace that holds loaded content also starts in RELOADING.
+        replacing = self.lifecycle.phase is Phase.RELOADING
+        memory = measure_memory() if reload and getenv_bool("VSVIEW_DEBUG") else nullcontext()
+        memory.__enter__()
+        screenshot: QLabel | None = None
+        saved_view: tuple[ViewState, int, bool] | None = None
+        ui_released = False
 
-        self.playback.stop()
-        self.playback.can_reload = False
-        self.statusLoadingStarted.emit("Reloading Content...")
-        self.loop.from_thread(self.content_area.setDisabled, True).result()
-
-        mmm = measure_memory() if is_debug else nullcontext()
-        mmm.__enter__()
-
-        screenshot = self._create_freeze_screenshot()
-        self.tbar.disable()
+        def release_ui() -> None:
+            nonlocal ui_released
+            if ui_released:
+                return
+            ui_released = True
+            if screenshot is not None:
+                self._destroy_freeze_screenshot(screenshot)
+            memory.__exit__(None, None, None)
 
         try:
-            self.tab_manager.disable_switch = True
-            self.playback.state.wait_for_cleanup(
-                0.25,
-                stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
-            )
-            self.loop.wait_for_threads(10000, owner=self)
-            self.loop.next_cycle().result()
+            if replacing:
+                self.playback.stop()
+                if reload:
+                    self.on_before_reload()
+                    self.statusLoadingStarted.emit("Reloading Content...")
+                self.loop.from_thread(self.content_area.setDisabled, True).result()
+                if reload:
+                    screenshot = self._create_freeze_screenshot()
+                self.tbar.disable()
+                self.tab_manager.disable_switch = True
 
-            # 1. Capture state
-            saved_state, current_tab_i, autofit_enabled = self._capture_reload_ui_state()
-            self._clear_reload_views()
+                if still_running := self._finish_generation_tasks():
+                    release_ui()
+                    self._refuse_replacement(still_running)
+                    return 2
 
-            # 2. Reset Environment
-            self.clear_environment()
-            self.loop.from_thread(gc.collect).result()
+                if reload:
+                    saved_view = self._capture_reload_ui_state()
+                    self._clear_reload_views()
+
+                self.clear_environment()
+                self.loop.from_thread(gc.collect).result()
+
+                if getenv_bool("VSVIEW_DEBUG"):
+                    logger.debug("Memory after environment cleanup: %s", ProcessMemorySnapshot())
+
             generation = self.lifecycle.next_generation()
 
-            if is_debug:
-                logger.debug("Memory after environment cleanup: %s", ProcessMemorySnapshot())
+            if reload:
+                self.reload_count += 1
 
-            self.reload_count += 1
+                with loader_lock:
+                    if local_packages := find_local_packages():
+                        evict_packages(local_packages)
+                        logger.info("Local packages reloaded: %r", sorted(local_packages))
+            else:
+                self.set_loading_page()
+                self.statusLoadingStarted.emit("Loading...")
+                self.content = content
+                unset_environment()
+                self.init_load(frame, time, tab_index)
 
-            with loader_lock:
-                # 2.5. Hot-reload local packages
-                if local_packages := find_local_packages():
-                    evict_packages(local_packages)
-                    logger.info("Local packages reloaded: %r", sorted(local_packages))
-
-            # 3. Load New Content
             outputs = self._get_outputs()
+            generation.check()
 
             if not outputs:
-                self._destroy_freeze_screenshot(screenshot)
+                release_ui()
                 self.clear_failed_load()
-                mmm.__exit__(None, None, None)
                 return 1
 
             voutputs, aoutputs = outputs
 
-            # 4. Reconstruct UI
-            tabs = self.tab_manager.create_tabs(voutputs, enabled=False)
+            if saved_view is not None:
+                tabs = self.tab_manager.create_tabs(voutputs, enabled=False)
+            else:
+                self.outputs_manager.current_video_index = clamp(
+                    self.outputs_manager.current_video_index, 0, len(voutputs) - 1
+                )
+                tabs = self.tab_manager.create_tabs(voutputs)
+
             if has_overriding_method(LoaderWorkspace, self, "on_views_created"):
                 self.on_views_created(self.loop.from_thread(lambda: list(tabs.views())).result())
-            current_tab_i = self._restore_reload_tabs(tabs, voutputs, saved_state, current_tab_i, autofit_enabled)
+
+            if saved_view is not None:
+                current_tab_i = self._restore_reload_tabs(tabs, voutputs, *saved_view)
+            else:
+                with QSignalBlocker(self.tab_manager):
+                    self.tab_manager.swap_tabs(tabs, self.outputs_manager.current_video_index)
+                current_tab_i = self.loop.from_thread(lambda: self.tab_manager.tabs.currentIndex()).result()
 
             self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
 
-            if self.lifecycle.closing:
-                self._destroy_freeze_screenshot(screenshot)
-                mmm.__exit__(None, None, None)
-                return 2
-
+            # Plugins are built here so they can use the file path and the environment that now exists.
+            self.load_plugins()
+            generation.check()
             self.plugin_controller.on_workspace_loaded()
 
             @run_in_loop(return_future=False)
             def on_complete(f: Future[int]) -> None:
-                self._destroy_freeze_screenshot(screenshot)
-                mmm.__exit__(None, None, None)
-                if f.exception() or f.result() != 0:
-                    logger.error("Failed to reload content: %r", self.content)
+                release_ui()
+
+                if not generation.is_current():
+                    return
+
+                if f.exception():
+                    logger.error("Failed to load content: %r", self.content)
                     self.clear_failed_load()
                     return
+
                 self.content_area.setEnabled(True)
                 self.tab_manager.tabs.setEnabled(True)
-                self.content_area.setFocus()
-                self.playback.can_reload = True
                 self.tab_manager.disable_switch = False
-                self.lifecycle.finish(generation)
+                self.playback.can_reload = True
                 self.tbar.enable()
+                self.lifecycle.finish(generation)
 
-                logger.info("Content reloaded successfully: %r", self.content)
-                self.on_content_reloaded()
+                if reload:
+                    self.content_area.setFocus()
+                    logger.info("Content reloaded successfully: %r", self.content)
+                    self.on_content_reloaded()
+                else:
+                    logger.info("Content loaded successfully: %r", self.content)
+                    self.on_content_loaded()
+                    self.statusLoadingFinished.emit("Completed")
 
-            self._on_tab_changed(current_tab_i, seamless=True, cb_render=on_complete, refresh_plugins=True)
+            # The workspace's own render must not be stopped by a busy plugin, or the load would never end.
+            self._on_tab_changed(
+                current_tab_i,
+                seamless=reload,
+                cb_render=on_complete,
+                refresh_plugins=reload,
+                check_busy=False,
+            )
 
             return 0
+        except StaleGenerationError:
+            logger.debug("The load of %r stopped because the workspace is closing", content)
+            release_ui()
+            return 2
         except Exception:
-            logger.error("Failed to reload content: %r", self.content)
-            self._destroy_freeze_screenshot(screenshot)
-            mmm.__exit__(None, None, None)
+            logger.error("Failed to load content: %r", content)
+            release_ui()
             self.clear_failed_load()
             raise
+
+    def _finish_generation_tasks(self) -> list[TaskInfo]:
+        self.playback.state.wait_for_cleanup(
+            0.25,
+            stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
+        )
+        self.loop.wait_for_threads(self.task_timeout_ms, owner=self)
+        self.loop.next_cycle().result()
+        return self.loop.pending_tasks(owner=self)
+
+    @run_in_loop(return_future=False)
+    def _refuse_replacement(self, still_running: list[TaskInfo]) -> None:
+        self.lifecycle.cancel_reload()
+        self.content_area.setEnabled(True)
+        self.tbar.enable()
+        self.tab_manager.disable_switch = False
+
+        names = ", ".join(sorted({task.name for task in still_running}))
+        message = (
+            f"The content was not reloaded: {len(still_running)} task(s) of this workspace are still running "
+            f"({names}). Try again when they have finished."
+        )
+        logger.warning(message)
+        self.statusLoadingErrored.emit("Reload refused")
+        show_warning(self, message, title="Reload Refused")
 
     @run_in_loop(return_future=False)
     def _capture_reload_ui_state(self) -> tuple[ViewState, int, bool]:
@@ -785,12 +820,17 @@ class LoaderWorkspace[T](BaseWorkspace):
         seamless: bool = False,
         cb_render: Callable[[Future[int]], None] | None = None,
         refresh_plugins: bool = False,
+        check_busy: bool = True,
     ) -> bool:
         self.playback.stop()
         self.outputs_manager.current_video_index = index
 
         if not self.outputs_manager.current_voutput:
             logger.debug("Invalid tab index %d, ignoring", index)
+            if cb_render:
+                f = Future[int]()
+                f.set_exception(RuntimeError(f"No video output at tab index {index}"))
+                cb_render(f)
             return True
 
         logger.debug("Switching to video output: clip=%r", self.outputs_manager.current_voutput.vs_output.clip)
@@ -837,7 +877,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                     cb_render(f)
 
             logger.debug("Requesting frame %d", target_frame)
-            return self.playback.request_frame(target_frame, on_complete, notify_plugins=False)
+            return self.playback.request_frame(target_frame, on_complete, notify_plugins=False, check_busy=check_busy)
 
         with self.env.use():
             self.plugin_controller.on_current_voutput_changed(refresh_plugins)

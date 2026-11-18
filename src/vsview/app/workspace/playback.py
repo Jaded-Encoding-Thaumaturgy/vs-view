@@ -254,14 +254,24 @@ class PlaybackManager(QObject):
         n: int,
         cb_render: Callable[[Future[int]], None] | None = None,
         notify_plugins: bool = True,
+        check_busy: bool = True,
     ) -> bool:
-        """Request a specific frame to be rendered and displayed."""
+        """
+        Request a specific frame to be rendered and displayed.
+
+        `cb_render` is always called, also when no frame is requested.
+        `check_busy=False` is for the workspace's own render at the end of a load, which a busy plugin must not stop.
+        """
         logger.debug("Frame requested: %d", n)
 
         if not (voutput := self._outputs_manager.current_voutput):
+            if cb_render:
+                fut = Future[int]()
+                fut.set_exception(RuntimeError("No video output to render"))
+                cb_render(fut)
             return False
 
-        if self._controller.busy:
+        if check_busy and self._controller.busy:
             logger.warning("At least one plugin is busy, cannot request frame")
             if cb_render:
                 fut = Future[int]()
@@ -931,14 +941,14 @@ def create_failed_image(text: str, width: int, height: int) -> QImage:
     return image
 
 
-def show_warning(parent: QWidget, error_message: str) -> None:
+def show_warning(parent: QWidget, error_message: str, title: str = "Playback Error") -> None:
     msg = QMessageBox(
         parent,
         text=error_message,
         icon=QMessageBox.Icon.Warning,
         standardButtons=QMessageBox.StandardButton.Ok,
     )
-    msg.setWindowTitle("Playback Error")
+    msg.setWindowTitle(title)
     msg.setModal(False)
     msg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
     msg.show()

@@ -25,6 +25,7 @@ from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings import SettingsManager
 from vsview.app.settings.manager import SettingsManager as SettingsManagerType
 from vsview.app.workspace.file import PythonScriptWorkspace, VideoFileWorkspace, requires_content
+from vsview.app.workspace.lifecycle import Phase
 from vsview.app.workspace.quick_script import QuickScriptWorkspace
 from vsview.app.workspace.utils import CodeContent
 from vsview.vsenv.loop import QtEventLoop
@@ -107,11 +108,9 @@ def quick_script_workspace(
     init_plugin_manager: PluginManager,
 ) -> Generator[QuickScriptWorkspace]:
     class TestQuickScriptWorkspace(QuickScriptWorkspace):
-        @property
-        def env(self) -> ManagedEnvironment:
-            if not self._env or self._env.disposed:
-                self._env = vsview_env_factory()
-            return self._env
+        @override
+        def new_environment(self) -> ManagedEnvironment:
+            return vsview_env_factory()
 
         def get_output_metadata(self) -> dict[int, Any]:
             return output_metadata.get(str(self.content), {})
@@ -621,7 +620,7 @@ def test_quick_script_initial_state(quick_script_workspace: QuickScriptWorkspace
     ws = quick_script_workspace
     assert ws.title == "Quick Script"
     assert ws.content_type == "code"
-    assert ws.loaded_once is False
+    assert ws.lifecycle.phase is Phase.EMPTY
     assert "<vsview quickscript " in ws.filename
     assert ws.tbar.isHidden() is True
     assert ws.content_area.isHidden() is True
@@ -639,7 +638,6 @@ def test_quick_script_page_state_transitions(quick_script_workspace: QuickScript
     ws.set_error_page()
     assert ws.content_area.isHidden() is True
     assert ws.tbar.isHidden() is True
-    assert ws.loaded_once is False
 
 
 def test_quick_script_loader_linecache_registration(quick_script_workspace: QuickScriptWorkspace) -> None:
@@ -665,6 +663,32 @@ def test_quick_script_loader_linecache_registration(quick_script_workspace: Quic
         assert cached_entry[3] == ws.filename
     finally:
         linecache.cache.pop(ws.filename, None)
+
+
+_QUICK_SCRIPT_CODE = (
+    "import vapoursynth as vs\n"
+    "clip = vs.core.std.BlankClip(length=10, width=64, height=64, format=vs.RGB24, fpsnum=24, fpsden=1)\n"
+    "clip = vs.core.std.SetFrameProps(\n"
+    "    clip, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709\n"
+    ")\n"
+    "clip.set_output(0)\n"
+)
+
+
+def test_quick_script_run_after_a_reload_before_the_first_run_reloads_the_loaded_content(
+    qtbot: QtBot, quick_script_workspace: QuickScriptWorkspace
+) -> None:
+    ws = quick_script_workspace
+    ws.code_dock.editor.setPlainText(_QUICK_SCRIPT_CODE)
+    fut = ws.reload_content()
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.LOADED, timeout=5000)
+    first_env = ws.env
+
+    qtbot.mouseClick(ws.code_dock.run_btn, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: ws.reload_count == 1 and ws.lifecycle.phase is Phase.LOADED, timeout=5000)
+
+    assert first_env.disposed is True
+    assert ws.env is not first_env
 
 
 def _click_quick_script_save(
