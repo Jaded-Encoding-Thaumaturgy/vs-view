@@ -30,7 +30,7 @@ def register_on_workspace_destroy[**P, R](cb: Callable[P, R], *args: P.args, **k
     Register a callback to run once when the workspace closes (ignored on reload).
 
     Use for resources persisting across reloads (e.g., via `get_cached`).
-    Duplicate registrations with identical arguments are ignored.
+    Duplicate registrations with identical arguments are ignored, when all arguments can be hashed.
 
     Note:
         Functions defined inside the script create new objects on each reload

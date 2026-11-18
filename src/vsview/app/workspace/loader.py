@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import Future, wait
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager, nullcontext, suppress
 from functools import partial
 from logging import getLogger
 from pathlib import Path
@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import Shiboken
 from vsengine import keep_environment
+from vsengine.loops import Cancelled
 from vsengine.policy import ManagedEnvironment
 from vsengine.vpy import ExecutionError, Script, load_code, load_script
 
@@ -188,7 +189,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         # Connect PlaybackManager signals to UI handlers
         self.playback.frameRendered.connect(self.tab_manager.update_current_view)
         self.playback.timelineCursorChanged.connect(self.update_timeline_cursor)
-        self.playback.loadFailed.connect(self.clear_failed_load)
+        self.playback.loadFailed.connect(self._on_render_failed)
 
         # Audio control signals
         self.playback.audioOutputChanged.connect(
@@ -336,6 +337,7 @@ class LoaderWorkspace[T](BaseWorkspace):
     @override
     def _finish_tasks(self) -> list[Future[Any]]:
         self.playback.stop()
+        self.playback.invalidate_renders()
         self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
         self.plugin_controller.on_workspace_destroy()
         self.loop.wait_for_threads(self.task_timeout_ms, owner=self)
@@ -399,11 +401,15 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         Returns:
             0 when the content is rendering, 1 when the load failed, 2 when the load was refused or stopped.
+
+        Raises:
+            Cancelled: When the workspace keeps its loaded content
+                when the load had not released it yet, and fails otherwise.
         """
         logger.debug("load_content called: path=%r, frame=%r, tab_index=%r", content, frame, tab_index)
 
         if not self.lifecycle.try_begin_load():
-            logger.warning("Workspace is %s, cannot load %r", self.lifecycle.phase.name.lower(), content)
+            self._warn_refused(f"load {content!r}")
             return 2
 
         return self._run_generation(content, reload=False, frame=frame, time=time, tab_index=tab_index)
@@ -416,12 +422,13 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         Returns:
             0 when the content is rendering, 1 when the reload failed, 2 when the reload was refused or stopped.
+
+        Raises:
+            Cancelled: When the workspace keeps its loaded content
+                when the reload had not released it yet, and fails otherwise.
         """
         if not self.lifecycle.try_begin_reload():
-            if self.lifecycle.busy:
-                logger.warning("At least one plugin is busy, cannot reload content")
-            else:
-                logger.warning("Workspace is %s, cannot reload content", self.lifecycle.phase.name.lower())
+            self._warn_refused("reload content")
             return 2
 
         logger.debug("Reloading content: %r", self.content)
@@ -438,6 +445,7 @@ class LoaderWorkspace[T](BaseWorkspace):
     ) -> int:
         # A load into a workspace that holds loaded content also starts in RELOADING.
         replacing = self.lifecycle.phase is Phase.RELOADING
+        keeps_loaded_content = replacing
         memory = measure_memory() if reload and getenv_bool("VSVIEW_DEBUG") else nullcontext()
         memory.__enter__()
         screenshot: QLabel | None = None
@@ -456,6 +464,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         try:
             if replacing:
                 self.playback.stop()
+                self.playback.invalidate_renders()
                 if reload:
                     self.on_before_reload()
                     self.statusLoadingStarted.emit("Reloading Content...")
@@ -464,10 +473,24 @@ class LoaderWorkspace[T](BaseWorkspace):
                     screenshot = self._create_freeze_screenshot()
                 self.tbar.disable()
 
-                if still_running := self._finish_generation_tasks():
+                self.playback.state.wait_for_cleanup(
+                    0.25,
+                    stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
+                )
+                self.loop.wait_for_threads(self.task_timeout_ms, owner=self)
+                self.loop.next_cycle().result()
+                still_running = self.loop.pending_tasks(owner=self)
+
+                if still_running:
                     release_ui()
-                    self._refuse_replacement(still_running)
+                    self._refuse_replacement(still_running, reload=reload)
                     return 2
+
+                if reload:
+                    self.statusLoadingStarted.emit("Reloading Content...")
+
+                # The loaded content is released from here on, so a cancellation can no longer keep it.
+                keeps_loaded_content = False
 
                 if reload:
                     saved_view = self._capture_reload_ui_state()
@@ -543,10 +566,17 @@ class LoaderWorkspace[T](BaseWorkspace):
                     self.clear_failed_load()
                     return
 
+                if not self.lifecycle.finish(generation):
+                    logger.warning(
+                        "Workspace is %s, the load of %r cannot end",
+                        self.lifecycle.phase.name.lower(),
+                        self.content,
+                    )
+                    return
+
                 self.content_area.setEnabled(True)
                 self.tab_manager.tabs.setEnabled(True)
                 self.tbar.enable()
-                self.lifecycle.finish(generation)
 
                 if reload:
                     self.content_area.setFocus()
@@ -571,35 +601,52 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.debug("The load of %r stopped because the workspace is closing", content)
             release_ui()
             return 2
+        except Cancelled:
+            logger.debug("The load of %r was cancelled", content)
+
+            with suppress(Cancelled):
+                release_ui()
+                if keeps_loaded_content:
+                    self._keep_loaded_content()
+                    self.statusLoadingErrored.emit("Reload cancelled" if reload else "Load cancelled")
+                else:
+                    self.clear_failed_load()
+            raise
         except Exception:
             logger.error("Failed to load content: %r", content)
             release_ui()
             self.clear_failed_load()
             raise
 
-    def _finish_generation_tasks(self) -> list[TaskInfo]:
-        self.playback.state.wait_for_cleanup(
-            0.25,
-            stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
-        )
-        self.loop.wait_for_threads(self.task_timeout_ms, owner=self)
-        self.loop.next_cycle().result()
-        return self.loop.pending_tasks(owner=self)
+    def _warn_refused(self, action: str) -> None:
+        if self.lifecycle.phase is Phase.LOADED and self.lifecycle.busy:
+            logger.warning("At least one plugin is busy, cannot %s", action)
+        else:
+            logger.warning("Workspace is %s, cannot %s", self.lifecycle.phase.name.lower(), action)
 
     @run_in_loop(return_future=False)
-    def _refuse_replacement(self, still_running: list[TaskInfo]) -> None:
+    def _keep_loaded_content(self) -> None:
         self.lifecycle.cancel_reload()
         self.content_area.setEnabled(True)
         self.tbar.enable()
 
+    @run_in_loop(return_future=False)
+    def _refuse_replacement(self, still_running: list[TaskInfo], *, reload: bool) -> None:
+        self._keep_loaded_content()
+
+        if reload:
+            kind, outcome = "Reload", "The content was not reloaded"
+        else:
+            kind, outcome = "Load", "The new content was not loaded"
+
         names = ", ".join(sorted({task.name for task in still_running}))
         message = (
-            f"The content was not reloaded: {len(still_running)} task(s) of this workspace are still running "
+            f"{outcome}: {len(still_running)} task(s) of this workspace are still running "
             f"({names}). Try again when they have finished."
         )
         logger.warning(message)
-        self.statusLoadingErrored.emit("Reload refused")
-        show_warning(self, message, title="Reload Refused")
+        self.statusLoadingErrored.emit(f"{kind} refused")
+        show_warning(self, message, title=f"{kind} Refused")
 
     @run_in_loop(return_future=False)
     def _capture_reload_ui_state(self) -> tuple[ViewState, int, bool]:
@@ -654,12 +701,24 @@ class LoaderWorkspace[T](BaseWorkspace):
         screenshot.deleteLater()
 
     @run_in_loop(return_future=False)
-    def clear_failed_load(self) -> None:
-        if not self.lifecycle.fail():
+    def clear_failed_load(self, *, loaded_only: bool = False) -> bool:
+        """
+        Mark the workspace as failed, release its environment and show the error page.
+
+        Args:
+            loaded_only: Fail only loaded content. A frame of the loaded content that fails to render sets it,
+                because a load or reload that runs reports its own failure.
+
+        Returns:
+            True when the workspace moved to the failed phase.
+            False when it has already failed, is closing, or holds no loaded content while `loaded_only` is set.
+        """
+        if not self.lifecycle.fail(loaded_only=loaded_only):
             logger.debug("Workspace is %s, skipping clear_failed_load...", self.lifecycle.phase.name.lower())
-            return
+            return False
 
         self.playback.stop()
+        self.playback.invalidate_renders()
         self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
 
         self.clear_environment()
@@ -671,6 +730,8 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.set_error_page()
         self.tbar.enable()
         gc.collect()
+
+        return True
 
     @run_in_loop
     def init_timeline(self) -> None:
@@ -892,6 +953,10 @@ class LoaderWorkspace[T](BaseWorkspace):
     @Slot()
     def _on_reload_failed(self) -> None:
         self.load_content(self.content)
+
+    @Slot()
+    def _on_render_failed(self) -> None:
+        self.clear_failed_load(loaded_only=True)
 
     @Slot()
     def _copy_current_frame_to_clipboard(self) -> None:

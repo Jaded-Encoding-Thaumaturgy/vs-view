@@ -76,16 +76,7 @@ class Generation:
 
 
 class WorkspaceLifecycle:
-    """
-    Tracks a loader workspace's phase, generation, and plugin gate.
-
-    `Generation` increments when loading new content or closing.
-    Work from an older generation is stale and must discard its results.
-
-    Plugins hold the workspace via `WorkspaceBlocker`, which blocks content replacement,
-    reloads, and teardown.
-    It cannot be acquired until new outputs exist or teardown finishes.
-    """
+    """Tracks a loader workspace's phase, generation, and plugin gate."""
 
     def __init__(self) -> None:
         self._lock = Lock()
@@ -190,14 +181,26 @@ class WorkspaceLifecycle:
         """
         return self._move(Phase.LOADED, generation)
 
-    def fail(self) -> bool:
+    def fail(self, *, loaded_only: bool = False) -> bool:
         """
         Mark the workspace as failed.
 
+        Args:
+            loaded_only: Fail only loaded content. A frame of the loaded content that fails to render sets it,
+                because a load or reload that runs reports its own failure.
+
         Returns:
-            False when the workspace has already failed or is closing, True otherwise.
+            False when the workspace has already failed or is closing,
+            or when `loaded_only` is set and no content is loaded. True otherwise.
         """
-        return self._move(Phase.FAILED)
+        with self._lock:
+            if Phase.FAILED not in self._phase.transition or (loaded_only and self._phase is not Phase.LOADED):
+                return False
+
+            self._phase = Phase.FAILED
+            self._exclusive = False
+
+        return True
 
     def begin_close(self) -> Generation | None:
         """
@@ -254,7 +257,7 @@ class WorkspaceLifecycle:
 
             self._phase = target
 
-            if target in (Phase.LOADED, Phase.FAILED):
+            if target is Phase.LOADED:
                 self._exclusive = False
 
         return True

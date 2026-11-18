@@ -438,6 +438,7 @@ class PlaybackManager(QObject):
         if self.state.is_playing:
             self._stop_playback()
 
+    @run_in_loop(return_future=False)
     def invalidate_renders(self) -> None:
         """Drop the result of every frame render that is still running."""
         self._render_epoch += 1

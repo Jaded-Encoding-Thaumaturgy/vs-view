@@ -31,16 +31,20 @@ def test_adding_the_same_callable_with_the_same_arguments_keeps_one_entry(
     assert calls == expected
 
 
-def test_arguments_that_cannot_be_hashed_are_kept_each_time() -> None:
+def test_arguments_that_cannot_be_hashed_are_kept_each_time_and_only_their_handle_removes_them() -> None:
     calls = list[list[int]]()
     registry = CallbackRegistry()
 
+    handle = registry.add(calls.append, [1])
     registry.add(calls.append, [1])
-    registry.add(calls.append, [1])
+    removed_by_arguments = registry.remove(calls.append, [1])
+    removed_by_handle = handle.remove()
     for cb in registry.take_all():
         cb()
 
-    assert calls == [[1], [1]]
+    assert removed_by_arguments is False
+    assert removed_by_handle is True
+    assert calls == [[1]]
 
 
 def test_handle_remove_unregisters_the_callback() -> None:
@@ -49,11 +53,13 @@ def test_handle_remove_unregisters_the_callback() -> None:
     handle = registry.add(calls.append, "removed")
     registry.add(calls.append, "kept")
 
-    handle.remove()
-    handle.remove()
+    first = handle.remove()
+    second = handle.remove()
     for cb in registry.take_all():
         cb()
 
+    assert first is True
+    assert second is False
     assert calls == ["kept"]
 
 
@@ -67,10 +73,13 @@ def test_remove_unregisters_the_entry_with_the_same_callable_and_arguments() -> 
     registry.add(record, "a", suffix="!")
     registry.add(record, "b")
 
-    registry.remove(record, "a", suffix="!")
+    removed = registry.remove(record, "a", suffix="!")
+    removed_again = registry.remove(record, "a", suffix="!")
     for cb in registry.take_all():
         cb()
 
+    assert removed is True
+    assert removed_again is False
     assert calls == ["b"]
 
 

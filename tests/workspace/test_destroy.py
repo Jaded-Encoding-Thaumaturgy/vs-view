@@ -14,6 +14,7 @@ from vsengine.policy import ManagedEnvironment
 
 from vsview.api._helpers import output_metadata
 from vsview.api.info import Context, register_on_workspace_destroy
+from vsview.app.plugins.exceptions import BlockerRefusedError
 from vsview.app.utils import Disposable
 from vsview.app.workspace.base import BaseWorkspace
 from vsview.app.workspace.loader import VSEngineWorkspace
@@ -82,14 +83,21 @@ def test_base_workspace_unregister(qtbot: QtBot) -> None:
     assert called == ["cb2"]
 
 
-def test_base_workspace_callback_error_resilience(qtbot: QtBot) -> None:
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(RuntimeError("Cleanup failure"), id="error"),
+        pytest.param(BlockerRefusedError("closing"), id="cancellation"),
+    ],
+)
+def test_base_workspace_callback_error_resilience(qtbot: QtBot, error: BaseException) -> None:
     workspace = BaseWorkspace()
     qtbot.addWidget(workspace)
 
     called = list[str]()
 
     def failing_cb() -> None:
-        raise RuntimeError("Cleanup failure")
+        raise error
 
     def passing_cb() -> None:
         called.append("passed")

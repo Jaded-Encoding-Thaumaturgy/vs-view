@@ -104,6 +104,27 @@ def test_fail(start: Phase, accepted: bool, end: Phase) -> None:
     assert lifecycle.phase is end
 
 
+@pytest.mark.parametrize(
+    ("start", "accepted", "end"),
+    [
+        (Phase.EMPTY, False, Phase.EMPTY),
+        (Phase.LOADING, False, Phase.LOADING),
+        (Phase.LOADED, True, Phase.FAILED),
+        (Phase.RELOADING, False, Phase.RELOADING),
+        (Phase.FAILED, False, Phase.FAILED),
+        (Phase.CLOSING, False, Phase.CLOSING),
+        (Phase.CLOSED, False, Phase.CLOSED),
+    ],
+)
+def test_fail_loaded_only_fails_nothing_but_loaded_content(start: Phase, accepted: bool, end: Phase) -> None:
+    lifecycle = _lifecycle_in(start)
+
+    result = lifecycle.fail(loaded_only=True)
+
+    assert result is accepted
+    assert lifecycle.phase is end
+
+
 @pytest.mark.parametrize("start", [Phase.LOADING, Phase.RELOADING])
 def test_finish_marks_the_current_generation_as_loaded(start: Phase) -> None:
     lifecycle = _lifecycle_in(start)

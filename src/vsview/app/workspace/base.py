@@ -107,15 +107,21 @@ class BaseWorkspace(QMainWindow):
         """
         Register a callback to run once, when this workspace closes.
 
-        Registering the same callable with the same arguments again is ignored.
+        Registering the same callable with the same arguments again is ignored,
+        unless an argument cannot be hashed.
         The callbacks run in reverse registration order, after the environment is released.
         """
         self._destroy_callbacks.add(cb, *args, **kwargs)
         return cb
 
-    def unregister_on_destroy[**P, R](self, cb: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> None:
-        """Unregister a previously registered on_destroy callback."""
-        self._destroy_callbacks.remove(cb, *args, **kwargs)
+    def unregister_on_destroy[**P, R](self, cb: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> bool:
+        """
+        Unregister a callback registered with `register_on_destroy` and the same arguments.
+
+        Returns:
+            True when the callback was registered or False when an argument cannot be hashed.
+        """
+        return self._destroy_callbacks.remove(cb, *args, **kwargs)
 
     def on_teardown_started(self) -> None:
         """

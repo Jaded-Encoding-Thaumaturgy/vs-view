@@ -573,7 +573,8 @@ class PluginAPI(QObject):
         when the object is destroyed.
 
         Returns:
-            A handle whose `remove()` method unregisters the callback.
+            A handle whose `remove()` method unregisters the callback,
+            and returns whether the callback was still registered.
         """
         return _get_controller(self).register_on_destroy(cb)
 
@@ -679,9 +680,10 @@ class WorkspaceBlocker(Protocol):
     * Automatic or manual reloading.
     * Frame requests (via seeking, programmatic calls, or playback start).
 
+    A held workspace does not delay its teardown.
+
     The workspace cannot be held while a load or reload replaces its environment, or once it is closing:
     `acquire()` returns False, and entering the context raises `BlockerRefusedError`.
-    `BlockerRefusedError` is a cancellation, so a background task that raises it ends quietly.
     """
 
     def __enter__(self) -> None: ...

@@ -7,6 +7,7 @@ from threading import Lock
 from typing import Any
 
 from PySide6.QtCore import QObject
+from vsengine.loops import Cancelled
 
 logger = getLogger(__name__)
 
@@ -16,22 +17,21 @@ class CallbackHandle:
 
     __slots__ = ("_remove",)
 
-    def __init__(self, remove: Callable[[], None]) -> None:
+    def __init__(self, remove: Callable[[], bool]) -> None:
         self._remove = remove
 
-    def remove(self) -> None:
-        """Remove the callback. Does nothing when it was already removed or has already run."""
-        self._remove()
+    def remove(self) -> bool:
+        """
+        Remove the callback.
+
+        Returns:
+            True when the callback was still registered.
+            False when it was already removed or has already run.
+        """
+        return self._remove()
 
 
 class CallbackRegistry:
-    """
-    An ordered, thread-safe set of callbacks run when a workspace releases its resources.
-
-    Registering the same callable with the same arguments again keeps the first entry.
-    A callback that is a bound method of a QObject is removed when that object is destroyed.
-    """
-
     def __init__(self) -> None:
         self._lock = Lock()
         self._callbacks = dict[Hashable, Callable[[], Any]]()
@@ -50,8 +50,8 @@ class CallbackRegistry:
 
         return CallbackHandle(remove)
 
-    def remove[**P](self, cb: Callable[P, Any], /, *args: P.args, **kwargs: P.kwargs) -> None:
-        self._discard(_make_key(cb, args, kwargs))
+    def remove[**P](self, cb: Callable[P, Any], /, *args: P.args, **kwargs: P.kwargs) -> bool:
+        return self._discard(_make_key(cb, args, kwargs))
 
     def snapshot(self) -> list[Callable[[], Any]]:
         with self._lock:
@@ -63,15 +63,17 @@ class CallbackRegistry:
             self._callbacks.clear()
         return callbacks
 
-    def _discard(self, key: Hashable) -> None:
+    def _discard(self, key: Hashable) -> bool:
         with self._lock:
-            self._callbacks.pop(key, None)
+            return self._callbacks.pop(key, None) is not None
 
 
 def run_callbacks(callbacks: list[Callable[[], Any]], owner: object) -> None:
     for cb in callbacks:
         try:
             cb()
+        except Cancelled as e:
+            logger.debug("Callback %r of %r was cancelled: %s", cb, owner, e)
         except Exception:
             logger.exception("Error running callback %r of %r", cb, owner)
 

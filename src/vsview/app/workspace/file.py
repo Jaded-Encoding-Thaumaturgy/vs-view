@@ -237,9 +237,11 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
 
     @run_in_loop(return_future=False)
     @override
-    def clear_failed_load(self) -> None:
-        self._autosave_timer.stop()
-        super().clear_failed_load()
+    def clear_failed_load(self, *, loaded_only: bool = False) -> bool:
+        # A refused failure must not stop the autosave of content that is still loaded.
+        if failed := super().clear_failed_load(loaded_only=loaded_only):
+            self._autosave_timer.stop()
+        return failed
 
     @run_in_loop(return_future=False)
     @override

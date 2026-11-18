@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from shiboken6 import Shiboken
+from vsengine.loops import Cancelled
 from vsengine.policy import ManagedEnvironment
 
 from vsview.api import hookimpl
@@ -102,6 +103,19 @@ def _make_dual_output_script_content(length: int = 100) -> str:
         ")\n"
         "clip0.set_output(0)\n"
         "clip1.set_output(1)\n"
+    )
+
+
+def _make_gated_broken_frame_script_content(broken_frame: int) -> str:
+    # `rendering` and `gate` come from the workspace's vsargs.
+    return _make_valid_script_content(length=50) + (
+        "def _eval(n):\n"
+        f"    if n == {broken_frame}:\n"
+        "        rendering.set()\n"
+        "        gate.wait(5)\n"
+        "        raise ValueError('broken frame')\n"
+        "    return clip\n"
+        "core.std.FrameEval(clip, _eval).set_output(0)\n"
     )
 
 
@@ -736,6 +750,93 @@ def test_a_reload_is_refused_while_a_task_of_the_workspace_still_runs(
     assert ws.reload_count == 1
 
 
+def test_a_frame_that_fails_to_render_during_a_reload_does_not_fail_the_reload(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+) -> None:
+    rendering, gate = threading.Event(), threading.Event()
+    script_file = tmp_path / "broken_frame.vpy"
+    script_file.write_text(_make_gated_broken_frame_script_content(broken_frame=10), encoding="utf-8")
+    ws = ConcreteScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+    ws.vsargs = {"rendering": rendering, "gate": gate}
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+    ws.playback.request_frame(10)
+    qtbot.waitUntil(rendering.is_set, timeout=3000)
+
+    fut_reload = ws.reload_content()
+    qtbot.waitUntil(lambda: ws.lifecycle.phase is Phase.RELOADING, timeout=3000)
+    gate.set()
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.lifecycle.phase is not Phase.RELOADING, timeout=5000)
+
+    assert fut_reload.result() == 0
+    assert ws.lifecycle.phase is Phase.LOADED
+    assert ws.reload_count == 1
+    assert ws.stack.currentWidget() is ws.loaded_page
+    assert ws.tab_manager.tabs.count() == 1
+
+
+class _CancelledBeforeReleaseWorkspace(ConcreteScriptWorkspace):
+    @override
+    def on_before_reload(self) -> None:
+        raise Cancelled("cancelled before the loaded content is released")
+
+
+class _CancelledAfterReleaseWorkspace(ConcreteScriptWorkspace):
+    @override
+    def on_views_created(self, views: Sequence[GraphicsView]) -> None:
+        if self.reload_count > 0:
+            raise Cancelled("cancelled after the loaded content is released")
+
+
+@pytest.mark.parametrize(
+    ("workspace_type", "expected_phase", "expected_page", "env_disposed"),
+    [
+        pytest.param(
+            _CancelledBeforeReleaseWorkspace,
+            Phase.LOADED,
+            lambda ws: ws.loaded_page,
+            False,
+            id="before-release-keeps-the-content",
+        ),
+        pytest.param(
+            _CancelledAfterReleaseWorkspace,
+            Phase.FAILED,
+            lambda ws: ws.error_page,
+            True,
+            id="after-release-fails",
+        ),
+    ],
+)
+def test_a_cancelled_reload_keeps_the_loaded_content_only_until_its_release(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+    workspace_type: type[ConcreteScriptWorkspace],
+    expected_phase: Phase,
+    expected_page: Callable[[ConcreteScriptWorkspace], QWidget],
+    env_disposed: bool,
+) -> None:
+    script_file = tmp_path / "cancelled.vpy"
+    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    ws = workspace_type(vsview_env_factory)
+    qtbot.addWidget(ws)
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+    env_before = ws.env
+
+    fut_reload = ws.reload_content()
+    qtbot.waitUntil(fut_reload.done, timeout=5000)
+
+    assert isinstance(fut_reload.exception(), Cancelled)
+    assert ws.lifecycle.phase is expected_phase
+    assert ws.stack.currentWidget() is expected_page(ws)
+    assert env_before.disposed is env_disposed
+    assert ws.tbar.isEnabled() is True
+
+
 def test_a_load_while_another_load_runs_is_refused(
     qtbot: QtBot,
     vsview_env_factory: Callable[[], ManagedEnvironment],
@@ -1139,6 +1240,52 @@ def test_load_content_skips_plugins_whose_constructor_raises(
     assert [d.objectName() for d in ws.dock_container.findChildren(PluginDock)] == ["test_loader_good_dock"]
     assert [type(tabs.widget(i)) for i in range(tabs.count())] == [_GoodPanel]
     assert tabs.isTabVisible(0) is True
+
+
+class _HoldingAtCloseDock(WidgetPluginBase[Any, Any]):
+    identifier = "test_loader_holding_at_close_dock"
+    display_name = "Holding at close dock"
+
+    @override
+    def on_workspace_destroy(self) -> None:
+        with self.api.blocker():
+            pass
+
+
+class _RecordingCloseDock(WidgetPluginBase[Any, Any]):
+    identifier = "test_loader_recording_close_dock"
+    display_name = "Recording close dock"
+
+    def __init__(self, parent: QWidget, api: Any) -> None:
+        super().__init__(parent, api)
+        self.destroy_calls = 0
+
+    @override
+    def on_workspace_destroy(self) -> None:
+        self.destroy_calls += 1
+
+
+def test_a_plugin_refused_the_workspace_at_close_does_not_stop_the_teardown(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+    register_tools: Callable[..., None],
+) -> None:
+    register_tools(docks=[_HoldingAtCloseDock, _RecordingCloseDock])
+    script_file = tmp_path / "close.vpy"
+    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    ws = ConcreteScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.LOADED, timeout=5000)
+    env = ws.env
+    recorder = next(p for p in ws.plugins if isinstance(p, _RecordingCloseDock))
+
+    ws.teardown()
+
+    assert recorder.destroy_calls == 1
+    assert ws.lifecycle.phase is Phase.CLOSED
+    assert env.disposed is True
 
 
 class _PanelPluginFailingOnce:
