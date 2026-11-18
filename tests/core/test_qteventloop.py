@@ -15,7 +15,7 @@ from vsengine.loops import Cancelled, set_loop
 
 from vsview.vsenv.loop import QtEventLoop, run_in_background, run_in_loop
 
-pytestmark = [pytest.mark.integration, pytest.mark.qt]
+pytestmark = [pytest.mark.integration, pytest.mark.qt, pytest.mark.vpy("no-core")]
 
 
 @pytest.fixture
