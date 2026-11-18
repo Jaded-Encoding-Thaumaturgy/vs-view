@@ -127,9 +127,10 @@ plugins = [
     "vsview-editor",
     "vsview-remote",
 ]
-# Specify this one to it's properly resolved for nativeres.
-# PyPI has an outdated wheel stub version compared to vs-wheels.
-index-nonsense = ["vapoursynth-ffms2"]
+# Extra packages bundled in the offline PyApp distribution.
+pyapp = ["vsjetpack[full]"]
+# Specify thosee to they're properly resolved for vs-wheels.
+index-nonsense = ["vapoursynth-ffms2", "vapoursynth-fmtconv"]
 
 [project.urls]
 Documentation = "https://jaded-encoding-thaumaturgy.github.io/vs-view/"
@@ -177,6 +178,7 @@ exclude = ["src/plugins/audio-convert"]
 
 [tool.uv.sources]
 vapoursynth-ffms2 = { index = "vs-wheels" }
+vapoursynth-fmtconv = { index = "vs-wheels" }
 # Core
 vspackrgb = { workspace = true }
 vsview-pyapp = { path = "src/pyapp", editable = true }

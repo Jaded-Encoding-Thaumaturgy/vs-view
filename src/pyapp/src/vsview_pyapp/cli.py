@@ -247,9 +247,29 @@ def create_dist(
     if not [*Path(main_dir).resolve().glob("*.whl"), *Path(plugins_dir).resolve().glob("*.whl")]:
         raise RuntimeError("No wheels found to install into offline distribution")
 
-    logger.info("Installing wheels into Python distribution...")
-    local_wheels = [w.resolve() for w in (*main_dir.glob("*.whl"), *plugins_dir.glob("*.whl"))]
-    install_cmd: list[Any] = [
+    logger.info("Exporting locked requirements...")
+    pylock = build_dir / "pylock.toml"
+    subprocess.run(
+        [
+            "uv",
+            "export",
+            "--locked",
+            "--format",
+            "pylock.toml",
+            "--no-dev",
+            "--extra",
+            "full",
+            "--group",
+            "pyapp",
+            "--no-emit-workspace",
+            "--output-file",
+            pylock,
+            *q,
+        ],
+        check=True,
+    )
+
+    pip_cmd: list[Any] = [
         python_exe,
         "-m",
         "pip",
@@ -257,17 +277,24 @@ def create_dist(
         "--no-warn-script-location",
         "--disable-pip-version-check",
         "--quiet",
-        "--find-links",
-        main_dir.resolve(),
-        "--find-links",
-        plugins_dir.resolve(),
-        "--extra-index-url",
-        "https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple",
-        *local_wheels,
-        "vsjetpack[full]",
         *q,
     ]
-    subprocess.run(install_cmd, check=True)
+
+    logger.info("Installing locked dependencies into Python distribution...")
+    subprocess.run([*pip_cmd, "--no-deps", "--require-hashes", "--requirement", pylock], check=True)
+
+    logger.info("Installing wheels into Python distribution...")
+    local_wheels = [w.resolve() for w in (*main_dir.glob("*.whl"), *plugins_dir.glob("*.whl"))]
+    subprocess.run([*pip_cmd, "--no-deps", "--no-index", *local_wheels], check=True)
+
+    # Catch anything missing from the export.
+    res = subprocess.run(
+        [python_exe, "-m", "pip", "check", "--disable-pip-version-check"],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    logger.info(res.stdout)
 
     logger.info("Relocating launcher scripts...")
     if os.name == "nt":
