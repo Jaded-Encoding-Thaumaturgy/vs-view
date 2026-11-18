@@ -95,7 +95,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
 
     @override
     def deleteLater(self) -> None:
-        if self._is_deleting:
+        if self.lifecycle.closing:
             return super().deleteLater()
 
         self._autosave_timer.stop()

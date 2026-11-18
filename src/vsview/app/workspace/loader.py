@@ -48,6 +48,7 @@ from ..views.tab import TabViewWidget
 from ..views.timeline import TimelineControlBar
 from ..views.video import GraphicsView, ViewState
 from .base import BaseWorkspace
+from .lifecycle import WorkspaceLifecycle
 from .playback import PlaybackManager
 from .tab_manager import PlayHeadToolButton, TabManager
 from .utils import State, evict_packages, find_local_packages
@@ -71,9 +72,8 @@ class LoaderWorkspace[T](BaseWorkspace):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
+        self.lifecycle = WorkspaceLifecycle()
         self.reload_count = 0
-        self._is_failed = False
-        self._is_deleting = False
 
         self.stack = QStackedWidget(self)
         self.current_layout.addWidget(self.stack)
@@ -254,10 +254,9 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     @override
     def deleteLater(self) -> None:
-        if self._is_deleting:
+        if self.lifecycle.begin_close() is None:
             logger.debug("%s deleteLater already in progress, ignoring", self.__class__.__name__)
-            return None
-        self._is_deleting = True
+            return
 
         logger.debug(
             "%s(%r) deleteLater called, cleaning up resources",
@@ -270,7 +269,8 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.plugin_controller.on_workspace_destroy()
         self.loop.wait_for_threads(10000, owner=self)
 
-        return super().deleteLater()
+        super().deleteLater()
+        self.lifecycle.mark_closed()
 
     @override
     def clear_environment(self) -> None:
@@ -344,6 +344,12 @@ class LoaderWorkspace[T](BaseWorkspace):
     ) -> int:
         logger.debug("load_content called: path=%r, frame=%r, tab_index=%r", content, frame, tab_index)
 
+        if not self.lifecycle.try_begin_load():
+            logger.debug("Workspace is closing, ignoring the load of %r", content)
+            return 2
+
+        generation = self.lifecycle.next_generation()
+
         self.set_loading_page()
         self.statusLoadingStarted.emit("Loading...")
 
@@ -385,7 +391,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.content_area.setEnabled(True)
             self.tab_manager.disable_switch = False
             self.playback.can_reload = True
-            self._is_failed = False
+            self.lifecycle.finish(generation)
 
             self.on_content_loaded()
             logger.info("Content loaded successfully: %r", self.content)
@@ -407,6 +413,10 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         if self.plugin_controller.busy:
             logger.warning("At least one plugin is busy, cannot reload content")
+            return 2
+
+        if not self.lifecycle.try_begin_reload():
+            logger.warning("Workspace is %s, cannot reload content", self.lifecycle.phase.name.lower())
             return 2
 
         logger.debug("Reloading content: %r", self.content)
@@ -441,6 +451,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             # 2. Reset Environment
             self.clear_environment()
             self.loop.from_thread(gc.collect).result()
+            generation = self.lifecycle.next_generation()
 
             if is_debug:
                 logger.debug("Memory after environment cleanup: %s", ProcessMemorySnapshot())
@@ -486,7 +497,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.content_area.setFocus()
                 self.playback.can_reload = True
                 self.tab_manager.disable_switch = False
-                self._is_failed = False
+                self.lifecycle.finish(generation)
                 self.tbar.enable()
 
                 logger.info("Content reloaded successfully: %r", self.content)
@@ -499,7 +510,6 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.error("Failed to reload content: %r", self.content)
             self._destroy_freeze_screenshot(screenshot)
             mmm.__exit__(None, None, None)
-            self._is_failed = False
             self.clear_failed_load()
             raise
 
@@ -557,8 +567,8 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     @run_in_loop(return_future=False)
     def clear_failed_load(self) -> None:
-        if self._is_failed:
-            logger.debug("Workspace already in failed state, skipping clear_failed_load...")
+        if not self.lifecycle.fail():
+            logger.debug("Workspace is %s, skipping clear_failed_load...", self.lifecycle.phase.name.lower())
             return
 
         self.playback.stop()
@@ -574,8 +584,6 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.tbar.enable()
         self.playback.can_reload = True
         gc.collect()
-
-        self._is_failed = True
 
     @run_in_loop
     def init_timeline(self) -> None:
@@ -624,7 +632,6 @@ class LoaderWorkspace[T](BaseWorkspace):
     @run_in_loop(return_future=False)
     def set_loading_page(self) -> None:
         logger.debug("Switching to loading page")
-        self._is_failed = False
         self.stack.setCurrentWidget(self.loading_page)
 
     @run_in_loop(return_future=False)

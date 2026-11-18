@@ -17,6 +17,7 @@ from vsview.app.outputs.video import VideoOutput
 from vsview.app.plugins.api import WidgetPluginBase
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.views import PluginDock
+from vsview.app.workspace.lifecycle import Phase
 from vsview.app.workspace.loader import LoaderWorkspace, VSEngineWorkspace
 from vsview.app.workspace.tab_manager import PlayHeadToolButton
 from vsview.assets import IconName
@@ -492,6 +493,70 @@ def test_reload_content_rejected_when_busy(
         assert ws.reload_count == 0
 
     assert ws.plugin_controller.busy is False
+
+
+# Lifecycle Phase Tests
+@pytest.mark.parametrize(
+    ("script_content", "expected_result", "expected_phase"),
+    [
+        pytest.param(_make_valid_script_content(length=50), 0, Phase.LOADED, id="valid"),
+        pytest.param("broken = [invalid syntax", 1, Phase.FAILED, id="broken"),
+    ],
+)
+def test_load_ends_in_the_phase_matching_its_result(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+    mocker: MockerFixture,
+    script_content: str,
+    expected_result: int,
+    expected_phase: Phase,
+) -> None:
+    mocker.patch("vsview.app.error.display_error_dialog", return_value=0)
+    script_file = tmp_path / "phase.vpy"
+    script_file.write_text(script_content, encoding="utf-8")
+    ws = ConcreteScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is expected_phase, timeout=3000)
+
+    assert fut.result() == expected_result
+    assert ws.lifecycle.phase is expected_phase
+
+
+def test_reload_of_a_failed_load_is_refused(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    mocker.patch("vsview.app.error.display_error_dialog", return_value=0)
+    script_file = tmp_path / "failed.vpy"
+    script_file.write_text("broken = [invalid syntax", encoding="utf-8")
+    ws = ConcreteScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.FAILED, timeout=3000)
+
+    fut_reload = ws.reload_content()
+    qtbot.waitUntil(fut_reload.done, timeout=2000)
+
+    assert fut_reload.result() == 2
+    assert ws.reload_count == 0
+    assert ws.lifecycle.phase is Phase.FAILED
+    assert ws.stack.currentWidget() is ws.error_page
+
+
+@pytest.mark.vpy("no-core")
+def test_a_load_requested_after_close_starts_nothing(loader_workspace: ConcreteLoaderWorkspace) -> None:
+    loader_workspace.deleteLater()
+
+    fut = loader_workspace.load_content("dummy_content")
+
+    assert fut.result(timeout=2) == 2
+    assert loader_workspace.lifecycle.phase is Phase.CLOSED
+    assert loader_workspace.stack.currentWidget() is loader_workspace.empty_page
 
 
 # Error Recovery Lifecycle Tests
