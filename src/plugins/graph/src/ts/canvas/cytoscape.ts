@@ -26,11 +26,18 @@ const LABEL_FONT = 'normal bold 14px system-ui, -apple-system, sans-serif';
 const LABEL_FONT_SIZE = 14;
 const FALLBACK_CHAR_WIDTH = 8;
 
+// Runtime Core methods that Cytoscape's typings don't cover.
+interface CoreInternals {
+  headless(): boolean;
+  renderer(): { wheelSensitivity?: number };
+}
+
 export class CytoscapeCanvas implements IDisposable {
   private cy: cytoscape.Core | null = null;
   private currentDirection: LayoutDirection = 'TB';
   private _heatmapActive = false;
   private _autoFitOnReload = true;
+  private _wheelSensitivity = 1;
   private showTimings = true;
   private timingUnit: TimingUnit = 'auto';
   private selectedNodeId: string | null = null;
@@ -103,6 +110,16 @@ export class CytoscapeCanvas implements IDisposable {
     this._autoFitOnReload = enabled;
   }
 
+  public get wheelSensitivity(): number {
+    return this._wheelSensitivity;
+  }
+
+  public set wheelSensitivity(value: number) {
+    if (this._wheelSensitivity === value) return;
+    this._wheelSensitivity = value;
+    this.applyWheelSensitivity();
+  }
+
   public get heatmapActive(): boolean {
     return this._heatmapActive;
   }
@@ -137,6 +154,7 @@ export class CytoscapeCanvas implements IDisposable {
       style: [],
     });
 
+    this.applyWheelSensitivity();
     this.setupEventHandlers();
   }
 
@@ -233,6 +251,9 @@ export class CytoscapeCanvas implements IDisposable {
     }
     if (options.autoFitOnReload !== undefined) {
       this._autoFitOnReload = options.autoFitOnReload;
+    }
+    if (options.wheelSensitivity !== undefined) {
+      this.wheelSensitivity = options.wheelSensitivity;
     }
 
     const resized = this.applyTimingDisplay(
@@ -674,6 +695,22 @@ export class CytoscapeCanvas implements IDisposable {
         this.containerElement.title = '';
       }
     });
+  }
+
+  private applyWheelSensitivity(): void {
+    const cy = this.cy as (cytoscape.Core & CoreInternals) | null;
+    if (!cy || cy.headless()) return;
+
+    // The wheelSensitivity option is only read at init.
+    // Its wheel handler reads this renderer field on every event, so writing it applies the change live.
+    const renderer = cy.renderer();
+    if (!('wheelSensitivity' in renderer)) {
+      console.warn(
+        'Cytoscape renderer has no wheelSensitivity field; the wheel zoom speed setting is ignored.',
+      );
+      return;
+    }
+    renderer.wheelSensitivity = this._wheelSensitivity;
   }
 
   private notifyNodeSelected(node: CanvasNodeData): void {

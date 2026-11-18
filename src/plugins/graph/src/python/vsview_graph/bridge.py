@@ -87,6 +87,7 @@ class GraphOptionsPayload(TypedDict, total=False):
     showTimings: bool
     timingUnit: Literal["auto", "ms", "ns"]
     autoFitOnReload: bool
+    wheelSensitivity: float
 
 
 class NodeTimingUpdate(TypedDict):

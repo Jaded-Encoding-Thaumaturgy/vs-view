@@ -350,6 +350,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
             "showTimings": settings.show_timings,
             "timingUnit": settings.timing_unit,
             "autoFitOnReload": settings.auto_fit_on_reload,
+            "wheelSensitivity": settings.wheel_zoom_speed,
         }
 
         # globalSettingsChanged fires for every global save, including other plugins' settings.

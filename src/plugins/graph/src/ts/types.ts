@@ -200,6 +200,7 @@ export interface GraphOptionsPayload {
   showTimings: boolean;
   timingUnit: TimingUnit;
   autoFitOnReload: boolean;
+  wheelSensitivity: number;
 }
 
 export interface NodeTimingsUpdate {

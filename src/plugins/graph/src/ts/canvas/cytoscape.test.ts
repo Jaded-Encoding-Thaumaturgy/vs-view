@@ -171,8 +171,10 @@ describe('CytoscapeCanvas', () => {
       nodeSep: 50,
       showTimings: false,
       autoFitOnReload: false,
+      wheelSensitivity: 5,
     });
     expect(layoutSpy).toHaveBeenCalledTimes(1);
+    expect(canvas.wheelSensitivity).toBe(5);
     expect(canvas.direction).toBe('LR');
     expect(canvas.layout).toBe('breadthfirst');
     expect(canvas.rankSep).toBe(80);

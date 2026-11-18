@@ -289,6 +289,7 @@ def test_graph_plugin_initial_sync_on_web_ready(
         "showTimings": True,
         "timingUnit": "auto",
         "autoFitOnReload": True,
+        "wheelSensitivity": 3.0,
     }
 
     # Video outputs dispatched
@@ -391,7 +392,7 @@ def test_graph_plugin_settings_propagation(
 
     # A reloaded page gets the full set again
     plugin.view.bridge.onWebReady()
-    assert len(received_dispatches[PyToJsCommand.SET_OPTIONS]) == 8
+    assert len(received_dispatches[PyToJsCommand.SET_OPTIONS]) == 9
 
 
 # Graph Inspection Caching & Invariants

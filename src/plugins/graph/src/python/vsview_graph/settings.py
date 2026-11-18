@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from PySide6.QtCore import QKeyCombination, Qt
 from PySide6.QtGui import QKeySequence
 
-from vsview.api import ActionDefinition, Checkbox, Dropdown, Spin
+from vsview.api import ActionDefinition, Checkbox, DoubleSpin, Dropdown, Spin
 
 from .bridge import KeybindingRule
 from .constants import PLUGIN_IDENTIFIER
@@ -79,6 +79,18 @@ class GraphSettings(BaseModel):
             tooltip="Automatically zoom and fit the entire graph into the viewport when topology reloads.",
         ),
     ] = True
+
+    wheel_zoom_speed: Annotated[
+        float,
+        DoubleSpin(
+            label="Wheel Zoom Speed",
+            min=0.5,
+            max=10.0,
+            suffix="x",
+            decimals=1,
+            tooltip="How much each mouse wheel step zooms the graph.\nHigher values zoom faster.",
+        ),
+    ] = 3.0
 
     show_timings: Annotated[
         bool,

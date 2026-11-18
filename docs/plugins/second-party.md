@@ -241,6 +241,7 @@ The Dependency Graph dock renders the filter dependency graph of any output usin
 | **Node Separation**   | `40 px` | Spacing between sibling nodes in Dagre and Concentric (10–200 px).                               |
 | **Profiling Heatmap** | `off`   | Toggles profiling heatmap overlay.                                                               |
 | **Auto-Fit Viewport** | `on`    | Fits graph to screen on reload.                                                                  |
+| **Wheel Zoom Speed**  | `3.0x`  | How much each mouse wheel step zooms (0.5–10x).                                                  |
 | **Show Timings**      | `on`    | Shows execution times on nodes and tooltips.                                                     |
 | **Timing Unit**       | `auto`  | Time format: `auto` (adaptive), `ms`, or `ns`.                                                   |
 
