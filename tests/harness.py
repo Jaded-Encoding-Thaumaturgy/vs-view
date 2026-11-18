@@ -233,6 +233,7 @@ class HarnessPluginController(QObject):
         self._aoutputs = list[AudioOutputProxy]()
         self._current_aoutput: AudioOutputProxy | None = None
         self._busy = False
+        self.refused_holds = 0
 
         self.destroy_callbacks = CallbackRegistry()
         self.managed_plugins = list[WidgetPluginBase[Any, Any]]()
@@ -284,6 +285,10 @@ class HarnessPluginController(QObject):
         return self._busy
 
     @property
+    def generation(self) -> int:
+        return 0
+
+    @property
     def voutputs(self) -> list[VideoOutputProxy]:
         return self._voutputs
 
@@ -314,7 +319,14 @@ class HarnessPluginController(QObject):
         return self.api.blocker(caller)
 
     def create_blocker(self, api: PluginAPI, caller: Any = None) -> WorkspaceBlocker:
-        return WorkspaceBlockerImplementation(lambda locked: setattr(self, "_busy", locked))
+        def hold() -> bool:
+            if self.refused_holds > 0:
+                self.refused_holds -= 1
+                return False
+            self._busy = True
+            return True
+
+        return WorkspaceBlockerImplementation(hold, lambda: setattr(self, "_busy", False))
 
     def init_view(self, view: Any, plugin: Any = None, refresh: bool = False) -> None: ...
 

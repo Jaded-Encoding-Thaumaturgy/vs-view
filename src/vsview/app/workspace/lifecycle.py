@@ -3,7 +3,10 @@ from __future__ import annotations
 from enum import Enum, auto
 from threading import Lock
 
+from PySide6.QtCore import QObject
 from vsengine.loops import Cancelled
+
+from ..utils import QObjectCounter
 
 
 class Phase(Enum):
@@ -74,16 +77,22 @@ class Generation:
 
 class WorkspaceLifecycle:
     """
-    The phase and the generation of a loader workspace.
+    Tracks a loader workspace's phase, generation, and plugin gate.
 
-    The generation goes up when a load or reload starts its new content, and when the workspace starts to close.
-    Work that holds an older `Generation` belongs to content that is gone, so it must drop its results.
+    `Generation` increments when loading new content or closing.
+    Work from an older generation is stale and must discard its results.
+
+    Plugins hold the workspace via `WorkspaceBlocker`, which blocks content replacement,
+    reloads, and teardown.
+    It cannot be acquired until new outputs exist or teardown finishes.
     """
 
     def __init__(self) -> None:
         self._lock = Lock()
         self._phase = Phase.EMPTY
         self._generation = 0
+        self._holders = QObjectCounter[QObject]()
+        self._exclusive = False
 
     @property
     def phase(self) -> Phase:
@@ -99,6 +108,12 @@ class WorkspaceLifecycle:
     def closing(self) -> bool:
         return self.phase in (Phase.CLOSING, Phase.CLOSED)
 
+    @property
+    def busy(self) -> bool:
+        """Whether a plugin holds the workspace."""
+        with self._lock:
+            return bool(self._holders)
+
     def try_begin_load(self) -> bool:
         """
         Start loading content.
@@ -106,16 +121,18 @@ class WorkspaceLifecycle:
         A workspace that holds loaded content moves to `RELOADING`, any other one to `LOADING`.
 
         Returns:
-            False while another load runs or once the workspace is closing, True otherwise.
+            False while another load runs, once the workspace is closing,
+            or when loaded content would be replaced while a plugin holds the workspace. True otherwise.
         """
         with self._lock:
             current = self._phase
             target = Phase.RELOADING if current is Phase.LOADED else Phase.LOADING
 
-            if target not in current.transition:
+            if target not in current.transition or (target is Phase.RELOADING and self._holders):
                 return False
 
             self._phase = target
+            self._exclusive = True
 
         return True
 
@@ -124,9 +141,17 @@ class WorkspaceLifecycle:
         Start reloading the loaded content.
 
         Returns:
-            True when the workspace moved from `LOADED` to `RELOADING`, False otherwise.
+            True when the workspace moved from `LOADED` to `RELOADING`,
+            False otherwise or when a plugin holds the workspace.
         """
-        return self._move(Phase.RELOADING)
+        with self._lock:
+            if self._phase is not Phase.LOADED or self._holders:
+                return False
+
+            self._phase = Phase.RELOADING
+            self._exclusive = True
+
+        return True
 
     def cancel_reload(self) -> bool:
         """
@@ -140,6 +165,7 @@ class WorkspaceLifecycle:
                 return False
 
             self._phase = Phase.LOADED
+            self._exclusive = False
 
         return True
 
@@ -148,6 +174,12 @@ class WorkspaceLifecycle:
         with self._lock:
             self._generation += 1
             return Generation(self, self._generation)
+
+    def end_exclusive(self) -> None:
+        """Let plugins hold the workspace again, once the new outputs of a load exist."""
+        with self._lock:
+            if self._phase not in (Phase.CLOSING, Phase.CLOSED):
+                self._exclusive = False
 
     def finish(self, generation: Generation) -> bool:
         """
@@ -169,7 +201,7 @@ class WorkspaceLifecycle:
 
     def begin_close(self) -> Generation | None:
         """
-        Start the teardown. Every older `Generation` becomes stale.
+        Start the teardown. Every older `Generation` becomes stale, and no plugin can hold the workspace anymore.
 
         Returns:
             The generation of the teardown, or None when the teardown has already started.
@@ -179,6 +211,7 @@ class WorkspaceLifecycle:
                 return None
 
             self._phase = Phase.CLOSING
+            self._exclusive = True
             self._generation += 1
             return Generation(self, self._generation)
 
@@ -191,6 +224,26 @@ class WorkspaceLifecycle:
         """
         return self._move(Phase.CLOSED)
 
+    def try_hold(self, holder: QObject) -> bool:
+        """
+        Mark the workspace as held by `holder`, until `release_hold` or until `holder` is destroyed.
+
+        Returns:
+            False while a load or reload has not created its outputs yet, or once the workspace is closing.
+        """
+        with self._lock:
+            if self._exclusive:
+                return False
+
+            self._holders.add(holder)
+
+        return True
+
+    def release_hold(self, holder: QObject) -> None:
+        """Release one hold of `holder`."""
+        with self._lock:
+            self._holders.discard(holder)
+
     def _move(self, target: Phase, generation: Generation | None = None) -> bool:
         with self._lock:
             if target not in self._phase.transition:
@@ -200,5 +253,8 @@ class WorkspaceLifecycle:
                 return False
 
             self._phase = target
+
+            if target in (Phase.LOADED, Phase.FAILED):
+                self._exclusive = False
 
         return True

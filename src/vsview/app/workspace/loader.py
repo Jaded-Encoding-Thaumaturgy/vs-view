@@ -150,6 +150,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         # Video Area (Tabs)
         self.tab_manager = TabManager(self.plugin_splitter, self.plugin_controller)
+        self.tab_manager.switch_allowed = lambda: self.lifecycle.phase is Phase.LOADED
         self.tab_manager.tabChanged.connect(self._on_tab_changed)
         self.tab_manager.sarTransformed.connect(lambda _: self._emit_output_info())
         self.plugin_splitter.insert_main_widget(self.tab_manager)
@@ -416,16 +417,11 @@ class LoaderWorkspace[T](BaseWorkspace):
         Returns:
             0 when the content is rendering, 1 when the reload failed, 2 when the reload was refused or stopped.
         """
-        if not self.playback.can_reload:
-            logger.warning("Workspace is busy, cannot reload content")
-            return 2
-
-        if self.plugin_controller.busy:
-            logger.warning("At least one plugin is busy, cannot reload content")
-            return 2
-
         if not self.lifecycle.try_begin_reload():
-            logger.warning("Workspace is %s, cannot reload content", self.lifecycle.phase.name.lower())
+            if self.lifecycle.busy:
+                logger.warning("At least one plugin is busy, cannot reload content")
+            else:
+                logger.warning("Workspace is %s, cannot reload content", self.lifecycle.phase.name.lower())
             return 2
 
         logger.debug("Reloading content: %r", self.content)
@@ -467,7 +463,6 @@ class LoaderWorkspace[T](BaseWorkspace):
                 if reload:
                     screenshot = self._create_freeze_screenshot()
                 self.tbar.disable()
-                self.tab_manager.disable_switch = True
 
                 if still_running := self._finish_generation_tasks():
                     release_ui()
@@ -530,7 +525,8 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
 
-            # Plugins are built here so they can use the file path and the environment that now exists.
+            # Plugins can hold the workspace again, and are built here so they can use the new environment.
+            self.lifecycle.end_exclusive()
             self.load_plugins()
             generation.check()
             self.plugin_controller.on_workspace_loaded()
@@ -549,8 +545,6 @@ class LoaderWorkspace[T](BaseWorkspace):
 
                 self.content_area.setEnabled(True)
                 self.tab_manager.tabs.setEnabled(True)
-                self.tab_manager.disable_switch = False
-                self.playback.can_reload = True
                 self.tbar.enable()
                 self.lifecycle.finish(generation)
 
@@ -597,7 +591,6 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.lifecycle.cancel_reload()
         self.content_area.setEnabled(True)
         self.tbar.enable()
-        self.tab_manager.disable_switch = False
 
         names = ", ".join(sorted({task.name for task in still_running}))
         message = (
@@ -677,7 +670,6 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.statusLoadingErrored.emit("Error while loading content")
         self.set_error_page()
         self.tbar.enable()
-        self.playback.can_reload = True
         gc.collect()
 
     @run_in_loop
@@ -823,6 +815,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         check_busy: bool = True,
     ) -> bool:
         self.playback.stop()
+        self.playback.invalidate_renders()
         self.outputs_manager.current_video_index = index
 
         if not self.outputs_manager.current_voutput:

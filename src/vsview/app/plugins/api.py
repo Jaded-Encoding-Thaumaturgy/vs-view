@@ -544,6 +544,15 @@ class PluginAPI(QObject):
         """Return whether any plugin currently holds an active WorkspaceBlocker."""
         return _get_controller(self).busy
 
+    @property
+    def generation(self) -> int:
+        """
+        Return the generation of the workspace content.
+
+        It changes when a load or reload starts its new content, and when the workspace starts to close.
+        """
+        return _get_controller(self).generation
+
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """
         Return a directory path for persistent plugin storage next to the loaded script,
@@ -589,6 +598,9 @@ class PluginAPI(QObject):
     def blocker(self, caller: WidgetPluginBase[Any, Any] | None = None) -> WorkspaceBlocker:
         """
         Create a WorkspaceBlocker to mark the workspace as busy.
+
+        The blocker cannot be acquired while a load or reload replaces the workspace's environment,
+        or once the workspace is closing.
 
         Args:
             caller: Optional widget holding the blocker.
@@ -666,6 +678,10 @@ class WorkspaceBlocker(Protocol):
 
     * Automatic or manual reloading.
     * Frame requests (via seeking, programmatic calls, or playback start).
+
+    The workspace cannot be held while a load or reload replaces its environment, or once it is closing:
+    `acquire()` returns False, and entering the context raises `BlockerRefusedError`.
+    `BlockerRefusedError` is a cancellation, so a background task that raises it ends quietly.
     """
 
     def __enter__(self) -> None: ...
@@ -681,6 +697,9 @@ class WorkspaceBlocker(Protocol):
     def acquire(self, block: bool = True, timeout: float | None = None) -> bool:
         """
         Acquire the lock to block the workspace.
+
+        Returns:
+            False when the lock was not acquired in time, or when the workspace cannot be held.
         """
         ...
 

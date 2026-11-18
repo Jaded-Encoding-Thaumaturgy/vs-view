@@ -388,7 +388,7 @@ def test_hot_reload_state_synchronization(
         lambda: (
             ws.outputs_manager.current_video_index == 1
             and ws.outputs_manager.voutputs[1].loaded_once
-            and ws.playback.can_reload
+            and ws.playback.is_idle
         ),
         timeout=3000,
     )
@@ -396,7 +396,7 @@ def test_hot_reload_state_synchronization(
     # Seek to frame 42 and wait for frame render to settle
     ws.playback.request_frame(42)
     qtbot.waitUntil(
-        lambda: ws.playback.state.current_frame == 42 and ws.playback.can_reload,
+        lambda: ws.playback.state.current_frame == 42 and ws.playback.is_idle,
         timeout=3000,
     )
     assert ws.tbar.playback_container.frame_edit.value() == 42
@@ -406,7 +406,7 @@ def test_hot_reload_state_synchronization(
 
     # Trigger hot reload
     fut_reload = ws.reload_content()
-    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.can_reload, timeout=3000)
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.is_idle, timeout=3000)
     assert fut_reload.result() == 0
 
     # Verify preserved state across successful reload
@@ -449,7 +449,7 @@ def test_hot_reload_time_mode_synchronization(
 
     # Reload
     fut_reload = ws.reload_content()
-    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.can_reload, timeout=3000)
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.is_idle, timeout=3000)
     assert fut_reload.result() == 0
 
     # Assert timeline mode and frame position preserved
@@ -475,16 +475,6 @@ def test_reload_content_rejected_when_busy(
     qtbot.waitUntil(lambda: fut.done() and ws.stack.currentWidget() is ws.loaded_page, timeout=3000)
     assert fut.result() == 0
 
-    # 1. When playback cannot reload (busy)
-    ws.playback.can_reload = False
-    fut_reject1 = ws.reload_content()
-    qtbot.waitUntil(lambda: fut_reject1.done(), timeout=2000)
-    assert fut_reject1.result() == 2
-    assert ws.reload_count == 0
-
-    ws.playback.can_reload = True
-
-    # 2. When plugin API is busy (using workspace blocker)
     with ws.plugin_controller.api.blocker():
         assert ws.plugin_controller.busy is True
         fut_reject2 = ws.reload_content()
@@ -873,7 +863,7 @@ def test_error_recovery_lifecycle_syntax_error(
     voutput = ws.outputs_manager.current_voutput
     assert isinstance(voutput, VideoOutput)
     assert voutput.vs_output.clip.num_frames == 80
-    assert ws.playback.can_reload is True
+    assert ws.playback.is_idle is True
     assert ws.tbar.isEnabled() is True
     assert ws.tbar.timeline.is_events_blocked is False
 
@@ -923,7 +913,7 @@ def test_error_recovery_lifecycle_name_error(
     voutput = ws.outputs_manager.current_voutput
     assert isinstance(voutput, VideoOutput)
     assert voutput.vs_output.clip.num_frames == 90
-    assert ws.playback.can_reload is True
+    assert ws.playback.is_idle is True
 
 
 def test_repeated_error_recovery_cycles(
@@ -995,7 +985,7 @@ def test_reload_content_tbar_lifecycle(
     script_file.write_text(_make_valid_script_content(length=60), encoding="utf-8")
     fut_reload = ws.reload_content()
 
-    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.can_reload, timeout=3000)
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.is_idle, timeout=3000)
 
     assert fut_reload.result() == 0
     assert spy_disable.call_count == 1
@@ -1049,7 +1039,7 @@ def test_reload_content_failure_destroys_freeze_screenshot_and_enables_tbar(
     # Fix script and recover via reload button
     script_file.write_text(_make_valid_script_content(length=70), encoding="utf-8")
     ws.reload_btn.click()
-    qtbot.waitUntil(lambda: ws.stack.currentWidget() is ws.loaded_page and ws.playback.can_reload, timeout=3000)
+    qtbot.waitUntil(lambda: ws.stack.currentWidget() is ws.loaded_page and ws.playback.is_idle, timeout=3000)
 
     assert ws.stack.currentWidget() is ws.loaded_page
     assert ws.tbar.isEnabled() is True
@@ -1139,7 +1129,7 @@ def test_load_content_skips_plugins_whose_constructor_raises(
     qtbot.addWidget(ws)
 
     fut = ws.load_content(script_file)
-    qtbot.waitUntil(lambda: fut.done() and ws.playback.can_reload, timeout=5000)
+    qtbot.waitUntil(lambda: fut.done() and ws.playback.is_idle, timeout=5000)
     qtbot.waitUntil(lambda: not ws.findChildren(QWidget, QRegularExpression("^broken_")), timeout=2000)
 
     tabs = ws.plugin_splitter.plugin_tabs
@@ -1173,14 +1163,14 @@ def test_reload_with_fewer_audio_tracks_selects_the_last_remaining_track(
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
     fut = ws.load_content(script_file)
-    qtbot.waitUntil(lambda: fut.done() and ws.playback.can_reload, timeout=5000)
+    qtbot.waitUntil(lambda: fut.done() and ws.playback.is_idle, timeout=5000)
     combo = ws.tbar.playback_container.audio_output_combo
     combo.setCurrentIndex(1)
     assert ws.outputs_manager.current_audio_index == 1
 
     script_file.write_text(_make_audio_tracks_script_content(1), encoding="utf-8")
     fut_reload = ws.reload_content()
-    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.can_reload, timeout=5000)
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.is_idle, timeout=5000)
 
     assert fut_reload.result() == 0
     assert len(ws.outputs_manager.aoutputs) == 1

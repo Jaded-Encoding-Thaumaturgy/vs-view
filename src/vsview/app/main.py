@@ -76,6 +76,7 @@ from .workspace import (
     BaseGenericFileWorkspace,
     BaseWorkspace,
     LoaderWorkspace,
+    Phase,
     PythonScriptWorkspace,
     QuickScriptWorkspace,
     VideoFileWorkspace,
@@ -600,7 +601,7 @@ class MainWindow(QMainWindow):
         if isinstance(btn.workspace, LoaderWorkspace):
             reload_action = menu.addAction("Reload")
             reload_action.setShortcut(QKeySequence(ShortcutManager.get_key(ActionID.RELOAD)))
-            reload_action.setEnabled(btn.workspace.playback.can_reload)
+            reload_action.setEnabled(btn.workspace.lifecycle.phase in (Phase.LOADED, Phase.FAILED))
 
         clear_action = menu.addAction("Clear")
         delete_action = menu.addAction("Delete")

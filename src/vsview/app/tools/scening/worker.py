@@ -19,7 +19,7 @@ import vapoursynth as vs
 import vsengine.video
 from vsengine import Cancelled
 
-from vsview.api import PluginAPI, PluginSettings, VideoOutputProxy
+from vsview.api import BlockerRefusedError, PluginAPI, PluginSettings, VideoOutputProxy
 
 from .models import AbstractRange
 
@@ -126,6 +126,8 @@ class ExportQueueManager:
                 try:
                     with self.api.blocker(), self.api.vs_context():
                         self._execute_job(job)
+                except BlockerRefusedError:
+                    self.api.statusMessage.emit("Export skipped: the workspace was reloading or closing.")
                 except Exception:
                     logger.exception("Unexpected error during export job execution")
                 finally:

@@ -374,13 +374,15 @@ def test_swap_tabs(tab_manager: TabManager, make_video_output: Callable[..., Vid
 
 # Tab Switching & api.busy Guard Tests
 @pytest.mark.vpy("no-core")
-def test_switch_tab_disabled_by_default(tab_manager: TabManager, make_video_output: Callable[..., VideoOutput]) -> None:
+def test_switch_tab_is_ignored_when_switching_is_not_allowed(
+    tab_manager: TabManager, make_video_output: Callable[..., VideoOutput]
+) -> None:
     mgr = tab_manager
 
     tabs = mgr.create_tabs([make_video_output("A", 0), make_video_output("B", 1)])
     mgr.swap_tabs(tabs, 0)
 
-    assert mgr.disable_switch is True
+    mgr.switch_allowed = lambda: False
     assert mgr.tabs.currentIndex() == 0
 
     mgr.switch_tab(1)
@@ -401,7 +403,6 @@ def test_switch_tab_enabled(
     outputs = [make_video_output("A", 0), make_video_output("B", 1), make_video_output("C", 2)]
     tabs = mgr.create_tabs(outputs)
     mgr.swap_tabs(tabs, 0)
-    mgr.disable_switch = False
 
     with qtbot.waitSignal(mgr.tabChanged) as blocker:
         mgr.switch_tab(1)
@@ -430,7 +431,6 @@ def test_switch_tab_busy_guard_reverts(
     outputs = [make_video_output("A", 0), make_video_output("B", 1), make_video_output("C", 2)]
     tabs = mgr.create_tabs(outputs)
     mgr.swap_tabs(tabs, 0)
-    mgr.disable_switch = False
 
     # Switch to tab 1 while not busy
     assert not plugin_controller.busy
@@ -444,6 +444,20 @@ def test_switch_tab_busy_guard_reverts(
 
     # Reverted to previous_tab_index (which was 1, the tab active prior to the rejected switch)
     assert mgr.tabs.currentIndex() == 1
+
+
+@pytest.mark.vpy("no-core")
+def test_selecting_a_tab_while_switching_is_not_allowed_reverts_it(
+    tab_manager: TabManager, make_video_output: Callable[..., VideoOutput]
+) -> None:
+    mgr = tab_manager
+    tabs = mgr.create_tabs([make_video_output("A", 0), make_video_output("B", 1)])
+    mgr.swap_tabs(tabs, 0)
+    mgr.switch_allowed = lambda: False
+
+    mgr.tabs.setCurrentIndex(1)
+
+    assert mgr.tabs.currentIndex() == 0
 
 
 def test_on_tab_changed_negative_index_ignored(qtbot: QtBot, tab_manager: TabManager) -> None:
@@ -547,7 +561,6 @@ def test_pan_sync_on_tab_changed(
     outputs = [make_video_output("A", 0), make_video_output("B", 1)]
     tabs = mgr.create_tabs(outputs)
     mgr.swap_tabs(tabs, 0)
-    mgr.disable_switch = False
 
     # Setup pixmap on tab 0 (prev_view)
     pix = QPixmap(120, 80)
@@ -577,7 +590,6 @@ def test_pan_sync_skipped_when_disabled_or_autofit(
     outputs = [make_video_output("A", 0), make_video_output("B", 1)]
     tabs = mgr.create_tabs(outputs)
     mgr.swap_tabs(tabs, 0)
-    mgr.disable_switch = False
 
     pix = QPixmap(100, 100)
     pix.fill(Qt.GlobalColor.blue)

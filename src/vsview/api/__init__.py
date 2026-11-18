@@ -6,6 +6,7 @@ from ..app.icon import IconName, IconReloadMixin, load_icon
 from ..app.packing import Packer
 from ..app.plugins import (
     AudioOutputProxy,
+    BlockerRefusedError,
     GraphicsViewProxy,
     LocalSettingsModel,
     NoCurrentVideoOutputError,
@@ -100,6 +101,7 @@ __all__ = [
     "BaseWebChannelBridge",
     "BaseWebEnginePage",
     "BaseWebEngineView",
+    "BlockerRefusedError",
     "CallbackHandle",
     "Checkbox",
     "ColorPicker",

@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-__all__ = ["NoCurrentVideoOutputError", "NoCurrentViewError", "NoEnvironmentError", "PluginError"]
+from vsengine.loops import Cancelled
+
+__all__ = [
+    "BlockerRefusedError",
+    "NoCurrentVideoOutputError",
+    "NoCurrentViewError",
+    "NoEnvironmentError",
+    "PluginError",
+]
 
 
 class PluginError(Exception):
@@ -23,4 +31,13 @@ class NoCurrentViewError(PluginError, RuntimeError):
 class NoEnvironmentError(PluginError, RuntimeError):
     """
     Raised when the VapourSynth environment of a workspace is accessed, but the workspace holds none.
+    """
+
+
+class BlockerRefusedError(Cancelled):
+    """
+    Raised when the workspace cannot be held:
+    a load or reload is replacing its environment, or the workspace is closing.
+
+    It is a cancellation, so a background task that raises it ends quietly.
     """

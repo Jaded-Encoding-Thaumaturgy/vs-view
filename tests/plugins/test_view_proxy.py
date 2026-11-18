@@ -69,7 +69,7 @@ def workspace(
 def _switch_tab(qtbot: QtBot, ws: ScriptWorkspace, index: int) -> None:
     ws.tab_manager.switch_tab(index)
     qtbot.waitUntil(
-        lambda: ws.outputs_manager.current_video_index == index and ws.playback.can_reload,
+        lambda: ws.outputs_manager.current_video_index == index and ws.playback.is_idle,
         timeout=3000,
     )
 

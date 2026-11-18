@@ -82,7 +82,7 @@ def test_e2e_complete_user_journey(
     ws = btn.workspace
 
     qtbot.waitUntil(
-        lambda: fut.done() and ws.stack.currentWidget() is ws.loaded_page and ws.playback.can_reload,
+        lambda: fut.done() and ws.stack.currentWidget() is ws.loaded_page and ws.playback.is_idle,
         timeout=5000,
     )
     assert fut.result() == 0
@@ -94,7 +94,7 @@ def test_e2e_complete_user_journey(
     # 3. Timeline scrubbing: Seek to frame 24 (Green segment)
     ws.playback.request_frame(24)
     qtbot.waitUntil(
-        lambda: ws.playback.state.current_frame == 24 and ws.playback.can_reload,
+        lambda: ws.playback.state.current_frame == 24 and ws.playback.is_idle,
         timeout=3000,
     )
     assert ws.playback.state.current_frame == 24
@@ -246,7 +246,7 @@ def test_e2e_hot_reload_lifecycle_in_gui(
     # 2. Seek to frame 30
     ws.playback.request_frame(30)
     qtbot.waitUntil(
-        lambda: ws.playback.state.current_frame == 30 and ws.playback.can_reload,
+        lambda: ws.playback.state.current_frame == 30 and ws.playback.is_idle,
         timeout=3000,
     )
     assert ws.playback.state.current_frame == 30
@@ -257,7 +257,7 @@ def test_e2e_hot_reload_lifecycle_in_gui(
 
     # 4. Trigger hot reload via public workspace API
     fut_reload = ws.reload_content()
-    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.can_reload, timeout=5000)
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.is_idle, timeout=5000)
     assert fut_reload.result() == 0
 
     # 5. Assert frame position and UI state preserved

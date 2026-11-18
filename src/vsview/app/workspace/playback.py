@@ -3,9 +3,11 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future, wait
+from contextlib import AbstractContextManager
 from logging import getLogger
+from threading import Lock
 from time import perf_counter_ns
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 from jetpytools import clamp, cround
 from PySide6.QtCore import QObject, QPoint, Qt, QTime, QTimer, Signal, Slot
@@ -23,7 +25,7 @@ if TYPE_CHECKING:
     from vsengine.policy import ManagedEnvironment
 
     from ...vsenv import QtEventLoop
-    from ..outputs import OutputsManager
+    from ..outputs import OutputsManager, VideoOutput
     from ..plugins._controller import PluginWorkspaceController
     from .tab_manager import TabManager
 
@@ -31,6 +33,37 @@ logger = getLogger(__name__)
 
 # Module constants
 MIN_FRAME_DELAY_NS = 1_000_000  # 1ms minimum scheduling delay
+
+
+class WorkCounter(AbstractContextManager[None]):
+    """Counts work that is running, across threads."""
+
+    __slots__ = ("_count", "_lock")
+
+    def __init__(self) -> None:
+        self._count = 0
+        self._lock = Lock()
+
+    @override
+    def __enter__(self) -> None:
+        self.increment()
+
+    @override
+    def __exit__(self, *_: object) -> None:
+        self.decrement()
+
+    @property
+    def is_idle(self) -> bool:
+        with self._lock:
+            return self._count == 0
+
+    def increment(self) -> None:
+        with self._lock:
+            self._count += 1
+
+    def decrement(self) -> None:
+        with self._lock:
+            self._count -= 1
 
 
 class PlaybackState(QObject):
@@ -211,9 +244,12 @@ class PlaybackManager(QObject):
         self.state.video_timer.timeout.connect(self._play_next_frame)
         self.state.audio_timer.timeout.connect(self._play_next_audio_frame)
 
-        self.can_reload = False
         self._timeline_rendering = False
         self._pending_frame: Frame | None = None
+
+        self._render_epoch = 0
+        self._playback_epoch = 0
+        self._work = WorkCounter()
 
     @property
     def has_pending_frame(self) -> bool:
@@ -226,6 +262,11 @@ class PlaybackManager(QObject):
         return self._timeline_rendering
 
     @property
+    def is_idle(self) -> bool:
+        """Check whether no frame render and no playback start is running."""
+        return self._work.is_idle
+
+    @property
     def _env(self) -> ManagedEnvironment:
         return self._get_env()
 
@@ -233,14 +274,12 @@ class PlaybackManager(QObject):
         """Dispatch rendering for the current pending coalesced frame, if one exists."""
         if self._pending_frame is None:
             self._timeline_rendering = False
-            self._tab_manager.disable_switch = False
             return
 
         frame = self._pending_frame
 
         self._pending_frame = None
         self._timeline_rendering = True
-        self._tab_manager.disable_switch = True
 
         @run_in_loop(return_future=False)
         def on_render_complete(f: Future[int]) -> None:
@@ -281,11 +320,14 @@ class PlaybackManager(QObject):
 
         n = clamp(n, 0, voutput.vs_output.clip.num_frames - 1)
 
-        self.can_reload = False
-        fut = self._render_frame(n, notify_plugins=notify_plugins)
+        self.invalidate_renders()
+        epoch = self._render_epoch
+
+        self._work.increment()
+        fut = self._render_frame(n, voutput, epoch, notify_plugins=notify_plugins)
 
         def on_success(res: int) -> None:
-            if self._tab_manager.tabs.currentIndex() != -1:
+            if epoch == self._render_epoch and self._tab_manager.tabs.currentIndex() != -1:
                 voutput.last_frame = n
                 self.state.current_frame = n
                 self.state.current_time = voutput.frame_to_time(n)
@@ -302,18 +344,15 @@ class PlaybackManager(QObject):
             self.loadFailed.emit()
 
         def on_finally_done(_: Any) -> None:
-            self.can_reload = True
+            self._work.decrement()
 
         fut.then(on_success, on_error, on_loop=True).add_done_callback(on_finally_done)
         return True
 
     @run_in_background(name="RenderFrame")
-    def _render_frame(self, n: int, notify_plugins: bool = True) -> int:
-        """Render a specific frame and emit for display."""
+    def _render_frame(self, n: int, voutput: VideoOutput, epoch: int, notify_plugins: bool = True) -> int:
+        """Render a specific frame and show it, unless a newer render or a tab change has replaced it."""
         logger.debug("Rendering frame %d (background)", n)
-
-        if not (voutput := self._outputs_manager.current_voutput):
-            return 1
 
         failed = False
         error_msg = ""
@@ -348,14 +387,13 @@ class PlaybackManager(QObject):
                 logger.error(error_msg)
                 failed = True
 
-            if notify_plugins:
+            if notify_plugins and epoch == self._render_epoch:
                 self._controller.on_current_frame_changed(n, None)
 
             if not self.state.is_playing:
                 self.statusLoadingFinished.emit("Completed")
 
-        self.frameRendered.emit(image, None, self._get_sar_from_props(n))
-        self.timelineCursorChanged.emit(n)
+        self._show_rendered_frame(epoch, image, n, self._get_sar_from_props(n, voutput))
 
         if failed:
             self._loop.from_thread(lambda: show_warning(self._tbar.window(), error_msg)).result()
@@ -390,22 +428,41 @@ class PlaybackManager(QObject):
     @Slot()
     def toggle_playback(self) -> None:
         """Toggle between play and pause."""
-        self.state.is_playing = not self.state.is_playing
-
         if self.state.is_playing:
-            self._start_playback()
-        else:
             self._stop_playback()
+        else:
+            self._begin_playback()
 
     def stop(self) -> None:
         """Stop playback externally."""
         if self.state.is_playing:
             self._stop_playback()
 
+    def invalidate_renders(self) -> None:
+        """Drop the result of every frame render that is still running."""
+        self._render_epoch += 1
+
+    @run_in_loop(return_future=False)
+    def _show_rendered_frame(self, epoch: int, image: QImage, n: int, sar: float) -> None:
+        if epoch != self._render_epoch:
+            logger.debug("Dropping the stale render of frame %d", n)
+            return
+
+        self.frameRendered.emit(image, None, sar)
+        self.timelineCursorChanged.emit(n)
+
+    def _begin_playback(self, play_range: range | None = None, loop: bool = False) -> None:
+        self._playback_epoch += 1
+        self.invalidate_renders()
+        self.state.is_playing = True
+        self._start_playback(self._playback_epoch, play_range, loop)
+
     @run_in_background(name="StartPlayback")
-    def _start_playback(self, play_range: range | None = None, loop: bool = False) -> None:
-        """Must set the state is_playing before calling this function"""
-        if not self.state.is_playing:
+    def _start_playback(self, epoch: int, play_range: range | None = None, loop: bool = False) -> None:
+        def is_current() -> bool:
+            return epoch == self._playback_epoch and self.state.is_playing
+
+        if not is_current():
             return
 
         logger.debug("Starting playback")
@@ -421,63 +478,62 @@ class PlaybackManager(QObject):
         self._tbar.set_playback_controls_enabled(False)
         self._tbar.timeline.is_events_blocked = True
         self._loop.from_thread(self._tbar.playback_container.play_pause_btn.setChecked, True)
-        self.can_reload = False
 
-        try:
-            # Wait for any pending buffer cleanup before creating new buffer
-            # This prevents accumulation of buffers when user spams play/pause
-            self.state.wait_for_cleanup(
-                timeout=1.0,
-                stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
-            )
-
-            if not self.state.is_playing:
-                return  # type: ignore[unreachable]
-
-            self._loop.from_thread(self.state.reset).result()
-
-            if not play_range:
-                play_range = range(self.state.current_frame, voutput.vs_output.clip.num_frames)
-
-            self._prepare_video(play_range=play_range, loop=loop)
-            self._prepare_audio(play_range=play_range, loop=loop)
-
-            if audio_buffer := self.state.audio_buffer:
-                audio_buffer.wait_for_first_frame(
-                    timeout=0.25,
-                    stall_cb=lambda: self.statusLoadingStarted.emit("Buffering audio..."),
+        with self._work:
+            try:
+                # Wait for any pending buffer cleanup before creating new buffer
+                # This prevents accumulation of buffers when user spams play/pause
+                self.state.wait_for_cleanup(
+                    timeout=1.0,
+                    stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
                 )
 
-            if buffer := self.state.buffer:
-                buffer.wait_for_first_frame(
-                    timeout=0.25,
-                    stall_cb=lambda: self.statusLoadingStarted.emit("Buffering..."),
-                )
+                if not is_current():
+                    return
 
-            # Check if user cancelled
-            if not self.state.is_playing:
-                return  # type: ignore[unreachable]
+                self._loop.from_thread(self.state.reset).result()
 
-            self._controller.on_playback_started()
+                if not play_range:
+                    play_range = range(self.state.current_frame, voutput.vs_output.clip.num_frames)
 
-            # Start both audio and video at the same time
-            self.state.next_frame_time_ns = self.state.next_audio_frame_time_ns = perf_counter_ns()
-            self.statusLoadingStarted.emit("Playing...")
+                self._prepare_video(play_range=play_range, loop=loop)
+                self._prepare_audio(play_range=play_range, loop=loop)
 
-            # Start the render chain.
-            # Frame 0 is already on screen, so start audio immediately
-            # and schedule the next video frame after 1 interval.
-            self._play_next_audio_frame()
-            self._schedule_or_continue()
-        except Exception:
-            self._stop_playback()
-            raise
-        finally:
-            self.can_reload = True
+                if audio_buffer := self.state.audio_buffer:
+                    audio_buffer.wait_for_first_frame(
+                        timeout=0.25,
+                        stall_cb=lambda: self.statusLoadingStarted.emit("Buffering audio..."),
+                    )
+
+                if buffer := self.state.buffer:
+                    buffer.wait_for_first_frame(
+                        timeout=0.25,
+                        stall_cb=lambda: self.statusLoadingStarted.emit("Buffering..."),
+                    )
+
+                # A stop, or a stop followed by a newer start, replaced this start while it was buffering.
+                if not is_current():
+                    return
+
+                self._controller.on_playback_started()
+
+                # Start both audio and video at the same time
+                self.state.next_frame_time_ns = self.state.next_audio_frame_time_ns = perf_counter_ns()
+                self.statusLoadingStarted.emit("Playing...")
+
+                # Start the render chain.
+                # Frame 0 is already on screen, so start audio immediately
+                # and schedule the next video frame after 1 interval.
+                self._play_next_audio_frame()
+                self._schedule_or_continue()
+            except Exception:
+                self._stop_playback()
+                raise
 
     @run_in_loop(return_future=False)
     def _stop_playback(self) -> None:
         logger.debug("Stopping playback")
+        self._playback_epoch += 1
         self._stop_audio()
         self.state.is_playing = False
 
@@ -486,8 +542,6 @@ class PlaybackManager(QObject):
         self._tbar.set_playback_controls_enabled(True)
         self._tbar.timeline.is_events_blocked = False
         self._tbar.playback_container.play_pause_btn.setChecked(False)
-
-        self.can_reload = True
 
         self._controller.on_playback_stopped()
         self.statusLoadingFinished.emit("Paused")
@@ -504,8 +558,7 @@ class PlaybackManager(QObject):
 
     def _restart_playback(self) -> None:
         self._stop_playback()
-        self.state.is_playing = True
-        self._start_playback()
+        self._begin_playback()
 
     @Slot()
     @run_in_background(name="PlaybackNextFrame")
@@ -764,11 +817,11 @@ class PlaybackManager(QObject):
         else:
             self._play_next_audio_frame()
 
-    def _get_sar_from_props(self, n: int) -> float:
-        if TYPE_CHECKING:
-            assert self._outputs_manager.current_voutput
+    def _get_sar_from_props(self, n: int, voutput: VideoOutput | None = None) -> float:
+        if not (voutput := voutput or self._outputs_manager.current_voutput):
+            return 1.0
 
-        props = self._outputs_manager.current_voutput.props.get(n)
+        props = voutput.props.get(n)
 
         if not props:
             return 1.0
@@ -810,9 +863,8 @@ class PlaybackManager(QObject):
 
         play_range = range(self.state.current_frame, end_frame + direction, step)
 
-        self.state.is_playing = True
         self._tbar.playback_container.play_pause_btn.setChecked(True)
-        self._start_playback(play_range=play_range, loop=loop)
+        self._begin_playback(play_range=play_range, loop=loop)
 
     @Slot(float)
     def _on_audio_delay_changed(self, delay_s: float) -> None:

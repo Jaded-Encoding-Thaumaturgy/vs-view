@@ -170,6 +170,36 @@ def test_export_queue_manager_fifo_execution(
     manager.shutdown(timeout=1.0)
 
 
+def test_an_export_refused_by_a_reload_is_reported_and_the_next_one_still_runs(
+    qtbot: QtBot,
+    mocker: MockerFixture,
+    export_harness: HarnessPluginController,
+    manager: ExportQueueManager,
+    sample_voutput_proxy: VideoOutputProxy,
+) -> None:
+    status_messages = list[str]()
+    export_harness.statusMessage.connect(status_messages.append)
+    executed_jobs = list[str]()
+    mocker.patch.object(manager, "_execute_job", side_effect=lambda job: executed_jobs.append(job.dest_files[0].stem))
+    export_harness.refused_holds = 1
+
+    for name in ("refused", "accepted"):
+        manager.enqueue(
+            ranges=[RangeFrame(start=0, end=1)],
+            voutput=sample_voutput_proxy,
+            dest_files=[Path(f"{name}.mp4")],
+            ffmpeg_args=[],
+            fmt="h264",
+        )
+    qtbot.waitUntil(
+        lambda: executed_jobs == ["accepted"] and any(m.startswith("Export skipped") for m in status_messages),
+        timeout=3000,
+    )
+
+    assert executed_jobs == ["accepted"]
+    manager.shutdown(timeout=1.0)
+
+
 def test_export_queue_manager_cancel_current(
     mocker: MockerFixture,
     manager: ExportQueueManager,

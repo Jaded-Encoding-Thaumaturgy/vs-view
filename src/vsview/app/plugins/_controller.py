@@ -4,6 +4,7 @@ import weakref
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from contextlib import contextmanager
+from functools import partial
 from logging import getLogger
 from pathlib import Path
 from threading import Lock
@@ -19,13 +20,13 @@ from shiboken6 import Shiboken
 from vsengine import UnifiedFuture
 
 from vsview.app.settings import SettingsManager
-from vsview.app.utils import QObjectCounter, QObjectSet, has_overriding_method
+from vsview.app.utils import QObjectSet, has_overriding_method
 from vsview.types import Frame, Time
 from vsview.vsenv.loop import run_in_loop
 
 from ._interface import _PluginLike, _PluginSettingsStore, _SettingsProxy, _ViewportCursorReset
 from .contracts import AudioOutputProxy, VideoOutputProxy
-from .exceptions import NoCurrentVideoOutputError, NoCurrentViewError
+from .exceptions import BlockerRefusedError, NoCurrentVideoOutputError, NoCurrentViewError
 
 if TYPE_CHECKING:
     from vsview.app.outputs import FrameBuffer
@@ -57,7 +58,6 @@ class PluginWorkspaceController(QObject):
     def __init__(self, workspace: LoaderWorkspace[Any]) -> None:
         super().__init__(workspace)
         self.__workspace = workspace
-        self.__busy_callers = QObjectCounter[QObject]()
         self.__settings_store = _PluginSettingsStore(self._get_file_path)
         self.__cursor_reset = _ViewportCursorReset(self)
         self.__cursor_reset_lock = Lock()
@@ -114,7 +114,11 @@ class PluginWorkspaceController(QObject):
 
     @property
     def busy(self) -> bool:
-        return bool(self.__busy_callers)
+        return self.__workspace.lifecycle.busy
+
+    @property
+    def generation(self) -> int:
+        return self.__workspace.lifecycle.generation
 
     @property
     def voutputs(self) -> list[VideoOutputProxy]:
@@ -200,16 +204,10 @@ class PluginWorkspaceController(QObject):
         return PlaybackProxy(self.__workspace.playback)
 
     def create_blocker(self, api: PluginAPI, caller: WidgetPluginBase[Any, Any] | None = None) -> WorkspaceBlocker:
-        busy_callers = self.__busy_callers
+        lifecycle = self.__workspace.lifecycle
         target = caller or api
 
-        def on_change(locked: bool) -> None:
-            if locked:
-                busy_callers.add(target)
-            else:
-                busy_callers.discard(target)
-
-        return WorkspaceBlocker(on_change)
+        return WorkspaceBlocker(partial(lifecycle.try_hold, target), partial(lifecycle.release_hold, target))
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         if not self.file_path:
@@ -559,29 +557,37 @@ class PluginWorkspaceController(QObject):
 
 
 class WorkspaceBlocker:
-    def __init__(self, on_change: Callable[[bool], None]) -> None:
+    def __init__(self, try_hold: Callable[[], bool], release_hold: Callable[[], None]) -> None:
         self._lock = Lock()
         self.locked = False
-        self._on_change = on_change
+        self._try_hold = try_hold
+        self._release_hold = release_hold
 
     def __enter__(self) -> None:
-        self.acquire(block=True)
+        if not self.acquire(block=True):
+            raise BlockerRefusedError("The workspace is replacing its environment or closing")
 
     def __exit__(self, *_: object) -> None:
         self.release()
 
     def acquire(self, block: bool = True, timeout: float | None = None) -> bool:
         t = -1.0 if timeout is None else timeout
-        success = self._lock.acquire(blocking=block, timeout=t)
-        if success and not self.locked:
+
+        if not self._lock.acquire(blocking=block, timeout=t):
+            return False
+
+        if not self.locked:
+            if not self._try_hold():
+                self._lock.release()
+                return False
             self.locked = True
-            self._on_change(True)
-        return success
+
+        return True
 
     def release(self) -> None:
         if self.locked:
             self.locked = False
-            self._on_change(False)
+            self._release_hold()
             self._lock.release()
 
 

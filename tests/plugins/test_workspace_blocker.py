@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 
 import pytest
 from PySide6.QtCore import QObject
@@ -8,13 +9,21 @@ from PySide6.QtCore import QObject
 from tests.harness import MockQObject
 from vsview.app.plugins._controller import PluginWorkspaceController
 from vsview.app.plugins.api import PluginAPI
+from vsview.app.plugins.exceptions import BlockerRefusedError
+from vsview.app.workspace.lifecycle import WorkspaceLifecycle
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
 
 
 @pytest.fixture
-def api(mock_qobject: MockQObject) -> PluginAPI:
-    controller = PluginWorkspaceController(mock_qobject)  # pyright: ignore[reportArgumentType]
+def lifecycle() -> WorkspaceLifecycle:
+    return WorkspaceLifecycle()
+
+
+@pytest.fixture
+def api(lifecycle: WorkspaceLifecycle) -> PluginAPI:
+    workspace = MockQObject(lifecycle=lifecycle)
+    controller = PluginWorkspaceController(workspace)  # pyright: ignore[reportArgumentType]
     return controller.api
 
 
@@ -98,3 +107,25 @@ def test_workspace_blocker_threads(api: PluginAPI) -> None:
     t2.start()
     t2.join()
     assert results == [False, True]
+
+
+@pytest.mark.parametrize(
+    "replace_or_close",
+    [
+        pytest.param(WorkspaceLifecycle.try_begin_load, id="loading"),
+        pytest.param(WorkspaceLifecycle.begin_close, id="closing"),
+    ],
+)
+def test_workspace_blocker_is_refused_while_the_workspace_is_replaced_or_closing(
+    api: PluginAPI, lifecycle: WorkspaceLifecycle, replace_or_close: Callable[[WorkspaceLifecycle], object]
+) -> None:
+    blocker = api.blocker()
+    replace_or_close(lifecycle)
+
+    acquired = blocker.acquire(block=False)
+
+    assert acquired is False
+    assert blocker.locked is False
+    assert api.busy is False
+    with pytest.raises(BlockerRefusedError, match="closing"), blocker:
+        pass

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
+from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QApplication
+from shiboken6 import Shiboken
 from vsengine.loops import Cancelled
 
 from vsview.app.workspace.lifecycle import Phase, StaleGenerationError, WorkspaceLifecycle
@@ -232,3 +237,54 @@ def test_generation_check_raises_a_cancellation_once_stale() -> None:
     with pytest.raises(StaleGenerationError, match=rf"Generation {generation.value} is stale") as exc_info:
         generation.check()
     assert isinstance(exc_info.value, Cancelled)
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize(
+    "begin",
+    [
+        pytest.param(WorkspaceLifecycle.try_begin_reload, id="reload"),
+        pytest.param(WorkspaceLifecycle.try_begin_load, id="load-replacing-content"),
+    ],
+)
+def test_loaded_content_is_not_replaced_while_a_plugin_holds_the_workspace(
+    qapp: QApplication, begin: Callable[[WorkspaceLifecycle], bool]
+) -> None:
+    lifecycle = _lifecycle_in(Phase.LOADED)
+    holder = QObject()
+    lifecycle.try_hold(holder)
+
+    refused = begin(lifecycle)
+    lifecycle.release_hold(holder)
+    accepted = begin(lifecycle)
+
+    assert refused is False
+    assert accepted is True
+    assert lifecycle.phase is Phase.RELOADING
+
+
+@pytest.mark.qt
+def test_plugins_can_hold_the_workspace_again_once_the_new_outputs_exist(qapp: QApplication) -> None:
+    lifecycle = WorkspaceLifecycle()
+    holder = QObject()
+    lifecycle.try_begin_load()
+
+    held_while_loading = lifecycle.try_hold(holder)
+    lifecycle.end_exclusive()
+    held_after = lifecycle.try_hold(holder)
+
+    assert held_while_loading is False
+    assert held_after is True
+    assert lifecycle.busy is True
+
+
+@pytest.mark.qt
+def test_a_destroyed_holder_releases_the_workspace(qapp: QApplication) -> None:
+    lifecycle = _lifecycle_in(Phase.LOADED)
+    holder = QObject()
+    lifecycle.try_hold(holder)
+
+    Shiboken.delete(holder)
+
+    assert lifecycle.busy is False
+    assert lifecycle.try_begin_reload() is True

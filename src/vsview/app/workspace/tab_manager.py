@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from enum import IntEnum
 from itertools import cycle
 from logging import getLogger
@@ -209,7 +209,7 @@ class TabManager(QWidget, IconReloadMixin):
         self.tabs.setCornerWidget(self.sync_container, Qt.Corner.TopRightCorner)
         self.current_layout.addWidget(self.tabs)
 
-        self.disable_switch = True
+        self.switch_allowed: Callable[[], bool] = lambda: True
 
         self._setup_shortcuts()
 
@@ -317,7 +317,7 @@ class TabManager(QWidget, IconReloadMixin):
     @overload
     def switch_tab(self, *, delta: int) -> None: ...
     def switch_tab(self, index: int | None = None, delta: int = 0) -> None:
-        if self.disable_switch:
+        if not self.switch_allowed():
             logger.warning("Switching tabs is disabled")
             return
 
@@ -384,7 +384,7 @@ class TabManager(QWidget, IconReloadMixin):
         if index < 0:
             return
 
-        if self.controller.busy:
+        if self.controller.busy or not self.switch_allowed():
             logger.warning("Workspace is busy, cannot switch output")
             with QSignalBlocker(self.tabs):
                 self.tabs.setCurrentIndex(self.tabs.previous_tab_index)

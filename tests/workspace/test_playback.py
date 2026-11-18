@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from time import perf_counter_ns
@@ -452,7 +453,7 @@ def test_playback_manager_treats_a_non_positive_sar_as_square_pixels(
     try:
         with qtbot.waitSignal(manager.frameRendered, timeout=2000) as blocker:
             manager.request_frame(0)
-        qtbot.waitUntil(lambda: manager.can_reload, timeout=2000)
+        qtbot.waitUntil(lambda: manager.is_idle, timeout=2000)
 
         assert blocker.args[2] == expected
     finally:
@@ -608,7 +609,7 @@ def test_playback_starts_without_audio_past_the_end_of_a_shorter_audio_track(
         assert manager.state.audio_buffer is None
     finally:
         manager.stop()
-        qtbot.waitUntil(lambda: manager.can_reload, timeout=5000)
+        qtbot.waitUntil(lambda: manager.is_idle, timeout=5000)
         manager.state.wait_for_cleanup()
         voutput.clear()
         aoutput.clear()
@@ -658,7 +659,7 @@ def use_voutput(
     yield use
 
     manager.stop()
-    qtbot.waitUntil(lambda: manager.can_reload, timeout=5000)
+    qtbot.waitUntil(lambda: manager.is_idle, timeout=5000)
     manager.state.wait_for_cleanup()
     mock_outputs.current_voutput = None
     for voutput in used:
@@ -672,7 +673,7 @@ def record_frames(manager: PlaybackManager) -> list[int]:
 
 
 def wait_until_stopped(manager: PlaybackManager, qtbot: QtBot) -> None:
-    qtbot.waitUntil(lambda: not manager.state.is_playing and manager.can_reload, timeout=5000)
+    qtbot.waitUntil(lambda: not manager.state.is_playing and manager.is_idle, timeout=5000)
 
 
 def make_clip(env: ManagedEnvironment, length: int = 10, fpsnum: int = 24, **props: Any) -> vs.VideoNode:
@@ -865,7 +866,7 @@ def test_seeking_to_a_frame_that_fails_after_the_script_shows_a_failure_image(
 
     with qtbot.waitSignal(manager.frameRendered, timeout=5000) as blocker:
         manager.request_frame(3)
-    qtbot.waitUntil(lambda: manager.can_reload, timeout=5000)
+    qtbot.waitUntil(lambda: manager.is_idle, timeout=5000)
 
     image: QImage = blocker.args[0]  # pyright: ignore[reportOptionalSubscript]
     assert (image.width(), image.height()) == (64, 64)
@@ -895,3 +896,64 @@ def test_rapid_seeks_render_the_first_and_the_last_target_only(
     )
 
     assert frames == [10, 30]
+
+
+def gated_voutput(env: ManagedEnvironment, gate: threading.Event, length: int = 30) -> VideoOutput:
+    """A video output whose frames are rendered only once `gate` is set."""
+    base = make_clip(env, length=length)
+
+    def select(n: int) -> vs.VideoNode:
+        gate.wait(10)
+        return base
+
+    with env.use():
+        clip = base.std.FrameEval(select)
+        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
+        voutput.prepared_clip = voutput.packer.pack_clip(clip, None)
+    return voutput
+
+
+def test_a_render_replaced_by_a_tab_change_does_not_reach_the_view(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    qtbot: QtBot,
+) -> None:
+    manager, env, _, _, _, _ = playback_manager_setup
+    gate = threading.Event()
+    use_voutput(gated_voutput(env, gate))
+    frames = record_frames(manager)
+    painted = list[QImage]()
+    manager.frameRendered.connect(lambda image, *_: painted.append(image))
+    completed = list[Future[int]]()
+
+    manager.request_frame(5, cb_render=completed.append)
+    manager.invalidate_renders()
+    gate.set()
+    qtbot.waitUntil(lambda: bool(completed) and manager.is_idle, timeout=5000)
+
+    assert painted == []
+    assert frames == []
+    assert manager.state.current_frame == 0
+    assert completed[0].result() == 0
+
+
+def test_play_stop_play_while_the_first_start_is_buffering_starts_playback_once(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    qtbot: QtBot,
+) -> None:
+    manager, env, _, _, _, _ = playback_manager_setup
+    gate = threading.Event()
+    use_voutput(gated_voutput(env, gate))
+    statuses = list[str]()
+    manager.statusLoadingStarted.connect(statuses.append)
+    manager.toggle_playback()
+    qtbot.waitUntil(lambda: "Buffering..." in statuses, timeout=5000)
+
+    manager.toggle_playback()
+    manager.toggle_playback()
+    gate.set()
+    qtbot.waitUntil(lambda: "Playing..." in statuses and manager.is_idle, timeout=5000)
+
+    assert statuses.count("Playing...") == 1
+    assert manager.state.is_playing is True
