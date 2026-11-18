@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from shiboken6 import Shiboken
-from vsengine import ManagedEnvironment, UnifiedFuture
+from vsengine import UnifiedFuture
 
 from vsview.api import (
     ActionDefinition,
@@ -263,8 +263,6 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     @override
     def deleteLater(self) -> None:
         GlobalConsoleHub.unregister(self.editor.bridge)
-        if hasattr(self, "_env_stubs_internal"):
-            self._env_stubs_internal.dispose()
         return super().deleteLater()
 
     @override
@@ -316,12 +314,6 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     @property
     def dirty_tabs(self) -> list[TabInfo]:
         return [t for t in self._open_tabs if t.get("isDirty", False)]
-
-    @property
-    def _env_stubs(self) -> ManagedEnvironment:
-        if not hasattr(self, "_env_stubs_internal"):
-            self._env_stubs_internal = create_environment()
-        return self._env_stubs_internal
 
     def open_file(self, filepath: Path) -> bool:
         try:
@@ -628,7 +620,7 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             stubs_dir.mkdir(parents=True, exist_ok=True)
             try:
                 logger.debug("Generating VapourSynth stubs at %s...", stub_file)
-                with self._env_stubs.use():
+                with create_environment() as env, env.use():
                     from vsstubs import output_stubs
 
                     output_stubs(input_file=None, output=stub_file)
