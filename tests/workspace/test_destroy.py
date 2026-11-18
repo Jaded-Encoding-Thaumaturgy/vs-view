@@ -12,6 +12,7 @@ from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
+from tests.scripts import blank_clip_script, script_source
 from vsview.api._helpers import output_metadata
 from vsview.api.info import Context, register_on_workspace_destroy
 from vsview.app.plugins.exceptions import BlockerRefusedError
@@ -220,12 +221,7 @@ def test_quick_script_workspace_loader_registers_source_length(
     workspace = TestQuickScriptWorkspace()
     qtbot.addWidget(workspace)
 
-    test_code = (
-        "import vapoursynth as vs\n"
-        "core = vs.core\n"
-        "clip = core.std.BlankClip(length=5, width=64, height=64, format=vs.RGB24)\n"
-        "clip.set_output(0)\n"
-    )
+    test_code = script_source(blank_clip_script, length=5)
     workspace.content = CodeContent(test_code, workspace.filename)
 
     linecache.cache.pop(workspace.filename, None)

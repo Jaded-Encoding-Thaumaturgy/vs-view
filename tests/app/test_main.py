@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
+from tests.scripts import blank_clip_script, script_source
 from vsview.app.main import MainWindow, WorkspaceToolButton
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import ShortcutEditor
@@ -204,14 +205,7 @@ def _choose_popup_action(qtbot: QtBot, text: str) -> None:
     QTimer.singleShot(0, choose)
 
 
-_VALID_SCRIPT = (
-    "import vapoursynth as vs\n"
-    "clip = vs.core.std.BlankClip(length=10, width=64, height=64, format=vs.RGB24, fpsnum=24, fpsden=1)\n"
-    "clip = vs.core.std.SetFrameProps(\n"
-    "    clip, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709\n"
-    ")\n"
-    "clip.set_output(0)\n"
-)
+_VALID_SCRIPT = script_source(blank_clip_script, length=10)
 
 
 def test_sidebar_reload_on_a_failed_workspace_loads_the_content_again(

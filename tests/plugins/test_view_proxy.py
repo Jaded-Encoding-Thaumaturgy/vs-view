@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
+from tests.scripts import dual_output_script, script_source
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.workspace.loader import VSEngineWorkspace
 from vsview.assets import IconName
@@ -19,16 +20,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
 
 TAB_CHANGED = SIGNAL("tabChanged(int)")
 
-DUAL_OUTPUT_SCRIPT = (
-    "import vapoursynth as vs\n"
-    "core = vs.core\n"
-    "for i, color in enumerate(([255, 0, 0], [0, 255, 0])):\n"
-    "    clip = core.std.BlankClip(length=10, width=64, height=64, format=vs.RGB24, fpsnum=24, fpsden=1, color=color)\n"
-    "    clip = core.std.SetFrameProps(\n"
-    "        clip, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709\n"
-    "    )\n"
-    "    clip.set_output(i)\n"
-)
+DUAL_OUTPUT_SCRIPT = script_source(dual_output_script, length=10)
 
 
 class ScriptWorkspace(VSEngineWorkspace[Path]):

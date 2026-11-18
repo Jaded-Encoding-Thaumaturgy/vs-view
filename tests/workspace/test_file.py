@@ -17,6 +17,7 @@ from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
+from tests.scripts import blank_clip_script, script_source
 from vsview.api import WidgetPluginBase
 from vsview.api._helpers import OutputMetadata
 from vsview.api.output import VideoMetadata
@@ -665,14 +666,7 @@ def test_quick_script_loader_linecache_registration(quick_script_workspace: Quic
         linecache.cache.pop(ws.filename, None)
 
 
-_QUICK_SCRIPT_CODE = (
-    "import vapoursynth as vs\n"
-    "clip = vs.core.std.BlankClip(length=10, width=64, height=64, format=vs.RGB24, fpsnum=24, fpsden=1)\n"
-    "clip = vs.core.std.SetFrameProps(\n"
-    "    clip, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709\n"
-    ")\n"
-    "clip.set_output(0)\n"
-)
+_QUICK_SCRIPT_CODE = script_source(blank_clip_script, length=10)
 
 
 def test_quick_script_run_after_a_reload_before_the_first_run_reloads_the_loaded_content(

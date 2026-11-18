@@ -14,6 +14,7 @@ from shiboken6 import Shiboken
 from vsengine.loops import Cancelled
 from vsengine.policy import ManagedEnvironment
 
+from tests.scripts import audio_tracks_script, blank_clip_script, dual_output_script, script_source
 from vsview.api import hookimpl
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.plugins.api import WidgetPluginBase
@@ -74,57 +75,6 @@ def setup_qt_event_loop(qt_event_loop: QtEventLoop) -> QtEventLoop:
     return qt_event_loop
 
 
-def _make_valid_script_content(length: int = 100, color: tuple[int, int, int] = (255, 0, 0)) -> str:
-    return (
-        "import vapoursynth as vs\n"
-        "core = vs.core\n"
-        f"clip = core.std.BlankClip(length={length}, width=64, height=64, "
-        f"format=vs.RGB24, fpsnum=24, fpsden=1, color={list(color)})\n"
-        "clip = core.std.SetFrameProps(\n"
-        "    clip, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709\n"
-        ")\n"
-        "clip.set_output(0)\n"
-    )
-
-
-def _make_dual_output_script_content(length: int = 100) -> str:
-    return (
-        "import vapoursynth as vs\n"
-        "core = vs.core\n"
-        f"clip0 = core.std.BlankClip(length={length}, width=64, height=64, "
-        "format=vs.RGB24, fpsnum=24, fpsden=1, color=[255, 0, 0])\n"
-        "clip0 = core.std.SetFrameProps(\n"
-        "    clip0, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709\n"
-        ")\n"
-        f"clip1 = core.std.BlankClip(length={length}, width=64, height=64, "
-        "format=vs.RGB24, fpsnum=24, fpsden=1, color=[0, 255, 0])\n"
-        "clip1 = core.std.SetFrameProps(\n"
-        "    clip1, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709\n"
-        ")\n"
-        "clip0.set_output(0)\n"
-        "clip1.set_output(1)\n"
-    )
-
-
-def _make_gated_broken_frame_script_content(broken_frame: int) -> str:
-    # `rendering` and `gate` come from the workspace's vsargs.
-    return _make_valid_script_content(length=50) + (
-        "def _eval(n):\n"
-        f"    if n == {broken_frame}:\n"
-        "        rendering.set()\n"
-        "        gate.wait(5)\n"
-        "        raise ValueError('broken frame')\n"
-        "    return clip\n"
-        "core.std.FrameEval(clip, _eval).set_output(0)\n"
-    )
-
-
-def _make_audio_tracks_script_content(num_tracks: int) -> str:
-    return _make_valid_script_content() + "".join(
-        f"core.std.BlankAudio(length=48000, samplerate=48000).set_output({i})\n" for i in range(1, num_tracks + 1)
-    )
-
-
 # Page Transition and Cursor Calculation Tests
 @pytest.mark.vpy("no-core")
 def test_loader_workspace_page_transitions(loader_workspace: ConcreteLoaderWorkspace) -> None:
@@ -157,7 +107,7 @@ def test_loader_update_timeline_cursor(
     mocker: MockerFixture,
 ) -> None:
     script_file = tmp_path / "cursor_test.vpy"
-    script_file.write_text(_make_valid_script_content(length=100), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=100), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -189,7 +139,7 @@ def test_loader_calculate_target_frame(
     tmp_path: Path,
 ) -> None:
     script_file = tmp_path / "target_frame.vpy"
-    script_file.write_text(_make_valid_script_content(length=100), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=100), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -359,7 +309,7 @@ def test_script_loading_valid(
     init_plugin_manager: PluginManager,
 ) -> None:
     script_file = tmp_path / "valid.vpy"
-    script_file.write_text(_make_valid_script_content(length=100), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=100), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -384,7 +334,7 @@ def test_hot_reload_state_synchronization(
     init_plugin_manager: PluginManager,
 ) -> None:
     script_file = tmp_path / "dual_output.vpy"
-    script_file.write_text(_make_dual_output_script_content(length=100), encoding="utf-8")
+    script_file.write_text(script_source(dual_output_script, length=100), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -416,7 +366,7 @@ def test_hot_reload_state_synchronization(
     assert ws.tbar.playback_container.frame_edit.value() == 42
 
     # Modify script file content
-    script_file.write_text(_make_dual_output_script_content(length=120), encoding="utf-8")
+    script_file.write_text(script_source(dual_output_script, length=120), encoding="utf-8")
 
     # Trigger hot reload
     fut_reload = ws.reload_content()
@@ -441,7 +391,7 @@ def test_hot_reload_time_mode_synchronization(
     init_plugin_manager: PluginManager,
 ) -> None:
     script_file = tmp_path / "time_sync.vpy"
-    script_file.write_text(_make_valid_script_content(length=120), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=120), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -459,7 +409,7 @@ def test_hot_reload_time_mode_synchronization(
     qtbot.waitUntil(lambda: ws.playback.state.current_frame == 48, timeout=2000)
 
     # Modify script content (increase length to 150)
-    script_file.write_text(_make_valid_script_content(length=150), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=150), encoding="utf-8")
 
     # Reload
     fut_reload = ws.reload_content()
@@ -480,7 +430,7 @@ def test_reload_content_rejected_when_busy(
     init_plugin_manager: PluginManager,
 ) -> None:
     script_file = tmp_path / "busy_check.vpy"
-    script_file.write_text(_make_valid_script_content(length=50), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=50), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -503,7 +453,7 @@ def test_reload_content_rejected_when_busy(
 @pytest.mark.parametrize(
     ("script_content", "expected_result", "expected_phase"),
     [
-        pytest.param(_make_valid_script_content(length=50), 0, Phase.LOADED, id="valid"),
+        pytest.param(script_source(blank_clip_script, length=50), 0, Phase.LOADED, id="valid"),
         pytest.param("broken = [invalid syntax", 1, Phase.FAILED, id="broken"),
     ],
 )
@@ -577,6 +527,13 @@ def test_vs_context_without_an_environment_raises(loader_workspace: ConcreteLoad
         pass
 
 
+def _register_unload_and_destroy_callbacks(*, record: Callable[[str], None]) -> None:
+    import vsview
+
+    vsview.register_on_unload(record, "unload")
+    vsview.register_on_workspace_destroy(record, "destroy")
+
+
 def test_script_unload_callbacks_run_at_each_release_and_destroy_callbacks_once_at_close(
     qtbot: QtBot,
     vsview_env_factory: Callable[[], ManagedEnvironment],
@@ -585,10 +542,7 @@ def test_script_unload_callbacks_run_at_each_release_and_destroy_callbacks_once_
     events = list[str]()
     script_file = tmp_path / "callbacks.vpy"
     script_file.write_text(
-        _make_valid_script_content(length=10)
-        + "import vsview\n"
-        + "vsview.register_on_unload(record, 'unload')\n"
-        + "vsview.register_on_workspace_destroy(record, 'destroy')\n",
+        script_source(blank_clip_script, length=10) + script_source(_register_unload_and_destroy_callbacks),
         encoding="utf-8",
     )
     ws = ConcreteScriptWorkspace(vsview_env_factory)
@@ -612,7 +566,7 @@ def test_a_removed_release_callback_does_not_run_at_reload(
     tmp_path: Path,
 ) -> None:
     script_file = tmp_path / "release.vpy"
-    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=10), encoding="utf-8")
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
     fut = ws.load_content(script_file)
@@ -632,6 +586,12 @@ class _ShortTaskTimeoutScriptWorkspace(ConcreteScriptWorkspace):
     task_timeout_ms = 100
 
 
+def register_unload_callback(message: str, *, record: Callable[[str], None]) -> None:
+    import vsview
+
+    vsview.register_on_unload(record, message)
+
+
 def test_closing_during_a_running_script_disposes_its_environment_after_the_script_ends(
     qtbot: QtBot,
     vsview_env_factory: Callable[[], ManagedEnvironment],
@@ -641,10 +601,9 @@ def test_closing_during_a_running_script_disposes_its_environment_after_the_scri
     events = list[str]()
     script_file = tmp_path / "slow.vpy"
     script_file.write_text(
-        "import vsview\n"
-        "started.set()\n"
-        "gate.wait(10)\n"
-        "vsview.register_on_unload(record, 'registered after the release')\n" + _make_valid_script_content(length=10),
+        script_source(wait_for_gate)
+        + script_source(register_unload_callback, message="registered after the release")
+        + script_source(blank_clip_script, length=10),
         encoding="utf-8",
     )
     ws = _ShortTaskTimeoutScriptWorkspace(vsview_env_factory)
@@ -684,11 +643,11 @@ def test_loading_new_content_into_a_loaded_workspace_releases_the_old_run(
     events = list[str]()
     first = tmp_path / "first.vpy"
     first.write_text(
-        _make_valid_script_content(length=10) + "import vsview\nvsview.register_on_unload(record, 'first unloaded')\n",
+        script_source(blank_clip_script, length=10) + script_source(register_unload_callback, message="first unloaded"),
         encoding="utf-8",
     )
     second = tmp_path / "second.vpy"
-    second.write_text(_make_valid_script_content(length=20), encoding="utf-8")
+    second.write_text(script_source(blank_clip_script, length=20), encoding="utf-8")
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
     ws.vsargs = {"record": events.append}
@@ -713,7 +672,7 @@ def test_a_reload_is_refused_while_a_task_of_the_workspace_still_runs(
     tmp_path: Path,
 ) -> None:
     script_file = tmp_path / "refused.vpy"
-    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=10), encoding="utf-8")
     ws = _ShortTaskTimeoutScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
     fut = ws.load_content(script_file)
@@ -750,6 +709,29 @@ def test_a_reload_is_refused_while_a_task_of_the_workspace_still_runs(
     assert ws.reload_count == 1
 
 
+def gated_broken_frame_script(broken_frame: int, *, rendering: threading.Event, gate: threading.Event) -> None:
+    import vapoursynth as vs
+
+    clip = vs.core.std.BlankClip(length=50, width=64, height=64, format=vs.RGB24, fpsnum=24, fpsden=1)
+    clip = vs.core.std.SetFrameProps(
+        clip, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709
+    )
+
+    def _eval(n: int) -> vs.VideoNode:
+        if n == broken_frame:
+            rendering.set()
+            gate.wait(5)
+            raise ValueError("broken frame")
+        return clip
+
+    vs.core.std.FrameEval(clip, _eval).set_output(0)
+
+
+def wait_for_gate(*, started: threading.Event, gate: threading.Event) -> None:
+    started.set()
+    gate.wait(10)
+
+
 def test_a_frame_that_fails_to_render_during_a_reload_does_not_fail_the_reload(
     qtbot: QtBot,
     vsview_env_factory: Callable[[], ManagedEnvironment],
@@ -757,7 +739,7 @@ def test_a_frame_that_fails_to_render_during_a_reload_does_not_fail_the_reload(
 ) -> None:
     rendering, gate = threading.Event(), threading.Event()
     script_file = tmp_path / "broken_frame.vpy"
-    script_file.write_text(_make_gated_broken_frame_script_content(broken_frame=10), encoding="utf-8")
+    script_file.write_text(script_source(gated_broken_frame_script, broken_frame=10), encoding="utf-8")
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
     ws.vsargs = {"rendering": rendering, "gate": gate}
@@ -820,7 +802,7 @@ def test_a_cancelled_reload_keeps_the_loaded_content_only_until_its_release(
     env_disposed: bool,
 ) -> None:
     script_file = tmp_path / "cancelled.vpy"
-    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=10), encoding="utf-8")
     ws = workspace_type(vsview_env_factory)
     qtbot.addWidget(ws)
     fut = ws.load_content(script_file)
@@ -844,9 +826,9 @@ def test_a_load_while_another_load_runs_is_refused(
 ) -> None:
     started, gate = threading.Event(), threading.Event()
     slow = tmp_path / "slow.vpy"
-    slow.write_text("started.set()\ngate.wait(10)\n" + _make_valid_script_content(length=10), encoding="utf-8")
+    slow.write_text(script_source(wait_for_gate) + script_source(blank_clip_script, length=10), encoding="utf-8")
     other = tmp_path / "other.vpy"
-    other.write_text(_make_valid_script_content(length=20), encoding="utf-8")
+    other.write_text(script_source(blank_clip_script, length=20), encoding="utf-8")
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
     ws.vsargs = {"started": started, "gate": gate}
@@ -869,7 +851,7 @@ def test_a_busy_plugin_does_not_stop_the_render_at_the_end_of_a_load(
     tmp_path: Path,
 ) -> None:
     script_file = tmp_path / "busy.vpy"
-    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=10), encoding="utf-8")
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
 
@@ -894,7 +876,7 @@ def test_an_error_after_the_script_ran_ends_the_load_as_failed(
     tmp_path: Path,
 ) -> None:
     script_file = tmp_path / "broken_views.vpy"
-    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=10), encoding="utf-8")
     ws = _BrokenViewsScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
 
@@ -916,7 +898,7 @@ def test_error_recovery_lifecycle_syntax_error(
 ) -> None:
     mock_dialog = mocker.patch("vsview.app.error.display_error_dialog", return_value=0)
     script_file = tmp_path / "lifecycle_syntax.vpy"
-    script_file.write_text(_make_valid_script_content(length=50), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=50), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -949,7 +931,7 @@ def test_error_recovery_lifecycle_syntax_error(
     assert ws.reload_btn.isEnabled()
 
     # Step 3: Fix script and reload via error_page reload button
-    script_file.write_text(_make_valid_script_content(length=80), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=80), encoding="utf-8")
 
     ws.reload_btn.click()
     qtbot.waitUntil(
@@ -978,7 +960,7 @@ def test_error_recovery_lifecycle_name_error(
 ) -> None:
     mock_dialog = mocker.patch("vsview.app.error.display_error_dialog", return_value=0)
     script_file = tmp_path / "lifecycle_name.vpy"
-    script_file.write_text(_make_valid_script_content(length=60), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=60), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -1003,7 +985,7 @@ def test_error_recovery_lifecycle_name_error(
     assert "NameError" in mock_dialog.call_args[0][1]
 
     # Step 3: Fix script and recover via reload button
-    script_file.write_text(_make_valid_script_content(length=90), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=90), encoding="utf-8")
     ws.reload_btn.click()
     qtbot.waitUntil(
         lambda: ws.stack.currentWidget() is ws.loaded_page,
@@ -1026,7 +1008,7 @@ def test_repeated_error_recovery_cycles(
 ) -> None:
     mocker.patch("vsview.app.error.display_error_dialog", return_value=0)
     script_file = tmp_path / "repeated_cycles.vpy"
-    script_file.write_text(_make_valid_script_content(length=50), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=50), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -1046,7 +1028,7 @@ def test_repeated_error_recovery_cycles(
         assert len(ws.outputs_manager.voutputs) == 0
 
         # Fix script (Cycle recovery)
-        script_file.write_text(_make_valid_script_content(length=50 + (cycle + 1) * 10), encoding="utf-8")
+        script_file.write_text(script_source(blank_clip_script, length=50 + (cycle + 1) * 10), encoding="utf-8")
         ws.reload_btn.click()
         qtbot.waitUntil(
             lambda: ws.stack.currentWidget() is ws.loaded_page,
@@ -1067,7 +1049,7 @@ def test_reload_content_tbar_lifecycle(
     mocker: MockerFixture,
 ) -> None:
     script_file = tmp_path / "tbar_lifecycle.vpy"
-    script_file.write_text(_make_valid_script_content(length=50), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=50), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -1083,7 +1065,7 @@ def test_reload_content_tbar_lifecycle(
     spy_enable = mocker.spy(ws.tbar, "enable")
 
     # Update script file and trigger hot reload
-    script_file.write_text(_make_valid_script_content(length=60), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=60), encoding="utf-8")
     fut_reload = ws.reload_content()
 
     qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.is_idle, timeout=3000)
@@ -1104,7 +1086,7 @@ def test_reload_content_failure_destroys_freeze_screenshot_and_enables_tbar(
 ) -> None:
     mocker.patch("vsview.app.error.display_error_dialog", return_value=0)
     script_file = tmp_path / "reload_failure.vpy"
-    script_file.write_text(_make_valid_script_content(length=50), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=50), encoding="utf-8")
 
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
@@ -1138,7 +1120,7 @@ def test_reload_content_failure_destroys_freeze_screenshot_and_enables_tbar(
     assert spy_enable.call_count == 1
 
     # Fix script and recover via reload button
-    script_file.write_text(_make_valid_script_content(length=70), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=70), encoding="utf-8")
     ws.reload_btn.click()
     qtbot.waitUntil(lambda: ws.stack.currentWidget() is ws.loaded_page and ws.playback.is_idle, timeout=3000)
 
@@ -1225,7 +1207,7 @@ def test_load_content_skips_plugins_whose_constructor_raises(
 ) -> None:
     register_tools(docks=[_BrokenDock, _GoodDock], panels=[_BrokenPanel, _GoodPanel])
     script_file = tmp_path / "plugins.vpy"
-    script_file.write_text(_make_valid_script_content(length=50), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=50), encoding="utf-8")
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
 
@@ -1273,7 +1255,7 @@ def test_a_plugin_refused_the_workspace_at_close_does_not_stop_the_teardown(
 ) -> None:
     register_tools(docks=[_HoldingAtCloseDock, _RecordingCloseDock])
     script_file = tmp_path / "close.vpy"
-    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    script_file.write_text(script_source(blank_clip_script, length=10), encoding="utf-8")
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
     fut = ws.load_content(script_file)
@@ -1306,7 +1288,7 @@ def test_reload_with_fewer_audio_tracks_selects_the_last_remaining_track(
     tmp_path: Path,
 ) -> None:
     script_file = tmp_path / "audio_tracks.vpy"
-    script_file.write_text(_make_audio_tracks_script_content(2), encoding="utf-8")
+    script_file.write_text(script_source(audio_tracks_script, num_tracks=2), encoding="utf-8")
     ws = ConcreteScriptWorkspace(vsview_env_factory)
     qtbot.addWidget(ws)
     fut = ws.load_content(script_file)
@@ -1315,7 +1297,7 @@ def test_reload_with_fewer_audio_tracks_selects_the_last_remaining_track(
     combo.setCurrentIndex(1)
     assert ws.outputs_manager.current_audio_index == 1
 
-    script_file.write_text(_make_audio_tracks_script_content(1), encoding="utf-8")
+    script_file.write_text(script_source(audio_tracks_script, num_tracks=1), encoding="utf-8")
     fut_reload = ws.reload_content()
     qtbot.waitUntil(lambda: fut_reload.done() and ws.playback.is_idle, timeout=5000)
 

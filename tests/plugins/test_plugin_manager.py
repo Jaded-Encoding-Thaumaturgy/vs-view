@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
+from tests.scripts import script_source
 from vsview.app import tools
 from vsview.app.plugins import specs
 from vsview.app.plugins.api import NodeProcessor, WidgetPluginBase
@@ -263,13 +264,22 @@ def test_load_skips_a_broken_entry_point_and_keeps_the_others(load_plugins: Load
     assert pm.manager.has_plugin("broken_tool") is False
 
 
+def _tool_failing_at_import() -> None:
+    raise ImportError("simulated broken tool")
+
+
+def _tool_with_an_invalid_hook() -> None:
+    from vsview.api import hookimpl
+
+    @hookimpl
+    def vsview_register_tooldock(unexpected_arg: object) -> None: ...
+
+
 def test_load_skips_a_broken_first_party_tool_and_keeps_the_others(
     load_plugins: LoadPlugins, qtbot: QtBot, extra_tools_dir: Path
 ) -> None:
-    (extra_tools_dir / "audit_import_error.py").write_text('raise ImportError("simulated broken tool")\n')
-    (extra_tools_dir / "audit_invalid_hook.py").write_text(
-        "from vsview.api import hookimpl\n\n\n@hookimpl\ndef vsview_register_tooldock(unexpected_arg): ...\n"
-    )
+    (extra_tools_dir / "audit_import_error.py").write_text(script_source(_tool_failing_at_import), encoding="utf-8")
+    (extra_tools_dir / "audit_invalid_hook.py").write_text(script_source(_tool_with_an_invalid_hook), encoding="utf-8")
     holder = CallbackHolder()
     PluginManager().call_when_loaded(holder.on_notify)
 
