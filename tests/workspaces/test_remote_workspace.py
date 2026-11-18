@@ -834,13 +834,8 @@ def test_load_without_a_connection_shows_the_reason(
     dialogs: list[str],
     mocker: MockerFixture,
 ) -> None:
-    def env(self: RemoteWorkspace) -> ManagedEnvironment:
-        if not self._env or self._env.disposed:
-            self._env = vsview_env_factory()
-        return self._env
-
-    # A subclass would lose the plugin settings model, so the property is replaced on the class itself.
-    mocker.patch.object(RemoteWorkspace, "env", property(env))
+    # A subclass would lose the plugin settings model, so the method is replaced on the class itself.
+    mocker.patch.object(RemoteWorkspace, "new_environment", side_effect=vsview_env_factory)
     ws = RemoteWorkspace()
     qtbot.addWidget(ws)
     statuses = list[str]()

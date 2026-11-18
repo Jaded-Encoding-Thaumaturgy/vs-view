@@ -94,21 +94,20 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         SettingsManager.signals.connect_local_weak(self._sync_sync_container)
 
     @override
-    def deleteLater(self) -> None:
-        if self.lifecycle.closing:
-            return super().deleteLater()
-
+    def on_teardown_started(self) -> None:
+        super().on_teardown_started()
         self._autosave_timer.stop()
-        self.playback.stop()
 
-        try:
-            return super().deleteLater()
-        finally:
-            if hasattr(self, "content"):
-                if (path := self.current_file_path) is not None:
-                    SettingsManager.save_local(path, self.local_settings)
-                    output_metadata.pop(str(path), None)
-                del self.content
+    @override
+    def on_teardown_finished(self) -> None:
+        # Saved last, so writes made by plugins while the workspace releases its resources are kept.
+        if hasattr(self, "content"):
+            if (path := self.current_file_path) is not None:
+                SettingsManager.save_local(path, self.local_settings)
+                output_metadata.pop(str(path), None)
+            del self.content
+
+        super().on_teardown_finished()
 
     @property
     def current_file_path(self) -> PathLike | None:

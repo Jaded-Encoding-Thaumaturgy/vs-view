@@ -40,12 +40,9 @@ class ScriptWorkspace(VSEngineWorkspace[Path]):
         self._env_factory = env_factory
         super().__init__(parent)
 
-    @property
     @override
-    def env(self) -> ManagedEnvironment:
-        if not self._env or self._env.disposed:
-            self._env = self._env_factory()
-        return self._env
+    def new_environment(self) -> ManagedEnvironment:
+        return self._env_factory()
 
 
 @pytest.fixture

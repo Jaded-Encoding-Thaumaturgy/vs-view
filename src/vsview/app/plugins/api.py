@@ -51,6 +51,9 @@ from ._interface import (
 from .contracts import AudioOutputProxy, VideoOutputProxy
 from .exceptions import NoCurrentVideoOutputError
 
+if TYPE_CHECKING:
+    from vsview.app.workspace.callbacks import CallbackHandle
+
 logger = getLogger(__name__)
 
 
@@ -551,15 +554,19 @@ class PluginAPI(QObject):
         """
         return _get_controller(self).get_local_storage(plugin)
 
-    def register_on_destroy(self, cb: Callable[[], Any]) -> None:
+    def register_on_destroy(self, cb: Callable[[], Any]) -> CallbackHandle:
         """
-        Register a callback to be called before the workspace begins a reload or when the workspace is destroyed.
-        This is generally used to clean up VapourSynth resources.
+        Register a persistent callback to clean up resources
+        whenever the workspace releases its VapourSynth environment
+        (before reload, after a failed load, or on destroy).
 
-        Registrations are permanent and cumulative: a callback cannot be unregistered,
-        each call adds one more callback, and every callback runs again before each reload.
+        Duplicate registrations are ignored, and bound `QObject` methods auto-unregister
+        when the object is destroyed.
+
+        Returns:
+            A handle whose `remove()` method unregisters the callback.
         """
-        _get_controller(self).register_on_destroy(cb)
+        return _get_controller(self).register_on_destroy(cb)
 
     @contextmanager
     def vs_context(self) -> Generator[None]:
@@ -568,6 +575,10 @@ class PluginAPI(QObject):
 
         Required when creating clips, filtering, or evaluating frames outside standard callbacks
         such as `PluginGraphicsView.get_node` or `NodeProcessor.prepare`.
+
+        Raises:
+            NoEnvironmentError: The workspace holds no environment: nothing is loaded, the last load failed,
+                a reload is between two environments, or the workspace is closing.
         """
         with _get_controller(self).vs_context():
             try:

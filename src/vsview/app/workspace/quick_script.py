@@ -441,10 +441,10 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
         ShortcutManager.register_shortcut(ActionID.RUN_QUICK_SCRIPT, self.code_dock.run_btn.click, self)
 
     @override
-    def deleteLater(self) -> None:
+    def on_teardown_finished(self) -> None:
         linecache.cache.pop(self.filename, None)
         output_metadata.pop(self.filename, None)
-        return super().deleteLater()
+        super().on_teardown_finished()
 
     @property
     @override

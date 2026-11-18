@@ -36,10 +36,11 @@ from ...api._helpers import output_metadata
 from ...api.info import Context
 from ...env import getenv_bool
 from ...types import Frame
-from ...vsenv import clear_environment, run_in_background, run_in_loop, unset_environment
+from ...vsenv import run_in_background, run_in_loop, unset_environment
 from ..outputs import AudioOutput, OutputsManager, VideoOutput
 from ..plugins._controller import PluginWorkspaceController
 from ..plugins.api import WidgetPluginBase
+from ..plugins.exceptions import NoEnvironmentError
 from ..settings import ActionID, ShortcutManager
 from ..utils import ProcessMemorySnapshot, has_overriding_method, measure_memory
 from ..views import PluginDock, PluginSplitter
@@ -48,7 +49,8 @@ from ..views.tab import TabViewWidget
 from ..views.timeline import TimelineControlBar
 from ..views.video import GraphicsView, ViewState
 from .base import BaseWorkspace
-from .lifecycle import WorkspaceLifecycle
+from .callbacks import CallbackHandle, CallbackRegistry, run_callbacks
+from .lifecycle import Phase
 from .playback import PlaybackManager
 from .tab_manager import PlayHeadToolButton, TabManager
 from .utils import State, evict_packages, find_local_packages
@@ -63,6 +65,9 @@ class LoaderWorkspace[T](BaseWorkspace):
     content: T
     """The content being loaded."""
 
+    teardown_timeout_ms: ClassVar[int] = 10_000
+    """How long the teardown waits for the workspace's tasks before it continues without them."""
+
     # Status bar signals
     statusLoadingStarted = Signal(str)  # message
     statusLoadingFinished = Signal(str)  # completed message
@@ -72,7 +77,6 @@ class LoaderWorkspace[T](BaseWorkspace):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self.lifecycle = WorkspaceLifecycle()
         self.reload_count = 0
 
         self.stack = QStackedWidget(self)
@@ -80,7 +84,8 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         # API & plugins
         self.plugin_controller = PluginWorkspaceController(self)
-        self.cbs_on_destroy = list[Callable[[], Any]]()
+        self._release_callbacks = CallbackRegistry()
+        self._unload_callbacks = CallbackRegistry()
         self.plugins = list[WidgetPluginBase[Any, Any]]()
         self.docks = list[PluginDock]()
         self.plugins_loaded = False
@@ -252,31 +257,61 @@ class LoaderWorkspace[T](BaseWorkspace):
         sm.register_shortcut(ActionID.SWITCH_PREVIOUS_TAB, lambda: self.tab_manager.switch_tab(delta=-1), self)
         sm.register_shortcut(ActionID.SWITCH_NEXT_TAB, lambda: self.tab_manager.switch_tab(delta=1), self)
 
+    @property
     @override
-    def deleteLater(self) -> None:
-        if self.lifecycle.begin_close() is None:
-            logger.debug("%s deleteLater already in progress, ignoring", self.__class__.__name__)
-            return
+    def env(self) -> ManagedEnvironment:
+        """
+        Return the managed VapourSynth environment of the loaded content.
 
-        logger.debug(
-            "%s(%r) deleteLater called, cleaning up resources",
-            self.__class__.__name__,
-            lambda: content.name if isinstance(content := getattr(self, "content", None), Path) else content,
-        )
+        Only the load path creates it, through `prepare_environment`.
 
-        self.playback.stop()
-        self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
-        self.plugin_controller.on_workspace_destroy()
-        self.loop.wait_for_threads(10000, owner=self)
+        Raises:
+            NoEnvironmentError: Nothing is loaded, the last load failed, a reload is between two environments,
+                or the workspace is closing.
+        """
+        if (env := self._env) is None or env.disposed:
+            raise NoEnvironmentError(f"{type(self).__name__} holds no VapourSynth environment")
+        return env
 
-        super().deleteLater()
-        self.lifecycle.mark_closed()
+    def prepare_environment(self) -> ManagedEnvironment:
+        """
+        Return the environment for the content being loaded, and create it when the workspace holds none.
+
+        The load path calls it before `loader`.
+
+        Raises:
+            NoEnvironmentError: The workspace is closing.
+        """
+        if self.lifecycle.closing:
+            raise NoEnvironmentError(f"{type(self).__name__} is closing and creates no VapourSynth environment")
+
+        if (env := self._env) is None or env.disposed:
+            self._env = env = self.new_environment()
+
+        return env
+
+    def register_on_release(self, cb: Callable[[], Any]) -> CallbackHandle:
+        """
+        Register a callback run each time this workspace releases its environment:
+        before each reload, after a failed load and when it closes.
+        """
+        return self._release_callbacks.add(cb)
+
+    def register_on_unload[**P, R](self, cb: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> Callable[P, R]:
+        """Register a callback run once, the next time this workspace releases its environment."""
+        self._unload_callbacks.add(cb, *args, **kwargs)
+        return cb
 
     @override
     def clear_environment(self) -> None:
-        if self._env and not self._env.disposed:
-            with self._env.use():
-                done, _ = wait(self.loop.from_thread(keep_environment(cb)) for cb in self.cbs_on_destroy)
+        if (env := self._env) is None or env.disposed:
+            # Their run's environment is gone, and VapourSynth calls made outside an environment are undefined.
+            self._unload_callbacks.take_all()
+        else:
+            with env.use():
+                run_callbacks(self._unload_callbacks.take_all()[::-1], self)
+                rcallbacks = self._release_callbacks.snapshot()
+                done, _ = wait([self.loop.from_thread(keep_environment(cb)) for cb in rcallbacks])
 
             for f in done:
                 if (exc := f.exception()) is not None:
@@ -288,6 +323,21 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.outputs_manager.clear()
 
         return super().clear_environment()
+
+    @override
+    def _before_delayed_disposal(self, env: ManagedEnvironment) -> None:
+        # A script still running at close may register unload callbacks after the release already ran them.
+        if (callbacks := self._unload_callbacks.take_all()) and not env.disposed:
+            with env.use():
+                run_callbacks(callbacks[::-1], self)
+
+    @override
+    def _finish_tasks(self) -> list[Future[Any]]:
+        self.playback.stop()
+        self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
+        self.plugin_controller.on_workspace_destroy()
+        self.loop.wait_for_threads(self.teardown_timeout_ms, owner=self)
+        return list(self.loop.pending_tasks(owner=self))
 
     @contextmanager
     def status_loading(self, loading_message: str, completed_message: str) -> Generator[None]:
@@ -379,6 +429,10 @@ class LoaderWorkspace[T](BaseWorkspace):
         # Load plugins in the load_content function so the plugins can get the file_path
         # and do VS things in the init since the environment is already created.
         self.load_plugins()
+
+        if self.lifecycle.closing:
+            return 2
+
         self.plugin_controller.on_workspace_loaded()
 
         @run_in_loop(return_future=False)
@@ -482,6 +536,12 @@ class LoaderWorkspace[T](BaseWorkspace):
             current_tab_i = self._restore_reload_tabs(tabs, voutputs, saved_state, current_tab_i, autofit_enabled)
 
             self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
+
+            if self.lifecycle.closing:
+                self._destroy_freeze_screenshot(screenshot)
+                mmm.__exit__(None, None, None)
+                return 2
+
             self.plugin_controller.on_workspace_loaded()
 
             @run_in_loop(return_future=False)
@@ -690,7 +750,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     def _get_outputs(self) -> tuple[list[VideoOutput], list[AudioOutput]] | None:
         try:
-            with self.env.use():
+            with self.prepare_environment().use():
                 self.loader()
 
                 voutputs = self.outputs_manager.create_voutputs(
@@ -820,7 +880,8 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     @run_in_loop(return_future=False)
     def load_plugins(self) -> None:
-        if not self.plugins_loaded:
+        # Plugins built during the teardown would never receive on_workspace_destroy.
+        if not self.plugins_loaded and not self.lifecycle.closing:
             tabs = self.plugin_splitter.plugin_tabs
 
             for dock in self.docks:
@@ -919,8 +980,9 @@ class LoaderWorkspace[T](BaseWorkspace):
             return
 
         if visible:
-            with self.env.use():
-                self.plugin_controller.init_plugin(w)
+            if self.lifecycle.phase is Phase.LOADED:
+                with self.env.use():
+                    self.plugin_controller.init_plugin(w)
 
             dock.truly_visible = True
         elif dock.truly_visible:
@@ -938,7 +1000,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             return
 
         if visible:
-            if self.outputs_manager.current_voutput:
+            if self.lifecycle.phase is Phase.LOADED:
                 with self.env.use():
                     self.plugin_controller.init_plugin(w)
         else:
@@ -946,7 +1008,10 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     @Slot(int, int)
     def _on_splitter_tab_changed(self, new_index: int, old_index: int) -> None:
-        if isinstance(w := self.plugin_splitter.plugin_tabs.widget(new_index), WidgetPluginBase):
+        if (
+            isinstance(w := self.plugin_splitter.plugin_tabs.widget(new_index), WidgetPluginBase)
+            and self.lifecycle.phase is Phase.LOADED
+        ):
             with self.env.use():
                 self.plugin_controller.init_plugin(w)
 
@@ -969,12 +1034,10 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
         self.persistent_state = State()
 
     @override
-    def deleteLater(self) -> None:
-        try:
-            return super().deleteLater()
-        finally:
-            self.persistent_state.clear()
-            self.persistent_state = State()
+    def on_teardown_finished(self) -> None:
+        super().on_teardown_finished()
+        self.persistent_state.clear()
+        self.persistent_state = State()
 
     @property
     def _script_content(self) -> Any:
@@ -1004,6 +1067,7 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
             is_reload=self.reload_count > 0,
             persistent_state=self.persistent_state,
             on_workspace_destroy=self.register_on_destroy,
+            on_unload=self.register_on_unload,
         )
 
         module = ModuleType("__vsview__")
@@ -1051,9 +1115,11 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
             raise RuntimeError("Script execution failed") from None
 
     @override
-    def _dispose_environment(self) -> None:
-        if hasattr(self, "script"):
-            clear_environment(self.script)
-            del self.script
-        else:
-            super()._dispose_environment()
+    def _take_environment(self) -> ManagedEnvironment | Script[ManagedEnvironment] | None:
+        if not hasattr(self, "script"):
+            return super()._take_environment()
+
+        script = self.script
+        del self.script
+        self._env = None
+        return script

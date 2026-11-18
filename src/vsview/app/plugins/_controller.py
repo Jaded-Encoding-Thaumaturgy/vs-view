@@ -30,6 +30,7 @@ from .exceptions import NoCurrentVideoOutputError, NoCurrentViewError
 if TYPE_CHECKING:
     from vsview.app.outputs import FrameBuffer
     from vsview.app.workspace import LoaderWorkspace
+    from vsview.app.workspace.callbacks import CallbackHandle
 
     from .api import (
         GraphicsViewProxy,
@@ -219,8 +220,8 @@ class PluginWorkspaceController(QObject):
         local_storage.mkdir(parents=True, exist_ok=True)
         return local_storage
 
-    def register_on_destroy(self, cb: Callable[[], Any]) -> None:
-        self.__workspace.cbs_on_destroy.append(cb)
+    def register_on_destroy(self, cb: Callable[[], Any]) -> CallbackHandle:
+        return self.__workspace.register_on_release(cb)
 
     @contextmanager
     def vs_context(self) -> Generator[None]:

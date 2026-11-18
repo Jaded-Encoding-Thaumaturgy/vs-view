@@ -125,9 +125,9 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         QTimer.singleShot(0, self, lambda: self._connect_and_load(dropped_file))
 
     @override
-    def deleteLater(self) -> None:
+    def on_teardown_started(self) -> None:
         self._discard_client()
-        super().deleteLater()
+        super().on_teardown_started()
 
     @override
     def clear_environment(self) -> None:

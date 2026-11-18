@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Generator, Sequence
 from pathlib import Path
 from typing import Any, override
@@ -15,6 +16,7 @@ from vsengine.policy import ManagedEnvironment
 from vsview.api import hookimpl
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.plugins.api import WidgetPluginBase
+from vsview.app.plugins.exceptions import NoEnvironmentError
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.views import PluginDock
 from vsview.app.workspace.lifecycle import Phase
@@ -40,12 +42,9 @@ class ConcreteScriptWorkspace(VSEngineWorkspace[Path]):
         self._env_factory = env_factory
         super().__init__(parent)
 
-    @property
     @override
-    def env(self) -> ManagedEnvironment:
-        if not self._env or self._env.disposed:
-            self._env = self._env_factory()
-        return self._env
+    def new_environment(self) -> ManagedEnvironment:
+        return self._env_factory()
 
 
 class ConcreteLoaderWorkspace(LoaderWorkspace[str]):
@@ -557,6 +556,118 @@ def test_a_load_requested_after_close_starts_nothing(loader_workspace: ConcreteL
     assert fut.result(timeout=2) == 2
     assert loader_workspace.lifecycle.phase is Phase.CLOSED
     assert loader_workspace.stack.currentWidget() is loader_workspace.empty_page
+
+
+# Environment and Release Tests
+@pytest.mark.vpy("no-core")
+@pytest.mark.parametrize("close_first", [False, True], ids=["nothing_loaded", "closed"])
+def test_vs_context_without_an_environment_raises(loader_workspace: ConcreteLoaderWorkspace, close_first: bool) -> None:
+    if close_first:
+        loader_workspace.deleteLater()
+
+    with (
+        pytest.raises(NoEnvironmentError, match=r"VapourSynth environment"),
+        loader_workspace.plugin_controller.api.vs_context(),
+    ):
+        pass
+
+
+def test_script_unload_callbacks_run_at_each_release_and_destroy_callbacks_once_at_close(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+) -> None:
+    events = list[str]()
+    script_file = tmp_path / "callbacks.vpy"
+    script_file.write_text(
+        _make_valid_script_content(length=10)
+        + "import vsview\n"
+        + "vsview.register_on_unload(record, 'unload')\n"
+        + "vsview.register_on_workspace_destroy(record, 'destroy')\n",
+        encoding="utf-8",
+    )
+    ws = ConcreteScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+    ws.vsargs = {"record": events.append}
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+
+    fut_reload = ws.reload_content()
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+    events_after_reload = list(events)
+    ws.teardown()
+
+    assert events_after_reload == ["unload"]
+    assert events == ["unload", "unload", "destroy"]
+
+
+def test_a_removed_release_callback_does_not_run_at_reload(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+) -> None:
+    script_file = tmp_path / "release.vpy"
+    script_file.write_text(_make_valid_script_content(length=10), encoding="utf-8")
+    ws = ConcreteScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+    calls = list[str]()
+    handle = ws.plugin_controller.api.register_on_destroy(lambda: calls.append("removed"))
+    ws.plugin_controller.api.register_on_destroy(lambda: calls.append("kept"))
+
+    handle.remove()
+    fut_reload = ws.reload_content()
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.lifecycle.phase is Phase.LOADED, timeout=3000)
+
+    assert calls == ["kept"]
+
+
+class _QuickTeardownScriptWorkspace(ConcreteScriptWorkspace):
+    teardown_timeout_ms = 100
+
+
+def test_closing_during_a_running_script_disposes_its_environment_after_the_script_ends(
+    qtbot: QtBot,
+    vsview_env_factory: Callable[[], ManagedEnvironment],
+    tmp_path: Path,
+) -> None:
+    started, gate = threading.Event(), threading.Event()
+    events = list[str]()
+    script_file = tmp_path / "slow.vpy"
+    script_file.write_text(
+        "import vsview\n"
+        "started.set()\n"
+        "gate.wait(10)\n"
+        "vsview.register_on_unload(record, 'registered after the release')\n" + _make_valid_script_content(length=10),
+        encoding="utf-8",
+    )
+    ws = _QuickTeardownScriptWorkspace(vsview_env_factory)
+    qtbot.addWidget(ws)
+    ws.vsargs = {"started": started, "gate": gate, "record": events.append}
+    ws.load_content(script_file)
+    qtbot.waitUntil(started.is_set, timeout=5000)
+    env = ws.env
+
+    disposal = ws.teardown()
+    disposed_while_running = env.disposed
+    gate.set()
+    qtbot.waitUntil(lambda: disposal is not None and disposal.done(), timeout=5000)
+
+    assert disposed_while_running is False
+    assert env.disposed is True
+    assert events == ["registered after the release"]
+
+
+@pytest.mark.vpy("no-core")
+def test_unload_callbacks_are_dropped_when_there_is_no_environment(loader_workspace: ConcreteLoaderWorkspace) -> None:
+    calls = list[str]()
+    loader_workspace.register_on_unload(calls.append, "unload")
+
+    loader_workspace.clear_environment()
+    loader_workspace.teardown()
+
+    assert calls == []
 
 
 # Error Recovery Lifecycle Tests

@@ -7,12 +7,14 @@ from types import ModuleType
 from typing import Any, override
 
 import pytest
+from PySide6.QtWidgets import QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
 from vsview.api._helpers import output_metadata
 from vsview.api.info import Context, register_on_workspace_destroy
+from vsview.app.utils import Disposable
 from vsview.app.workspace.base import BaseWorkspace
 from vsview.app.workspace.loader import VSEngineWorkspace
 from vsview.app.workspace.quick_script import QuickScriptWorkspace
@@ -101,6 +103,28 @@ def test_base_workspace_callback_error_resilience(qtbot: QtBot) -> None:
     assert called == ["passed"]
 
 
+class _DisposableChild(QWidget, Disposable):
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.dispose_calls = 0
+
+    @override
+    def dispose(self) -> None:
+        self.dispose_calls += 1
+
+
+def test_teardown_disposes_every_disposable_child(qtbot: QtBot) -> None:
+    workspace = BaseWorkspace()
+    qtbot.addWidget(workspace)
+    direct = _DisposableChild(workspace)
+    nested = _DisposableChild(QWidget(workspace))
+
+    workspace.deleteLater()
+    workspace.deleteLater()
+
+    assert (direct.dispose_calls, nested.dispose_calls) == (1, 1)
+
+
 def test_on_workspace_destroy_inside_preview(mocker: MockerFixture, qtbot: QtBot) -> None:
     workspace = BaseWorkspace()
     qtbot.addWidget(workspace)
@@ -110,6 +134,7 @@ def test_on_workspace_destroy_inside_preview(mocker: MockerFixture, qtbot: QtBot
         is_reload=False,
         persistent_state={},
         on_workspace_destroy=workspace.register_on_destroy,
+        on_unload=workspace.register_on_destroy,
     )
     mod = ModuleType("__vsview__")
     mod.__vsview_context__ = ctx  # type: ignore[attr-defined]
@@ -180,12 +205,9 @@ def test_quick_script_workspace_loader_registers_source_length(
     vpy_env_factory: Callable[[], ManagedEnvironment],
 ) -> None:
     class TestQuickScriptWorkspace(QuickScriptWorkspace):
-        @property
         @override
-        def env(self) -> ManagedEnvironment:
-            if not self._env or self._env.disposed:
-                self._env = vpy_env_factory()
-            return self._env
+        def new_environment(self) -> ManagedEnvironment:
+            return vpy_env_factory()
 
     workspace = TestQuickScriptWorkspace()
     qtbot.addWidget(workspace)
@@ -200,7 +222,7 @@ def test_quick_script_workspace_loader_registers_source_length(
 
     linecache.cache.pop(workspace.filename, None)
     try:
-        with workspace.env.use():
+        with workspace.prepare_environment().use():
             workspace.loader()
 
         assert workspace.filename in linecache.cache

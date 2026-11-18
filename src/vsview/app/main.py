@@ -4,6 +4,7 @@ import ctypes
 import gc
 import sys
 from collections.abc import Callable, Generator, Sequence
+from concurrent.futures import Future
 from contextlib import contextmanager
 from functools import partial
 from logging import DEBUG, getLogger
@@ -338,6 +339,7 @@ class MainWindow(QMainWindow):
         self.plugin_manager.call_when_loaded(self._init_view_tools_settings)
 
         self._connected_workspace: BaseWorkspace | None = None
+        self._pending_disposals = set[Future[None]]()
 
     def _setup_shortcuts(self) -> None:
         sm = ShortcutManager()
@@ -396,8 +398,7 @@ class MainWindow(QMainWindow):
                 if Shiboken.getCppPointer(child)[0] not in children_before and isinstance(child, QWidget):
                     QWidget.deleteLater(child)
 
-            if not self.nav_container.buttons:
-                unregister_policy()
+            self._unregister_policy_when_idle()
             raise
 
         self.disconnect_workspace()
@@ -435,7 +436,14 @@ class MainWindow(QMainWindow):
         self.button_group.removeButton(btn)
         self.nav_container.remove_button(btn)
 
+        def on_disposal_done(disposal: Future[None]) -> None:
+            self._pending_disposals.discard(disposal)
+            self._unregister_policy_when_idle()
+
         if Shiboken.isValid(btn.workspace):
+            if (disposal := btn.workspace.teardown()) is not None:
+                self._pending_disposals.add(disposal)
+                disposal.add_loop_callback(on_disposal_done)
             btn.workspace.deleteLater()
 
         btn.deleteLater()
@@ -443,8 +451,7 @@ class MainWindow(QMainWindow):
         with QSignalBlocker(self.settings_manager.signals):
             self.settings_manager.save_global()
 
-        if not self.nav_container.buttons:
-            unregister_policy()
+        self._unregister_policy_when_idle()
 
         with check_leaks.ctx():
             QTimer.singleShot(0, gc.collect)
@@ -495,6 +502,10 @@ class MainWindow(QMainWindow):
 
         if isinstance(workspace, LoaderWorkspace) and workspace.outputs_manager.current_voutput:
             workspace._emit_output_info()
+
+    def _unregister_policy_when_idle(self) -> None:
+        if not self.nav_container.buttons and not self._pending_disposals:
+            unregister_policy()
 
     def _save_geometry(self) -> None:
         # For maximized windows, use normalGeometry to get the unmaximized dimensions

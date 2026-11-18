@@ -30,6 +30,7 @@ from vsview.app.plugins.contracts import AudioOutputProxy, VideoOutputProxy
 from vsview.app.plugins.exceptions import NoCurrentVideoOutputError
 from vsview.app.settings import SettingsManager
 from vsview.app.settings.shortcuts import ShortcutManager
+from vsview.app.workspace.callbacks import CallbackHandle, CallbackRegistry
 from vsview.types import Frame, Time
 from vsview.vsenv.loop import QtEventLoop
 
@@ -233,7 +234,7 @@ class HarnessPluginController(QObject):
         self._current_aoutput: AudioOutputProxy | None = None
         self._busy = False
 
-        self.destroy_callbacks = list[Callable[[], Any]]()
+        self.destroy_callbacks = CallbackRegistry()
         self.managed_plugins = list[WidgetPluginBase[Any, Any]]()
 
         self.current_view_proxy = HarnessGraphicsViewProxy(self)
@@ -324,8 +325,8 @@ class HarnessPluginController(QObject):
         with self.env.use():
             yield
 
-    def register_on_destroy(self, cb: Callable[[], Any]) -> None:
-        self.destroy_callbacks.append(cb)
+    def register_on_destroy(self, cb: Callable[[], Any]) -> CallbackHandle:
+        return self.destroy_callbacks.add(cb)
 
     def get_local_storage(self, plugin: WidgetPluginBase[Any, Any] | _PluginLike) -> Path | None:
         if self._file_path is None:
@@ -463,8 +464,7 @@ class HarnessPluginController(QObject):
 
     def destroy(self) -> None:
         """Execute all registered destroy callbacks and notify managed plugins."""
-        while self.destroy_callbacks:
-            cb = self.destroy_callbacks.pop()
+        for cb in self.destroy_callbacks.take_all()[::-1]:
             cb()
         self.on_workspace_destroy()
 

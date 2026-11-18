@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["NoCurrentVideoOutputError", "NoCurrentViewError", "PluginError"]
+__all__ = ["NoCurrentVideoOutputError", "NoCurrentViewError", "NoEnvironmentError", "PluginError"]
 
 
 class PluginError(Exception):
@@ -17,4 +17,10 @@ class NoCurrentVideoOutputError(PluginError, RuntimeError):
 class NoCurrentViewError(PluginError, RuntimeError):
     """
     Raised when `api.current_view` is accessed but no graphics view is currently available.
+    """
+
+
+class NoEnvironmentError(PluginError, RuntimeError):
+    """
+    Raised when the VapourSynth environment of a workspace is accessed, but the workspace holds none.
     """

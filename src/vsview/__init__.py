@@ -5,6 +5,7 @@ from .api import (
     get_state,
     is_preview,
     is_reload,
+    register_on_unload,
     register_on_workspace_destroy,
     set_output,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "get_state",
     "is_preview",
     "is_reload",
+    "register_on_unload",
     "register_on_workspace_destroy",
     "set_output",
 ]

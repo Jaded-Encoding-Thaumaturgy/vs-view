@@ -525,6 +525,13 @@ else:
     """Metaclass type of any Shiboken.Object."""
 
 
+class Disposable:
+    """Mixin for widgets whose resources the workspace teardown must release."""
+
+    def dispose(self) -> None:
+        """Release the resources. It may be called more than once."""
+
+
 class _WeakConnection:
     __slots__ = ("__weakref__", "_connected", "_signal", "_slot_weak")
 

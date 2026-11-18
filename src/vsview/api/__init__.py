@@ -11,6 +11,7 @@ from ..app.plugins import (
     NoCurrentVideoOutputError,
     NoCurrentViewError,
     NodeProcessor,
+    NoEnvironmentError,
     PlaybackProxy,
     PluginAPI,
     PluginError,
@@ -54,6 +55,7 @@ from ..app.views import OutputInfo
 from ..app.views.components import AbstractTableModel, Accordion, AnimatedToggle, NonClosingMenu, SegmentedControl
 from ..app.views.timeline import FrameEdit, TimeEdit
 from ..app.views.video import BaseGraphicsView
+from ..app.workspace.callbacks import CallbackHandle
 from ..logging import get_console_level, setup_web_logger
 from ..types import Frame, Time
 from ..vsenv import (
@@ -65,7 +67,16 @@ from ..vsenv import (
     to_thread_scoped,
     wait_for_threads,
 )
-from .info import Context, get_cached, get_reload_count, get_state, is_preview, is_reload, register_on_workspace_destroy
+from .info import (
+    Context,
+    get_cached,
+    get_reload_count,
+    get_state,
+    is_preview,
+    is_reload,
+    register_on_unload,
+    register_on_workspace_destroy,
+)
 from .output import catch_output, get_output, get_outputs, set_output
 
 if TYPE_CHECKING:
@@ -89,6 +100,7 @@ __all__ = [
     "BaseWebChannelBridge",
     "BaseWebEnginePage",
     "BaseWebEngineView",
+    "CallbackHandle",
     "Checkbox",
     "ColorPicker",
     "ColorPickerInput",
@@ -112,6 +124,7 @@ __all__ = [
     "LoginCredentialsInput",
     "NoCurrentVideoOutputError",
     "NoCurrentViewError",
+    "NoEnvironmentError",
     "NodeProcessor",
     "NonClosingMenu",
     "ObjectType",
@@ -157,6 +170,7 @@ __all__ = [
     "is_reload",
     "load_icon",
     "path_to_hash",
+    "register_on_unload",
     "register_on_workspace_destroy",
     "run_in_background",
     "run_in_loop",

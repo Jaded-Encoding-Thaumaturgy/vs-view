@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 
 from ...env import getenv_bool
 from ...logging import setup_web_logger
-from ..utils import get_all_original_bases
+from ..utils import Disposable, get_all_original_bases
 
 if sys.version_info >= (3, 13):
     FallbackT = TypeVar("FallbackT", default=None)
@@ -264,7 +264,7 @@ class BaseWebEnginePage(QWebEnginePage):
         )
 
 
-class BaseWebEngineView[BridgeT: BaseWebChannelBridge[Any, Any]](QWebEngineView):
+class BaseWebEngineView[BridgeT: BaseWebChannelBridge[Any, Any]](QWebEngineView, Disposable):
     _bridge_cls: ClassVar[type[BaseWebChannelBridge[Any, Any]]]
     logger_name: ClassVar[str] = "vsview_web_js"
 
@@ -292,6 +292,7 @@ class BaseWebEngineView[BridgeT: BaseWebChannelBridge[Any, Any]](QWebEngineView)
         )
 
         self.bridge = self._bridge_cls(self)  # type: ignore[assignment]
+        self._disposed = False
 
         channel = QWebChannel(self, propertyUpdateInterval=-1)
         channel.registerObject("bridge", self.bridge)
@@ -313,8 +314,16 @@ class BaseWebEngineView[BridgeT: BaseWebChannelBridge[Any, Any]](QWebEngineView)
         return super().load(thing)
 
     @override
-    def deleteLater(self) -> None:
+    def dispose(self) -> None:
+        if self._disposed:
+            return
+        self._disposed = True
+
         self.page().webChannel().deregisterObject(self.bridge)
         self.page().webChannel().deleteLater()
         self.page().deleteLater()
+
+    @override
+    def deleteLater(self) -> None:
+        self.dispose()
         super().deleteLater()

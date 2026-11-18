@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable, MutableMapping
-from functools import partial
 from typing import Any, NamedTuple, Self
 
 
@@ -17,7 +16,8 @@ class Context(NamedTuple):
     reload_count: int
     is_reload: bool
     persistent_state: MutableMapping[Any, Any]
-    on_workspace_destroy: Callable[[Callable[[], Any]], Any]
+    on_workspace_destroy: Callable[..., Any]
+    on_unload: Callable[..., Any]
 
     @classmethod
     def get(cls) -> Self | None:
@@ -27,20 +27,46 @@ class Context(NamedTuple):
 
 def register_on_workspace_destroy[**P, R](cb: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> Callable[P, R]:
     """
-    Register a callback to run when the workspace is destroyed.
+    Register a callback to run once when the workspace closes (ignored on reload).
 
-    The callback is returned to facilitate usage as a decorator.
+    Use for resources persisting across reloads (e.g., via `get_cached`).
+    Duplicate registrations with identical arguments are ignored.
+
+    Note:
+        Functions defined inside the script create new objects on each reload
+        and will execute with cleared globals at close.
+        Use `register_on_unload` for per-run resources instead.
 
     Args:
-        callback: A callable to invoke upon workspace destruction.
-        *args: Positional arguments forwarded to callback.
-        **kwargs: Keyword arguments forwarded to callback.
+        cb: Callable to invoke on workspace close.
+        *args: Positional arguments forwarded to `cb`.
+        **kwargs: Keyword arguments forwarded to `cb`.
 
     Returns:
-        The registered callback.
+        The registered callback (allows use as a decorator).
     """
     if (ctx := Context.get()) is not None:
-        ctx.on_workspace_destroy(partial(cb, *args, **kwargs))
+        ctx.on_workspace_destroy(cb, *args, **kwargs)
+    return cb
+
+
+def register_on_unload[**P, R](cb: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> Callable[P, R]:
+    """
+    Register a one-time callback to run when the current script run is released
+    (before the next reload or on workspace close).
+
+    Use for resources created fresh on each run. The callback is removed after execution.
+
+    Args:
+        cb: Callable to invoke on release.
+        *args: Positional arguments forwarded to `cb`.
+        **kwargs: Keyword arguments forwarded to `cb`.
+
+    Returns:
+        The registered callback (allows use as a decorator).
+    """
+    if (ctx := Context.get()) is not None:
+        ctx.on_unload(cb, *args, **kwargs)
     return cb
 
 

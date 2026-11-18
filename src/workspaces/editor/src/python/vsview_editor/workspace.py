@@ -805,14 +805,18 @@ class EditorWorkspace(
             QTimer.singleShot(0, self._apply_default_dock_sizes)
 
     @override
-    def deleteLater(self) -> None:
+    def on_teardown_started(self) -> None:
         GlobalConsoleHub.unregister(self.code_dock.editor.bridge)
         self.code_dock.editor.bridge.dispatch(PyToJsCommand.LSP_DISCONNECT)
         self.code_dock.lsp_manager.stop()
+        super().on_teardown_started()
+
+    @override
+    def on_teardown_finished(self) -> None:
         self.code_dock.deleteLater()
         linecache.cache.pop(self.content.filename, None)
         output_metadata.pop(self.content.filename, None)
-        super().deleteLater()
+        super().on_teardown_finished()
 
     @property
     @override
