@@ -180,9 +180,8 @@ class PluginWorkspaceController(QObject):
 
         try:
             current_view = tab_manager.current_view
-        except TypeError as e:
-            logger.debug("Error %s", e, exc_info=e)
-            raise NoCurrentViewError("No current view is currently available in the active workspace") from None
+        except TypeError:
+            raise NoCurrentViewError("No current view is currently available in the active workspace")
 
         with self.__cursor_reset_lock:
             if not self.__cursor_reset_connected:
