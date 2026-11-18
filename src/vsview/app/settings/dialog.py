@@ -184,7 +184,8 @@ class SettingsTab(QWidget):
 
         self._updating_scroll = True
         try:
-            self.scroll_area.ensureWidgetVisible(section, 0, 12)
+            y = section.mapTo(self.container, QPoint(0, 0)).y()
+            self.scroll_area.verticalScrollBar().setValue(max(0, y - self.container_layout.contentsMargins().top()))
         finally:
             self._updating_scroll = False
 
