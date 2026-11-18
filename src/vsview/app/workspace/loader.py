@@ -440,7 +440,7 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             # 2. Reset Environment
             self.clear_environment()
-            gc.collect()
+            self.loop.from_thread(gc.collect).result()
 
             if is_debug:
                 logger.debug("Memory after environment cleanup: %s", ProcessMemorySnapshot())
