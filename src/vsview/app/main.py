@@ -337,8 +337,7 @@ class MainWindow(QMainWindow):
 
         self.plugin_manager.call_when_loaded(self._init_view_tools_settings)
 
-        # Track currently connected workspace for status bar
-        self._connected_workspace: LoaderWorkspace[Any] | None = None
+        self._connected_workspace: BaseWorkspace | None = None
 
     def _setup_shortcuts(self) -> None:
         sm = ShortcutManager()
@@ -473,18 +472,22 @@ class MainWindow(QMainWindow):
     def connect_workspace(self, workspace: BaseWorkspace) -> None:
         if isinstance(workspace, LoaderWorkspace):
             self.status_widget.connect_workspace(workspace)
-            self._connected_workspace = workspace
         else:
             self.status_widget.clear()
             self.status_widget.set_ready()
 
+        self._connected_workspace = workspace
         workspace.on_connected()
 
     def disconnect_workspace(self) -> None:
-        if self._connected_workspace is not None:
-            self.status_widget.disconnect_workspace(self._connected_workspace)
-            self._connected_workspace.on_disconnected()
-            self._connected_workspace = None
+        if (workspace := self._connected_workspace) is None:
+            return
+
+        if isinstance(workspace, LoaderWorkspace):
+            self.status_widget.disconnect_workspace(workspace)
+
+        workspace.on_disconnected()
+        self._connected_workspace = None
 
     def update_connection(self, workspace: BaseWorkspace) -> None:
         self.disconnect_workspace()

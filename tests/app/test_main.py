@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import override
 from unittest.mock import MagicMock, patch
@@ -20,7 +20,8 @@ from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import ShortcutEditor
 from vsview.app.settings.manager import SettingsManager
 from vsview.app.settings.models import GlobalSettings, WindowGeometry
-from vsview.app.workspace import PythonScriptWorkspace, VideoFileWorkspace
+from vsview.app.workspace import BaseWorkspace, PythonScriptWorkspace, VideoFileWorkspace
+from vsview.assets import IconName
 from vsview.vsenv import QtEventLoop, unregister_policy
 
 pytestmark = [pytest.mark.integration, pytest.mark.qt, pytest.mark.vpy("no-policy")]
@@ -130,6 +131,39 @@ def test_deleting_an_inactive_workspace_keeps_the_active_one_connected(main_wind
     assert main_window.stack.currentWidget() is active.workspace
     assert _HookRecordingFileWorkspace.hooks == ["on_connected"]
     assert main_window.status_widget.message_text_label.text() == "after delete"
+
+
+class _HookRecordingBaseWorkspace(BaseWorkspace):
+    title = "Hook Recorder"
+    icon = IconName.FILE_CODE
+    hooks: list[str]
+
+    @override
+    def on_connected(self) -> None:
+        self.hooks.append("on_connected")
+
+    @override
+    def on_disconnected(self) -> None:
+        self.hooks.append("on_disconnected")
+
+
+@pytest.mark.parametrize(
+    "leave",
+    [
+        pytest.param(lambda window, _: window.add_workspace(VideoFileWorkspace), id="add_another_workspace"),
+        pytest.param(lambda window, btn: window.delete_workspace(btn), id="delete_it"),
+    ],
+)
+def test_leaving_a_workspace_that_is_not_a_loader_disconnects_it(
+    main_window: MainWindow,
+    leave: Callable[[MainWindow, WorkspaceToolButton[_HookRecordingBaseWorkspace]], object],
+) -> None:
+    _HookRecordingBaseWorkspace.hooks = []
+    btn = main_window.add_workspace(_HookRecordingBaseWorkspace)
+
+    leave(main_window, btn)
+
+    assert _HookRecordingBaseWorkspace.hooks == ["on_connected", "on_disconnected"]
 
 
 class _BrokenWorkspace(VideoFileWorkspace):
