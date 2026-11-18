@@ -113,6 +113,7 @@ class Application(QApplication):
         SettingsManager(noop=no_settings)
         loop = QtEventLoop(self)
         set_loop(loop)
+        self.aboutToQuit.connect(loop.cancel)
         ShortcutManager()
         SecretsManager()
         AppearanceManager()

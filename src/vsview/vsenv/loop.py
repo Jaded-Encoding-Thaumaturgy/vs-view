@@ -52,7 +52,7 @@ class QtEventLoop(QObject, EventLoop):
         self._active_tasks = Counter[str]()
         self._tracked_tasks = dict[UnifiedFuture[Any], TaskInfo]()
         self._thread_futures = dict[int, UnifiedFuture[Any]]()
-        self._pending = dict[int, Callable[[], None]]()
+        self._pending = dict[int, tuple[Callable[[], None], UnifiedFuture[Any]]]()
         self._cancelled = False
         self._invoke.connect(self._on_invoke)
 
@@ -67,15 +67,12 @@ class QtEventLoop(QObject, EventLoop):
         self.wait_for_threads(5000)
         self._invoke.disconnect(self._on_invoke)
 
-        with self._lock:
-            self._pending.clear()
-
     @Slot(int)
     def _on_invoke(self, task_id: int) -> None:
         with self._lock:
-            wrapper = self._pending.pop(task_id, None)
-        if wrapper:
-            wrapper()
+            pending = self._pending.pop(task_id, None)
+        if pending:
+            pending[0]()
 
     @override
     def from_thread[**P, R](self, func: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> UnifiedFuture[R]:
@@ -106,9 +103,13 @@ class QtEventLoop(QObject, EventLoop):
             return fut
 
         with self._lock:
+            if self._cancelled:
+                fut.set_exception(Cancelled())
+                return fut
+
             task_id = self._counter
             self._counter += 1
-            self._pending[task_id] = wrapper
+            self._pending[task_id] = wrapper, fut
 
         self._invoke.emit(task_id)
 
@@ -214,6 +215,12 @@ class QtEventLoop(QObject, EventLoop):
         """Mark the event loop as cancelled."""
         with self._lock:
             self._cancelled = True
+            pending = list(self._pending.values())
+            self._pending.clear()
+
+        for _, fut in pending:
+            if fut.set_running_or_notify_cancel():
+                fut.set_exception(Cancelled())
 
     def reset_cancel(self) -> None:
         """Reset cancellation state."""

@@ -191,6 +191,55 @@ def test_next_cycle(qt_loop: QtEventLoop, qtbot: QtBot) -> None:
     assert isinstance(fut2.exception(), Cancelled)
 
 
+def test_from_thread_from_a_worker_fails_at_once_after_cancel(qt_loop: QtEventLoop, qapp: QApplication) -> None:
+    called = False
+
+    def task() -> None:
+        nonlocal called
+        called = True
+
+    qt_loop.cancel()
+    errors = list[BaseException | None]()
+
+    # The main thread pumps no events here, so a queued call would leave the worker waiting until its timeout.
+    worker = threading.Thread(target=lambda: errors.append(qt_loop.from_thread(task).exception(timeout=2.0)))
+    worker.start()
+    worker.join()
+    qapp.processEvents()
+
+    assert len(errors) == 1
+    assert isinstance(errors[0], Cancelled)
+    assert called is False
+
+
+def test_cancel_fails_the_main_thread_calls_that_are_still_queued(qt_loop: QtEventLoop, qapp: QApplication) -> None:
+    called = False
+
+    def task() -> None:
+        nonlocal called
+        called = True
+
+    queued = threading.Event()
+    errors = list[BaseException | None]()
+
+    def bg_worker() -> None:
+        fut = qt_loop.from_thread(task)
+        queued.set()
+        errors.append(fut.exception(timeout=2.0))
+
+    worker = threading.Thread(target=bg_worker)
+    worker.start()
+    assert queued.wait(2.0)
+
+    qt_loop.cancel()
+    worker.join()
+    qapp.processEvents()
+
+    assert len(errors) == 1
+    assert isinstance(errors[0], Cancelled)
+    assert called is False
+
+
 def test_wait_for_threads_main_thread(qt_loop: QtEventLoop) -> None:
     start_evt = threading.Event()
     finish_evt = threading.Event()
