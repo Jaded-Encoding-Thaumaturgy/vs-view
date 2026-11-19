@@ -662,7 +662,15 @@ class PlaybackManager(QObject):
 
         # Schedule timer only if delay is significant; avoids timer overhead for <1ms delays
         if (delay_ns := self.state.next_frame_time_ns - perf_counter_ns()) > MIN_FRAME_DELAY_NS:
-            self._loop.from_thread(lambda: self.state.video_timer.start(cround(delay_ns / 1_000_000)))
+            epoch = self._playback_epoch
+
+            self._loop.from_thread(
+                lambda: (
+                    self.state.video_timer.start(cround(delay_ns / 1_000_000))
+                    if epoch == self._playback_epoch and self.state.is_playing
+                    else None
+                )
+            )
         else:
             self._play_next_frame()
         return None
