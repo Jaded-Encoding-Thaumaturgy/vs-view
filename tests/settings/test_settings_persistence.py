@@ -232,6 +232,62 @@ def test_validate_lenient_raises_when_a_required_field_is_missing() -> None:
         validate_lenient(_Lenient, {"section": {"value": "bad"}})
 
 
+def _save_from_another_window(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    # A later modification time, even when both writes fall in the same clock tick
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+
+
+def test_global_save_keeps_the_changes_another_window_saved(
+    fresh_settings_manager: Callable[[], SettingsManager],
+) -> None:
+    sm = fresh_settings_manager()
+    other = json.loads(GlobalSettings.path.read_text(encoding="utf-8"))
+    other["chdir"] = True
+    other["status_message_timeout"] = 1
+    other["timeline"]["seek_step"] = 50
+    _save_from_another_window(GlobalSettings.path, json.dumps(other))
+    sm.global_settings.status_message_timeout = 1234
+    sm.global_settings.timeline.mode = "time"
+
+    sm.save_global()
+
+    saved = GlobalSettings.model_validate_json(GlobalSettings.path.read_text(encoding="utf-8"))
+    for settings in (saved, sm.global_settings):
+        assert (settings.chdir, settings.status_message_timeout, settings.timeline.seek_step) == (True, 1234, 50)
+        assert settings.timeline.mode == "time"
+
+
+def test_local_save_keeps_a_file_another_window_created(tmp_path: Path) -> None:
+    script = tmp_path / "script.vpy"
+    script.touch()
+    settings_path = SettingsManager.local_settings_path(script)
+    settings = SettingsManager.get_local_settings(script)
+    _save_from_another_window(settings_path, LocalSettings(source_path=str(script), last_frame=42).model_dump_json())
+    settings.playback.speed = 2.0
+
+    SettingsManager.save_local(script)
+
+    saved = LocalSettings.model_validate_json(settings_path.read_text(encoding="utf-8"))
+    assert (saved.last_frame, saved.playback.speed) == (42, 2.0)
+    assert SettingsManager.get_local_settings(script).last_frame == 42
+
+
+def test_global_save_writes_its_own_settings_when_the_other_window_file_is_unreadable(
+    fresh_settings_manager: Callable[[], SettingsManager],
+) -> None:
+    sm = fresh_settings_manager()
+    _save_from_another_window(GlobalSettings.path, "{ unclosed invalid json: [")
+    sm.global_settings.status_message_timeout = 1234
+
+    sm.save_global()
+
+    assert GlobalSettings.path.read_text(encoding="utf-8") == sm.global_settings.model_dump_json(indent=2)
+    assert sm.global_settings.status_message_timeout == 1234
+
+
 def test_failed_global_save_keeps_previous_file(mocker: MockerFixture) -> None:
     SettingsManager.save_global(GlobalSettings())
     previous = GlobalSettings.path.read_bytes()
