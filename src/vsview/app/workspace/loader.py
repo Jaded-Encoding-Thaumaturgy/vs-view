@@ -189,6 +189,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         # Connect PlaybackManager signals to UI handlers
         self.playback.frameRendered.connect(self.tab_manager.update_current_view)
         self.playback.timelineCursorChanged.connect(self.update_timeline_cursor)
+        self.playback.seekRefused.connect(self.restore_timeline_cursor)
         self.playback.loadFailed.connect(self._on_render_failed)
 
         # Audio control signals
@@ -760,17 +761,31 @@ class LoaderWorkspace[T](BaseWorkspace):
     @Slot(int)
     @run_in_loop
     def update_timeline_cursor(self, n: int) -> None:
-        if not self.outputs_manager.current_voutput or self.playback.has_pending_frame:
+        if self.playback.has_pending_frame:
             return
 
-        self.tbar.timeline.cursor_x = (n := Frame(n))
+        self._set_cursor(n, force=False)
+
+    @Slot(int)
+    def restore_timeline_cursor(self, n: int) -> None:
+        self._set_cursor(n, force=True)
+
+    def _set_cursor(self, n: int, *, force: bool) -> None:
+        if not (voutput := self.outputs_manager.current_voutput):
+            return
+
+        frame = Frame(n)
+
+        if force:
+            self.tbar.timeline.force_cursor(frame)
+        else:
+            self.tbar.timeline.cursor_x = frame
 
         with QSignalBlocker(self.tbar.playback_container.frame_edit):
-            self.tbar.playback_container.frame_edit.setValue(n)
+            self.tbar.playback_container.frame_edit.setValue(frame)
 
         with QSignalBlocker(self.tbar.playback_container.time_edit):
-            time = self.outputs_manager.current_voutput.frame_to_time(n)
-            self.tbar.playback_container.time_edit.setTime(time.to_qtime())
+            self.tbar.playback_container.time_edit.setTime(voutput.frame_to_time(frame).to_qtime())
 
     @run_in_loop(return_future=False)
     def set_loaded_page(self) -> None:

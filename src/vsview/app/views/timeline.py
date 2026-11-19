@@ -687,8 +687,7 @@ class Timeline(QWidget):
         if self.mousepressed:
             return
 
-        self._cursor_val = x
-        self.update()
+        self.force_cursor(x)
 
     @property
     def mode(self) -> Literal["frame", "time"]:
@@ -1026,8 +1025,7 @@ class Timeline(QWidget):
             return
 
         new_x = self.hover_x
-        self._cursor_val = new_x
-        self.update()
+        self.force_cursor(new_x)
 
         frame = clamp(self.x_to_frame(new_x), Frame(0), Frame(max(0, self.total_frames - 1)))
         self.clicked.emit(frame, self.x_to_time(new_x))
@@ -1043,6 +1041,10 @@ class Timeline(QWidget):
         if Shiboken.isValid(self.hover_popup):
             self.hover_popup.deleteLater()
         super().deleteLater()
+
+    def force_cursor(self, x: int | Frame | Time) -> None:
+        self._cursor_val = x
+        self.update()
 
     def set_data(self, total_frames: int, cum_durations: Sequence[Time] | None = None) -> None:
         self._total_frames = total_frames

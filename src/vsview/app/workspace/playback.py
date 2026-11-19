@@ -186,6 +186,7 @@ class PlaybackManager(QObject):
     # Signals for UI communication
     frameRendered = Signal(QImage, object, float)  # image, backing frame, sar
     timelineCursorChanged = Signal(int)  # frame number
+    seekRefused = Signal(int)  # frame number still shown
 
     audioOutputChanged = Signal(int)  # index
 
@@ -285,7 +286,8 @@ class PlaybackManager(QObject):
         def on_render_complete(f: Future[int]) -> None:
             self.render_pending_frame()
 
-        self.request_frame(frame, cb_render=on_render_complete)
+        if not self.request_frame(frame, cb_render=on_render_complete):
+            self.seekRefused.emit(self.state.current_frame)
 
     @run_in_loop(return_future=False)
     def request_frame(
@@ -890,7 +892,7 @@ class PlaybackManager(QObject):
 
     @Slot(Frame, Frame)
     def _on_frame_changed(self, frame: Frame, old_frame: Frame) -> None:
-        logger.debug("Frame changed: frame=%d", frame)
+        logger.debug("Requesting frame %d", frame)
         self.seek_to_frame_coalesced(frame)
 
     @Slot(float)
@@ -907,13 +909,11 @@ class PlaybackManager(QObject):
 
     @Slot(QTime, QTime)
     def _on_time_changed(self, time: QTime, old_time: QTime) -> None:
-        logger.debug("Time changed: time=%s", time)
-
         if not (voutput := self._outputs_manager.current_voutput):
             return
 
         frame = voutput.time_to_frame(Time.from_qtime(time))
-        logger.debug("Time changed: frame=%d", frame)
+        logger.debug("Requesting time %s, frame %s", time, frame)
         self.seek_to_frame_coalesced(frame)
 
     @Slot(Frame, Time)

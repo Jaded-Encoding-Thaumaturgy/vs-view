@@ -421,6 +421,54 @@ def test_playback_manager_api_busy_frame_request(
         mock_outputs.current_voutput = None
 
 
+def test_playback_manager_reports_the_shown_frame_when_a_busy_plugin_refuses_a_seek(
+    playback_manager_setup: PlaybackManagerSetup,
+    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    qtbot: QtBot,
+) -> None:
+    manager, env, plugin_controller, mock_outputs, _, tbar = playback_manager_setup
+    voutput = create_test_video_output(env, 100)
+    mock_outputs.current_voutput = voutput
+    manager.state.current_frame = 7
+
+    try:
+        with (
+            plugin_controller.create_blocker(plugin_controller.api),
+            qtbot.waitSignal(manager.seekRefused, timeout=1000) as blocker,
+        ):
+            tbar.playback_container.frame_edit.setValue(Frame(40))
+
+        assert blocker.args == [7]
+        assert manager.state.current_frame == 7
+        assert not manager.is_rendering
+    finally:
+        voutput.clear()
+        mock_outputs.current_voutput = None
+
+
+def test_playback_manager_does_not_refuse_a_seek_queued_behind_a_render(
+    playback_manager_setup: PlaybackManagerSetup,
+    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    qtbot: QtBot,
+) -> None:
+    manager, env, _, mock_outputs, _, tbar = playback_manager_setup
+    voutput = create_test_video_output(env, 100)
+    mock_outputs.current_voutput = voutput
+    refused = list[int]()
+    manager.seekRefused.connect(refused.append)
+
+    try:
+        tbar.playback_container.frame_edit.setValue(Frame(10))
+        tbar.playback_container.frame_edit.setValue(Frame(20))
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
+
+        assert manager.state.current_frame == 20
+        assert refused == []
+    finally:
+        voutput.clear()
+        mock_outputs.current_voutput = None
+
+
 @pytest.mark.parametrize(
     ("sar_num", "sar_den", "expected"),
     [(0, 1, 1.0), (16, 0, 1.0), (-4, 3, 1.0), (4, -3, 1.0), (16, 11, 16 / 11)],
