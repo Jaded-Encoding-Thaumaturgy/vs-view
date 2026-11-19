@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from copy import copy
 from datetime import timedelta
 from enum import IntEnum
@@ -653,15 +653,35 @@ class RangeTableModel(AbstractTableModel):
 
         self.rangesModified.emit()
 
-    def remove_range(self, idx: QModelIndex) -> None:
-        if not (0 <= (i := idx.row()) < len(self._data)):
-            return
+    def remove_ranges(
+        self, indexes: Iterable[QModelIndex | QPersistentModelIndex]
+    ) -> list[tuple[RangeFrame | RangeTime, SceneRow]]:
+        """Remove the rows of `indexes` and return the removed ranges with their scenes."""
+        rows = sorted({row for idx in indexes if 0 <= (row := idx.row()) < len(self._data)}, reverse=True)
+        removed = list[tuple[RangeFrame | RangeTime, SceneRow]]()
 
-        with self.remove_rows(i):
-            range_item, scene = self._data.pop(i)
-            scene.ranges = [r for r in scene.ranges if r is not range_item]
+        # Rows are removed by runs of adjacent rows, from the bottom, so the rows above keep their index
+        i = 0
+        while i < len(rows):
+            last = rows[i]
+            while i + 1 < len(rows) and rows[i + 1] == rows[i] - 1:
+                i += 1
+            first = rows[i]
+            i += 1
+
+            with self.remove_rows(first, last):
+                removed.extend(self._data[first : last + 1])
+                del self._data[first : last + 1]
+
+        if not removed:
+            return removed
+
+        removed_ids = {id(range_item) for range_item, _ in removed}
+        for scene in {id(scene): scene for _, scene in removed}.values():
+            scene.ranges = [r for r in scene.ranges if id(r) not in removed_ids]
 
         self.rangesModified.emit()
+        return removed
 
     def _sort_key(self, item: tuple[RangeFrame | RangeTime, SceneRow]) -> Any:
         range_item, _ = item

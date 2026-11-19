@@ -432,6 +432,30 @@ def test_scening_multi_row_deletion_and_model_sync(plugin_controller: HarnessPlu
     assert notches[0][0] == [(25, 40)]
 
 
+def test_scening_deleting_ranges_of_several_scenes_saves_once(plugin_controller: HarnessPluginController) -> None:
+    plugin = plugin_controller.create_plugin(SceningPlugin)
+    plugin_controller.on_workspace_loaded()
+    plugin.on_new_scene()
+    plugin.on_new_scene()
+    first, second = plugin.scenes_model.scenes
+    for (start, end), scene in [((10, 20), first), ((30, 40), first), ((50, 60), second), ((70, 80), second)]:
+        plugin.ranges_model.add_range(RangeFrame(start=start, end=end), scene)
+    modified = list[None]()
+    plugin.ranges_model.rangesModified.connect(lambda: modified.append(None))
+    sel_model = plugin.ranges_view.selectionModel()
+    for row in (0, 1, 3):
+        sel_model.select(
+            plugin.ranges_model.index(row, 0),
+            QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows,
+        )
+
+    plugin.on_remove_range_triggered()
+
+    assert len(modified) == 1
+    assert [[r.to_tuple() for r in scene.ranges] for scene in plugin.settings.local_.scenes] == [[], [(50, 60)]]
+    assert [r.to_tuple() for r, _ in plugin.ranges_model.ranges] == [(50, 60)]
+
+
 def test_scening_clipboard_export_and_toolbar_cycle(
     plugin_controller: HarnessPluginController,
 ) -> None:

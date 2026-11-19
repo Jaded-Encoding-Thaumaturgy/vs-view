@@ -659,7 +659,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
             # Remove old references
             self.api.timeline.clear_notches(
-                (scene.notch_id for scene in set(self.settings.local_.scenes).difference(all_scenes)),
+                (scene.notch_id for scene in set(self.scenes_model.scenes).difference(all_scenes)),
                 update=True,
             )
         else:
@@ -667,7 +667,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             self.export_scene_action.setDisabled(True)
             self.range_start_action.setChecked(False)
 
-            self.api.timeline.clear_notches(scene.notch_id for scene in self.settings.local_.scenes)
+            self.api.timeline.clear_notches(scene.notch_id for scene in self.scenes_model.scenes)
 
     @Slot()
     def on_cycle_toolbar_style(self) -> None:
@@ -772,12 +772,7 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
         if not (selected_indexes := self.ranges_view.selectionModel().selectedRows()):
             return
 
-        # Sort by row descending to avoid index shifts
-        for idx in sorted(selected_indexes, key=lambda idx: idx.row(), reverse=True):
-            r = self.ranges_model.data(idx, self.ranges_model.RangeRole)
-            scene = self.ranges_model.data(idx, self.ranges_model.SceneRowRole)
-
-            self.ranges_model.remove_range(idx)
+        for r, scene in self.ranges_model.remove_ranges(selected_indexes):
             self.api.timeline.discard_notch(scene.notch_id, [r.to_tuple()], r.id, update=False)
 
         self.api.timeline.update()
