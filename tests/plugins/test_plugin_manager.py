@@ -445,7 +445,7 @@ def test_populate_default_settings_loads_plugins_and_fills_local_settings(
     file_path = tmp_path / "test_script.vpy"
     pm = PluginManager()
 
-    pm.populate_default_settings("local", file_path=file_path)
+    pm.populate_default_settings(SettingsManager.get_local_settings(file_path))
 
     assert pm.loaded is True
     assert SettingsManager.get_local_settings(file_path).plugins["local_tool"] == OptionsModel()

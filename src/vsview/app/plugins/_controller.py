@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import weakref
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
@@ -31,7 +32,6 @@ from .exceptions import BlockerRefusedError, NoCurrentVideoOutputError, NoCurren
 
 if TYPE_CHECKING:
     from vsview.app.outputs import FrameBuffer
-    from vsview.app.settings.models import LocalSettings
     from vsview.app.workspace import LoaderWorkspace
     from vsview.app.workspace.callbacks import CallbackHandle
 
@@ -60,7 +60,7 @@ class PluginWorkspaceController(QObject):
     def __init__(self, workspace: LoaderWorkspace[Any]) -> None:
         super().__init__(workspace)
         self.__workspace = workspace
-        self.__settings_store = _PluginSettingsStore(self._get_local_settings)
+        self.__settings_store = _PluginSettingsStore(self._get_file_path)
         self.__cursor_reset = _ViewportCursorReset(self)
         self.__cursor_reset_lock = Lock()
         self.__cursor_reset_connected = False
@@ -389,6 +389,11 @@ class PluginWorkspaceController(QObject):
     def update_settings(self, plugin: _PluginLike, scope: str, **updates: Any) -> None:
         self.__settings_store.update(plugin, scope, **updates)
 
+    def populate_local_settings(self) -> None:
+        from .manager import PluginManager
+
+        PluginManager.populate_default_settings(self.__settings_store.local_settings())
+
     # Qt View Event Forwarding
     @Slot(QContextMenuEvent)
     def on_view_context_menu(self, event: QContextMenuEvent) -> None:
@@ -497,12 +502,11 @@ class PluginWorkspaceController(QObject):
     def _get_file_path(self) -> Path | None:
         from vsview.app.workspace import BaseGenericFileWorkspace
 
-        return self.__workspace.current_file_path if isinstance(self.__workspace, BaseGenericFileWorkspace) else None
+        if not isinstance(self.__workspace, BaseGenericFileWorkspace):
+            return None
 
-    def _get_local_settings(self) -> LocalSettings:
-        if (path := self._get_file_path()) is None:
-            return SettingsManager.default_local_settings
-        return SettingsManager.get_local_settings(path)
+        # A workspace may return any PathLike, such as a Path subclass with its own behaviour
+        return None if (path := self.__workspace.current_file_path) is None else Path(os.fspath(path))
 
     @staticmethod
     @contextmanager

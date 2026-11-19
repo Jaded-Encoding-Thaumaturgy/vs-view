@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import pkgutil
 import weakref
 from collections import defaultdict
@@ -11,7 +10,7 @@ from importlib import import_module
 from inspect import ismethod
 from logging import getLogger
 from threading import Lock
-from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, Literal, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, cast
 
 import pluggy
 from jetpytools import Singleton, inject_self
@@ -296,6 +295,7 @@ class PluginManager(Singleton):
         self._for_each_plugin("registering its shortcuts", register)
 
     def _construct_settings_registry(self) -> None:
+        from ..settings import SettingsManager
         from ..settings.dialog import PLUGIN_PREFIX
         from ..settings.models import SettingEntry, extract_settings
 
@@ -330,7 +330,7 @@ class PluginManager(Singleton):
 
         self._for_each_plugin("extracting its settings", extract)
 
-        self._populate_default_settings("global")
+        self._populate_default_settings(SettingsManager.global_settings)
         self._plugin_global_settings = global_entries
         self._plugin_local_settings = local_entries
 
@@ -358,27 +358,19 @@ class PluginManager(Singleton):
 
     @inject_self
     @ensure_loaded("wait")
-    def populate_default_settings(
-        self, scope: Literal["global", "local"], file_path: os.PathLike[str] | None = None
-    ) -> None:
-        self._populate_default_settings(scope, file_path)
+    def populate_default_settings(self, container: GlobalSettings | LocalSettings) -> None:
+        """Validate the plugin entries of `container`, and add default settings for plugins without one."""
+        self._populate_default_settings(container)
 
-    def _populate_default_settings(
-        self, scope: Literal["global", "local"], file_path: os.PathLike[str] | None = None
-    ) -> None:
-        from ..settings import SettingsManager
+    def _populate_default_settings(self, container: GlobalSettings | LocalSettings) -> None:
+        from ..settings.models import GlobalSettings
         from ._interface import get_plugin_model
 
-        if scope == "global":
-            settings_container: GlobalSettings | LocalSettings = SettingsManager.global_settings
-        elif file_path is not None:
-            settings_container = SettingsManager.get_local_settings(file_path)
-        else:
-            raise ValueError("Local plugin settings need a file path.")
+        scope = "global" if isinstance(container, GlobalSettings) else "local"
 
         with self._lock:
             for plugin in self._all_plugins():
                 try:
-                    get_plugin_model(settings_container, plugin.identifier, getattr(plugin, f"{scope}_settings_model"))
+                    get_plugin_model(container, plugin.identifier, getattr(plugin, f"{scope}_settings_model"))
                 except Exception:
                     logger.exception("Couldn't create the %s settings of plugin %r", scope, plugin)

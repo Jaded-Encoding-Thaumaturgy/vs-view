@@ -193,8 +193,8 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         if tab_index is None:
             self.outputs_manager.current_video_index = self.local_settings.last_output_tab_index
 
-        if (path := self.current_file_path) is not None and not PluginManager.load_failed:
-            PluginManager.populate_default_settings("local", path)
+        if not PluginManager.load_failed:
+            self.plugin_controller.populate_local_settings()
 
     @requires_content(return_fallback=dict[int, Any])
     @override

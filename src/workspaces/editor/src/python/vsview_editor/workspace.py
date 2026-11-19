@@ -1006,7 +1006,7 @@ class EditorWorkspace(
                 if not self._has_run:
                     self.init_load()
                 elif not PluginManager.load_failed:
-                    PluginManager.populate_default_settings("local", new_path)
+                    self.plugin_controller.populate_local_settings()
                 self.api.localSettingsChanged.emit(str(SettingsManager.local_settings_path(new_path)))
         else:
             self.content = ContentPath(

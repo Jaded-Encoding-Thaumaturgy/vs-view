@@ -29,7 +29,6 @@ from vsview.app.plugins.api import PluginAPI, WidgetPluginBase, WorkspaceBlocker
 from vsview.app.plugins.contracts import AudioOutputProxy, VideoOutputProxy
 from vsview.app.plugins.exceptions import NoCurrentVideoOutputError
 from vsview.app.settings import SettingsManager
-from vsview.app.settings.models import LocalSettings
 from vsview.app.settings.shortcuts import ShortcutManager
 from vsview.app.workspace.callbacks import CallbackHandle, CallbackRegistry
 from vsview.types import Frame, Time
@@ -243,7 +242,7 @@ class HarnessPluginController(QObject):
         self.timeline_proxy = HarnessTimelineProxy()
         self.playback_proxy = HarnessPlaybackProxy(self)
 
-        self._settings_store = _PluginSettingsStore(self._get_local_settings)
+        self._settings_store = _PluginSettingsStore(lambda: self._file_path)
         self.api = PluginAPI(self)
         register_controller(self.api, self)  # pyright: ignore[reportArgumentType]
 
@@ -378,6 +377,10 @@ class HarnessPluginController(QObject):
         self._settings_store.update(plugin, scope, **updates)
 
     # Harness Helpers & State Drivers
+    def set_file_path(self, path: Path | None) -> None:
+        """Set the script path of the simulated workspace. None simulates a workspace without a file."""
+        self._file_path = path
+
     def create_plugin[T: WidgetPluginBase[Any, Any]](self, plugin_cls: type[T]) -> T:
         """Instantiate a plugin widget, wire it to the harness API, and register it with qtbot."""
         plugin = plugin_cls(None, self.api)  # pyright: ignore[reportArgumentType]
@@ -502,11 +505,6 @@ class HarnessPluginController(QObject):
     def _wait_for_background_tasks(self) -> None:
         if isinstance(loop := get_loop(), QtEventLoop):
             loop.wait_for_threads(5000)
-
-    def _get_local_settings(self) -> LocalSettings:
-        if self._file_path is None:
-            return SettingsManager.default_local_settings
-        return SettingsManager.get_local_settings(self._file_path)
 
     def _on_global_settings_changed(self) -> None:
         self.globalSettingsChanged.emit()

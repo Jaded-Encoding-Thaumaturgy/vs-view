@@ -4,6 +4,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from itertools import zip_longest
 from logging import getLogger
+from pathlib import Path
 from threading import Lock
 from types import get_original_bases
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, get_args, get_origin, override
@@ -98,8 +99,26 @@ class _SettingsProxy[T: BaseModel]:
 class _PluginSettingsStore:
     """Reads and writes uncached plugin models directly in `settings.plugins`."""
 
-    def __init__(self, local_settings: Callable[[], LocalSettings]) -> None:
-        self._local_settings = local_settings
+    def __init__(self, file_path: Callable[[], Path | None]) -> None:
+        self._file_path = file_path
+        # Used while the workspace has no file path. It is never saved.
+        self._session_settings = LocalSettings()
+
+    def local_settings(self) -> LocalSettings:
+        if (path := self._file_path()) is None:
+            return self._session_settings
+
+        settings = SettingsManager.get_local_settings(path)
+
+        if self._session_settings.plugins:
+            # The workspace got a path, for example when an unsaved editor tab is saved.
+            # Plugin settings already stored for that file win over the session ones.
+            with _materialize_lock:
+                for identifier, model in self._session_settings.plugins.items():
+                    settings.plugins.setdefault(identifier, model)
+                self._session_settings.plugins.clear()
+
+        return settings
 
     def get_proxy(self, plugin: _PluginLike, scope: str) -> _SettingsProxy[BaseModel] | None:
         if (model := self._get_model(plugin, scope)) is None:
@@ -122,7 +141,7 @@ class _PluginSettingsStore:
         if scope == "global":
             container: GlobalSettings | LocalSettings = SettingsManager.global_settings
         elif scope == "local":
-            container = self._local_settings()
+            container = self.local_settings()
         else:
             raise ValueError(f"Invalid settings scope {scope!r}, must be 'global' or 'local'.")
 

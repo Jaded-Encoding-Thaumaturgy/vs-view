@@ -673,6 +673,19 @@ def test_frame_strip_settings_and_slots(qtbot: QtBot, plugin_controller: Harness
     }
 
 
+def test_frame_strip_settings_apply_without_a_file_path(plugin_controller: HarnessPluginController) -> None:
+    plugin_controller.set_file_path(None)
+    plugin = plugin_controller.create_plugin(FrameStripPlugin)
+    plugin.show()
+    count_spin, _, current_check = _frame_strip_settings_controls(plugin)
+
+    count_spin.setValue(3)
+    current_check.setChecked(True)
+
+    assert (plugin.neighbor_count, plugin.show_current_frame) == (3, True)
+    assert set(plugin.slots.keys()) == {-3, -2, -1, 0, 1, 2, 3}
+
+
 def test_frame_strip_playback_stop_keeps_up_to_date_slots(
     qtbot: QtBot, plugin_controller: HarnessPluginController
 ) -> None:

@@ -59,7 +59,7 @@ def script_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def store(script_path: Path) -> _PluginSettingsStore:
-    return _PluginSettingsStore(lambda: SettingsManager.get_local_settings(script_path))
+    return _PluginSettingsStore(lambda: script_path)
 
 
 def _local_plugins(script_path: Path) -> dict[str, Any]:
@@ -175,8 +175,8 @@ def test_store_returns_none_for_a_scope_without_a_model(store: _PluginSettingsSt
 
 
 def test_store_write_is_seen_by_other_plugin_instances_and_workspaces(script_path: Path) -> None:
-    panel_store = _PluginSettingsStore(lambda: SettingsManager.get_local_settings(script_path))
-    other_workspace_store = _PluginSettingsStore(lambda: SettingsManager.get_local_settings(script_path))
+    panel_store = _PluginSettingsStore(lambda: script_path)
+    other_workspace_store = _PluginSettingsStore(lambda: script_path)
     panel, dock = MockPlugin(), MockPlugin()
     dock_global = panel_store.get_proxy(dock, "global")
     dock_local = other_workspace_store.get_proxy(dock, "local")
@@ -331,3 +331,33 @@ def test_store_update_without_a_model_is_refused(store: _PluginSettingsStore) ->
 
     with pytest.raises(ValueError, match="local_settings_model"):
         store.update(GlobalOnlyPlugin(), "local", attr1="x")
+
+
+def test_store_keeps_local_writes_without_a_file_path() -> None:
+    store = _PluginSettingsStore(lambda: None)
+
+    store.update(MockPlugin(), "local", attr2=5)
+
+    assert store.get_proxy(MockPlugin(), "local") == MockLocalSettings(attr2=5)
+
+
+def test_store_moves_session_settings_to_the_file_when_a_path_appears(script_path: Path) -> None:
+    path: list[Path | None] = [None]
+    store = _PluginSettingsStore(lambda: path[0])
+    store.update(MockPlugin(), "local", attr2=5)
+
+    path[0] = script_path
+
+    assert store.get_proxy(MockPlugin(), "local") == MockLocalSettings(attr2=5)
+    assert _local_plugins(script_path)["test_plugin"] == MockLocalSettings(attr2=5)
+
+
+def test_store_keeps_the_stored_file_settings_when_a_path_appears(script_path: Path) -> None:
+    _local_plugins(script_path)["test_plugin"] = {"attr2": 200}
+    path: list[Path | None] = [None]
+    store = _PluginSettingsStore(lambda: path[0])
+    store.update(MockPlugin(), "local", attr2=5)
+
+    path[0] = script_path
+
+    assert store.get_proxy(MockPlugin(), "local") == MockLocalSettings(attr2=200)
