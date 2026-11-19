@@ -364,13 +364,12 @@ class PluginManager(Singleton):
 
     def _populate_default_settings(self, container: GlobalSettings | LocalSettings) -> None:
         from ..settings.models import GlobalSettings
-        from ._interface import get_plugin_model
 
         scope = "global" if isinstance(container, GlobalSettings) else "local"
 
         with self._lock:
             for plugin in self._all_plugins():
                 try:
-                    get_plugin_model(container, plugin.identifier, getattr(plugin, f"{scope}_settings_model"))
+                    container.get_plugin_model(plugin.identifier, getattr(plugin, f"{scope}_settings_model"))
                 except Exception:
                     logger.exception("Couldn't create the %s settings of plugin %r", scope, plugin)

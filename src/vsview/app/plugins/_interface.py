@@ -5,18 +5,16 @@ from copy import deepcopy
 from itertools import zip_longest
 from logging import getLogger
 from pathlib import Path
-from threading import Lock
 from types import get_original_bases
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, get_args, get_origin, override
 from weakref import ref
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from PySide6.QtCore import QObject, Qt, Slot
 from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
 from vsview.app.settings import SecretsManager, SettingsManager
-from vsview.app.settings.manager import validate_lenient
 from vsview.app.settings.models import GlobalSettings, LocalSettings
 from vsview.app.utils import ObjectType
 
@@ -114,7 +112,7 @@ class _PluginSettingsStore:
         if self._session_settings.plugins:
             # The workspace got a path, for example when an unsaved editor tab is saved.
             # Plugin settings already stored for that file win over the session ones.
-            with _materialize_lock:
+            with self._session_settings.materialize_lock:
                 for identifier, model in self._session_settings.plugins.items():
                     settings.plugins.setdefault(identifier, model)
                 self._session_settings.plugins.clear()
@@ -146,48 +144,11 @@ class _PluginSettingsStore:
         else:
             raise ValueError(f"Invalid settings scope {scope!r}, must be 'global' or 'local'.")
 
-        return get_plugin_model(container, plugin.identifier, getattr(plugin, f"{scope}_settings_model", None))
-
-
-_materialize_lock = Lock()
-
-
-def get_plugin_model(
-    container: GlobalSettings | LocalSettings, identifier: str, model_cls: type[BaseModel] | None
-) -> BaseModel | None:
-    """
-    Return the validated plugin model from `container.plugins`, converting a raw entry on first access.
-
-    Invalid fields of a raw entry are reset to their defaults.
-    """
-    if model_cls is None:
-        return None
-
-    if isinstance(entry := container.plugins.get(identifier), model_cls):
-        return entry
-
-    with _materialize_lock:
-        # Another thread may have converted the entry while this one waited
-        if isinstance(entry := container.plugins.get(identifier), model_cls):
-            return entry
-
-        raw = entry.model_dump() if isinstance(entry, BaseModel) else entry or {}
-
-        try:
-            model, dropped = validate_lenient(model_cls, raw)
-        except ValidationError as e:
-            logger.warning("The plugin %r has invalid settings, using the defaults:\n%s", identifier, e)
-            model = model_cls()
-        else:
-            if dropped:
-                logger.warning(
-                    "Invalid settings of plugin %r were reset to their defaults: %s",
-                    identifier,
-                    ", ".join(dropped),
-                )
-
-        container.plugins[identifier] = model
-        return model
+        return (
+            container.get_plugin_model(plugin.identifier, model_cls)
+            if (model_cls := getattr(plugin, f"{scope}_settings_model", None))
+            else None
+        )
 
 
 def _assign(model: BaseModel, updates: dict[str, Any]) -> None:

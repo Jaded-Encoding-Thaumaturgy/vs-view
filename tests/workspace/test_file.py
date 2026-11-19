@@ -232,7 +232,7 @@ def test_local_settings_lifecycle_and_autosave(video_workspace: VideoFileWorkspa
     ws = video_workspace
 
     # Missing content fallback
-    assert ws.local_settings == SettingsManager.default_local_settings
+    assert ws.local_settings.model_dump() == SettingsManager.default_local_settings.model_dump()
 
     # Set content
     test_file = tmp_path / "settings_clip.mp4"

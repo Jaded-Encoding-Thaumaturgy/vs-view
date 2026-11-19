@@ -7,10 +7,12 @@ import os
 import sys
 from base64 import b64decode, b64encode
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from datetime import time, timedelta
 from logging import getLogger
 from operator import attrgetter
 from pathlib import Path
+from threading import Lock
 from typing import Annotated, Any, Generic, Literal, NamedTuple, TypeVar, get_args, get_origin, override
 
 import vapoursynth as vs
@@ -24,7 +26,9 @@ from pydantic import (
     Field,
     PlainSerializer,
     PlainValidator,
+    PrivateAttr,
     SerializerFunctionWrapHandler,
+    ValidationError,
     model_serializer,
 )
 from pygments.styles import get_all_styles as get_pygments_styles
@@ -698,7 +702,51 @@ class QtSettings(BaseModel):
         return handler(self)
 
 
+PluginsType = Annotated[
+    dict[str, dict[str, Any] | BaseModel],
+    PlainSerializer(
+        lambda d: {k: v.model_dump() if isinstance(v, BaseModel) else v for k, v in d.items()},
+        return_type=dict[str, dict[str, Any]],
+    ),
+]
+
+
 class BaseSettings(BaseModel):
+    plugins: PluginsType = Field(default_factory=dict)
+
+    _materialize_lock: Lock = PrivateAttr(default_factory=Lock)
+
+    @property
+    def materialize_lock(self) -> Lock:
+        return self._materialize_lock
+
+    def get_plugin_model(self, identifier: str, model_cls: type[BaseModel]) -> BaseModel:
+        if isinstance(entry := self.plugins.get(identifier), model_cls):
+            return entry
+
+        with self._materialize_lock:
+            # Another thread may have converted the entry while this one waited
+            if isinstance(entry := self.plugins.get(identifier), model_cls):
+                return entry
+
+            raw = entry.model_dump() if isinstance(entry, BaseModel) else entry or {}
+
+            try:
+                model, dropped = validate_lenient(model_cls, raw)
+            except ValidationError as e:
+                logger.warning("The plugin %r has invalid settings, using the defaults:\n%s", identifier, e)
+                model = model_cls()
+            else:
+                if dropped:
+                    logger.warning(
+                        "Invalid settings of plugin %r were reset to their defaults: %s",
+                        identifier,
+                        ", ".join(dropped),
+                    )
+
+            self.plugins[identifier] = model
+            return model
+
     def get_nested_value(self, key: str) -> Any:
         obj: Any = self
 
@@ -715,13 +763,66 @@ class BaseSettings(BaseModel):
         data[parts[-1]] = value
 
 
-PluginsType = Annotated[
-    dict[str, dict[str, Any] | BaseModel],
-    PlainSerializer(
-        lambda d: {k: v.model_dump() if isinstance(v, BaseModel) else v for k, v in d.items()},
-        return_type=dict[str, dict[str, Any]],
-    ),
-]
+def validate_lenient[M: BaseModel](model_cls: type[M], data: Any) -> tuple[M, list[str]]:
+    """
+    Validate `data`, resetting each invalid field to its default instead of failing.
+
+    Returns:
+        The model and the dotted paths of the fields that were reset.
+
+    Raises:
+        ValidationError: An error cannot be fixed by resetting a field, for example a missing required field.
+    """
+    dropped = list[str]()
+
+    while True:
+        try:
+            return model_cls.model_validate(data), dropped
+        except ValidationError as e:
+            paths = set[tuple[int | str, ...]]()
+
+            for error in e.errors():
+                if (path := _invalid_key_path(data, error["loc"])) is None:
+                    raise
+                paths.add(path)
+
+            if not dropped:
+                data = deepcopy(data)
+
+            # Longest first, so dropping a parent key never comes before dropping one of its children
+            for path in sorted(paths, key=len, reverse=True):
+                _drop_key(data, path)
+                dropped.append(".".join(map(str, path)))
+
+
+def _invalid_key_path(data: Any, loc: tuple[int | str, ...]) -> tuple[int | str, ...] | None:
+    # The deepest dict key on the error path. Dropping it makes the field use its default.
+    # Parts that are not in the data (union members, validator names, missing fields) end the walk.
+    node, path = data, None
+
+    for i, part in enumerate(loc):
+        if isinstance(node, dict) and part in node:
+            path = loc[: i + 1]
+        elif not (isinstance(node, list) and isinstance(part, int) and 0 <= part < len(node)):
+            break
+        if isinstance(node, list) and isinstance(part, int):  # noqa: SIM114
+            node = node[part]
+        elif isinstance(node, dict) and isinstance(part, str):
+            node = node[part]
+        else:
+            raise NotImplementedError
+
+    return path
+
+
+def _drop_key(data: Any, path: tuple[int | str, ...]) -> None:
+    *parents, key = path
+
+    for part in parents:
+        data = data[part]
+
+    data.pop(key, None)
+
 
 Base64Bytes = Annotated[
     bytes | None,
@@ -843,8 +944,6 @@ class GlobalSettings(BaseSettings):
     timeline: TimelineSettings = TimelineSettings()
     playback: PlaybackSettings = PlaybackSettings()
     view: ViewSettings = ViewSettings()
-
-    plugins: PluginsType = Field(default_factory=dict)
 
     # Hidden
     window_geometry: WindowGeometry = WindowGeometry()
@@ -1046,4 +1145,3 @@ class LocalSettings(BaseSettings):
     synchronization: SynchronizationSettings = Field(default_factory=SynchronizationSettings)
     layout: LayoutSettings = Field(default_factory=LayoutSettings)
     view: LocalViewSettings = Field(default_factory=LocalViewSettings)
-    plugins: PluginsType = Field(default_factory=dict)
