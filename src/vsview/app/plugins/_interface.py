@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from itertools import zip_longest
 from logging import getLogger
-from pathlib import Path
+from threading import Lock
 from types import get_original_bases
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, get_args, get_origin, override
-from weakref import WeakKeyDictionary, ref
+from weakref import ref
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from PySide6.QtCore import QObject, Qt, Slot
 from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
 from vsview.app.settings import SecretsManager, SettingsManager
+from vsview.app.settings.models import GlobalSettings, LocalSettings
 from vsview.app.utils import ObjectType
 
 from .contracts import LocalSettingsModel
@@ -35,44 +37,54 @@ class _PluginLike(Protocol):
 
 class _SettingsProxy[T: BaseModel]:
     """
-    Proxy that intercepts `__setattr__` on a pydantic BaseModel and auto-persists the change via the supplied callback.
-    Reads are delegated transparently to the underlying model.
+    Live settings view.
+
+    Writes validate and update the model, falling back to defaults/global on None reads.
     """
 
-    __slots__ = ("_model", "_on_update", "_path")
+    __slots__ = ("_fallback", "_model", "_writable")
 
     if TYPE_CHECKING:
+        _fallback: BaseModel | None
         _model: T
-        _on_update: Callable[[str, Any], None]
-        _path: str
+        _writable: bool
 
-    def __init__(self, model: T, on_update: Callable[[str, Any], None], path: str = "") -> None:
+    def __init__(self, model: T, fallback: BaseModel | None = None, *, writable: bool = True) -> None:
         object.__setattr__(self, "_model", model)
-        object.__setattr__(self, "_on_update", on_update)
-        object.__setattr__(self, "_path", path)
+        object.__setattr__(self, "_fallback", fallback)
+        object.__setattr__(self, "_writable", writable)
 
     def __getattr__(self, name: str) -> Any:
+        # copy and pickle look up these names before __init__ has run
         if name in _SettingsProxy.__slots__:
             raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
 
-        attr = getattr(self._model, name)
-        if isinstance(attr, BaseModel):
-            sub_path = f"{self._path}.{name}" if self._path else name
-            return _SettingsProxy(attr, self._on_update, sub_path)
-        return attr
+        value = getattr(self._model, name)
+
+        if self._fallback is None:
+            return _SettingsProxy(value, writable=self._writable) if isinstance(value, BaseModel) else value
+
+        fallback = getattr(self._fallback, name, None)
+
+        if isinstance(value, BaseModel):
+            return _SettingsProxy(value, fallback if isinstance(fallback, BaseModel) else None, writable=self._writable)
+
+        if value is None and fallback is not None:
+            # The global value is shown read-only or as a copy, so a write through it cannot change the global settings
+            return _SettingsProxy(fallback, writable=False) if isinstance(fallback, BaseModel) else deepcopy(fallback)
+
+        return value
 
     @override
     def __setattr__(self, name: str, value: Any) -> None:
-        if name in self.__slots__:
+        if name in _SettingsProxy.__slots__:
             object.__setattr__(self, name, value)
-        elif hasattr(self._model, name):
-            if isinstance(value, _SettingsProxy):
-                value = value._model
-
-            self._on_update(f"{self._path}.{name}" if self._path else name, value)
-            self._model.__pydantic_validator__.validate_assignment(self._model, name, value)
-        else:
+        elif name not in type(self._model).model_fields:
             raise AttributeError(f"{type(self._model).__name__!r} object has no attribute {name!r}")
+        elif not self._writable:
+            raise TypeError(f"Cannot set {name!r}: the local value is None, so this shows the global value")
+        else:
+            self._model.__pydantic_validator__.validate_assignment(self._model, name, _unwrap(value))
 
     @override
     def __repr__(self) -> str:
@@ -80,102 +92,89 @@ class _SettingsProxy[T: BaseModel]:
 
     @override
     def __eq__(self, other: object) -> bool:
-        return self._model == other._model if isinstance(other, _SettingsProxy) else self._model == other
+        return self._model == _unwrap(other)
 
 
 class _PluginSettingsStore:
-    def __init__(self, source: Callable[[], Path | None]) -> None:
-        self._source = source
-        self._caches: dict[str, WeakKeyDictionary[_PluginLike, BaseModel]] = {
-            "global": WeakKeyDictionary(),
-            "local": WeakKeyDictionary(),
-        }
+    """Reads and writes uncached plugin models directly in `settings.plugins`."""
 
-    @property
-    def file_path(self) -> Path | None:
-        return self._source()
-
-    def get(self, plugin: _PluginLike, scope: str) -> BaseModel | None:
-        if scope not in ("global", "local"):
-            raise ValueError(f"Invalid settings scope {scope!r}, must be 'global' or 'local'.")
-
-        cache = self._caches[scope]
-
-        if plugin in cache:
-            return cache[plugin]
-
-        model_cls: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model", None)
-        if model_cls is None:
-            return None
-
-        # Fetch and validate
-        settings = model_cls.model_validate(self._get_raw_settings(plugin.identifier, scope))
-
-        # Resolve local settings with global fallbacks
-        if (
-            scope == "local"
-            and isinstance(settings, LocalSettingsModel)
-            and (global_settings := self.get(plugin, "global"))
-        ):
-            settings = settings.resolve(global_settings)
-
-        cache[plugin] = settings
-        return settings
+    def __init__(self, local_settings: Callable[[], LocalSettings]) -> None:
+        self._local_settings = local_settings
 
     def get_proxy(self, plugin: _PluginLike, scope: str) -> _SettingsProxy[BaseModel] | None:
-        model = self.get(plugin, scope)
-        if model is None:
+        if (model := self._get_model(plugin, scope)) is None:
             return None
-        return _SettingsProxy(model, lambda k, v: self.update(plugin, scope, **{k: v}))
+
+        fallback = self._get_model(plugin, "global") if isinstance(model, LocalSettingsModel) else None
+        return _SettingsProxy(model, fallback)
 
     def update(self, plugin: _PluginLike, scope: str, **updates: Any) -> None:
-        if scope not in ("global", "local"):
-            raise ValueError(f"Invalid settings scope {scope!r}, must be 'global' or 'local'.")
-
-        model_cls: type[BaseModel] | None = getattr(plugin, f"{scope}_settings_model", None)
-        if model_cls is None:
+        if (model := self._get_model(plugin, scope)) is None:
             raise ValueError(f"Plugin {plugin.identifier!r} has no {scope}_settings_model defined.")
 
-        # Always update against the raw (unresolved) state
-        raw_data = self._get_raw_settings(plugin.identifier, scope)
-        settings = model_cls.model_validate(raw_data)
+        # One assignment is validated before it is stored. Several are first tried on a copy,
+        # so a bad value in any of them leaves the model unchanged.
+        if len(updates) > 1:
+            _assign(model.model_copy(deep=True), updates)
+        _assign(model, updates)
 
-        for key, value in updates.items():
-            if isinstance(value, _SettingsProxy):
-                value = value._model
-
-            *parents, field = key.split(".")
-            curr = settings
-            for part in parents:
-                curr = getattr(curr, part)
-
-            if not isinstance(curr, BaseModel):
-                raise TypeError(f"Cannot set {key!r}: {'.'.join(parents)!r} is {curr!r}")
-
-            curr.__pydantic_validator__.validate_assignment(curr, field, value)
-
-        self._set_raw_settings(plugin.identifier, scope, settings)
-        self._caches[scope].pop(plugin, None)
-
-    def invalidate(self, scope: str) -> None:
-        self._caches[scope].clear()
-
-    def _get_raw_settings(self, plugin_id: str, scope: str) -> dict[str, Any]:
+    def _get_model(self, plugin: _PluginLike, scope: str) -> BaseModel | None:
         if scope == "global":
-            container = SettingsManager.global_settings
-        elif self.file_path is not None:
-            container = SettingsManager.get_local_settings(self.file_path)
+            container: GlobalSettings | LocalSettings = SettingsManager.global_settings
+        elif scope == "local":
+            container = self._local_settings()
         else:
-            return {}
+            raise ValueError(f"Invalid settings scope {scope!r}, must be 'global' or 'local'.")
 
-        raw = container.plugins.get(plugin_id, {})
-        return raw if isinstance(raw, dict) else raw.model_dump()
+        return get_plugin_model(container, plugin.identifier, getattr(plugin, f"{scope}_settings_model", None))
 
-    def _set_raw_settings(self, plugin_id: str, scope: str, settings: BaseModel) -> None:
-        if scope == "global":
-            SettingsManager.global_settings.plugins[plugin_id] = settings
-        elif self.file_path is not None:
-            SettingsManager.get_local_settings(self.file_path).plugins[plugin_id] = settings
+
+_materialize_lock = Lock()
+
+
+def get_plugin_model(
+    container: GlobalSettings | LocalSettings, identifier: str, model_cls: type[BaseModel] | None
+) -> BaseModel | None:
+    """Return the validated plugin model from `container.plugins`, initializing or defaulting invalid raw entries."""
+    if model_cls is None:
+        return None
+
+    if isinstance(entry := container.plugins.get(identifier), model_cls):
+        return entry
+
+    with _materialize_lock:
+        # Another thread may have converted the entry while this one waited
+        if isinstance(entry := container.plugins.get(identifier), model_cls):
+            return entry
+
+        raw = entry.model_dump() if isinstance(entry, BaseModel) else entry or {}
+
+        try:
+            model = model_cls.model_validate(raw)
+        except ValidationError as e:
+            logger.warning("The plugin %r has invalid settings, using the defaults:\n%s", identifier, e)
+            model = model_cls()
+
+        container.plugins[identifier] = model
+        return model
+
+
+def _assign(model: BaseModel, updates: dict[str, Any]) -> None:
+    for key, value in updates.items():
+        *parents, field = key.split(".")
+
+        target: Any = model
+        for part in parents:
+            target = getattr(target, part)
+
+        if not isinstance(target, BaseModel):
+            raise TypeError(f"Cannot set {key!r}: {'.'.join(parents)!r} is {target!r}")
+
+        target.__pydantic_validator__.validate_assignment(target, field, _unwrap(value))
+
+
+def _unwrap(value: Any) -> Any:
+    return value._model if isinstance(value, _SettingsProxy) else value
 
 
 class _PluginBaseMeta(ObjectType):

@@ -7,13 +7,14 @@ import pytest
 import vapoursynth as vs
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
-from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QLineEdit, QSpinBox, QToolButton
+from PySide6.QtWidgets import QApplication, QBoxLayout, QCheckBox, QFrame, QLineEdit, QSpinBox, QToolButton
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.packing import Packer
+from vsview.app.settings import SettingsManager
 from vsview.app.tools.colorpicker.plugin import ColorPickerPlugin, TrackingState
 from vsview.app.tools.cropping.plugin import RegionSelectorPlugin
 from vsview.app.tools.frame_strip.constants import MAX_NEIGHBOR_COUNT
@@ -303,16 +304,17 @@ def test_color_picker_decimals_nb_setting_update(qtbot: QtBot, plugin_controller
     assert plugin.src_labels["Norm"][0].text() == "0.00000"
     assert plugin.rgb_labels["Norm"][0].text() == "0.00000"
 
-    # Update decimals_nb to 2 via public plugin contract
+    # A global change reaches the plugin when the settings are saved, as on Apply in the Settings dialog
     plugin.update_global_settings(decimals_nb=2)
+    SettingsManager.save_global()
     qtbot.waitUntil(lambda: plugin.rgb_labels["Norm"][0].text() == "0.00")
 
     assert plugin.settings.global_.decimals_nb == 2
     assert plugin.src_labels["Norm"][0].text() == "0.00"
     assert plugin.rgb_labels["Norm"][0].text() == "0.00"
 
-    # Update decimals_nb to 4 via public plugin contract
     plugin.update_global_settings(decimals_nb=4)
+    SettingsManager.save_global()
     qtbot.waitUntil(lambda: plugin.rgb_labels["Norm"][0].text() == "0.0000")
 
     assert plugin.settings.global_.decimals_nb == 4
@@ -626,6 +628,14 @@ def test_frameprop_preview_graphics_view_set_frame_does_not_close_frame(
 
 
 # FrameStripPlugin Tests
+def _frame_strip_settings_controls(plugin: FrameStripPlugin) -> tuple[QSpinBox, QSpinBox, QCheckBox]:
+    menu = plugin.slots[1].context_menu
+    count_spin, step_spin = menu.findChildren(QSpinBox)
+    current_check = menu.findChild(QCheckBox)
+    assert current_check is not None
+    return count_spin, step_spin, current_check
+
+
 def test_frame_strip_settings_and_slots(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
     plugin = plugin_controller.create_plugin(FrameStripPlugin)
     plugin.show()
@@ -638,7 +648,9 @@ def test_frame_strip_settings_and_slots(qtbot: QtBot, plugin_controller: Harness
     assert plugin.separator.isVisible() is True
 
     # Expand neighbor count and enable current frame slot
-    plugin.update_local_settings(neighbor_count=3, show_current_frame=True)
+    count_spin, step_spin, current_check = _frame_strip_settings_controls(plugin)
+    count_spin.setValue(3)
+    current_check.setChecked(True)
     assert plugin.neighbor_count == 3
     assert plugin.show_current_frame is True
     assert set(plugin.slots.keys()) == {-3, -2, -1, 0, 1, 2, 3}
@@ -646,7 +658,7 @@ def test_frame_strip_settings_and_slots(qtbot: QtBot, plugin_controller: Harness
 
     # Update step stride and verify target frames reflect offset * step
     plugin_controller.set_current_frame(50)
-    plugin.update_local_settings(step=5)
+    step_spin.setValue(5)
     qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))
 
     assert plugin.step == 5
@@ -708,7 +720,7 @@ def test_frame_strip_frame_navigation_and_bounds(qtbot: QtBot, plugin_controller
 def test_frame_strip_click_to_seek(qtbot: QtBot, plugin_controller: HarnessPluginController) -> None:
     plugin = plugin_controller.create_plugin(FrameStripPlugin)
     plugin.show()
-    plugin.update_local_settings(show_current_frame=True)
+    _frame_strip_settings_controls(plugin)[2].setChecked(True)
 
     plugin_controller.set_current_frame(20)
     qtbot.waitUntil(lambda: not any(s.is_loading for s in plugin.slots.values()))

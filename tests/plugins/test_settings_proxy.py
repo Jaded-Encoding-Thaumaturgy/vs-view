@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import cast, override
-from unittest.mock import MagicMock
+from typing import Any, ClassVar
 
 import pytest
 from pydantic import BaseModel, ValidationError
-from pytest_mock import MockerFixture
 
 from vsview.app.plugins._interface import _PluginSettingsStore, _SettingsProxy
 from vsview.app.plugins.contracts import LocalSettingsModel
@@ -16,7 +14,6 @@ from vsview.app.settings import SettingsManager
 pytestmark = [pytest.mark.unit]
 
 
-# Mock models for testing
 class MockNestedModel(BaseModel):
     nest_attr: str = "nest_default"
 
@@ -47,230 +44,186 @@ class MockLocalSettings(LocalSettingsModel):
     attr1: str | None = None
     attr2: int | None = None
 
-    @override
-    def resolve(self, global_settings: BaseModel) -> MockLocalSettings:
-        resolved = self.model_copy()
-        if resolved.attr1 is None:
-            resolved.attr1 = getattr(global_settings, "attr1", "default1")
-        if resolved.attr2 is None:
-            resolved.attr2 = getattr(global_settings, "attr2", 10)
-        return resolved
+
+class MockPlugin:
+    identifier: ClassVar[str] = "test_plugin"
+    global_settings_model: ClassVar[type[BaseModel] | None] = MockGlobalSettings
+    local_settings_model: ClassVar[type[BaseModel] | None] = MockLocalSettings
+    api: Any = None
 
 
-# --- _SettingsProxy Tests ---
+@pytest.fixture
+def script_path(tmp_path: Path) -> Path:
+    return tmp_path / "test.vpy"
 
 
-def test_proxy_delegation(mocker: MockerFixture) -> None:
-    model = MockGlobalSettings()
-    on_update = mocker.stub()
-    proxy = _SettingsProxy(model, on_update)
+@pytest.fixture
+def store(script_path: Path) -> _PluginSettingsStore:
+    return _PluginSettingsStore(lambda: SettingsManager.get_local_settings(script_path))
 
-    assert proxy.attr1 == "default1"
+
+def _local_plugins(script_path: Path) -> dict[str, Any]:
+    return SettingsManager.get_local_settings(script_path).plugins
+
+
+# _SettingsProxy
+def test_proxy_reads_the_model() -> None:
+    proxy = _SettingsProxy(MockGlobalSettings(attr1="a"))
+
+    assert proxy.attr1 == "a"
     assert proxy.attr2 == 10
-    on_update.assert_not_called()
 
 
-def test_proxy_setattr(mocker: MockerFixture) -> None:
+def test_proxy_write_is_stored_in_the_model() -> None:
     model = MockGlobalSettings()
-    on_update = mocker.stub()
-    proxy = _SettingsProxy(model, on_update)
+    proxy = _SettingsProxy(model)
 
     proxy.attr1 = "new_value"
-    on_update.assert_called_once_with("attr1", "new_value")
+
+    assert model.attr1 == "new_value"
 
 
-def test_proxy_equality(mocker: MockerFixture) -> None:
-    model1 = MockGlobalSettings(attr1="a")
-    model2 = MockGlobalSettings(attr1="a")
-    model3 = MockGlobalSettings(attr1="b")
+def test_proxy_write_stores_the_validated_value() -> None:
+    model = MockGlobalSettings()
+    proxy = _SettingsProxy(model)
 
-    proxy1 = _SettingsProxy(model1, mocker.stub())
-    proxy2 = _SettingsProxy(model2, mocker.stub())
+    proxy.attr2 = "42"
+
+    assert model.attr2 == 42
+
+
+def test_proxy_equality() -> None:
+    proxy1 = _SettingsProxy(MockGlobalSettings(attr1="a"))
+    proxy2 = _SettingsProxy(MockGlobalSettings(attr1="a"))
 
     assert proxy1 == proxy2
-    assert proxy1 == model1
-    assert proxy1 != model3
+    assert proxy1 == MockGlobalSettings(attr1="a")
+    assert proxy1 != MockGlobalSettings(attr1="b")
     assert proxy1 != "not a proxy"
 
 
-def test_proxy_rejects_unknown_attributes(mocker: MockerFixture) -> None:
-    on_update = mocker.stub()
-    proxy = _SettingsProxy(MockGlobalSettings(), on_update)
+def test_proxy_rejects_unknown_attributes() -> None:
+    model = MockGlobalSettings()
+    proxy = _SettingsProxy(model)
 
     with pytest.raises(AttributeError, match="unknown_attr"):
         proxy.unknown_attr = 5
 
-    on_update.assert_not_called()
+    assert model == MockGlobalSettings()
 
 
-def test_proxy_shallow_copy_keeps_the_model_and_callback(mocker: MockerFixture) -> None:
+def test_proxy_write_of_the_wrong_type_leaves_the_model_unchanged() -> None:
+    model = MockGlobalSettings(attr2=7)
+    proxy = _SettingsProxy(model)
+
+    with pytest.raises(ValidationError, match="attr2"):
+        proxy.attr2 = "not a number"
+
+    assert model == MockGlobalSettings(attr2=7)
+
+
+def test_proxy_shallow_copy_writes_to_the_same_model() -> None:
     model = MockGlobalSettings(attr1="copied")
-    on_update = mocker.stub()
-    proxy = _SettingsProxy(model, on_update)
+    proxy = _SettingsProxy(model)
 
     copied = copy.copy(proxy)
     copied.attr2 = 20
 
-    assert copied.attr1 == "copied"
     assert copied == proxy
-    on_update.assert_called_once_with("attr2", 20)
+    assert model.attr2 == 20
 
 
-# _PluginSettingsStore Tests
-@pytest.fixture
-def mock_workspace(mocker: MockerFixture) -> MagicMock:
-    return mocker.MagicMock()
-
-
-@pytest.fixture
-def mock_plugin(mocker: MockerFixture) -> MagicMock:
-    plugin = mocker.MagicMock()
-    plugin.identifier = "test_plugin"
-    plugin.global_settings_model = MockGlobalSettings
-    plugin.local_settings_model = MockLocalSettings
-    return plugin
-
-
-def test_store_get_caching(mock_workspace: MagicMock, mock_plugin: MagicMock) -> None:
-    store = _PluginSettingsStore(mock_workspace)
-
-    # Raw settings in isolated storage
-    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "from_storage"}
-
-    # First call should fetch and validate
-    settings1 = store.get(mock_plugin, "global")
-    assert isinstance(settings1, MockGlobalSettings)
-    assert settings1.attr1 == "from_storage"
-    assert settings1.attr2 == 10
-
-    # Modify storage - cache should still return old value
-    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "changed"}
-    settings2 = store.get(mock_plugin, "global")
-    assert settings2 is settings1
-    assert isinstance(settings2, MockGlobalSettings)
-    assert settings2.attr1 == "from_storage"
-
-
-def test_store_local_global_resolution(tmp_path: Path, mock_plugin: MagicMock) -> None:
-    test_file = tmp_path / "test.vpy"
-    store = _PluginSettingsStore(lambda: test_file)
-
-    # Setup global and local storage
-    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "global_val", "attr2": 100}
-    SettingsManager.get_local_settings(test_file).plugins["test_plugin"] = {"attr2": 200}
-
-    local_settings = store.get(mock_plugin, "local")
-    assert isinstance(local_settings, MockLocalSettings)
-
-    # attr1 should fall back to global, attr2 should be local
-    assert local_settings.attr1 == "global_val"
-    assert local_settings.attr2 == 200
-
-
-def test_store_update_invalidates_cache(mock_workspace: MagicMock, mock_plugin: MagicMock) -> None:
-    store = _PluginSettingsStore(mock_workspace)
-    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "old"}
-
-    # Populate cache
-    settings_old = store.get(mock_plugin, "global")
-    assert isinstance(settings_old, MockGlobalSettings)
-    assert settings_old.attr1 == "old"
-    assert settings_old.attr2 == 10
-
-    # Update through store
-    store.update(mock_plugin, "global", attr1="new")
-
-    # Verify persistence
-    persisted = SettingsManager.global_settings.plugins["test_plugin"]
-    assert persisted.attr1 == "new"  # pyright: ignore[reportAttributeAccessIssue]
-
-    # Verify cache invalidation - next get should be fresh
-    settings_new = store.get(mock_plugin, "global")
-    assert settings_new is not settings_old
-    assert isinstance(settings_new, MockGlobalSettings)
-    assert settings_new.attr1 == "new"
-    assert settings_new.attr2 == 10
-
-
-def test_store_invalidate(mock_workspace: MagicMock, mock_plugin: MagicMock) -> None:
-    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "initial_val"}
-    store = _PluginSettingsStore(mock_workspace)
-
-    cached_settings = store.get(mock_plugin, "global")
-    assert isinstance(cached_settings, MockGlobalSettings)
-    assert cached_settings.attr1 == "initial_val"
-
-    # Modify underlying storage
-    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "updated_val"}
-
-    # Without invalidation, get returns cached object
-    assert store.get(mock_plugin, "global") is cached_settings
-
-    # Invalidate global scope cache
-    store.invalidate("global")
-
-    # After invalidation, get returns a fresh instance with the updated value
-    fresh_settings = store.get(mock_plugin, "global")
-    assert fresh_settings is not cached_settings
-    assert isinstance(fresh_settings, MockGlobalSettings)
-    assert fresh_settings.attr1 == "updated_val"
-
-
-# --- Integration Test ---
-
-
-def test_plugin_settings_reactive_write(mock_workspace: MagicMock, mock_plugin: MagicMock) -> None:
-    store = _PluginSettingsStore(mock_workspace)
-
-    def get_proxy() -> _SettingsProxy[MockGlobalSettings]:
-        model = cast(MockGlobalSettings, store.get(mock_plugin, "global"))
-        return _SettingsProxy(model, lambda k, v: store.update(mock_plugin, "global", **{k: v}))
-
-    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "initial"}
-
-    proxy = get_proxy()
-    assert proxy.attr1 == "initial"
-
-    # Reactive write
-    proxy.attr1 = "updated"
-
-    # Verify persistence
-    persisted = SettingsManager.global_settings.plugins["test_plugin"]
-    if hasattr(persisted, "attr1"):
-        assert persisted.attr1 == "updated"  # pyright: ignore[reportAttributeAccessIssue]
-    else:
-        assert persisted["attr1"] == "updated"
-
-    # Next read should be fresh due to cache invalidation in update()
-    new_proxy = get_proxy()
-    assert new_proxy.attr1 == "updated"
-    assert new_proxy is not proxy  # Different model instance
-
-
-def test_proxy_nested_model_update(mocker: MockerFixture) -> None:
+def test_proxy_nested_write_is_stored_in_the_model() -> None:
     model = MockParentModel()
-    on_update = mocker.stub()
-    proxy = _SettingsProxy(model, on_update)
 
-    proxy.nest.nest_attr = "new_nest_value"
+    _SettingsProxy(model).nest.nest_attr = "new_nest_value"
 
     assert model.nest.nest_attr == "new_nest_value"
-    on_update.assert_called_once()
-    on_update.assert_called_once_with("nest.nest_attr", "new_nest_value")
 
 
-def test_proxy_deeply_nested_model_update(mocker: MockerFixture) -> None:
+def test_proxy_deeply_nested_write_is_stored_in_the_model() -> None:
     model = MockLevel1()
-    on_update = mocker.stub()
-    proxy = _SettingsProxy(model, on_update)
 
-    proxy.l2.l3.val = 42
+    _SettingsProxy(model).l2.l3.val = 42
 
     assert model.l2.l3.val == 42
-    on_update.assert_called_once_with("l2.l3.val", 42)
 
 
-def test_store_nested_local_settings_inheritance(tmp_path: Path, mocker: MockerFixture) -> None:
+# _PluginSettingsStore
+def test_store_reads_the_stored_raw_settings(store: _PluginSettingsStore) -> None:
+    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "from_storage"}
+
+    proxy = store.get_proxy(MockPlugin(), "global")
+
+    assert proxy == MockGlobalSettings(attr1="from_storage")
+
+
+def test_store_uses_the_defaults_when_the_stored_settings_are_invalid(store: _PluginSettingsStore) -> None:
+    SettingsManager.global_settings.plugins["test_plugin"] = {"attr2": "not a number"}
+
+    proxy = store.get_proxy(MockPlugin(), "global")
+
+    assert proxy == MockGlobalSettings()
+    assert SettingsManager.global_settings.plugins["test_plugin"] == MockGlobalSettings()
+
+
+def test_store_returns_none_for_a_scope_without_a_model(store: _PluginSettingsStore) -> None:
+    class GlobalOnlyPlugin(MockPlugin):
+        local_settings_model = None
+
+    assert store.get_proxy(GlobalOnlyPlugin(), "local") is None
+
+
+def test_store_write_is_seen_by_other_plugin_instances_and_workspaces(script_path: Path) -> None:
+    panel_store = _PluginSettingsStore(lambda: SettingsManager.get_local_settings(script_path))
+    other_workspace_store = _PluginSettingsStore(lambda: SettingsManager.get_local_settings(script_path))
+    panel, dock = MockPlugin(), MockPlugin()
+    dock_global = panel_store.get_proxy(dock, "global")
+    dock_local = other_workspace_store.get_proxy(dock, "local")
+
+    panel_store.update(panel, "global", attr1="global_write")
+    panel_store.update(panel, "local", attr2=200)
+
+    assert dock_global == MockGlobalSettings(attr1="global_write")
+    assert other_workspace_store.get_proxy(dock, "global") == MockGlobalSettings(attr1="global_write")
+    assert dock_local is not None
+    assert dock_local.attr2 == 200
+
+
+def test_store_local_reads_unset_fields_from_global(store: _PluginSettingsStore, script_path: Path) -> None:
+    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "global_val", "attr2": 100}
+    _local_plugins(script_path)["test_plugin"] = {"attr2": 200}
+
+    local = store.get_proxy(MockPlugin(), "local")
+
+    assert local is not None
+    assert (local.attr1, local.attr2) == ("global_val", 200)
+
+
+def test_store_global_write_is_seen_through_local(store: _PluginSettingsStore) -> None:
+    plugin = MockPlugin()
+    local = store.get_proxy(plugin, "local")
+
+    store.update(plugin, "global", attr1="changed")
+
+    assert local is not None
+    assert local.attr1 == "changed"
+
+
+def test_store_local_write_stores_only_the_override(store: _PluginSettingsStore, script_path: Path) -> None:
+    plugin = MockPlugin()
+    local = store.get_proxy(plugin, "local")
+    assert local is not None
+
+    local.attr2 = 5
+
+    assert _local_plugins(script_path)["test_plugin"] == MockLocalSettings(attr2=5)
+    assert SettingsManager.global_settings.plugins["test_plugin"] == MockGlobalSettings()
+
+
+def test_store_nested_local_override_keeps_reading_other_fields_from_global(
+    store: _PluginSettingsStore, script_path: Path
+) -> None:
     class SubModel(BaseModel):
         opacity: float | None = None
         color: str | None = None
@@ -281,114 +234,100 @@ def test_store_nested_local_settings_inheritance(tmp_path: Path, mocker: MockerF
     class NestedGlobalSettings(BaseModel):
         visual: SubModel = SubModel(opacity=1.0, color="red")
 
-    plugin = mocker.MagicMock()
-    plugin.identifier = "nested_plugin"
-    plugin.global_settings_model = NestedGlobalSettings
-    plugin.local_settings_model = NestedLocalSettings
+    class NestedPlugin(MockPlugin):
+        identifier = "nested_plugin"
+        global_settings_model = NestedGlobalSettings
+        local_settings_model = NestedLocalSettings
 
-    test_file = tmp_path / "test_nested.vpy"
-    store = _PluginSettingsStore(lambda: test_file)
+    plugin = NestedPlugin()
+    local = store.get_proxy(plugin, "local")
+    assert local is not None
 
-    SettingsManager.global_settings.plugins["nested_plugin"] = {"visual": {"opacity": 1.0, "color": "red"}}
-    SettingsManager.get_local_settings(test_file).plugins["nested_plugin"] = {}
+    local.visual.opacity = 0.5
+    store.update(plugin, "global", visual=SubModel(opacity=1.0, color="blue"))
 
-    proxy = store.get_proxy(plugin, "local")
-    assert proxy is not None
-    assert proxy.visual.opacity == 1.0
-    assert proxy.visual.color == "red"
-
-    # Mutate only opacity in local settings
-    proxy.visual.opacity = 0.5
-
-    # Verify raw local settings only has opacity set, color remains None
-    raw_local = SettingsManager.get_local_settings(test_file).plugins["nested_plugin"]
-    raw_dict = raw_local if isinstance(raw_local, dict) else raw_local.model_dump()
-    assert raw_dict["visual"]["opacity"] == 0.5
-    assert raw_dict["visual"]["color"] is None
-
-    # Update global color to "blue", local proxy should reflect inherited global change
-    SettingsManager.global_settings.plugins["nested_plugin"] = {"visual": {"opacity": 1.0, "color": "blue"}}
-    store.invalidate("global")
-    store.invalidate("local")
-
-    fresh_local = store.get(plugin, "local")
-    assert isinstance(fresh_local, NestedLocalSettings)
-    assert fresh_local.visual.opacity == 0.5
-    assert fresh_local.visual.color == "blue"
+    assert (local.visual.opacity, local.visual.color) == (0.5, "blue")
+    assert _local_plugins(script_path)["nested_plugin"] == NestedLocalSettings(visual=SubModel(opacity=0.5))
 
 
-# Write validation
-def test_store_update_rejects_a_value_of_the_wrong_type(mock_workspace: MagicMock, mock_plugin: MagicMock) -> None:
-    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "kept", "attr2": 7}
-    store = _PluginSettingsStore(mock_workspace)
-    cached = store.get(mock_plugin, "global")
-
-    with pytest.raises(ValidationError, match=r"attr2\n  Input should be a valid integer"):
-        store.update(mock_plugin, "global", attr2="not a number")
-
-    assert SettingsManager.global_settings.plugins["test_plugin"] == {"attr1": "kept", "attr2": 7}
-    assert store.get(mock_plugin, "global") is cached
-    assert cached == MockGlobalSettings(attr1="kept", attr2=7)
-
-
-def test_proxy_write_of_the_wrong_type_leaves_the_proxy_and_the_store_unchanged(
-    mock_workspace: MagicMock, mock_plugin: MagicMock
-) -> None:
-    SettingsManager.global_settings.plugins["test_plugin"] = {"attr2": 7}
-    store = _PluginSettingsStore(mock_workspace)
-    proxy = store.get_proxy(mock_plugin, "global")
-    assert proxy is not None
-
-    with pytest.raises(ValidationError, match=r"attr2\n  Input should be a valid integer"):
-        proxy.attr2 = "not a number"
-
-    assert proxy.attr2 == 7
-    assert SettingsManager.global_settings.plugins["test_plugin"] == {"attr2": 7}
-    assert store.get(mock_plugin, "global") == MockGlobalSettings(attr2=7)
-
-
-def test_proxy_write_stores_the_validated_value(mock_workspace: MagicMock, mock_plugin: MagicMock) -> None:
-    store = _PluginSettingsStore(mock_workspace)
-    proxy = store.get_proxy(mock_plugin, "global")
-    assert proxy is not None
-
-    proxy.attr2 = "42"
-
-    assert proxy.attr2 == 42
-    assert SettingsManager.global_settings.plugins["test_plugin"] == MockGlobalSettings(attr2=42)
-    assert store.get(mock_plugin, "global") == MockGlobalSettings(attr2=42)
-
-
-def test_proxy_nested_write_that_fails_leaves_the_proxy_unchanged(tmp_path: Path, mocker: MockerFixture) -> None:
+def test_store_write_into_a_global_fallback_is_refused(store: _PluginSettingsStore, script_path: Path) -> None:
     class Visual(BaseModel):
         opacity: float = 1.0
 
     class OptionalVisualLocal(LocalSettingsModel):
         visual: Visual | None = None
 
-        @override
-        def resolve(self, global_settings: BaseModel) -> OptionalVisualLocal:
-            resolved = self.model_copy()
-            if resolved.visual is None:
-                resolved.visual = getattr(global_settings, "visual", Visual())
-            return resolved
-
     class VisualGlobal(BaseModel):
         visual: Visual = Visual()
 
-    plugin = mocker.MagicMock()
-    plugin.identifier = "optional_visual_plugin"
-    plugin.global_settings_model = VisualGlobal
-    plugin.local_settings_model = OptionalVisualLocal
+    class OptionalVisualPlugin(MockPlugin):
+        identifier = "optional_visual_plugin"
+        global_settings_model = VisualGlobal
+        local_settings_model = OptionalVisualLocal
 
-    test_file = tmp_path / "optional_visual.vpy"
-    store = _PluginSettingsStore(lambda: test_file)
-    SettingsManager.get_local_settings(test_file).plugins["optional_visual_plugin"] = {}
-    proxy = store.get_proxy(plugin, "local")
-    assert proxy is not None
+    local = store.get_proxy(OptionalVisualPlugin(), "local")
+    assert local is not None
 
-    with pytest.raises(TypeError, match=r"Cannot set 'visual\.opacity': 'visual' is None"):
-        proxy.visual.opacity = 0.5
+    with pytest.raises(TypeError, match="opacity"):
+        local.visual.opacity = 0.5
 
-    assert proxy.visual.opacity == 1.0
-    assert SettingsManager.get_local_settings(test_file).plugins["optional_visual_plugin"] == {}
+    assert local.visual.opacity == 1.0
+    assert SettingsManager.global_settings.plugins["optional_visual_plugin"] == VisualGlobal()
+    assert _local_plugins(script_path)["optional_visual_plugin"] == OptionalVisualLocal()
+
+
+def test_store_in_place_change_of_a_global_fallback_list_keeps_the_global_list(store: _PluginSettingsStore) -> None:
+    class ListGlobal(BaseModel):
+        items: list[int] = [1, 2]
+
+    class ListLocal(LocalSettingsModel):
+        items: list[int] | None = None
+
+    class ListPlugin(MockPlugin):
+        identifier = "list_plugin"
+        global_settings_model = ListGlobal
+        local_settings_model = ListLocal
+
+    local = store.get_proxy(ListPlugin(), "local")
+    assert local is not None
+
+    local.items.append(3)
+
+    assert SettingsManager.global_settings.plugins["list_plugin"] == ListGlobal(items=[1, 2])
+
+
+def test_store_update_sets_a_nested_field_by_dotted_key(store: _PluginSettingsStore) -> None:
+    class NestedPlugin(MockPlugin):
+        identifier = "nested_plugin"
+        global_settings_model = MockParentModel
+
+    store.update(NestedPlugin(), "global", **{"nest.nest_attr": "dotted"})
+
+    assert SettingsManager.global_settings.plugins["nested_plugin"] == MockParentModel(
+        nest=MockNestedModel(nest_attr="dotted")
+    )
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"attr2": "not a number"},
+        {"attr1": "valid", "attr2": "not a number"},
+    ],
+)
+def test_store_update_with_a_wrong_type_changes_nothing(store: _PluginSettingsStore, updates: dict[str, Any]) -> None:
+    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "kept", "attr2": 7}
+    proxy = store.get_proxy(MockPlugin(), "global")
+
+    with pytest.raises(ValidationError, match="attr2"):
+        store.update(MockPlugin(), "global", **updates)
+
+    assert proxy == MockGlobalSettings(attr1="kept", attr2=7)
+
+
+def test_store_update_without_a_model_is_refused(store: _PluginSettingsStore) -> None:
+    class GlobalOnlyPlugin(MockPlugin):
+        local_settings_model = None
+
+    with pytest.raises(ValueError, match="local_settings_model"):
+        store.update(GlobalOnlyPlugin(), "local", attr1="x")

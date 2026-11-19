@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, Concatenate, Literal, cast
 
 import pluggy
 from jetpytools import Singleton, inject_self
-from pydantic import BaseModel
 from vapoursynth import AudioNode, VideoNode
 from vsengine.loops import EventLoop, get_loop
 
@@ -25,7 +24,7 @@ from . import specs
 from .entrypoints import load_entrypoints
 
 if TYPE_CHECKING:
-    from ..settings.models import SettingEntry
+    from ..settings.models import GlobalSettings, LocalSettings, SettingEntry
     from .api import NodeProcessor, WidgetPluginBase
     from .api_wk import PluginBaseWorkspace
 
@@ -368,41 +367,18 @@ class PluginManager(Singleton):
         self, scope: Literal["global", "local"], file_path: os.PathLike[str] | None = None
     ) -> None:
         from ..settings import SettingsManager
+        from ._interface import get_plugin_model
 
-        if scope == "local" and file_path is not None:
+        if scope == "global":
+            settings_container: GlobalSettings | LocalSettings = SettingsManager.global_settings
+        elif file_path is not None:
             settings_container = SettingsManager.get_local_settings(file_path)
         else:
-            settings_container = SettingsManager.global_settings
-
-        model_attr = f"{scope}_settings_model"
+            raise ValueError("Local plugin settings need a file path.")
 
         with self._lock:
             for plugin in self._all_plugins():
                 try:
-                    if (model := getattr(plugin, model_attr)) is None:
-                        continue
-
-                    raw = settings_container.plugins.get(plugin.identifier, {})
-                    existing = raw.model_dump() if isinstance(raw, BaseModel) else raw
+                    get_plugin_model(settings_container, plugin.identifier, getattr(plugin, f"{scope}_settings_model"))
                 except Exception:
-                    logger.exception("Couldn't read the %s settings of plugin %r", scope, plugin)
-                    continue
-
-                if not (validated := _safe_validate(model, existing, plugin.identifier)):
-                    continue
-
-                settings_container.plugins[plugin.identifier] = validated
-
-
-def _safe_validate(model: type[BaseModel], existing: dict[str, Any], identifier: str) -> BaseModel | None:
-    try:
-        return model.model_validate(existing)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("The plugin %r has invalid settings: \n%s\n\nTrying default values...", identifier, e)
-
-    try:
-        return model()
-    except Exception as e:  # noqa: BLE001
-        logger.error("Couldn't create default settings values for %r\n%s", identifier, e)
-
-    return None
+                    logger.exception("Couldn't create the %s settings of plugin %r", scope, plugin)

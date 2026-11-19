@@ -29,6 +29,7 @@ from vsview.app.plugins.api import PluginAPI, WidgetPluginBase, WorkspaceBlocker
 from vsview.app.plugins.contracts import AudioOutputProxy, VideoOutputProxy
 from vsview.app.plugins.exceptions import NoCurrentVideoOutputError
 from vsview.app.settings import SettingsManager
+from vsview.app.settings.models import LocalSettings
 from vsview.app.settings.shortcuts import ShortcutManager
 from vsview.app.workspace.callbacks import CallbackHandle, CallbackRegistry
 from vsview.types import Frame, Time
@@ -242,7 +243,7 @@ class HarnessPluginController(QObject):
         self.timeline_proxy = HarnessTimelineProxy()
         self.playback_proxy = HarnessPlaybackProxy(self)
 
-        self._settings_store = _PluginSettingsStore(lambda: self._file_path)
+        self._settings_store = _PluginSettingsStore(self._get_local_settings)
         self.api = PluginAPI(self)
         register_controller(self.api, self)  # pyright: ignore[reportArgumentType]
 
@@ -370,15 +371,11 @@ class HarnessPluginController(QObject):
         return self.api.get_shortcut_label(action_id)
 
     # Settings Delegation to Production _PluginSettingsStore
-    def get_cached_proxy_settings(self, plugin: _PluginLike, scope: str) -> Any:
+    def get_settings_proxy(self, plugin: _PluginLike, scope: str) -> Any:
         return self._settings_store.get_proxy(plugin, scope)
 
     def update_settings(self, plugin: _PluginLike, scope: str, **updates: Any) -> None:
         self._settings_store.update(plugin, scope, **updates)
-        if scope == "global":
-            self.globalSettingsChanged.emit()
-        elif self._file_path is not None:
-            self.localSettingsChanged.emit(str(self._file_path))
 
     # Harness Helpers & State Drivers
     def create_plugin[T: WidgetPluginBase[Any, Any]](self, plugin_cls: type[T]) -> T:
@@ -506,13 +503,15 @@ class HarnessPluginController(QObject):
         if isinstance(loop := get_loop(), QtEventLoop):
             loop.wait_for_threads(5000)
 
+    def _get_local_settings(self) -> LocalSettings:
+        if self._file_path is None:
+            return SettingsManager.default_local_settings
+        return SettingsManager.get_local_settings(self._file_path)
+
     def _on_global_settings_changed(self) -> None:
-        self._settings_store.invalidate("global")
-        self._settings_store.invalidate("local")
         self.globalSettingsChanged.emit()
 
     def _on_local_settings_changed(self, path: str) -> None:
-        self._settings_store.invalidate("local")
         self.localSettingsChanged.emit(path)
 
     def _on_about_to_save_global(self) -> None:

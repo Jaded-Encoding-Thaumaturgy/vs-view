@@ -736,12 +736,13 @@ class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
 
     Note:
         In-place mutations of mutable containers (e.g., `self.settings.global_.items.append(...)`)
-        do not trigger `__setattr__` and are not persisted automatically. Reassign the attribute
-        or use `update_global_settings()` / `update_local_settings()`.
+        change the stored value without validation.
+        Reassign the attribute or use `update_global_settings()` / `update_local_settings()` to validate the value.
 
-        When local settings inherit from `LocalSettingsModel`, `self.settings.local_` automatically
-        resolves with global fallbacks applied for any `None` values. Returns None if no settings
-        model is defined for the scope.
+        When local settings inherit from `LocalSettingsModel`, a `None` field of `self.settings.local_`
+        reads the global value of the same name.
+        Writes always set the local value.
+        Returns None if no settings model is defined for the scope.
     """
 
     def __init__(self, plugin: _PluginLike) -> None:
@@ -750,12 +751,12 @@ class PluginSettings(Generic[TGlobalSettings, TLocalSettings]):
     @property
     def global_(self) -> TGlobalSettings:
         """Get the current global settings."""
-        return _get_controller(self._plugin.api).get_cached_proxy_settings(self._plugin, "global")  # type: ignore[return-value]
+        return _get_controller(self._plugin.api).get_settings_proxy(self._plugin, "global")  # type: ignore[return-value]
 
     @property
     def local_(self) -> TLocalSettings:
         """Get the current local settings (resolved with global fallbacks)."""
-        return _get_controller(self._plugin.api).get_cached_proxy_settings(self._plugin, "local")  # type: ignore[return-value]
+        return _get_controller(self._plugin.api).get_settings_proxy(self._plugin, "local")  # type: ignore[return-value]
 
 
 class _PluginBase(Generic[TGlobalSettings, TLocalSettings], metaclass=_PluginBaseMeta):

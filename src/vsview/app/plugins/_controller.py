@@ -31,6 +31,7 @@ from .exceptions import BlockerRefusedError, NoCurrentVideoOutputError, NoCurren
 
 if TYPE_CHECKING:
     from vsview.app.outputs import FrameBuffer
+    from vsview.app.settings.models import LocalSettings
     from vsview.app.workspace import LoaderWorkspace
     from vsview.app.workspace.callbacks import CallbackHandle
 
@@ -59,7 +60,7 @@ class PluginWorkspaceController(QObject):
     def __init__(self, workspace: LoaderWorkspace[Any]) -> None:
         super().__init__(workspace)
         self.__workspace = workspace
-        self.__settings_store = _PluginSettingsStore(self._get_file_path)
+        self.__settings_store = _PluginSettingsStore(self._get_local_settings)
         self.__cursor_reset = _ViewportCursorReset(self)
         self.__cursor_reset_lock = Lock()
         self.__cursor_reset_connected = False
@@ -382,7 +383,7 @@ class PluginWorkspaceController(QObject):
                     plugin.on_playback_stopped()
 
     # Settings Access & Updates
-    def get_cached_proxy_settings(self, plugin: _PluginLike, scope: str) -> _SettingsProxy[BaseModel] | None:
+    def get_settings_proxy(self, plugin: _PluginLike, scope: str) -> _SettingsProxy[BaseModel] | None:
         return self.__settings_store.get_proxy(plugin, scope)
 
     def update_settings(self, plugin: _PluginLike, scope: str, **updates: Any) -> None:
@@ -498,6 +499,11 @@ class PluginWorkspaceController(QObject):
 
         return self.__workspace.current_file_path if isinstance(self.__workspace, BaseGenericFileWorkspace) else None
 
+    def _get_local_settings(self) -> LocalSettings:
+        if (path := self._get_file_path()) is None:
+            return SettingsManager.default_local_settings
+        return SettingsManager.get_local_settings(path)
+
     @staticmethod
     @contextmanager
     def _isolated(hook: str, target: object) -> Generator[None]:
@@ -509,12 +515,9 @@ class PluginWorkspaceController(QObject):
             logger.exception("%s failed for %r", hook, target)
 
     def _on_global_settings_changed(self) -> None:
-        self.__settings_store.invalidate("global")
-        self.__settings_store.invalidate("local")
         self.globalSettingsChanged.emit()
 
     def _on_local_settings_changed(self, path: str) -> None:
-        self.__settings_store.invalidate("local")
         self.localSettingsChanged.emit(path)
 
     def _on_about_to_save_global(self) -> None:
