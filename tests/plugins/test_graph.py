@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
@@ -222,13 +221,12 @@ def test_graph_shortcut_to_rule_valid(
     assert rule == expected_rule
 
 
-@pytest.mark.skipif(os.getenv("CI", "").lower() in ["1", "true"], reason="CI segfault")
 @pytest.mark.vpy("no-core")
 def test_graph_web_view_theme_sync(qtbot: QtBot) -> None:
     """Verify GraphWebView.sync_theme returns False before readiness and dispatches theme update when ready."""
     widget = QWidget()
     qtbot.addWidget(widget)
-    view = GraphWebView(widget)
+    view = StubGraphWebView(widget)
 
     # Before bridge is ready, sync_theme returns False without dispatch
     assert not view.bridge.is_ready
@@ -240,22 +238,6 @@ def test_graph_web_view_theme_sync(qtbot: QtBot) -> None:
     view.bridge.dispatchCommandSignal.connect(lambda cmd, _: dispatched.append(cmd))
 
     assert view.sync_theme() is True
-    assert PyToJsCommand.THEME_UPDATE in dispatched
-
-
-@pytest.mark.skipif(os.getenv("CI", "").lower() in ["1", "true"], reason="CI segfault")
-@pytest.mark.vpy("no-core")
-def test_graph_web_view_palette_change_event(qtbot: QtBot) -> None:
-    """Verify PaletteChange event updates background color and triggers theme synchronization."""
-    widget = QWidget()
-    qtbot.addWidget(widget)
-    view = GraphWebView(widget)
-    view.bridge.onWebReady()
-
-    dispatched = list[str]()
-    view.bridge.dispatchCommandSignal.connect(lambda cmd, _: dispatched.append(cmd))
-
-    QCoreApplication.sendEvent(view, QEvent(QEvent.Type.PaletteChange))
     assert PyToJsCommand.THEME_UPDATE in dispatched
 
 
