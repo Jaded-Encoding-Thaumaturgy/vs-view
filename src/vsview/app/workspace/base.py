@@ -18,7 +18,7 @@ from ..plugins.exceptions import NoEnvironmentError
 from ..settings import SettingsManager
 from ..settings.models import GlobalSettings
 from ..utils import Disposable
-from .callbacks import CallbackRegistry, run_callbacks
+from .callbacks import CallbackRegistry
 from .lifecycle import WorkspaceLifecycle
 
 logger = getLogger(__name__)
@@ -169,7 +169,7 @@ class BaseWorkspace(QMainWindow):
 
         self.on_teardown_started()
         self._release_environment(self._finish_tasks())
-        run_callbacks(self._destroy_callbacks.take_all()[::-1], self)
+        self._destroy_callbacks.run_callbacks(self, take_all=True, reverse=True)
 
         for child in self.findChildren(QObject):
             if isinstance(child, Disposable):

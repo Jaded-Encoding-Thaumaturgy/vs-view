@@ -51,7 +51,7 @@ from ..views.tab import TabViewWidget
 from ..views.timeline import TimelineControlBar
 from ..views.video import GraphicsView, ViewState
 from .base import BaseWorkspace
-from .callbacks import CallbackHandle, CallbackRegistry, run_callbacks
+from .callbacks import CallbackHandle, CallbackRegistry
 from .lifecycle import Phase, StaleGenerationError
 from .playback import PlaybackManager, show_warning
 from .tab_manager import PlayHeadToolButton, TabManager
@@ -313,7 +313,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             self._unload_callbacks.take_all()
         else:
             with env.use():
-                run_callbacks(self._unload_callbacks.take_all()[::-1], self)
+                self._unload_callbacks.run_callbacks(self, take_all=True, reverse=True)
                 rcallbacks = self._release_callbacks.snapshot()
                 done, _ = wait([self.loop.from_thread(keep_environment(cb)) for cb in rcallbacks])
 
@@ -331,9 +331,9 @@ class LoaderWorkspace[T](BaseWorkspace):
     @override
     def _before_delayed_disposal(self, env: ManagedEnvironment) -> None:
         # A script still running at close may register unload callbacks after the release already ran them.
-        if (callbacks := self._unload_callbacks.take_all()) and not env.disposed:
+        if not env.disposed:
             with env.use():
-                run_callbacks(callbacks[::-1], self)
+                self._unload_callbacks.run_callbacks(self, take_all=True, reverse=True)
 
     @override
     def _finish_tasks(self) -> list[Future[Any]]:

@@ -63,19 +63,22 @@ class CallbackRegistry:
             self._callbacks.clear()
         return callbacks
 
+    def run_callbacks(self, owner: object, *, take_all: bool = True, reverse: bool = True) -> None:
+        cbs = self.take_all() if take_all else self.snapshot()
+        if reverse:
+            cbs.reverse()
+
+        for cb in cbs:
+            try:
+                cb()
+            except Cancelled as e:
+                logger.debug("Callback %r of %r was cancelled: %s", cb, owner, e)
+            except Exception:
+                logger.exception("Error running callback %r of %r", cb, owner)
+
     def _discard(self, key: Hashable) -> bool:
         with self._lock:
             return self._callbacks.pop(key, None) is not None
-
-
-def run_callbacks(callbacks: list[Callable[[], Any]], owner: object) -> None:
-    for cb in callbacks:
-        try:
-            cb()
-        except Cancelled as e:
-            logger.debug("Callback %r of %r was cancelled: %s", cb, owner, e)
-        except Exception:
-            logger.exception("Error running callback %r of %r", cb, owner)
 
 
 def _make_key(cb: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> Hashable:
