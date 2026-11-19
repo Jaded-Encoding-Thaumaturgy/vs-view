@@ -168,9 +168,9 @@ def isolate_secrets(monkeypatch: pytest.MonkeyPatch) -> InMemoryKeyring:
 
 # Global Settings Isolation
 @pytest.fixture(autouse=True)
-def isolate_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
-    # Redirect global and local settings paths to isolated pytest tmp_path
-    fake_dir = SPath(tmp_path / "vsview_config")
+def isolate_settings(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
+    settings_root = tmp_path_factory.mktemp("settings")
+    fake_dir = SPath(settings_root / "vsview_config")
     fake_config = fake_dir / "global_settings.json"
     monkeypatch.setattr(GlobalSettings, "config_path", fake_dir)
     monkeypatch.setattr(GlobalSettings, "path", fake_config)
@@ -178,7 +178,7 @@ def isolate_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generat
     monkeypatch.setattr(
         SettingsManager,
         "local_settings_path",
-        staticmethod(lambda p: tmp_path / ".vsjet" / "vsview" / f"{path_to_hash(p)}.json"),
+        staticmethod(lambda p: settings_root / ".vsjet" / "vsview" / f"{path_to_hash(p)}.json"),
     )
 
     # Reset settings on existing instance and clean up accumulated signal connections

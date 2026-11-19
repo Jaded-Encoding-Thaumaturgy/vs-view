@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 import vapoursynth as vs
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
-from PySide6.QtGui import QContextMenuEvent, QImage, QKeyEvent, QMouseEvent, QPixmap, QTransform
+from PySide6.QtGui import QContextMenuEvent, QImage, QKeyEvent, QMouseEvent, QPixmap, QShortcut, QTransform
 from PySide6.QtWidgets import QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
@@ -207,17 +207,21 @@ def test_tab_manager_shortcuts_registration(tab_manager: TabManager) -> None:
     for aid in expected_actions:
         assert [sc.parent() for sc in sm.get_shortcuts(aid)].count(mgr) == 1, aid
 
+    def own(aid: ActionID) -> list[QShortcut]:
+        return [sc for sc in sm.get_shortcuts(aid) if sc.parent() is mgr]
+
     # Trigger registered shortcuts and verify widget state toggling
-    for sc in sm.get_shortcuts(ActionID.SYNC_ZOOM):
+    for sc in own(ActionID.SYNC_ZOOM):
         sc.activated.emit()
     assert mgr.sync_zoom_btn.isChecked() is False
 
-    for sc in sm.get_shortcuts(ActionID.AUTOFIT_ALL_VIEWS):
+    for sc in own(ActionID.AUTOFIT_ALL_VIEWS):
         sc.activated.emit()
     assert mgr.autofit_btn.isChecked() is True
 
 
 # TabManager.create_tabs Tests
+@pytest.mark.vpy("no-core")
 def test_create_tabs_single_output_disables_sync(
     tab_manager: TabManager, make_video_output: Callable[..., VideoOutput]
 ) -> None:
