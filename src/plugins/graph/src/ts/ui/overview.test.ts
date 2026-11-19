@@ -169,17 +169,19 @@ describe('OverviewPanel', () => {
     const highlightBtn = warnGroup.querySelector<HTMLButtonElement>('.overview-group-action-btn')!;
     highlightBtn.click();
     expect(mockCanvas.highlightNodeGroup).toHaveBeenCalledWith(nodeIds);
-    expect(warnGroup.classList.contains('open')).toBe(false);
+    expect(warnGroup.querySelector('details')?.open).toBe(false);
 
     // Expand warning group accordion -> shows 15 chips + '+2 more' button
-    warnGroup.querySelector<HTMLElement>('.overview-group-header')?.click();
-    expect(warnGroup.classList.contains('open')).toBe(true);
+    const details = warnGroup.querySelector('details')!;
+    details.open = true;
+    details.dispatchEvent(new Event('toggle'));
     expect(warnGroup.querySelectorAll('.overview-node-chip')).toHaveLength(15);
 
     const moreBtn = warnGroup.querySelector<HTMLButtonElement>('.overview-chip-more')!;
     expect(moreBtn.textContent.trim()).toBe('+2 more');
     moreBtn.click();
     expect(warnGroup.querySelectorAll('.overview-node-chip')).toHaveLength(17);
+    expect(warnGroup.querySelector('details')?.open).toBe(true);
 
     // Clicking a node chip focuses that node
     warnGroup.querySelector<HTMLButtonElement>('.overview-node-chip')?.click();

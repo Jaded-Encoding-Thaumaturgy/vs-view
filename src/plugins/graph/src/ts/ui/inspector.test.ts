@@ -147,10 +147,7 @@ describe('InspectorDrawer', () => {
 
     copyButtons[1]?.click();
     expect(copyNodeSpy).toHaveBeenLastCalledWith('node_123', 'call', 1);
-    // Copying must not toggle the accordion frame
-    expect(container.querySelectorAll('.accordion-item')[1]?.classList.contains('active')).toBe(
-      false,
-    );
+    expect(container.querySelectorAll('details')[1]?.open).toBe(false);
 
     copyButtons[0]?.click();
     expect(copyNodeSpy).toHaveBeenLastCalledWith('node_123', 'call', 0);
@@ -218,21 +215,24 @@ describe('InspectorDrawer', () => {
     drawer.inspectNode(node);
 
     // Frame 0 is expanded by default; Frame 1 is collapsed
-    const items = container.querySelectorAll('.accordion-item');
-    expect(items).toHaveLength(2);
-    expect(items[0]?.classList.contains('active')).toBe(true);
-    expect(items[1]?.classList.contains('active')).toBe(false);
-    expect(items[1]?.textContent).toContain('No arguments');
+    const frames = () => container.querySelectorAll<HTMLDetailsElement>('.accordion-item details');
+    expect(frames()).toHaveLength(2);
+    expect(frames()[0]?.open).toBe(true);
+    expect(frames()[1]?.open).toBe(false);
+    expect(frames()[1]?.textContent).toContain('No arguments');
 
-    // Click Frame 1 header to expand it, and Frame 0 header to collapse it
-    items[1]?.querySelector<HTMLButtonElement>('.accordion-header')?.click();
-    items[0]?.querySelector<HTMLButtonElement>('.accordion-header')?.click();
-    expect(container.querySelectorAll('.accordion-item')[0]?.classList.contains('active')).toBe(
-      false,
-    );
-    expect(container.querySelectorAll('.accordion-item')[1]?.classList.contains('active')).toBe(
-      true,
-    );
+    // Expand Frame 1 and collapse Frame 0, then re-render to check that the state survives it
+    for (const [idx, open] of [
+      [1, true],
+      [0, false],
+    ] as const) {
+      const details = frames()[idx]!;
+      details.open = open;
+      details.dispatchEvent(new Event('toggle'));
+    }
+    drawer.setTimingOptions(false, 'ms');
+    expect(frames()[0]?.open).toBe(false);
+    expect(frames()[1]?.open).toBe(true);
 
     // Resolved and fallback clip badges in arguments table
     const clipBadges = container.querySelectorAll<HTMLButtonElement>(

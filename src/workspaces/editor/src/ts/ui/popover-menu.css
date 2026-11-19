@@ -1,0 +1,75 @@
+.context-menu-host {
+  display: contents;
+}
+
+.context-menu-anchor {
+  position: fixed;
+  inline-size: 0;
+  block-size: 0;
+  pointer-events: none;
+}
+
+.context-menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  position-area: block-end span-inline-end;
+  position-try-fallbacks:
+    flip-block,
+    flip-inline,
+    flip-block flip-inline;
+
+  min-inline-size: 170px;
+  padding: 4px 0;
+  border: 1px solid var(--vscode-menu-border, #454545);
+  border-radius: 6px;
+  background-color: var(--vscode-menu-background, #252526);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  color: var(--vscode-menu-foreground, #cccccc);
+  font:
+    12px -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  inline-size: 100%;
+  padding: 5px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.context-menu-item:hover:not([aria-disabled='true']) {
+  background-color: var(--vscode-menu-selectionBackground, #094771);
+  color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+.context-menu-item[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.context-menu-shortcut {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #888888);
+}
+
+.context-menu-item:hover:not([aria-disabled='true']) .context-menu-shortcut {
+  color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+.context-menu-separator {
+  margin: 4px 0;
+  border: 0;
+  border-block-start: 1px solid var(--vscode-menu-separatorBackground, #454545);
+}

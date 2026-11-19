@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>vsview Dependency Graph</title>
     <script>
       (function () {
@@ -26,10 +27,10 @@
       <div id="hud" class="hud-container"></div>
       <div id="inspector-drawer" class="inspector-drawer"></div>
       <div id="overview" class="overview-container"></div>
-      <div id="error-banner" class="error-banner"></div>
+      <div id="error-banner" class="error-banner" role="alert"></div>
 
       <div id="loading-overlay">
-        <div class="loading-spinner"></div>
+        <progress class="loading-spinner" aria-label="Loading"></progress>
         <div class="loading-text">Loading Dependency Graph...</div>
       </div>
     </div>

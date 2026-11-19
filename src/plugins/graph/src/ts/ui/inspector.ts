@@ -1,6 +1,6 @@
+import './disclosure.css';
 import './inspector.css';
 import { type TemplateResult, html, nothing, render } from 'lit-html';
-import { classMap } from 'lit-html/directives/class-map.js';
 import { repeat } from 'lit-html/directives/repeat.js';
 import { when } from 'lit-html/directives/when.js';
 import { Disposable, Result } from 'vsview-shared';
@@ -195,13 +195,14 @@ export class InspectorDrawer extends Disposable {
     if (this.lastNode) this.opts.onCopyNode(this.lastNode.id, 'report');
   }
 
-  private toggleFrame(idx: number): void {
-    if (this.openFrames.has(idx)) {
-      this.openFrames.delete(idx);
-    } else {
+  private handleFrameToggle(idx: number, event: Event): void {
+    if (!(event.currentTarget instanceof HTMLDetailsElement)) return;
+
+    if (event.currentTarget.open) {
       this.openFrames.add(idx);
+    } else {
+      this.openFrames.delete(idx);
     }
-    this.render();
   }
 
   private render(): void {
@@ -235,9 +236,11 @@ export class InspectorDrawer extends Disposable {
           <div class="inspector-title-actions">
             ${this.renderReportButton()}
             <button
+              type="button"
               class="inspector-close-btn"
               id="inspector-close"
               title="Close inspector"
+              aria-label="Close inspector"
               @click=${() => this.close()}
             >
               &times;
@@ -437,27 +440,24 @@ export class InspectorDrawer extends Disposable {
     const isActive = this.openFrames.has(idx);
 
     return html`
-      <div class=${classMap({ 'accordion-item': true, active: isActive })}>
-        <div class="accordion-header-row">
-          <button class="accordion-header" @click=${() => this.toggleFrame(idx)}>
-            <span class="accordion-arrow">${isActive ? '▼' : '▶'}</span>
+      <div class="accordion-item disclosure">
+        <details ?open=${isActive} @toggle=${(e: Event) => this.handleFrameToggle(idx, e)}>
+          <summary class="disclosure-summary accordion-header">
             <span class="accordion-frame-lvl">#${frame.level}</span>
             <span class="accordion-frame-func">${frame.plugin_ns}.${frame.function} </span>
             <span class="accordion-plugin-id">${frame.plugin_id}</span>
-          </button>
-          <button
-            class="card-action-btn accordion-copy-btn"
-            data-frame-idx=${idx}
-            title="Copy this frame's filter call as Python"
-            @click=${(e: Event) => {
-              e.stopPropagation();
-              this.copyFilterCall(idx);
-            }}
-          >
-            Copy Call
-          </button>
-        </div>
-        <div class="accordion-body">${this.renderArgumentsTable(frame.arguments)}</div>
+          </summary>
+          <div class="accordion-body">${this.renderArgumentsTable(frame.arguments)}</div>
+        </details>
+        <button
+          type="button"
+          class="card-action-btn accordion-copy-btn disclosure-action"
+          data-frame-idx=${idx}
+          title="Copy this frame's filter call as Python"
+          @click=${() => this.copyFilterCall(idx)}
+        >
+          Copy Call
+        </button>
       </div>
     `;
   }

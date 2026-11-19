@@ -2,6 +2,8 @@
   --font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  color-scheme: light dark;
 }
 
 * {
@@ -22,6 +24,11 @@ body {
   user-select: none;
 }
 
+:focus-visible {
+  outline: 2px solid var(--accent, var(--initial-accent));
+  outline-offset: 2px;
+}
+
 #app {
   width: 100%;
   height: 100%;
@@ -30,10 +37,7 @@ body {
 }
 
 #cy {
-  width: 100%;
-  height: 100%;
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
   background-color: var(--bg-color, var(--initial-bg));
 }

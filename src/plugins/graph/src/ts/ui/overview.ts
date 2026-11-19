@@ -1,3 +1,4 @@
+import './disclosure.css';
 import './overview.css';
 import { type TemplateResult, html, nothing, render } from 'lit-html';
 import { classMap } from 'lit-html/directives/class-map.js';
@@ -140,13 +141,14 @@ export class OverviewPanel extends Disposable {
     this.render();
   }
 
-  private toggleGroup(key: string): void {
-    if (this.expandedGroups.has(key)) {
-      this.expandedGroups.delete(key);
-    } else {
+  private handleGroupToggle(key: string, event: Event): void {
+    if (!(event.currentTarget instanceof HTMLDetailsElement)) return;
+
+    if (event.currentTarget.open) {
       this.expandedGroups.add(key);
+    } else {
+      this.expandedGroups.delete(key);
     }
-    this.render();
   }
 
   private toggleChips(key: string): void {
@@ -209,7 +211,13 @@ export class OverviewPanel extends Disposable {
         <div class="overview-panel" role="dialog" aria-label="Graph overview">
           <div class="overview-header">
             <span class="overview-title">Graph Overview</span>
-            <button class="overview-close" title="Close overview" @click=${() => this.close()}>
+            <button
+              type="button"
+              class="overview-close"
+              title="Close overview"
+              aria-label="Close overview"
+              @click=${() => this.close()}
+            >
               &times;
             </button>
           </div>
@@ -278,7 +286,9 @@ export class OverviewPanel extends Disposable {
   private renderModeChip(chip: ModeChip, isActive: boolean): TemplateResult {
     return html`
       <button
+        type="button"
         class=${classMap({ 'overview-chip': true, active: isActive })}
+        aria-pressed=${isActive}
         @click=${() => this.selectMode(chip.value)}
       >
         ${chip.label} <span class="overview-chip-count">${chip.count}</span>
@@ -295,6 +305,7 @@ export class OverviewPanel extends Disposable {
         <div class="overview-section-title">Request patterns</div>
         <div class="overview-empty">${list || 'none'}</div>
         <button
+          type="button"
           class=${classMap({ 'overview-chip': true, active })}
           @click=${() => this.togglePatterns()}
         >
@@ -356,6 +367,7 @@ export class OverviewPanel extends Disposable {
       <div class="overview-section">
         <div class="overview-section-title">Media changes (${analysis.transitionCount})</div>
         <button
+          type="button"
           class=${classMap({ 'overview-chip': true, active: this.mediaOnly })}
           style="margin-bottom: 8px;"
           @click=${() => this.toggleMediaOnly()}
@@ -398,29 +410,31 @@ export class OverviewPanel extends Disposable {
       <div
         class=${classMap({
           'overview-group': true,
-          open: isOpen,
+          disclosure: true,
           ...(config.severityClass ? { [config.severityClass]: true } : {}),
         })}
       >
-        <div class="overview-group-header" @click=${() => this.toggleGroup(config.key)}>
-          <div class="overview-group-info">
-            <span class="overview-group-chevron">▶</span>
+        <details ?open=${isOpen} @toggle=${(e: Event) => this.handleGroupToggle(config.key, e)}>
+          <summary class="disclosure-summary overview-group-header">
             <span class="overview-group-title" title="${config.title}">${config.title}</span>
             <span class="overview-group-count" title="${config.count} ${config.countUnit}"
               >${config.count}</span
             >
-          </div>
-          <div class="overview-group-actions" @click=${(e: Event) => e.stopPropagation()}>
-            <button
-              class=${classMap({ 'overview-group-action-btn': true, active: isHighlighted })}
-              title="${highlightTitle}"
-              @click=${() => this.toggleGroupHighlight(config.key, config.nodeIds)}
-            >
-              ${isHighlighted ? 'Highlighted' : 'Highlight'}
-            </button>
-          </div>
-        </div>
-        ${when(isOpen, () => this.renderGroupBody(config))}
+          </summary>
+          ${this.renderGroupBody(config)}
+        </details>
+        <button
+          type="button"
+          class=${classMap({
+            'overview-group-action-btn': true,
+            'disclosure-action': true,
+            active: isHighlighted,
+          })}
+          title="${highlightTitle}"
+          @click=${() => this.toggleGroupHighlight(config.key, config.nodeIds)}
+        >
+          ${isHighlighted ? 'Highlighted' : 'Highlight'}
+        </button>
       </div>
     `;
   }

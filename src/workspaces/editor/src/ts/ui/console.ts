@@ -1,36 +1,19 @@
 import './console.css';
 import { FitAddon } from '@xterm/addon-fit';
 import { type ITheme, Terminal } from '@xterm/xterm';
-import { type TemplateResult, html, render } from 'lit-html';
-import { choose } from 'lit-html/directives/choose.js';
-import { classMap } from 'lit-html/directives/class-map.js';
-import { repeat } from 'lit-html/directives/repeat.js';
-import { styleMap } from 'lit-html/directives/style-map.js';
 import * as vscode from 'vscode';
 import { DisposableStore, Result, toDisposable } from 'vsview-shared';
 
 import { BridgeService } from '../bridge/python';
-import { getInitialTheme, getThemeDefinition } from '../utils/theme';
+import { applyDocumentTheme, getInitialTheme, getThemeDefinition } from '../utils/theme';
 import { DOM_IDS } from './constants';
+import { type MenuItem, PopoverMenu } from './popover-menu';
 
-interface MenuActionItem {
-  id: string;
-  kind: 'action';
-  label: string;
-  shortcut: string;
-  action: () => void;
-  disabled?: boolean;
-}
-
-interface MenuSeparatorItem {
-  id: string;
-  kind: 'separator';
-}
-
-type MenuItem = MenuActionItem | MenuSeparatorItem;
 type CssPropertyLookup = (...names: string[]) => string | undefined;
 
 export class ConsolePanelService implements vscode.Disposable {
+  private static readonly MIN_HEIGHT = 80;
+  private static readonly MAX_HEIGHT = 600;
   private static readonly ANSI_COLOR_KEYS = [
     'black',
     'red',
@@ -63,14 +46,17 @@ export class ConsolePanelService implements vscode.Disposable {
 
   private readonly onDidToggleEmitter = new vscode.EventEmitter<boolean>();
   private readonly onDidResizeEmitter = new vscode.EventEmitter<number>();
+  private readonly contextMenu = new PopoverMenu({
+    id: DOM_IDS.CONSOLE_CONTEXT_MENU,
+    label: 'Console actions',
+  });
 
   private isVisible = true;
-  private isDragging = false;
+  private dragPointerId: number | null = null;
   private startY = 0;
   private startHeight = 200;
   private themeTimer: ReturnType<typeof setTimeout> | null = null;
   private fitFrameId: number | null = null;
-  private contextMenuDisposables: DisposableStore | null = null;
 
   constructor() {
     this.onDidToggle = this.onDidToggleEmitter.event;
@@ -91,6 +77,7 @@ export class ConsolePanelService implements vscode.Disposable {
     this.setupUIListeners();
     this.disposables.add(this.onDidToggleEmitter);
     this.disposables.add(this.onDidResizeEmitter);
+    this.disposables.add(this.contextMenu);
     this.disposables.add(toDisposable(() => this.terminal.dispose()));
 
     this.disposables.add(
@@ -156,8 +143,7 @@ export class ConsolePanelService implements vscode.Disposable {
   public setTheme(theme: string): void {
     getThemeDefinition(theme).match({
       ok: (def) => {
-        document.documentElement.dataset.theme = def.id;
-        document.documentElement.setAttribute('data-theme-kind', def.kind.toString());
+        applyDocumentTheme(def);
 
         if (this.themeTimer !== null) {
           clearTimeout(this.themeTimer);
@@ -188,7 +174,6 @@ export class ConsolePanelService implements vscode.Disposable {
   }
 
   public dispose(): void {
-    this.closeContextMenu();
     if (this.themeTimer !== null) {
       clearTimeout(this.themeTimer);
       this.themeTimer = null;
@@ -296,7 +281,7 @@ export class ConsolePanelService implements vscode.Disposable {
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      this.showContextMenu(e.clientX, e.clientY);
+      this.contextMenu.show(e.clientX, e.clientY, this.getContextMenuItems());
     };
 
     this.xtermContainer.addEventListener('contextmenu', handleContextMenu);
@@ -326,57 +311,69 @@ export class ConsolePanelService implements vscode.Disposable {
   }
 
   private setupResizerDragListeners(): void {
-    const cleanupDrag = () => {
-      if (this.isDragging) {
-        this.isDragging = false;
-        this.resizerElement.classList.remove('dragging');
-        document.body.style.userSelect = '';
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
-      }
+    const finishDrag = (): void => {
+      if (this.dragPointerId === null) return;
+
+      this.dragPointerId = null;
+      this.resizerElement.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerEnd);
+      window.removeEventListener('pointercancel', onPointerEnd);
     };
 
-    const onMouseMove = (e: MouseEvent) => {
-      if (!this.isDragging) return;
+    const onPointerMove = (e: PointerEvent): void => {
+      if (e.pointerId !== this.dragPointerId) return;
 
-      const deltaY = this.startY - e.clientY;
-      const newHeight = Math.max(80, Math.min(600, this.startHeight + deltaY));
-
-      document.documentElement.style.setProperty('--console-height', `${newHeight}px`);
-
-      this.fit();
-      this.onDidResizeEmitter.fire(newHeight);
+      this.setHeight(this.startHeight + this.startY - e.clientY);
     };
 
-    const onMouseUp = () => {
-      if (!this.isDragging) return;
-      cleanupDrag();
+    const onPointerEnd = (e: PointerEvent): void => {
+      if (e.pointerId !== this.dragPointerId) return;
+
+      finishDrag();
       this.fit();
     };
 
-    const onMouseDown = (e: MouseEvent) => {
-      this.isDragging = true;
+    const onPointerDown = (e: PointerEvent): void => {
+      if (e.button !== 0) return;
+
+      e.preventDefault();
+      this.dragPointerId = e.pointerId;
       this.startY = e.clientY;
       this.startHeight = this.panelElement.getBoundingClientRect().height;
 
       this.resizerElement.classList.add('dragging');
       document.body.style.userSelect = 'none';
 
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp);
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerEnd);
+      window.addEventListener('pointercancel', onPointerEnd);
     };
 
-    this.resizerElement.addEventListener('mousedown', onMouseDown);
+    this.resizerElement.addEventListener('pointerdown', onPointerDown);
     this.disposables.add(
       toDisposable(() => {
-        this.resizerElement.removeEventListener('mousedown', onMouseDown);
-        cleanupDrag();
+        this.resizerElement.removeEventListener('pointerdown', onPointerDown);
+        finishDrag();
       }),
     );
 
     const onWindowResize = () => this.fit();
     window.addEventListener('resize', onWindowResize);
     this.disposables.add(toDisposable(() => window.removeEventListener('resize', onWindowResize)));
+  }
+
+  private setHeight(requested: number): void {
+    const height = Math.max(
+      ConsolePanelService.MIN_HEIGHT,
+      Math.min(ConsolePanelService.MAX_HEIGHT, requested),
+    );
+
+    document.documentElement.style.setProperty('--console-height', `${height}px`);
+
+    this.fit();
+    this.onDidResizeEmitter.fire(height);
   }
 
   private getContextMenuItems(): MenuItem[] {
@@ -406,108 +403,5 @@ export class ConsolePanelService implements vscode.Disposable {
         action: () => this.clear(),
       },
     ];
-  }
-
-  private showContextMenu(x: number, y: number): void {
-    this.closeContextMenu();
-
-    const fragment = document.createDocumentFragment();
-    render(this.renderContextMenu(x, y, this.getContextMenuItems()), fragment);
-    document.body.appendChild(fragment);
-
-    const menu = document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU);
-    if (menu) {
-      this.clampContextMenuPosition(menu, x, y);
-    }
-
-    this.bindContextMenuDismissListeners();
-  }
-
-  private renderContextMenu(x: number, y: number, items: MenuItem[]): TemplateResult {
-    return html`
-      <div
-        id=${DOM_IDS.CONSOLE_CONTEXT_MENU}
-        class="console-context-menu"
-        style=${styleMap({ left: `${x}px`, top: `${y}px` })}
-      >
-        ${repeat(
-          items,
-          (item) => item.id,
-          (item) => this.renderContextMenuEntry(item),
-        )}
-      </div>
-    `;
-  }
-
-  private renderContextMenuEntry(item: MenuItem): TemplateResult {
-    return html`${choose(item.kind, [
-      ['separator', () => html`<div class="console-context-menu-separator"></div>`],
-      ['action', () => this.renderContextMenuAction(item as MenuActionItem)],
-    ])}`;
-  }
-
-  private renderContextMenuAction(item: MenuActionItem): TemplateResult {
-    const classes = {
-      'console-context-menu-item': true,
-      disabled: Boolean(item.disabled),
-    };
-
-    return html`
-      <div
-        class=${classMap(classes)}
-        @click=${(e: MouseEvent) => this.handleContextMenuItemClick(e, item)}
-      >
-        <span class="console-context-menu-label">${item.label}</span>
-        <span class="console-context-menu-shortcut">${item.shortcut}</span>
-      </div>
-    `;
-  }
-
-  private handleContextMenuItemClick(e: MouseEvent, item: MenuActionItem): void {
-    e.stopPropagation();
-    if (!item.disabled) {
-      this.closeContextMenu();
-      item.action();
-    }
-  }
-
-  private clampContextMenuPosition(menu: HTMLElement, x: number, y: number): void {
-    const rect = menu.getBoundingClientRect();
-    const finalX =
-      x + rect.width > window.innerWidth ? Math.max(0, window.innerWidth - rect.width - 4) : x;
-    const finalY =
-      y + rect.height > window.innerHeight ? Math.max(0, window.innerHeight - rect.height - 4) : y;
-
-    menu.style.left = `${finalX}px`;
-    menu.style.top = `${finalY}px`;
-  }
-
-  private bindContextMenuDismissListeners(): void {
-    this.contextMenuDisposables = new DisposableStore();
-
-    const onWindowClick = () => this.closeContextMenu();
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        this.closeContextMenu();
-      }
-    };
-
-    window.addEventListener('click', onWindowClick, { once: true });
-    window.addEventListener('keydown', onKeyDown);
-
-    this.contextMenuDisposables.add(
-      toDisposable(() => {
-        window.removeEventListener('click', onWindowClick);
-        window.removeEventListener('keydown', onKeyDown);
-      }),
-    );
-  }
-
-  private closeContextMenu(): void {
-    document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)?.remove();
-    if (this.contextMenuDisposables) {
-      this.contextMenuDisposables.dispose();
-      this.contextMenuDisposables = null;
-    }
   }
 }

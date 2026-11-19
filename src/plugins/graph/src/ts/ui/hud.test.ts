@@ -162,6 +162,17 @@ describe('HudController', () => {
     expect(patternsBtn.classList.contains('active')).toBe(false);
   });
 
+  it('exposes toggle state and an accessible name on every button', () => {
+    const heatmapBtn = container.querySelector<HTMLButtonElement>('#hud-heatmap')!;
+    expect(heatmapBtn.getAttribute('aria-pressed')).toBe('false');
+    heatmapBtn.click();
+    expect(heatmapBtn.getAttribute('aria-pressed')).toBe('true');
+
+    for (const btn of container.querySelectorAll<HTMLButtonElement>('.hud-btn')) {
+      expect(btn.getAttribute('aria-label') ?? btn.textContent.trim()).not.toBe('');
+    }
+  });
+
   it('performs live search, cycles through matches via buttons/keys, and clears on Escape', () => {
     const input = container.querySelector<HTMLInputElement>('#hud-search-input')!;
     const countEl = container.querySelector<HTMLElement>('#hud-search-count')!;

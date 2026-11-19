@@ -23,7 +23,6 @@
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
   overflow: hidden;
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 .overview-header {
@@ -130,10 +129,12 @@
 }
 
 .overview-group {
+  --disclosure-action-space: 84px;
+  --disclosure-row-height: 26px;
+
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background: color-mix(in srgb, var(--surface-color) 70%, transparent);
-  overflow: hidden;
   transition: border-color 0.15s ease;
 }
 
@@ -142,12 +143,8 @@
 }
 
 .overview-group-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   padding: 5px 8px;
   background: var(--surface-elevated);
-  cursor: pointer;
   user-select: none;
 }
 
@@ -155,26 +152,8 @@
   background: var(--surface-hover);
 }
 
-.overview-group-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-}
-
-.overview-group-chevron {
-  font-size: 8px;
-  color: var(--text-muted);
-  display: inline-block;
-  transition: transform 0.15s ease;
-}
-
-.overview-group.open .overview-group-chevron {
-  transform: rotate(90deg);
-}
-
 .overview-group-title {
+  min-width: 0;
   font-size: 11px;
   font-weight: 600;
   color: var(--text-primary);
@@ -197,12 +176,6 @@
   color: var(--danger);
 }
 
-.overview-group-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .overview-group-action-btn {
   background: transparent;
   border: 1px solid var(--border-color);
@@ -211,7 +184,10 @@
   font-size: 10px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .overview-group-action-btn:hover {
@@ -256,7 +232,9 @@
   font-family: var(--font-mono);
   color: var(--text-primary);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .overview-node-chip:hover {
@@ -272,7 +250,7 @@
   font-size: 10px;
   color: var(--accent);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease;
 }
 
 .overview-chip-more:hover {

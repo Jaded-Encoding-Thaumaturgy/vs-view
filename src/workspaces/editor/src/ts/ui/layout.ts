@@ -46,7 +46,12 @@ export function renderStartupError(message: string, err: unknown): void {
 
 function renderConsolePanel(): TemplateResult {
   return html`
-    <div id=${DOM_IDS.CONSOLE_PANEL} class="console-panel">
+    <div
+      id=${DOM_IDS.CONSOLE_PANEL}
+      class="console-panel"
+      role="region"
+      aria-label="Output console"
+    >
       ${renderConsoleHeader()}
       <div id=${DOM_IDS.XTERM_CONTAINER} class="xterm-container"></div>
     </div>
@@ -58,7 +63,12 @@ function renderConsoleHeader(): TemplateResult {
     <div class="console-header">
       <div class="console-title">Output Console</div>
       <div class="console-actions">
-        <button id=${DOM_IDS.CONSOLE_CLEAR_BTN} class="console-btn" title="Clear Console">
+        <button
+          id=${DOM_IDS.CONSOLE_CLEAR_BTN}
+          type="button"
+          class="console-btn"
+          title="Clear Console"
+        >
           Clear
         </button>
         <button

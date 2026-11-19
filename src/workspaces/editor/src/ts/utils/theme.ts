@@ -138,3 +138,16 @@ export function getInitialTheme(): string {
   const urlTheme = new URLSearchParams(window.location.search).get('initialTheme');
   return urlTheme ?? (window.ENV?.VSVIEW !== undefined ? undefined : 'Dark Modern')!;
 }
+
+/**
+ * Marks the document with the active theme so CSS and the native controls (scrollbars, form
+ * popups) follow it.
+ */
+export function applyDocumentTheme(def: ThemeDefinition): void {
+  const root = document.documentElement;
+  const isLight = def.kind.value === 'light' || def.kind.value === 'hc-light';
+
+  root.dataset.theme = def.id;
+  root.setAttribute('data-theme-kind', def.kind.toString());
+  root.style.setProperty('color-scheme', isLight ? 'light' : 'dark');
+}

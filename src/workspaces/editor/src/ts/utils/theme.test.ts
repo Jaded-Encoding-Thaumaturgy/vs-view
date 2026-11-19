@@ -1,6 +1,12 @@
 import { describe, expect, it, test } from 'vite-plus/test';
 
-import { DEFAULT_THEMES, GITHUB_THEMES, SUPPORTED_THEMES, getThemeDefinition } from './theme';
+import {
+  DEFAULT_THEMES,
+  GITHUB_THEMES,
+  SUPPORTED_THEMES,
+  applyDocumentTheme,
+  getThemeDefinition,
+} from './theme';
 
 describe('Theme utilities', () => {
   describe('ThemeKind mapping and values', () => {
@@ -22,6 +28,29 @@ describe('Theme utilities', () => {
           expect(def.kind.uiTheme).toBe(expectedUiTheme);
           expect(def.kind.toString()).toBe(kindValue);
         }
+      },
+    );
+  });
+
+  describe('applyDocumentTheme', () => {
+    test.each([
+      { kindValue: 'dark', scheme: 'dark' },
+      { kindValue: 'hc-black', scheme: 'dark' },
+      { kindValue: 'light', scheme: 'light' },
+      { kindValue: 'hc-light', scheme: 'light' },
+    ] as const)(
+      "marks the document of a '$kindValue' theme with the '$scheme' color scheme",
+      ({ kindValue, scheme }) => {
+        const def = Object.values(SUPPORTED_THEMES).find(
+          (theme) => theme.kind.value === kindValue,
+        )!;
+
+        applyDocumentTheme(def);
+
+        const root = document.documentElement;
+        expect(root.dataset.theme).toBe(def.id);
+        expect(root.getAttribute('data-theme-kind')).toBe(kindValue);
+        expect(root.style.getPropertyValue('color-scheme')).toBe(scheme);
       },
     );
   });

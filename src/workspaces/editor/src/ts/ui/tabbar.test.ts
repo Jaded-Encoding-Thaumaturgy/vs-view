@@ -3,14 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import type { TabInfo } from '../types';
 import { DOM_IDS } from './constants';
 import { type TabBarCallbacks, TabBarView } from './tabbar';
+import { stubPopoverApi } from './test-helpers';
 
 describe('TabBarView', () => {
   let tabBarContainer: HTMLElement;
   let callbacks: Required<TabBarCallbacks>;
   let tabBar: TabBarView;
+  let restorePopoverApi: () => void;
 
   beforeEach(() => {
     document.body.innerHTML = '';
+    restorePopoverApi = stubPopoverApi();
 
     tabBarContainer = document.createElement('div');
     tabBarContainer.id = DOM_IDS.TAB_BAR;
@@ -29,6 +32,7 @@ describe('TabBarView', () => {
 
   afterEach(() => {
     tabBar.dispose();
+    restorePopoverApi();
     document.body.innerHTML = '';
   });
 
@@ -240,6 +244,57 @@ describe('TabBarView', () => {
     expect(tabBarContainer.scrollLeft).toBe(55);
   });
 
+  describe('tab semantics', () => {
+    const tabs: TabInfo[] = [
+      {
+        uri: 'file:///workspace/main.py',
+        title: 'main.py',
+        isMain: true,
+        isDirty: true,
+        language: 'python',
+      },
+      {
+        uri: 'file:///workspace/helper.py',
+        title: 'helper.py',
+        isMain: false,
+        isDirty: false,
+        language: 'python',
+      },
+      {
+        uri: 'file:///workspace/other.py',
+        title: 'other.py',
+        isMain: false,
+        isDirty: false,
+        language: 'python',
+      },
+    ];
+
+    const tabElements = () =>
+      Array.from(tabBarContainer.querySelectorAll<HTMLElement>('[role="tab"]'));
+
+    it('exposes a named tablist with the selected tab and the editor as its panel', () => {
+      const panel = document.createElement('div');
+      panel.id = DOM_IDS.EDITOR;
+      document.body.appendChild(panel);
+
+      tabBar.render(tabs, 'file:///workspace/helper.py');
+
+      expect(tabBarContainer.getAttribute('role')).toBe('tablist');
+      expect(tabBarContainer.getAttribute('aria-label')).toBe('Open scripts');
+      expect(tabElements().map((tab) => tab.getAttribute('aria-selected'))).toEqual([
+        'false',
+        'true',
+        'false',
+      ]);
+      expect(tabElements()[0]?.getAttribute('aria-label')).toBe(
+        'main.py, main script, unsaved changes',
+      );
+      expect(tabElements()[1]?.getAttribute('aria-label')).toBe('helper.py');
+      expect(panel.getAttribute('role')).toBe('tabpanel');
+      expect(panel.getAttribute('aria-labelledby')).toBe(tabElements()[1]?.id);
+    });
+  });
+
   describe('context menu', () => {
     const tabs: TabInfo[] = [
       {
@@ -258,57 +313,61 @@ describe('TabBarView', () => {
       },
     ];
 
-    it('right click on non-main tab renders full context menu at coordinates', () => {
-      tabBar.render(tabs, 'file:///workspace/main.py');
-
-      const nonMainTabEl = tabBarContainer.children[1] as HTMLElement;
-      const contextMenuEvent = new MouseEvent('contextmenu', {
+    const openMenu = (tabEl: HTMLElement, clientX = 100, clientY = 100) => {
+      const event = new MouseEvent('contextmenu', {
         bubbles: true,
         cancelable: true,
-        clientX: 150,
-        clientY: 220,
+        clientX,
+        clientY,
       });
+      tabEl.dispatchEvent(event);
+      return event;
+    };
 
-      nonMainTabEl.dispatchEvent(contextMenuEvent);
+    const menuItems = () =>
+      document
+        .getElementById(DOM_IDS.TAB_CONTEXT_MENU)!
+        .querySelectorAll<HTMLElement>('.context-menu-item');
 
-      expect(contextMenuEvent.defaultPrevented).toBe(true);
+    it('right click on non-main tab opens a popover menu at the pointer with all items', () => {
+      tabBar.render(tabs, 'file:///workspace/main.py');
+
+      const event = openMenu(tabBarContainer.children[1] as HTMLElement, 150, 220);
+
+      expect(event.defaultPrevented).toBe(true);
 
       const menu = document.getElementById(DOM_IDS.TAB_CONTEXT_MENU);
       expect(menu).not.toBeNull();
-      expect(menu?.className).toBe('tab-context-menu');
-      expect(menu?.style.left).toBe('150px');
-      expect(menu?.style.top).toBe('220px');
+      expect(menu?.getAttribute('popover')).toBe('auto');
+      expect(menu?.getAttribute('role')).toBe('menu');
+      expect(menu?.hasAttribute('data-popover-open')).toBe(true);
 
-      const items = menu!.querySelectorAll<HTMLElement>('.tab-context-menu-item');
-      expect(items).toHaveLength(4);
-      expect(items[0]?.textContent.trim()).toBe('⚡ Set as Main Script');
-      expect(items[0]?.classList.contains('disabled')).toBe(false);
-      expect(items[1]?.textContent.trim()).toBe('Close');
-      expect(items[2]?.textContent.trim()).toBe('Close Others');
-      expect(items[2]?.classList.contains('disabled')).toBe(false);
-      expect(items[3]?.textContent.trim()).toBe('Close Saved');
-      expect(items[3]?.classList.contains('disabled')).toBe(false);
+      const anchor = document.querySelector<HTMLElement>('.context-menu-anchor');
+      expect(anchor?.style.left).toBe('150px');
+      expect(anchor?.style.top).toBe('220px');
+
+      const items = menuItems();
+      expect(Array.from(items, (item) => item.textContent.trim())).toEqual([
+        '⚡ Set as Main Script',
+        'Close',
+        'Close Others',
+        'Close Saved',
+      ]);
+      expect(Array.from(items, (item) => item.getAttribute('aria-disabled'))).toEqual([
+        null,
+        null,
+        null,
+        null,
+      ]);
     });
 
     it('right click on main tab opens menu with Set as Main Script disabled', () => {
       tabBar.render(tabs, 'file:///workspace/main.py');
 
-      const mainTabEl = tabBarContainer.children[0] as HTMLElement;
-      const contextMenuEvent = new MouseEvent('contextmenu', {
-        bubbles: true,
-        cancelable: true,
-        clientX: 50,
-        clientY: 50,
-      });
+      openMenu(tabBarContainer.children[0] as HTMLElement, 50, 50);
 
-      mainTabEl.dispatchEvent(contextMenuEvent);
-
-      expect(contextMenuEvent.defaultPrevented).toBe(true);
-      const menu = document.getElementById(DOM_IDS.TAB_CONTEXT_MENU);
-      expect(menu).not.toBeNull();
-
-      const setMainItem = menu!.querySelectorAll<HTMLElement>('.tab-context-menu-item')[0]!;
-      expect(setMainItem.classList.contains('disabled')).toBe(true);
+      const setMainItem = menuItems()[0]!;
+      expect(setMainItem.getAttribute('aria-disabled')).toBe('true');
 
       // Clicking disabled item does not invoke callback or close menu
       setMainItem.click();
@@ -318,39 +377,29 @@ describe('TabBarView', () => {
 
     it("clicking '⚡ Set as Main Script', 'Close', 'Close Others', and 'Close Saved' invokes callbacks and closes menu", () => {
       tabBar.render(tabs, 'file:///workspace/main.py');
-
       const nonMainTabEl = tabBarContainer.children[1] as HTMLElement;
-      const openMenu = () => {
-        nonMainTabEl.dispatchEvent(
-          new MouseEvent('contextmenu', {
-            bubbles: true,
-            cancelable: true,
-            clientX: 100,
-            clientY: 100,
-          }),
-        );
-        return document
-          .getElementById(DOM_IDS.TAB_CONTEXT_MENU)!
-          .querySelectorAll<HTMLElement>('.tab-context-menu-item');
-      };
 
       // 1. Set as Main Script
-      openMenu()[0]!.click();
+      openMenu(nonMainTabEl);
+      menuItems()[0]!.click();
       expect(callbacks.onSetMainTab).toHaveBeenCalledWith('file:///workspace/secondary.py');
       expect(document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)).toBeNull();
 
       // 2. Close
-      openMenu()[1]!.click();
+      openMenu(nonMainTabEl);
+      menuItems()[1]!.click();
       expect(callbacks.onCloseTab).toHaveBeenCalledWith('file:///workspace/secondary.py');
       expect(document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)).toBeNull();
 
       // 3. Close Others
-      openMenu()[2]!.click();
+      openMenu(nonMainTabEl);
+      menuItems()[2]!.click();
       expect(callbacks.onCloseOtherTabs).toHaveBeenCalledWith('file:///workspace/secondary.py');
       expect(document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)).toBeNull();
 
       // 4. Close Saved
-      openMenu()[3]!.click();
+      openMenu(nonMainTabEl);
+      menuItems()[3]!.click();
       expect(callbacks.onCloseSavedTabs).toHaveBeenCalledTimes(1);
       expect(document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)).toBeNull();
     });
@@ -367,83 +416,41 @@ describe('TabBarView', () => {
       ];
 
       tabBar.render(singleDirtyTab, 'file:///workspace/only.py');
+      openMenu(tabBarContainer.children[0] as HTMLElement, 40, 40);
 
-      const tabEl = tabBarContainer.children[0] as HTMLElement;
-      tabEl.dispatchEvent(
-        new MouseEvent('contextmenu', {
-          bubbles: true,
-          cancelable: true,
-          clientX: 40,
-          clientY: 40,
-        }),
-      );
-
-      const items = document
-        .getElementById(DOM_IDS.TAB_CONTEXT_MENU)!
-        .querySelectorAll<HTMLElement>('.tab-context-menu-item');
-
-      expect(items[2]?.classList.contains('disabled')).toBe(true); // Close Others
-      expect(items[3]?.classList.contains('disabled')).toBe(true); // Close Saved
+      const items = menuItems();
+      expect(items[2]?.getAttribute('aria-disabled')).toBe('true'); // Close Others
+      expect(items[3]?.getAttribute('aria-disabled')).toBe('true'); // Close Saved
     });
 
-    it('pressing Escape closes context menu and disposes window listeners', () => {
+    it('removes the menu when the browser dismisses the popover (Escape or outside click)', () => {
       tabBar.render(tabs, 'file:///workspace/main.py');
+      openMenu(tabBarContainer.children[1] as HTMLElement);
 
-      const nonMainTabEl = tabBarContainer.children[1] as HTMLElement;
-      nonMainTabEl.dispatchEvent(
-        new MouseEvent('contextmenu', {
-          bubbles: true,
-          cancelable: true,
-          clientX: 100,
-          clientY: 100,
-        }),
-      );
-
-      expect(document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)).not.toBeNull();
-
-      window.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'Escape',
-          code: 'Escape',
-        }),
-      );
+      document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)!.hidePopover();
 
       expect(document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)).toBeNull();
+      expect(document.querySelector('.context-menu-anchor')).toBeNull();
     });
 
-    it('clicking outside closes context menu', () => {
+    it('keeps a reopened menu when the replaced menu reports its close late', () => {
       tabBar.render(tabs, 'file:///workspace/main.py');
+      openMenu(tabBarContainer.children[1] as HTMLElement);
+      const staleMenu = document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)!;
 
-      const nonMainTabEl = tabBarContainer.children[1] as HTMLElement;
-      nonMainTabEl.dispatchEvent(
-        new MouseEvent('contextmenu', {
-          bubbles: true,
-          cancelable: true,
-          clientX: 100,
-          clientY: 100,
-        }),
-      );
+      openMenu(tabBarContainer.children[0] as HTMLElement);
+      // Browsers fire `toggle` from a queued task, so the old menu's close can arrive after this.
+      staleMenu.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed' }));
 
-      expect(document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)).not.toBeNull();
-
-      window.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-      expect(document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)).toBeNull();
+      const menu = document.getElementById(DOM_IDS.TAB_CONTEXT_MENU);
+      expect(menu).not.toBeNull();
+      expect(menu).not.toBe(staleMenu);
+      expect(menu?.hasAttribute('data-popover-open')).toBe(true);
     });
 
     it('re-rendering tabs closes any open context menu', () => {
       tabBar.render(tabs, 'file:///workspace/main.py');
-
-      const nonMainTabEl = tabBarContainer.children[1] as HTMLElement;
-      nonMainTabEl.dispatchEvent(
-        new MouseEvent('contextmenu', {
-          bubbles: true,
-          cancelable: true,
-          clientX: 100,
-          clientY: 100,
-        }),
-      );
-
+      openMenu(tabBarContainer.children[1] as HTMLElement);
       expect(document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)).not.toBeNull();
 
       tabBar.render(tabs, 'file:///workspace/main.py');

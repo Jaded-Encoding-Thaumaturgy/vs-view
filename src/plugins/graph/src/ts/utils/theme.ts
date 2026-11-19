@@ -47,6 +47,7 @@ export class ThemeManager extends Disposable {
 
   private applyToCss(tokens: ThemeTokens): void {
     const root = document.documentElement;
+    root.style.setProperty('color-scheme', tokens.isDark ? 'dark' : 'light');
     root.style.setProperty('--bg-color', tokens.bg);
     root.style.setProperty('--surface-color', tokens.surface);
     root.style.setProperty('--surface-elevated', tokens.surfaceElevated);

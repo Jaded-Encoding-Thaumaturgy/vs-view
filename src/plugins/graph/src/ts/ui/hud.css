@@ -13,7 +13,6 @@
   gap: 6px;
   background: color-mix(in srgb, var(--surface-color) 88%, transparent);
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 5px 8px;
@@ -42,7 +41,6 @@
   font-size: 12px;
   font-family: var(--font-family);
   cursor: pointer;
-  outline: none;
 }
 
 .hud-select:hover {
@@ -59,8 +57,10 @@
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  outline: none;
-  transition: all 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .hud-btn:hover {
@@ -68,8 +68,10 @@
   border-color: var(--accent);
 }
 
-.hud-btn:active {
-  transform: translateY(1px);
+@media (prefers-reduced-motion: no-preference) {
+  .hud-btn:active {
+    transform: translateY(1px);
+  }
 }
 
 .hud-btn.active {
@@ -90,6 +92,8 @@
 
 .hud-search-group:focus-within {
   border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .hud-search-icon {

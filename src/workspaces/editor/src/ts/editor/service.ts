@@ -8,7 +8,7 @@ import { findExistingModel } from '../services/models';
 import type { EditorOptionsPayload, TabInfo } from '../types';
 import { DEFAULT_SCRIPT_URI, DOM_IDS } from '../ui/constants';
 import { TabBarView } from '../ui/tabbar';
-import { getInitialTheme, getThemeDefinition } from '../utils/theme';
+import { applyDocumentTheme, getInitialTheme, getThemeDefinition } from '../utils/theme';
 import { isSameResource } from '../utils/uri';
 import * as config from './config';
 
@@ -188,8 +188,7 @@ export class EditorService implements vscode.Disposable {
   public setTheme(theme: string): void {
     getThemeDefinition(theme).match({
       ok: (def) => {
-        document.documentElement.dataset.theme = def.id;
-        document.documentElement.setAttribute('data-theme-kind', def.kind.toString());
+        applyDocumentTheme(def);
         monaco.editor.setTheme(def.id);
         void Result.fromPromise(() => this.persistThemeConfig(def.id)).mapErr((err) =>
           console.error(`Failed to set theme: ${err.message}`),

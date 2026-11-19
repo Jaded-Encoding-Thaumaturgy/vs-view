@@ -2,7 +2,6 @@ import './tabbar.css';
 import { type TemplateResult, html, nothing, render } from 'lit-html';
 import { classMap } from 'lit-html/directives/class-map.js';
 import { repeat } from 'lit-html/directives/repeat.js';
-import { styleMap } from 'lit-html/directives/style-map.js';
 import { unsafeHTML } from 'lit-html/directives/unsafe-html.js';
 import { when } from 'lit-html/directives/when.js';
 import type * as vscode from 'vscode';
@@ -11,6 +10,7 @@ import { DisposableStore, toDisposable } from 'vsview-shared';
 import xIconSvg from '../assets/icons/lucide/x.svg?raw';
 import type { TabInfo } from '../types';
 import { DOM_IDS } from './constants';
+import { type MenuItem, PopoverMenu } from './popover-menu';
 
 export type TabBarCallbacks = {
   onSelectTab: (uri: string) => void;
@@ -20,30 +20,22 @@ export type TabBarCallbacks = {
   onSetMainTab: (uri: string) => void;
 };
 
-interface TabMenuActionItem {
-  id: string;
-  kind: 'action';
-  label: string;
-  action: () => void;
-  disabled?: boolean;
-}
-
-interface TabMenuSeparatorItem {
-  id: string;
-  kind: 'separator';
-}
-
-type TabMenuItem = TabMenuActionItem | TabMenuSeparatorItem;
-
 export class TabBarView implements vscode.Disposable {
   private readonly disposables = new DisposableStore();
   private readonly container: HTMLElement;
-  private contextMenuDisposables: DisposableStore | null = null;
+  private readonly contextMenu = new PopoverMenu({
+    id: DOM_IDS.TAB_CONTEXT_MENU,
+    label: 'Tab actions',
+  });
+  private readonly tabIds = new Map<string, string>();
+  private nextTabId = 0;
   private currentTabs: TabInfo[] = [];
   private lastActiveUri: string | null = null;
 
   constructor(private readonly callbacks: TabBarCallbacks) {
     this.container = document.getElementById(DOM_IDS.TAB_BAR)!;
+    this.container.setAttribute('role', 'tablist');
+    this.container.setAttribute('aria-label', 'Open scripts');
 
     const onWheel = (e: WheelEvent) => this.onWheel(e);
     this.container.addEventListener('wheel', onWheel, { passive: false });
@@ -51,8 +43,11 @@ export class TabBarView implements vscode.Disposable {
   }
 
   public render(tabs: TabInfo[], activeUri: string | null): void {
-    this.closeContextMenu();
+    this.contextMenu.close();
     this.currentTabs = tabs;
+    for (const uri of this.tabIds.keys()) {
+      if (!tabs.some((tab) => tab.uri === uri)) this.tabIds.delete(uri);
+    }
     const activeChanged = activeUri !== this.lastActiveUri;
     this.lastActiveUri = activeUri;
 
@@ -64,6 +59,7 @@ export class TabBarView implements vscode.Disposable {
       ),
       this.container,
     );
+    this.syncTabPanel(activeUri);
 
     if (activeChanged && activeUri !== null) {
       const activeEl = this.container.querySelector<HTMLElement>('.tab.active');
@@ -72,7 +68,7 @@ export class TabBarView implements vscode.Disposable {
   }
 
   public dispose(): void {
-    this.closeContextMenu();
+    this.contextMenu.dispose();
     render(nothing, this.container);
     this.disposables.dispose();
   }
@@ -89,10 +85,37 @@ export class TabBarView implements vscode.Disposable {
     this.container.scrollLeft += e.deltaY;
   }
 
+  private tabId(uri: string): string {
+    let id = this.tabIds.get(uri);
+    if (id === undefined) {
+      id = `${DOM_IDS.TAB_BAR}-tab-${this.nextTabId++}`;
+      this.tabIds.set(uri, id);
+    }
+    return id;
+  }
+
+  private syncTabPanel(activeUri: string | null): void {
+    const panel = document.getElementById(DOM_IDS.EDITOR);
+    if (!panel) return;
+
+    panel.setAttribute('role', 'tabpanel');
+    if (activeUri === null) {
+      panel.removeAttribute('aria-labelledby');
+    } else {
+      panel.setAttribute('aria-labelledby', this.tabId(activeUri));
+    }
+  }
+
+  private tabLabel(tab: TabInfo): string {
+    const notes = [tab.isMain ? 'main script' : null, tab.isDirty ? 'unsaved changes' : null];
+    return [tab.title, ...notes.filter((note) => note !== null)].join(', ');
+  }
+
   private renderTab(tab: TabInfo, activeUri: string | null): TemplateResult {
+    const isActive = tab.uri === activeUri;
     const classes = {
       tab: true,
-      active: tab.uri === activeUri,
+      active: isActive,
       main: tab.isMain,
       dirty: tab.isDirty,
     };
@@ -100,6 +123,10 @@ export class TabBarView implements vscode.Disposable {
     return html`
       <div
         class=${classMap(classes)}
+        id=${this.tabId(tab.uri)}
+        role="tab"
+        aria-selected=${isActive}
+        aria-label=${this.tabLabel(tab)}
         @click=${() => this.callbacks.onSelectTab(tab.uri)}
         @mousedown=${(e: MouseEvent) => this.handleTabMouseDown(e)}
         @auxclick=${(e: MouseEvent) => this.handleTabAuxClick(e, tab.uri)}
@@ -113,7 +140,7 @@ export class TabBarView implements vscode.Disposable {
   }
 
   private renderMainBadge(): TemplateResult {
-    return html`<span class="tab-main-badge">MAIN</span>`;
+    return html`<span class="tab-main-badge" aria-hidden="true">MAIN</span>`;
   }
 
   private renderTabTitle(tab: TabInfo): TemplateResult {
@@ -156,10 +183,10 @@ export class TabBarView implements vscode.Disposable {
 
   private handleTabContextMenu(e: MouseEvent, tab: TabInfo): void {
     e.preventDefault();
-    this.showContextMenu(e.clientX, e.clientY, tab);
+    this.contextMenu.show(e.clientX, e.clientY, this.getContextMenuItems(tab));
   }
 
-  private getContextMenuItems(tab: TabInfo): TabMenuItem[] {
+  private getContextMenuItems(tab: TabInfo): MenuItem[] {
     return [
       {
         id: 'set-main',
@@ -190,107 +217,5 @@ export class TabBarView implements vscode.Disposable {
         action: () => this.callbacks.onCloseSavedTabs(),
       },
     ];
-  }
-
-  private showContextMenu(x: number, y: number, tab: TabInfo): void {
-    this.closeContextMenu();
-
-    const fragment = document.createDocumentFragment();
-    render(this.renderContextMenu(x, y, this.getContextMenuItems(tab)), fragment);
-    document.body.appendChild(fragment);
-
-    const menu = document.getElementById(DOM_IDS.TAB_CONTEXT_MENU);
-    if (menu) {
-      this.clampContextMenuPosition(menu, x, y);
-    }
-
-    this.bindContextMenuDismissListeners();
-  }
-
-  private renderContextMenu(x: number, y: number, items: TabMenuItem[]): TemplateResult {
-    return html`
-      <div
-        id=${DOM_IDS.TAB_CONTEXT_MENU}
-        class="tab-context-menu"
-        style=${styleMap({ left: `${x}px`, top: `${y}px` })}
-      >
-        ${repeat(
-          items,
-          (item) => item.id,
-          (item) => this.renderContextMenuEntry(item),
-        )}
-      </div>
-    `;
-  }
-
-  private renderContextMenuEntry(item: TabMenuItem): TemplateResult {
-    if (item.kind === 'separator') {
-      return html`<div class="tab-context-menu-separator"></div>`;
-    }
-    return this.renderContextMenuAction(item);
-  }
-
-  private renderContextMenuAction(item: TabMenuActionItem): TemplateResult {
-    const classes = {
-      'tab-context-menu-item': true,
-      disabled: Boolean(item.disabled),
-    };
-
-    return html`
-      <div
-        class=${classMap(classes)}
-        @click=${(e: MouseEvent) => this.handleContextMenuItemClick(e, item)}
-      >
-        ${item.label}
-      </div>
-    `;
-  }
-
-  private handleContextMenuItemClick(e: MouseEvent, item: TabMenuActionItem): void {
-    e.stopPropagation();
-    if (!item.disabled) {
-      this.closeContextMenu();
-      item.action();
-    }
-  }
-
-  private clampContextMenuPosition(menu: HTMLElement, x: number, y: number): void {
-    const rect = menu.getBoundingClientRect();
-    const finalX =
-      x + rect.width > window.innerWidth ? Math.max(0, window.innerWidth - rect.width - 4) : x;
-    const finalY =
-      y + rect.height > window.innerHeight ? Math.max(0, window.innerHeight - rect.height - 4) : y;
-
-    menu.style.left = `${finalX}px`;
-    menu.style.top = `${finalY}px`;
-  }
-
-  private bindContextMenuDismissListeners(): void {
-    this.contextMenuDisposables = new DisposableStore();
-
-    const onWindowClick = () => this.closeContextMenu();
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        this.closeContextMenu();
-      }
-    };
-
-    window.addEventListener('click', onWindowClick, { once: true });
-    window.addEventListener('keydown', onKeyDown);
-
-    this.contextMenuDisposables.add(
-      toDisposable(() => {
-        window.removeEventListener('click', onWindowClick);
-        window.removeEventListener('keydown', onKeyDown);
-      }),
-    );
-  }
-
-  private closeContextMenu(): void {
-    document.getElementById(DOM_IDS.TAB_CONTEXT_MENU)?.remove();
-    if (this.contextMenuDisposables) {
-      this.contextMenuDisposables.dispose();
-      this.contextMenuDisposables = null;
-    }
   }
 }

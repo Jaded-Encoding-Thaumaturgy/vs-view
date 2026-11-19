@@ -191,13 +191,9 @@ export class HudController extends Disposable {
 
     render(
       html`
-        <div class="hud-bar">
-          ${this.renderOutputSelect()}
-          <div class="hud-separator"></div>
-          ${this.renderCanvasControls()}
-          <div class="hud-separator"></div>
-          ${this.renderToolActions()}
-          <div class="hud-separator"></div>
+        <div class="hud-bar" role="group" aria-label="Graph controls">
+          ${this.renderOutputSelect()} ${this.renderSeparator()} ${this.renderCanvasControls()}
+          ${this.renderSeparator()} ${this.renderToolActions()} ${this.renderSeparator()}
           ${this.renderSearchBar(hasMatches)}
         </div>
       `,
@@ -214,6 +210,10 @@ export class HudController extends Disposable {
     select.value = this.following || !active ? '-1' : String(active.index);
   }
 
+  private renderSeparator(): TemplateResult {
+    return html`<div class="hud-separator" role="separator" aria-orientation="vertical"></div>`;
+  }
+
   private renderOutputSelect(): TemplateResult {
     function renderOutputOption(out: OutputItem): TemplateResult {
       return html`<option value=${String(out.index)}>
@@ -222,10 +222,11 @@ export class HudController extends Disposable {
     }
 
     return html`
-      <div class="hud-group">
+      <div class="hud-group" role="group" aria-label="Output">
         <select
           id="hud-output-select"
           class="hud-select"
+          aria-label="Output to inspect"
           title="Select workspace output to inspect"
           ?disabled=${this.outputs.length === 0}
           @change=${(e: Event) => this.handleOutputChange(e)}
@@ -249,24 +250,29 @@ export class HudController extends Disposable {
 
   private renderCanvasControls(): TemplateResult {
     return html`
-      <div class="hud-group">
+      <div class="hud-group" role="group" aria-label="View">
         <button
+          type="button"
           id="hud-zoom-in"
           class="hud-btn"
+          aria-label="Zoom in"
           title="Zoom In"
           @click=${() => this.opts.canvas.zoomIn()}
         >
           +
         </button>
         <button
+          type="button"
           id="hud-zoom-out"
           class="hud-btn"
+          aria-label="Zoom out"
           title="Zoom Out"
           @click=${() => this.opts.canvas.zoomOut()}
         >
           −
         </button>
         <button
+          type="button"
           id="hud-fit"
           class="hud-btn"
           title="Fit Entire Graph"
@@ -275,16 +281,24 @@ export class HudController extends Disposable {
           Fit
         </button>
         <button
+          type="button"
           id="hud-reset"
           class="hud-btn"
+          aria-label="Reset view to 1:1"
           title="Reset View (1:1)"
           @click=${() => this.opts.canvas.reset()}
         >
           1:1
         </button>
         <button
+          type="button"
           id="hud-direction"
           class="hud-btn"
+          aria-label=${
+            this.direction === 'TB'
+              ? 'Layout direction TB (vertical)'
+              : 'Layout direction LR (horizontal)'
+          }
           title="Toggle Layout Direction (Vertical / Horizontal)"
           @click=${() => this.toggleDirection()}
         >
@@ -296,24 +310,29 @@ export class HudController extends Disposable {
 
   private renderToolActions(): TemplateResult {
     return html`
-      <div class="hud-group">
+      <div class="hud-group" role="group" aria-label="Tools">
         <button
+          type="button"
           id="hud-heatmap"
           class=${classMap({ 'hud-btn': true, active: this.heatmap })}
+          aria-pressed=${this.heatmap}
           title="Toggle profiling heatmap (Teal: fast → Amber: moderate → Red: bottleneck)"
           @click=${() => this.toggleHeatmap()}
         >
           Heatmap
         </button>
         <button
+          type="button"
           id="hud-patterns"
           class=${classMap({ 'hud-btn': true, active: this.patterns })}
+          aria-pressed=${this.patterns}
           title="Show request pattern labels on edges"
           @click=${() => this.togglePatterns()}
         >
           Patterns
         </button>
         <button
+          type="button"
           id="hud-overview"
           class="hud-btn"
           title="Graph overview, warnings and exports"
@@ -322,8 +341,10 @@ export class HudController extends Disposable {
           Overview
         </button>
         <button
+          type="button"
           id="hud-refresh"
           class="hud-btn"
+          aria-label="Refresh graph"
           title="Re-inspect the graph and refresh timings"
           @click=${() => this.opts.onReloadRequested()}
         >
@@ -335,22 +356,28 @@ export class HudController extends Disposable {
 
   private renderSearchBar(hasMatches: boolean): TemplateResult {
     return html`
-      <div class="hud-group hud-search-group">
-        <span class="hud-search-icon" title=${DEFAULT_SEARCH_TOOLTIP}>🔍</span>
+      <div class="hud-group hud-search-group" role="search">
+        <span class="hud-search-icon" title=${DEFAULT_SEARCH_TOOLTIP} aria-hidden="true">🔍</span>
         <input
           id="hud-search-input"
           class=${classMap({ 'hud-search-input': true, invalid: this.searchError !== null })}
           type="text"
           placeholder="Search filter..."
+          aria-label="Search filter"
+          aria-invalid=${this.searchError !== null}
           title=${this.searchError ?? DEFAULT_SEARCH_TOOLTIP}
           .value=${live(this.searchQuery)}
           @input=${(e: Event) => this.handleSearchInput(e)}
           @keydown=${(e: KeyboardEvent) => this.handleSearchKeyDown(e)}
         />
-        <span id="hud-search-count" class="hud-search-count"> ${this.getSearchCountLabel()} </span>
+        <span id="hud-search-count" class="hud-search-count" role="status">
+          ${this.getSearchCountLabel()}
+        </span>
         <button
+          type="button"
           id="hud-search-prev"
           class="hud-search-btn"
+          aria-label="Previous match"
           title="Previous match"
           ?disabled=${!hasMatches}
           @click=${() => this.cycleMatch(-1)}
@@ -358,8 +385,10 @@ export class HudController extends Disposable {
           ▲
         </button>
         <button
+          type="button"
           id="hud-search-next"
           class="hud-search-btn"
+          aria-label="Next match"
           title="Next match"
           ?disabled=${!hasMatches}
           @click=${() => this.cycleMatch(1)}

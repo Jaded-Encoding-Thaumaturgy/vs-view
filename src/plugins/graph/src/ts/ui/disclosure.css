@@ -1,0 +1,84 @@
+.disclosure {
+  --disclosure-row-height: 28px;
+  --disclosure-action-height: 20px;
+
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  overflow: hidden;
+}
+
+.disclosure > details {
+  grid-area: 1 / 1 / 2 / -1;
+  min-inline-size: 0;
+}
+
+.disclosure > .disclosure-action {
+  grid-area: 1 / 2;
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  block-size: var(--disclosure-action-height);
+  margin-block-start: calc((var(--disclosure-row-height) - var(--disclosure-action-height)) / 2);
+  margin-inline-end: 8px;
+  z-index: 1;
+}
+
+.disclosure-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  cursor: pointer;
+  min-block-size: var(--disclosure-row-height);
+}
+
+.disclosure > details > .disclosure-summary {
+  padding-inline-end: var(--disclosure-action-space, 0px);
+}
+
+.disclosure-summary:focus-visible {
+  outline-offset: -2px;
+}
+
+.disclosure-summary::before {
+  content: '';
+  flex-shrink: 0;
+  inline-size: 0.45em;
+  block-size: 0.45em;
+  margin-inline: 0.2em;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  rotate: -45deg;
+  color: var(--text-secondary);
+}
+
+.disclosure-summary:dir(rtl)::before {
+  rotate: 135deg;
+}
+
+.disclosure > details[open] > .disclosure-summary::before {
+  rotate: 45deg;
+}
+
+.disclosure > details::details-content {
+  interpolate-size: allow-keywords;
+  overflow: clip;
+  contain: layout;
+}
+
+.disclosure > details:not([open])::details-content {
+  block-size: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .disclosure-summary::before {
+    transition: rotate 0.15s ease;
+  }
+
+  .disclosure > details::details-content {
+    transition:
+      block-size 0.2s ease,
+      content-visibility 0.2s allow-discrete;
+  }
+}

@@ -39,6 +39,17 @@ describe('ThemeManager', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it('matches the native color scheme to the theme polarity', () => {
+    const manager = new ThemeManager();
+    const scheme = () => document.documentElement.style.getPropertyValue('color-scheme');
+
+    manager.updateTheme(TOKENS);
+    expect(scheme()).toBe('dark');
+
+    manager.updateTheme({ ...TOKENS, isDark: false });
+    expect(scheme()).toBe('light');
+  });
+
   it('safely handles throwing listeners without interrupting others', () => {
     const manager = new ThemeManager();
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

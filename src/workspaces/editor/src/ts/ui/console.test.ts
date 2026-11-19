@@ -4,6 +4,7 @@ import { Result } from 'vsview-shared';
 
 import { BridgeService } from '../bridge/python';
 import { DOM_IDS } from './constants';
+import { stubPopoverApi } from './test-helpers';
 
 // Hoisted xterm / FitAddon / vscode mocks
 const { MockTerminalInstance, MockFitAddonInstance, terminalState } = vi.hoisted(() => {
@@ -155,6 +156,7 @@ describe('ConsolePanelService', () => {
   let clearBtnEl: HTMLButtonElement;
   let closeBtnEl: HTMLButtonElement;
 
+  let restorePopoverApi: () => void;
   let mockBridgeService: { sendEvent: ReturnType<typeof vi.fn> };
   let bridgeActiveSpy: ReturnType<typeof vi.spyOn>;
 
@@ -175,6 +177,7 @@ describe('ConsolePanelService', () => {
 
     document.body.innerHTML = '';
     window.location.search = '';
+    restorePopoverApi = stubPopoverApi();
 
     panelEl = document.createElement('div');
     panelEl.id = DOM_IDS.CONSOLE_PANEL;
@@ -241,6 +244,7 @@ describe('ConsolePanelService', () => {
   });
 
   afterEach(() => {
+    restorePopoverApi();
     bridgeActiveSpy.mockRestore();
     document.body.innerHTML = '';
     vi.restoreAllMocks();
@@ -353,42 +357,70 @@ describe('ConsolePanelService', () => {
   });
 
   describe('Resizer drag handling', () => {
+    const pointer = (type: string, init: PointerEventInit) =>
+      new PointerEvent(type, { pointerId: 1, bubbles: true, ...init });
+
     it('clamps height between 80px and 600px and fires onDidResize', () => {
       using service = new ConsolePanelService();
       const resizeSpy = vi.fn();
       service.onDidResize(resizeSpy);
 
       // Start drag at Y = 300
-      resizerEl.dispatchEvent(new MouseEvent('mousedown', { clientY: 300, bubbles: true }));
+      resizerEl.dispatchEvent(pointer('pointerdown', { clientY: 300, button: 0 }));
 
       expect(resizerEl.classList.contains('dragging')).toBe(true);
       expect(document.body.style.userSelect).toBe('none');
 
+      // Other pointers (multi-touch) are ignored
+      window.dispatchEvent(pointer('pointermove', { pointerId: 2, clientY: 100 }));
+      expect(resizeSpy).not.toHaveBeenCalled();
+
       // Move up by 50px (Y = 250 -> delta = +50 -> newHeight = 250)
-      window.dispatchEvent(new MouseEvent('mousemove', { clientY: 250 }));
+      window.dispatchEvent(pointer('pointermove', { clientY: 250 }));
       expect(document.documentElement.style.getPropertyValue('--console-height')).toBe('250px');
       expect(resizeSpy).toHaveBeenCalledWith(250);
 
       // Clamp upper bound: move up to Y = -700 (clamp to 600)
-      window.dispatchEvent(new MouseEvent('mousemove', { clientY: -700 }));
+      window.dispatchEvent(pointer('pointermove', { clientY: -700 }));
       expect(document.documentElement.style.getPropertyValue('--console-height')).toBe('600px');
       expect(resizeSpy).toHaveBeenCalledWith(600);
 
       // Clamp lower bound: move down to Y = 800 (clamp to 80)
-      window.dispatchEvent(new MouseEvent('mousemove', { clientY: 800 }));
+      window.dispatchEvent(pointer('pointermove', { clientY: 800 }));
       expect(document.documentElement.style.getPropertyValue('--console-height')).toBe('80px');
       expect(resizeSpy).toHaveBeenCalledWith(80);
 
-      // Mouse up ends dragging
-      window.dispatchEvent(new MouseEvent('mouseup'));
+      // A pointer up from another pointer does not end the drag
+      window.dispatchEvent(pointer('pointerup', { pointerId: 2 }));
+      expect(resizerEl.classList.contains('dragging')).toBe(true);
+
+      window.dispatchEvent(pointer('pointerup', {}));
 
       expect(resizerEl.classList.contains('dragging')).toBe(false);
       expect(document.body.style.userSelect).toBe('');
 
-      // Additional mouse moves after mouseup are ignored
+      // Additional pointer moves after pointerup are ignored
       resizeSpy.mockClear();
-      window.dispatchEvent(new MouseEvent('mousemove', { clientY: 250 }));
+      window.dispatchEvent(pointer('pointermove', { clientY: 250 }));
       expect(resizeSpy).not.toHaveBeenCalled();
+    });
+
+    it('ends the drag when the pointer is cancelled', () => {
+      using _service = new ConsolePanelService();
+
+      resizerEl.dispatchEvent(pointer('pointerdown', { clientY: 300, button: 0 }));
+      window.dispatchEvent(pointer('pointercancel', {}));
+
+      expect(resizerEl.classList.contains('dragging')).toBe(false);
+      expect(document.body.style.userSelect).toBe('');
+    });
+
+    it('ignores non-primary buttons', () => {
+      using _service = new ConsolePanelService();
+
+      resizerEl.dispatchEvent(pointer('pointerdown', { clientY: 300, button: 2 }));
+
+      expect(resizerEl.classList.contains('dragging')).toBe(false);
     });
 
     it('triggers fit and bridge resize on window resize', () => {
@@ -485,7 +517,12 @@ describe('ConsolePanelService', () => {
   });
 
   describe('Context menu handling', () => {
-    it('opens context menu on right click and suppresses native event', () => {
+    const menuItems = () =>
+      document
+        .getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)!
+        .querySelectorAll<HTMLElement>('.context-menu-item');
+
+    it('opens a popover menu at the pointer on right click and suppresses the native event', () => {
       using _service = new ConsolePanelService();
 
       const contextMenuEvent = new MouseEvent('contextmenu', {
@@ -505,9 +542,12 @@ describe('ConsolePanelService', () => {
 
       const menuEl = document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU);
       expect(menuEl).not.toBeNull();
-      expect(menuEl?.classList.contains('console-context-menu')).toBe(true);
-      expect(menuEl?.style.left).toBe('100px');
-      expect(menuEl?.style.top).toBe('150px');
+      expect(menuEl?.getAttribute('popover')).toBe('auto');
+      expect(menuEl?.hasAttribute('data-popover-open')).toBe(true);
+
+      const anchor = document.querySelector<HTMLElement>('.context-menu-anchor');
+      expect(anchor?.style.left).toBe('100px');
+      expect(anchor?.style.top).toBe('150px');
     });
 
     it('disables Copy item when terminal has no selection', () => {
@@ -516,11 +556,11 @@ describe('ConsolePanelService', () => {
 
       xtermContainerEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
 
-      const menuEl = document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)!;
-      const copyItem = menuEl.querySelectorAll('.console-context-menu-item')[0] as HTMLElement;
+      const copyItem = menuItems()[0]!;
 
-      expect(copyItem.classList.contains('disabled')).toBe(true);
-      expect(copyItem.querySelector('.console-context-menu-label')?.textContent).toBe('Copy');
+      expect(copyItem.getAttribute('aria-disabled')).toBe('true');
+      expect(copyItem.querySelector('.context-menu-label')?.textContent).toBe('Copy');
+      expect(copyItem.querySelector('.context-menu-shortcut')?.textContent).toBe('Ctrl+C');
     });
 
     it('executes Copy item when clicked with active selection', () => {
@@ -529,12 +569,11 @@ describe('ConsolePanelService', () => {
 
       xtermContainerEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
 
-      const menuEl = document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)!;
-      const copyItem = menuEl.querySelectorAll('.console-context-menu-item')[0] as HTMLElement;
+      const copyItem = menuItems()[0]!;
 
-      expect(copyItem.classList.contains('disabled')).toBe(false);
+      expect(copyItem.hasAttribute('aria-disabled')).toBe(false);
 
-      copyItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      copyItem.click();
       expect(mockBridgeService.sendEvent).toHaveBeenCalledWith('clipboard.copy', {
         text: 'active selected text',
       });
@@ -546,14 +585,11 @@ describe('ConsolePanelService', () => {
 
       xtermContainerEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
 
-      const menuEl = document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)!;
-      const selectAllItem = menuEl.querySelectorAll('.console-context-menu-item')[1] as HTMLElement;
+      const selectAllItem = menuItems()[1]!;
 
-      expect(selectAllItem.querySelector('.console-context-menu-label')?.textContent).toBe(
-        'Select All',
-      );
+      expect(selectAllItem.querySelector('.context-menu-label')?.textContent).toBe('Select All');
 
-      selectAllItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      selectAllItem.click();
       expect(terminalState.lastCreatedTerminal.selectionAllCalled).toBe(true);
       expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).toBeNull();
     });
@@ -563,49 +599,22 @@ describe('ConsolePanelService', () => {
 
       xtermContainerEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
 
-      const menuEl = document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)!;
-      const clearItem = menuEl.querySelectorAll('.console-context-menu-item')[2] as HTMLElement;
+      const clearItem = menuItems()[2]!;
 
-      expect(clearItem.querySelector('.console-context-menu-label')?.textContent).toBe(
-        'Clear Console',
-      );
+      expect(clearItem.querySelector('.context-menu-label')?.textContent).toBe('Clear Console');
 
-      clearItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      clearItem.click();
       expect(terminalState.lastCreatedTerminal.clearedCount).toBe(1);
       expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).toBeNull();
     });
 
-    it('dismisses context menu on Escape key', () => {
+    it('removes the menu when the browser dismisses the popover (Escape or outside click)', () => {
       using _service = new ConsolePanelService();
 
       xtermContainerEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
-      expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).not.toBeNull();
+      document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)!.hidePopover();
 
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).toBeNull();
-    });
-
-    it('dismisses context menu on outside click', () => {
-      using _service = new ConsolePanelService();
-
-      xtermContainerEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
-      expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).not.toBeNull();
-
-      window.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)).toBeNull();
-    });
-
-    it('clamps context menu positioning to window boundaries', () => {
-      using _service = new ConsolePanelService();
-      Object.defineProperty(window, 'innerWidth', { value: 500, configurable: true });
-      Object.defineProperty(window, 'innerHeight', { value: 400, configurable: true });
-
-      xtermContainerEl.dispatchEvent(
-        new MouseEvent('contextmenu', { clientX: 450, clientY: 380, bubbles: true }),
-      );
-
-      const menuEl = document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)!;
-      expect(menuEl).not.toBeNull();
     });
 
     it('clicking a disabled menu item does not execute action or close menu', () => {
@@ -614,11 +623,10 @@ describe('ConsolePanelService', () => {
 
       xtermContainerEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
 
-      const menuEl = document.getElementById(DOM_IDS.CONSOLE_CONTEXT_MENU)!;
-      const copyItem = menuEl.querySelectorAll('.console-context-menu-item')[0] as HTMLElement;
-      expect(copyItem.classList.contains('disabled')).toBe(true);
+      const copyItem = menuItems()[0]!;
+      expect(copyItem.getAttribute('aria-disabled')).toBe('true');
 
-      copyItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      copyItem.click();
       expect(mockBridgeService.sendEvent).not.toHaveBeenCalledWith(
         'clipboard.copy',
         expect.anything(),
