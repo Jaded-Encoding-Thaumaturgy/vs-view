@@ -522,7 +522,7 @@ class ViewSettings(BaseModel):
         Resizer,
         Dropdown(
             label="Chroma Resizer",
-            items=[(v, v) for v in Resizer],
+            items=[(v.label, v) for v in Resizer],
             tooltip="Chroma resizer for the views",
         ),
     ] = Resizer.LANCZOS3
@@ -1004,6 +1004,16 @@ class LayoutSettings(BaseModel):
     """Base64-encoded QMainWindow.saveState() byte array for dock positions"""
 
 
+def _to_qpointf(v: Any) -> Any:
+    if not v or isinstance(v, QPointF):
+        return v
+
+    try:
+        return QPointF(*v)
+    except TypeError as e:
+        raise ValueError(f"Expected two numbers, got {v!r}") from e
+
+
 class LocalViewSettings(BaseModel):
     """View-specific settings, stored per script."""
 
@@ -1012,7 +1022,7 @@ class LocalViewSettings(BaseModel):
 
     last_center: Annotated[
         QPointF | None,
-        PlainValidator(lambda v: QPointF(*v) if v else v),
+        PlainValidator(_to_qpointf),
         PlainSerializer(lambda v: v.toTuple() if isinstance(v, QPointF) else None),
     ] = None
     """The last center position of the view."""

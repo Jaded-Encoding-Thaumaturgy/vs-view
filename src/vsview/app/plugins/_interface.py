@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
 from vsview.app.settings import SecretsManager, SettingsManager
+from vsview.app.settings.manager import validate_lenient
 from vsview.app.settings.models import GlobalSettings, LocalSettings
 from vsview.app.utils import ObjectType
 
@@ -154,7 +155,11 @@ _materialize_lock = Lock()
 def get_plugin_model(
     container: GlobalSettings | LocalSettings, identifier: str, model_cls: type[BaseModel] | None
 ) -> BaseModel | None:
-    """Return the validated plugin model from `container.plugins`, initializing or defaulting invalid raw entries."""
+    """
+    Return the validated plugin model from `container.plugins`, converting a raw entry on first access.
+
+    Invalid fields of a raw entry are reset to their defaults.
+    """
     if model_cls is None:
         return None
 
@@ -169,10 +174,17 @@ def get_plugin_model(
         raw = entry.model_dump() if isinstance(entry, BaseModel) else entry or {}
 
         try:
-            model = model_cls.model_validate(raw)
+            model, dropped = validate_lenient(model_cls, raw)
         except ValidationError as e:
             logger.warning("The plugin %r has invalid settings, using the defaults:\n%s", identifier, e)
             model = model_cls()
+        else:
+            if dropped:
+                logger.warning(
+                    "Invalid settings of plugin %r were reset to their defaults: %s",
+                    identifier,
+                    ", ".join(dropped),
+                )
 
         container.plugins[identifier] = model
         return model

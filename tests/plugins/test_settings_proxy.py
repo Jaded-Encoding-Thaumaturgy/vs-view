@@ -158,13 +158,13 @@ def test_store_reads_the_stored_raw_settings(store: _PluginSettingsStore) -> Non
     assert proxy == MockGlobalSettings(attr1="from_storage")
 
 
-def test_store_uses_the_defaults_when_the_stored_settings_are_invalid(store: _PluginSettingsStore) -> None:
-    SettingsManager.global_settings.plugins["test_plugin"] = {"attr2": "not a number"}
+def test_store_resets_only_the_invalid_fields_of_the_stored_settings(store: _PluginSettingsStore) -> None:
+    SettingsManager.global_settings.plugins["test_plugin"] = {"attr1": "kept", "attr2": "not a number"}
 
     proxy = store.get_proxy(MockPlugin(), "global")
 
-    assert proxy == MockGlobalSettings()
-    assert SettingsManager.global_settings.plugins["test_plugin"] == MockGlobalSettings()
+    assert proxy == MockGlobalSettings(attr1="kept")
+    assert SettingsManager.global_settings.plugins["test_plugin"] == MockGlobalSettings(attr1="kept")
 
 
 def test_store_returns_none_for_a_scope_without_a_model(store: _PluginSettingsStore) -> None:

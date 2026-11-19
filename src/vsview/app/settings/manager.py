@@ -5,13 +5,14 @@ import os
 import shutil
 import sys
 from collections.abc import Callable
+from copy import deepcopy
 from inspect import Signature
 from logging import DEBUG, getLogger
 from pathlib import Path
 from typing import Any
 
 from jetpytools import CustomTypeError, Singleton, inject_self
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import QApplication
 from rich.pretty import pretty_repr
@@ -256,7 +257,7 @@ class SettingsManager(Singleton):
 
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            self._global_settings = GlobalSettings.model_validate(data)
+            self._global_settings, dropped = validate_lenient(GlobalSettings, data)
         except (OSError, ValidationError, json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
             logger.warning("Global settings file is malformed or unreadable. Using defaults.\nError: %s", e)
             logger.debug("Full traceback:", exc_info=True)
@@ -265,6 +266,10 @@ class SettingsManager(Singleton):
         except Exception:
             logger.exception("Unhandled exception:")
             return
+
+        if dropped:
+            logger.warning("Invalid global settings were reset to their defaults: %s", ", ".join(dropped))
+            _back_up_unreadable_file(path)
 
         # Merge in any new shortcuts that don't exist in the loaded settings
         self._merge_default_shortcuts()
@@ -315,7 +320,7 @@ class SettingsManager(Singleton):
 
         try:
             data = json.loads(settings_path.read_text(encoding="utf-8"))
-            self._local_settings[path_hash] = LocalSettings.model_validate(data)
+            self._local_settings[path_hash], dropped = validate_lenient(LocalSettings, data)
         except (OSError, ValidationError, json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
             logger.error(
                 "Local settings file is malformed or unreadable for %s. Using defaults.\nFile: %s\nError: %s",
@@ -328,8 +333,80 @@ class SettingsManager(Singleton):
             self._local_settings[path_hash] = fallback_settings
             return
 
+        if dropped:
+            logger.warning(
+                "Invalid local settings for %s were reset to their defaults: %s",
+                script_path,
+                ", ".join(dropped),
+            )
+            _back_up_unreadable_file(settings_path)
+
+        if not (settings := self._local_settings[path_hash]).source_path:
+            settings.source_path = str(script_path)
+
         logger.debug("Loaded local settings for %s", script_path)
         logger.log(DEBUG - 1, "%s", lambda: pretty_repr(self._local_settings[path_hash]))
+
+
+def validate_lenient[M: BaseModel](model_cls: type[M], data: Any) -> tuple[M, list[str]]:
+    """
+    Validate `data`, resetting each invalid field to its default instead of failing.
+
+    Returns:
+        The model and the dotted paths of the fields that were reset.
+
+    Raises:
+        ValidationError: An error cannot be fixed by resetting a field, for example a missing required field.
+    """
+    dropped = list[str]()
+
+    while True:
+        try:
+            return model_cls.model_validate(data), dropped
+        except ValidationError as e:
+            paths = set[tuple[int | str, ...]]()
+
+            for error in e.errors():
+                if (path := _invalid_key_path(data, error["loc"])) is None:
+                    raise
+                paths.add(path)
+
+            if not dropped:
+                data = deepcopy(data)
+
+            # Longest first, so dropping a parent key never comes before dropping one of its children
+            for path in sorted(paths, key=len, reverse=True):
+                _drop_key(data, path)
+                dropped.append(".".join(map(str, path)))
+
+
+def _invalid_key_path(data: Any, loc: tuple[int | str, ...]) -> tuple[int | str, ...] | None:
+    # The deepest dict key on the error path. Dropping it makes the field use its default.
+    # Parts that are not in the data (union members, validator names, missing fields) end the walk.
+    node, path = data, None
+
+    for i, part in enumerate(loc):
+        if isinstance(node, dict) and part in node:
+            path = loc[: i + 1]
+        elif not (isinstance(node, list) and isinstance(part, int) and 0 <= part < len(node)):
+            break
+        if isinstance(node, list) and isinstance(part, int):  # noqa: SIM114
+            node = node[part]
+        elif isinstance(node, dict) and isinstance(part, str):
+            node = node[part]
+        else:
+            raise NotImplementedError
+
+    return path
+
+
+def _drop_key(data: Any, path: tuple[int | str, ...]) -> None:
+    *parents, key = path
+
+    for part in parents:
+        data = data[part]
+
+    data.pop(key, None)
 
 
 def _back_up_unreadable_file(path: Path) -> None:
