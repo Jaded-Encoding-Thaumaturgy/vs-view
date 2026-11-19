@@ -4,7 +4,7 @@ import json
 import sys
 from collections.abc import Callable, Mapping
 from enum import StrEnum
-from functools import wraps
+from functools import cache, wraps
 from logging import DEBUG, ERROR, WARNING, getLogger
 from typing import Any, ClassVar, Generic, TypeVar, get_args, get_origin, overload, override
 
@@ -13,7 +13,13 @@ from PySide6 import QtWebEngineCore
 from PySide6.QtCore import QEvent, QFile, QIODevice, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QColor, QPalette, Qt
 from PySide6.QtWebChannel import QWebChannel
-from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+from PySide6.QtWebEngineCore import (
+    QWebEnginePage,
+    QWebEngineSettings,
+    qWebEngineChromiumSecurityPatchVersion,
+    qWebEngineChromiumVersion,
+    qWebEngineVersion,
+)
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QMessageBox, QWidget
 
@@ -29,6 +35,13 @@ else:
     FallbackT = typing_extensions.TypeVar("FallbackT", default=None)
 
 logger = getLogger(__name__)
+
+
+@cache
+def log_web_version() -> None:
+    logger.debug("WebEngine version %s", qWebEngineVersion())
+    logger.debug("Chromium version %s", qWebEngineChromiumVersion())
+    logger.debug("Chromium security patch version %s", qWebEngineChromiumSecurityPatchVersion())
 
 
 class SafeSlot(Generic[FallbackT]):
@@ -214,6 +227,7 @@ class BaseWebEnginePage(QWebEnginePage):
         background_color: QColor | None = None,
         logger_name: str = "vsview_web_js",
     ) -> None:
+        log_web_version()
         super().__init__(parent)
         self._js_logger = setup_web_logger(logger_name)
         if background_color is not None:
