@@ -458,6 +458,9 @@ class VideoFramesCache(LRUCache[int, vs.VideoFrame]):
     @override
     def __setitem__(self, key: int, value: vs.VideoFrame) -> None:
         with self.lock:
+            if (replaced := self.data.get(key)) is not None and replaced is not value:
+                replaced.close()
+
             self.data[key] = value
             self.data.move_to_end(key)
             while len(self.data) > self.cache_size:
@@ -470,11 +473,13 @@ class VideoFramesCache(LRUCache[int, vs.VideoFrame]):
             if key in self.data:
                 return super().__getitem__(key)
 
-            if self.clip is not None:
-                with self.clip.get_frame(key) as frame:
-                    return self.add_frame(key, frame)
+            clip = self.clip
 
-            return super().__getitem__(key)
+        if clip is None:
+            raise KeyError(key)
+
+        with clip.get_frame(key) as frame:
+            return self.add_frame(key, frame)
 
     @override
     def __delitem__(self, key: int) -> None:
@@ -488,7 +493,11 @@ class VideoFramesCache(LRUCache[int, vs.VideoFrame]):
 
     def add_frame(self, n: int, f: vs.VideoFrame) -> vs.VideoFrame:
         f = f.copy()
-        self[n] = f
+
+        with self.lock:
+            if self.clip is not None:
+                self[n] = f
+
         return f
 
     def get_frame(self, n: int, f: vs.VideoFrame) -> vs.VideoFrame:

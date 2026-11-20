@@ -6,6 +6,7 @@ from concurrent.futures import Future, wait
 from functools import partial
 from itertools import cycle, islice
 from logging import getLogger
+from threading import Lock
 from typing import TYPE_CHECKING, NamedTuple
 
 import vapoursynth as vs
@@ -41,7 +42,16 @@ def on_error(e: BaseException, msg: str) -> None:
 class FrameBuffer:
     """Manages async pre-fetching of video frames during playback."""
 
-    __slots__ = ("_bundles", "_invalidated", "_play_frames", "_plugin_nodes", "_size", "env", "video_output")
+    __slots__ = (
+        "_bundles",
+        "_invalidated",
+        "_lock",
+        "_play_frames",
+        "_plugin_nodes",
+        "_size",
+        "env",
+        "video_output",
+    )
 
     def __init__(self, video_output: VideoOutput, env: ManagedEnvironment) -> None:
         self.video_output = video_output
@@ -52,14 +62,13 @@ class FrameBuffer:
         self._play_frames: Generator[int] | None = None
         self._invalidated = False
         self._plugin_nodes = dict[str, vs.VideoNode]()
+        self._lock = Lock()
 
     def register_plugin_node(self, identifier: str, node: vs.VideoNode) -> None:
         self._plugin_nodes[identifier] = node
         logger.debug("Registered plugin node: %s", identifier)
 
     def allocate(self, play_range: range, loop: bool = False) -> None:
-        self._play_frames = self._create_play_frames(play_range, loop)
-
         logger.debug(
             "Allocating buffer: %s, buffering up to %d frames, %d plugins",
             play_range,
@@ -67,20 +76,24 @@ class FrameBuffer:
             len(self._plugin_nodes),
         )
 
-        for _ in range(self._size):
-            if self._invalidated:
-                break
+        with self._lock:
+            self._play_frames = self._create_play_frames(play_range, loop)
 
-            if (next_frame := next(self._play_frames, None)) is None:
-                break
+            for _ in range(self._size):
+                if self._invalidated:
+                    break
 
-            self._bundles.appendleft(self._request_bundle(next_frame))
+                if (next_frame := next(self._play_frames, None)) is None:
+                    break
+
+                self._bundles.appendleft(self._request_bundle(next_frame))
 
     def wait_for_first_frame(self, timeout: float | None = None, stall_cb: Callable[[], None] | None = None) -> None:
-        if self._invalidated or not self._bundles:
-            return
+        with self._lock:
+            if self._invalidated or not self._bundles:
+                return
 
-        first_frame = self._bundles[-1]
+            first_frame = self._bundles[-1]
 
         # Wait for both main frame and all registered plugin frames
         _, undone = wait([first_frame.main_future, *first_frame.plugin_futures.values()], timeout)
@@ -92,7 +105,8 @@ class FrameBuffer:
             f.result()
 
     def invalidate(self) -> Future[None]:
-        self._invalidated = True
+        with self._lock:
+            self._invalidated = True
         return self.clear()
 
     def get_next_frame(self) -> tuple[int, vs.VideoFrame, dict[str, vs.VideoFrame]] | None:
@@ -101,10 +115,14 @@ class FrameBuffer:
 
         Returns None if the buffer is empty.
         """
-        if self._invalidated or not self._bundles:
-            return None
+        with self._lock:
+            if self._invalidated or not self._bundles:
+                return None
 
-        bundle = self._bundles.pop()
+            bundle = self._bundles.pop()
+
+            if self._play_frames is not None and (next_frame := next(self._play_frames, None)) is not None:
+                self._bundles.appendleft(self._request_bundle(next_frame))
 
         try:
             main_frame = bundle.main_future.result()
@@ -131,23 +149,20 @@ class FrameBuffer:
             except Exception:
                 logger.exception("Failed to get plugin frame %s for frame %d", identifier, bundle.n)
 
-        # Request next frame set at the front of the buffer (if not invalidated)
-        if not self._invalidated and self._play_frames and (next_frame := next(self._play_frames, None)) is not None:
-            self._bundles.appendleft(self._request_bundle(next_frame))
-
         return bundle.n, main_frame, plugin_frames
 
     @run_in_background(name="ClearBuffer")
     def clear(self) -> None:
         """Clear all buffered frames and trigger garbage collection."""
-        self._plugin_nodes.clear()
+        with self._lock:
+            self._plugin_nodes.clear()
 
-        if self._play_frames is not None:
-            self._play_frames.close()
-            self._play_frames = None
+            if self._play_frames is not None:
+                self._play_frames.close()
+                self._play_frames = None
 
-        bundles = list(self._bundles)
-        self._bundles.clear()
+            bundles = list(self._bundles)
+            self._bundles.clear()
 
         pending = list[UnifiedFuture[None]]()
 
@@ -197,7 +212,7 @@ class FrameBuffer:
 class AudioBuffer:
     """Manages async pre-fetching of audio frames during playback."""
 
-    __slots__ = ("_bundles", "_invalidated", "_play_frames", "_size", "audio_output", "env")
+    __slots__ = ("_bundles", "_invalidated", "_lock", "_play_frames", "_size", "audio_output", "env")
 
     def __init__(self, audio_output: AudioOutput, env: ManagedEnvironment) -> None:
         self.audio_output = audio_output
@@ -207,26 +222,29 @@ class AudioBuffer:
         self._bundles = deque[AudioBundle]()
         self._play_frames: Generator[int] | None = None
         self._invalidated = False
+        self._lock = Lock()
 
     def allocate(self, play_range: range, loop: bool = False) -> None:
-        self._play_frames = self._create_play_frames(play_range, loop)
-
         logger.debug("Allocating audio buffer: %s, buffering up to %d frames", play_range, self._size)
 
-        for _ in range(self._size):
-            if self._invalidated:
-                break
+        with self._lock:
+            self._play_frames = self._create_play_frames(play_range, loop)
 
-            if (next_frame := next(self._play_frames, None)) is None:
-                break
+            for _ in range(self._size):
+                if self._invalidated:
+                    break
 
-            self._bundles.appendleft(self._request_bundle(next_frame))
+                if (next_frame := next(self._play_frames, None)) is None:
+                    break
+
+                self._bundles.appendleft(self._request_bundle(next_frame))
 
     def wait_for_first_frame(self, timeout: float | None = None, stall_cb: Callable[[], None] | None = None) -> None:
-        if self._invalidated or not self._bundles:
-            return
+        with self._lock:
+            if self._invalidated or not self._bundles:
+                return
 
-        first_frame = self._bundles[-1]
+            first_frame = self._bundles[-1]
 
         _, undone = wait([first_frame.future], timeout)
 
@@ -236,7 +254,8 @@ class AudioBuffer:
         first_frame.future.result()
 
     def invalidate(self) -> Future[None]:
-        self._invalidated = True
+        with self._lock:
+            self._invalidated = True
         return self.clear()
 
     def get_next_frame(self) -> tuple[int, vs.AudioFrame] | None:
@@ -245,14 +264,14 @@ class AudioBuffer:
 
         Returns None if the buffer is empty or the next frame is not ready.
         """
-        if self._invalidated or not self._bundles or not self._bundles[-1].future.done():
-            return None
+        with self._lock:
+            if self._invalidated or not self._bundles or not self._bundles[-1].future.done():
+                return None
 
-        bundle = self._bundles.pop()
+            bundle = self._bundles.pop()
 
-        # Request next frame at the front of the buffer
-        if not self._invalidated and self._play_frames and (next_frame := next(self._play_frames, None)) is not None:
-            self._bundles.appendleft(self._request_bundle(next_frame))
+            if self._play_frames is not None and (next_frame := next(self._play_frames, None)) is not None:
+                self._bundles.appendleft(self._request_bundle(next_frame))
 
         try:
             return bundle.n, bundle.future.result()
@@ -263,12 +282,13 @@ class AudioBuffer:
     @run_in_background(name="ClearAudioBuffer")
     def clear(self) -> None:
         """Clear all buffered frames and trigger garbage collection."""
-        if self._play_frames is not None:
-            self._play_frames.close()
-            self._play_frames = None
+        with self._lock:
+            if self._play_frames is not None:
+                self._play_frames.close()
+                self._play_frames = None
 
-        bundles = list(self._bundles)
-        self._bundles.clear()
+            bundles = list(self._bundles)
+            self._bundles.clear()
 
         pending = list[UnifiedFuture[None]]()
 

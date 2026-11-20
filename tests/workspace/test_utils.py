@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
@@ -167,6 +168,55 @@ def test_video_frames_cache_miss_fetches_from_clip(sample_video_clip: vs.VideoNo
     assert cache[3] is frame
     # Cache hit on subsequent access
     assert spy_clip.calls == [3]
+
+
+@pytest.mark.vpy("initial-core")
+def test_video_frames_cache_miss_does_not_block_other_threads(sample_video_clip: vs.VideoNode) -> None:
+    render_started = threading.Event()
+    release_render = threading.Event()
+
+    def slow_select(n: int) -> vs.VideoNode:
+        render_started.set()
+        release_render.wait(timeout=5.0)
+        return sample_video_clip
+
+    cache = VideoFramesCache(sample_video_clip.std.FrameEval(slow_select), cache_size=5)
+    cache[0] = sample_video_clip.get_frame(0)
+
+    renderer = threading.Thread(target=cache.__getitem__, args=(3,))
+    renderer.start()
+    assert render_started.wait(timeout=5.0)
+
+    lookups = list[bool]()
+    reader = threading.Thread(target=lambda: lookups.append(0 in cache))
+    reader.start()
+    reader.join(timeout=2.0)
+    reader_finished_during_render = not reader.is_alive()
+
+    release_render.set()
+    renderer.join(timeout=5.0)
+    reader.join(timeout=5.0)
+
+    assert reader_finished_during_render is True
+    assert lookups == [True]
+    assert 3 in cache
+
+
+@pytest.mark.vpy("initial-core")
+def test_video_frames_cache_replacing_a_frame_closes_the_old_one(sample_video_clip: vs.VideoNode) -> None:
+    cache = VideoFramesCache(sample_video_clip, cache_size=5)
+    first = sample_video_clip.get_frame(0)
+    second = sample_video_clip.get_frame(0)
+    cache[0] = first
+
+    cache[0] = first
+    assert first.closed is False
+
+    cache[0] = second
+
+    assert first.closed is True
+    assert second.closed is False
+    assert cache[0] is second
 
 
 @pytest.mark.vpy("initial-core")
