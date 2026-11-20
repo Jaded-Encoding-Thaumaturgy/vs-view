@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 from typing import Self
 
-from jetpytools import cround
+from jetpytools import SPath, cround
 from PySide6.QtCore import QTime
 
 
@@ -43,3 +44,18 @@ class Time(timedelta):
     def from_qtime(cls, qtime: QTime) -> Self:
         """Convert a QTime object to a Time object."""
         return cls(milliseconds=qtime.msecsSinceStartOfDay())
+
+
+class VPath(SPath):
+    @property
+    def st_mtime_ns(self) -> int | None:
+        try:
+            return super().stat().st_mtime_ns
+        except OSError:
+            return None
+
+    def safe_stat(self, *, follow_symlinks: bool = True) -> os.stat_result | None:
+        try:
+            return super().stat(follow_symlinks=follow_symlinks)
+        except OSError:
+            return None

@@ -7,16 +7,16 @@ import sys
 from collections.abc import Callable
 from inspect import Signature
 from logging import DEBUG, getLogger
-from pathlib import Path
 from typing import Any, NamedTuple
 
-from jetpytools import CustomTypeError, Singleton, inject_self
+from jetpytools import MISSING, CustomTypeError, Singleton, inject_self
 from pydantic import ValidationError
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import QApplication
 from rich.pretty import pretty_repr
 
 from ...env import getenv_bool
+from ...types import VPath
 from ..utils import WeakableSignals, atomic_write
 from .models import GlobalSettings, LocalSettings, validate_lenient
 
@@ -71,7 +71,7 @@ class SettingsManager(Singleton):
     def __init__(self, noop: bool = False) -> None:
         self._global_settings = self.default_global_settings
         self._local_settings = dict[str, LocalSettings]()  # Keyed by path hash
-        self._baselines = dict[Path, _Baseline]()
+        self._baselines = dict[VPath, _Baseline]()
         self._signals = SettingsSignals(QApplication.instance())
 
         self._noop = noop
@@ -115,7 +115,7 @@ class SettingsManager(Singleton):
         path_hash = path_to_hash(script_path)
 
         if path_hash not in self._local_settings:
-            logger.debug("%s is not in loaded local settings (from %s)", path_hash, lambda: Path(script_path).name)
+            logger.debug("%s is not in loaded local settings (from %s)", path_hash, lambda: VPath(script_path).name)
             self._load_local(script_path)
 
         return self._local_settings.get(path_hash) or self.default_local_settings
@@ -148,7 +148,7 @@ class SettingsManager(Singleton):
             settings = settings()
 
         self._global_settings = settings if settings is not None else self._global_settings
-        path = Path(path or GlobalSettings.path_env)
+        path = VPath(path or GlobalSettings.path_env)
 
         try:
             if not self._noop:
@@ -180,8 +180,7 @@ class SettingsManager(Singleton):
         """
         from ..utils import path_to_hash
 
-        script_path = Path(script_path)
-
+        script_path = VPath(script_path)
         settings_path = self.local_settings_path(script_path)
 
         try:
@@ -217,7 +216,7 @@ class SettingsManager(Singleton):
         return True
 
     @staticmethod
-    def local_settings_path(script_path: os.PathLike[str]) -> Path:
+    def local_settings_path(script_path: os.PathLike[str]) -> VPath:
         """
         Get the file path for a script's local settings.
 
@@ -229,7 +228,7 @@ class SettingsManager(Singleton):
         """
         from ..utils import path_to_hash
 
-        return Path(script_path).parent / ".vsjet" / "vsview" / f"{path_to_hash(script_path)}.json"
+        return VPath(script_path).parent / ".vsjet" / "vsview" / f"{path_to_hash(script_path)}.json"
 
     def _load_global(self) -> None:
         if self._noop:
@@ -242,7 +241,7 @@ class SettingsManager(Singleton):
                 self.save_global(self.default_global_settings, GlobalSettings.path)
 
         # Taken before the read, so a write by another process after this point is seen when saving
-        mtime = _mtime(GlobalSettings.path_env)
+        mtime = GlobalSettings.path_env.st_mtime_ns
 
         if (settings := self._read_global()) is not None:
             self._global_settings = settings
@@ -308,16 +307,18 @@ class SettingsManager(Singleton):
     def _load_local(self, script_path: os.PathLike[str]) -> None:
         from ..utils import path_to_hash
 
-        script_path = Path(script_path)
+        script_path = VPath(script_path)
         settings_path = self.local_settings_path(script_path)
 
         if self._noop:
             logger.info("Loading with no config set")
-            self._local_settings[path_to_hash(script_path)] = self._default_local_settings(script_path)
+            self._local_settings[path_to_hash(script_path)] = self.default_local_settings.model_copy(
+                update={"source_path": script_path.to_str()}
+            )
             return
 
         # Taken before the read, so a write by another process after this point is seen when saving
-        mtime = _mtime(settings_path)
+        mtime = settings_path.st_mtime_ns
         settings = self._read_local(script_path, settings_path)
 
         if not settings.source_path:
@@ -326,10 +327,10 @@ class SettingsManager(Singleton):
         self._local_settings[path_to_hash(script_path)] = settings
         self._remember(settings_path, settings, mtime)
 
-    def _read_local(self, script_path: Path, settings_path: Path) -> LocalSettings:
+    def _read_local(self, script_path: VPath, settings_path: VPath) -> LocalSettings:
         if not settings_path.exists():
             logger.debug("Local settings file does not exist for %s. Using defaults.", script_path)
-            return self._default_local_settings(script_path)
+            return self.default_local_settings.model_copy(update={"source_path": str(script_path)})
 
         try:
             data = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -343,7 +344,7 @@ class SettingsManager(Singleton):
             )
             logger.debug("Full traceback:", exc_info=True)
             _back_up_unreadable_file(settings_path)
-            return self._default_local_settings(script_path)
+            return self.default_local_settings.model_copy(update={"source_path": str(script_path)})
 
         if dropped:
             logger.warning(
@@ -357,10 +358,7 @@ class SettingsManager(Singleton):
         logger.log(DEBUG - 1, "%s", lambda: pretty_repr(settings))
         return settings
 
-    def _default_local_settings(self, script_path: Path) -> LocalSettings:
-        return self.default_local_settings.model_copy(update={"source_path": str(script_path)})
-
-    def _write[S: GlobalSettings | LocalSettings](self, path: Path, settings: S) -> S:
+    def _write[S: GlobalSettings | LocalSettings](self, path: VPath, settings: S) -> S:
         """Write `settings`, after merging the changes another process saved since this one last read or wrote it."""
         text = settings.model_dump_json(indent=2)
 
@@ -370,14 +368,14 @@ class SettingsManager(Singleton):
 
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(path, text)
-        self._baselines[path] = _Baseline(json.loads(text), _mtime(path))
+        self._baselines[path] = _Baseline(json.loads(text), path.st_mtime_ns)
 
         return settings
 
     def _merge_external_changes[S: GlobalSettings | LocalSettings](
-        self, path: Path, settings: S, ours: dict[str, Any]
+        self, path: VPath, settings: S, ours: dict[str, Any]
     ) -> S | None:
-        if (baseline := self._baselines.get(path)) is None or _mtime(path) in (None, baseline.mtime_ns):
+        if (baseline := self._baselines.get(path)) is None or path.st_mtime_ns in (None, baseline.mtime_ns):
             return None
 
         try:
@@ -390,7 +388,7 @@ class SettingsManager(Singleton):
         logger.info("Merged the settings saved by another vsview window into %s", path)
         return merged
 
-    def _remember(self, path: Path, settings: GlobalSettings | LocalSettings, mtime: int | None) -> None:
+    def _remember(self, path: VPath, settings: GlobalSettings | LocalSettings, mtime: int | None) -> None:
         self._baselines[path] = _Baseline(json.loads(settings.model_dump_json()), mtime)
 
 
@@ -400,9 +398,6 @@ class _Baseline(NamedTuple):
 
     mtime_ns: int | None
     """The file modification time at that moment, or None if the file did not exist."""
-
-
-_MISSING = object()
 
 
 def _merge_changes(base: Any, ours: Any, theirs: Any) -> Any:
@@ -415,19 +410,12 @@ def _merge_changes(base: Any, ours: Any, theirs: Any) -> Any:
     merged = {key: theirs[key] for key in theirs if key not in ours}
 
     for key, value in ours.items():
-        merged[key] = _merge_changes(base.get(key, _MISSING), value, theirs[key]) if key in theirs else value
+        merged[key] = _merge_changes(base.get(key, MISSING), value, theirs[key]) if key in theirs else value
 
     return merged
 
 
-def _mtime(path: Path) -> int | None:
-    try:
-        return path.stat().st_mtime_ns
-    except OSError:
-        return None
-
-
-def _back_up_unreadable_file(path: Path) -> None:
+def _back_up_unreadable_file(path: VPath) -> None:
     backup_path = path.with_name(f"{path.name}.bak")
 
     try:

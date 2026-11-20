@@ -19,7 +19,6 @@ from unittest.mock import MagicMock
 
 import pytest
 import vapoursynth as vs
-from jetpytools import SPath
 from PySide6.QtCharts import QAbstractAxis, QAbstractSeries
 from PySide6.QtCore import (
     QAbstractAnimation,
@@ -61,6 +60,7 @@ from vsview.app.settings.secrets import SecretsManager
 from vsview.app.tools.frameprops.categories import CategoryRegistry
 from vsview.app.tools.frameprops.formatters import FormatterRegistry
 from vsview.app.utils import path_to_hash
+from vsview.types import VPath
 from vsview.vsenv import create_environment, get_policy, unregister_policy
 from vsview.vsenv.loop import QtEventLoop
 
@@ -169,8 +169,8 @@ def isolate_secrets(monkeypatch: pytest.MonkeyPatch) -> InMemoryKeyring:
 # Global Settings Isolation
 @pytest.fixture(autouse=True)
 def isolate_settings(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
-    settings_root = tmp_path_factory.mktemp("settings")
-    fake_dir = SPath(settings_root / "vsview_config")
+    settings_root = VPath(tmp_path_factory.mktemp("settings"))
+    fake_dir = VPath(settings_root / "vsview_config")
     fake_config = fake_dir / "global_settings.json"
     monkeypatch.setattr(GlobalSettings, "config_path", fake_dir)
     monkeypatch.setattr(GlobalSettings, "path", fake_config)

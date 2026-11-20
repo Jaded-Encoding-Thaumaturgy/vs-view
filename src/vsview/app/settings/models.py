@@ -11,12 +11,11 @@ from copy import deepcopy
 from datetime import time, timedelta
 from logging import getLogger
 from operator import attrgetter
-from pathlib import Path
 from threading import Lock
 from typing import Annotated, Any, Generic, Literal, NamedTuple, TypeVar, get_args, get_origin, override
 
 import vapoursynth as vs
-from jetpytools import SPath, classproperty
+from jetpytools import classproperty
 from platformdirs import user_config_path
 from pydantic import (
     AfterValidator,
@@ -39,6 +38,7 @@ from PySide6.QtWidgets import QColorDialog, QStyleFactory, QWidget
 from ...assets import ICON_PROVIDERS
 from ...assets.themes import ThemeRegistry
 from ...env import getenv_bool
+from ...types import VPath
 from ..themes import AppearanceManager
 from .action import ActionID
 from .enums import Resizer
@@ -962,8 +962,8 @@ class GlobalSettings(BaseSettings):
 
     @classproperty.cached
     @classmethod
-    def config_path(cls) -> SPath:
-        return SPath(
+    def config_path(cls) -> VPath:
+        return VPath(
             user_config_path(
                 "vsview",
                 appauthor=False,
@@ -974,7 +974,7 @@ class GlobalSettings(BaseSettings):
 
     @classproperty.cached
     @classmethod
-    def path(cls) -> SPath:
+    def path(cls) -> VPath:
         r"""
         Get the global settings path.
 
@@ -990,7 +990,7 @@ class GlobalSettings(BaseSettings):
 
     @classproperty.cached
     @classmethod
-    def path_env(cls) -> SPath:
+    def path_env(cls) -> VPath:
         r"""
         Get the scoped global settings path.
 
@@ -1000,7 +1000,7 @@ class GlobalSettings(BaseSettings):
         `{base_config_path}\{env_parent_name}\{executable_mtime_ns}\global_settings.json`
         """
         if getenv_bool("VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT") and sys.executable:
-            env_dir = Path(sys.prefix)
+            env_dir = VPath(sys.prefix)
 
             # We are inside a virtual environment
             if sys.prefix != sys.base_prefix:
