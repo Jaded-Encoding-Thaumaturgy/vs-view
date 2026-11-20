@@ -3,11 +3,9 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future, wait
-from contextlib import AbstractContextManager
 from logging import getLogger
-from threading import Lock
 from time import perf_counter_ns
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any
 
 from jetpytools import clamp, cround
 from PySide6.QtCore import QObject, QPoint, Qt, QTime, QTimer, Signal, Slot
@@ -19,6 +17,7 @@ from ...types import Frame, Time
 from ...vsenv import run_in_background, run_in_loop
 from ..outputs import AudioBuffer, FrameBuffer
 from ..settings import SettingsManager
+from ..utils import WorkTracker
 from ..views.timeline import TimelineControlBar
 
 if TYPE_CHECKING:
@@ -33,37 +32,6 @@ logger = getLogger(__name__)
 
 # Module constants
 MIN_FRAME_DELAY_NS = 1_000_000  # 1ms minimum scheduling delay
-
-
-class WorkCounter(AbstractContextManager[None]):
-    """Counts work that is running, across threads."""
-
-    __slots__ = ("_count", "_lock")
-
-    def __init__(self) -> None:
-        self._count = 0
-        self._lock = Lock()
-
-    @override
-    def __enter__(self) -> None:
-        self.increment()
-
-    @override
-    def __exit__(self, *_: object) -> None:
-        self.decrement()
-
-    @property
-    def is_idle(self) -> bool:
-        with self._lock:
-            return self._count == 0
-
-    def increment(self) -> None:
-        with self._lock:
-            self._count += 1
-
-    def decrement(self) -> None:
-        with self._lock:
-            self._count -= 1
 
 
 class PlaybackState(QObject):
@@ -250,7 +218,7 @@ class PlaybackManager(QObject):
 
         self._render_epoch = 0
         self._playback_epoch = 0
-        self._work = WorkCounter()
+        self._work = WorkTracker()
 
     @property
     def has_pending_frame(self) -> bool:

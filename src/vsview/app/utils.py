@@ -22,7 +22,7 @@ from collections.abc import (
     Sized,
     ValuesView,
 )
-from contextlib import contextmanager, suppress
+from contextlib import AbstractContextManager, contextmanager, suppress
 from dataclasses import dataclass
 from inspect import ismethod
 from logging import DEBUG, getLogger
@@ -756,6 +756,37 @@ class QObjectCounter[T: QObject](Container[T], Sized):
             self._counts[value] = count
 
             return count
+
+
+class WorkTracker(AbstractContextManager[None]):
+    """Tracks work that is running, across threads."""
+
+    __slots__ = ("_count", "_lock")
+
+    def __init__(self) -> None:
+        self._count = 0
+        self._lock = threading.Lock()
+
+    @override
+    def __enter__(self) -> None:
+        self.increment()
+
+    @override
+    def __exit__(self, *_: object) -> None:
+        self.decrement()
+
+    @property
+    def is_idle(self) -> bool:
+        with self._lock:
+            return self._count == 0
+
+    def increment(self) -> None:
+        with self._lock:
+            self._count += 1
+
+    def decrement(self) -> None:
+        with self._lock:
+            self._count -= 1
 
 
 def deepmerge(source: Mapping[Any, Any], destination: dict[Any, Any]) -> dict[Any, Any]:
