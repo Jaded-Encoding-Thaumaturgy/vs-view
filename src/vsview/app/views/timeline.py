@@ -1278,7 +1278,7 @@ class TimeEdit(QTimeEdit):
         super().__init__(parent)
         self.timeChanged.connect(self._on_time_changed)
 
-        self.setDisplayFormat("H:mm:ss.zzz")
+        self.setDisplayFormat("HH:mm:ss.zzz")
         self.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
         self.setMinimumTime(QTime())
         self.setKeyboardTracking(False)
