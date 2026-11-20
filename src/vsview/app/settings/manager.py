@@ -1,13 +1,14 @@
 """Settings manager for vsview."""
 
+from __future__ import annotations
+
 import json
 import os
-import shutil
 import sys
 from collections.abc import Callable
 from inspect import Signature
 from logging import DEBUG, getLogger
-from typing import Any, NamedTuple
+from typing import Any
 
 from jetpytools import MISSING, CustomTypeError, Singleton, inject_self
 from pydantic import ValidationError
@@ -17,8 +18,8 @@ from rich.pretty import pretty_repr
 
 from ...env import getenv_bool
 from ...types import VPath
-from ..utils import WeakableSignals, atomic_write
-from .models import GlobalSettings, LocalSettings, validate_lenient
+from ..utils import WeakableSignals
+from .models import BaseSettings, GlobalSettings, LocalSettings, validate_lenient
 
 if sys.version_info >= (3, 13):
     from typing import TypeIs
@@ -71,7 +72,7 @@ class SettingsManager(Singleton):
     def __init__(self, noop: bool = False) -> None:
         self._global_settings = self.default_global_settings
         self._local_settings = dict[str, LocalSettings]()  # Keyed by path hash
-        self._baselines = dict[VPath, _Baseline]()
+        self._files = dict[VPath, _SettingsFile]()
         self._signals = SettingsSignals(QApplication.instance())
 
         self._noop = noop
@@ -152,7 +153,7 @@ class SettingsManager(Singleton):
 
         try:
             if not self._noop:
-                self._global_settings = self._write(path, self._global_settings)
+                self._global_settings = self._get_file(path).write(self._global_settings)
                 logger.debug("Saved global settings to: %s", path)
             if emit_changed:
                 self._signals.globalChanged.emit()
@@ -206,7 +207,7 @@ class SettingsManager(Singleton):
 
         try:
             if not self._noop:
-                self._local_settings[path_to_hash(script_path)] = self._write(settings_path, resolved_settings)
+                self._local_settings[path_to_hash(script_path)] = self._get_file(settings_path).write(resolved_settings)
                 logger.debug("Saved local settings for %s to: %s", script_path, settings_path)
             self._signals.localChanged.emit(str(settings_path))
         except Exception:
@@ -240,36 +241,36 @@ class SettingsManager(Singleton):
             with QSignalBlocker(self._signals):
                 self.save_global(self.default_global_settings, GlobalSettings.path)
 
-        # Taken before the read, so a write by another process after this point is seen when saving
-        mtime = GlobalSettings.path_env.st_mtime_ns
+        file = self._get_file(GlobalSettings.path_env)
+        raw = file.path.safe_read_bytes()
 
-        if (settings := self._read_global()) is not None:
+        if (settings := self._read_global(raw)) is not None:
             self._global_settings = settings
             # Merge in any new shortcuts that don't exist in the loaded settings
             self._merge_default_shortcuts()
 
-        self._remember(GlobalSettings.path_env, self._global_settings, mtime)
+        file.sync(raw, self._global_settings)
 
-    def _read_global(self) -> GlobalSettings | None:
-        # Determine which file to load (path_env == path when the env var is unset)
+    def _read_global(self, raw: bytes | None) -> GlobalSettings | None:
+        # path_env == path when the env var is unset
         path = GlobalSettings.path_env
 
-        if not path.exists():
-            # Env-scoped file doesn't exist.
-            # Fallback to the reference file only if COPY is enabled, otherwise keep defaults
-            if not getenv_bool("VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT_COPY"):
-                logger.info("Global settings file does not exist. Using defaults.")
-                return None
-
+        if raw is None and getenv_bool("VSVIEW_GLOBAL_SETTINGS_ENVIRONMENT_COPY"):
+            # The env-scoped file doesn't exist. Fall back to the reference file only if COPY is enabled
             path = GlobalSettings.path
+            raw = path.safe_read_bytes()
+
+        if raw is None:
+            logger.info("Global settings file does not exist. Using defaults.")
+            return None
 
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(raw.decode("utf-8"))
             settings, dropped = validate_lenient(GlobalSettings, data)
-        except (OSError, ValidationError, json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
+        except (ValidationError, json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
             logger.warning("Global settings file is malformed or unreadable. Using defaults.\nError: %s", e)
             logger.debug("Full traceback:", exc_info=True)
-            _backup_file(path)
+            path.save_as_backup()
             return None
         except Exception:
             logger.exception("Unhandled exception:")
@@ -277,7 +278,7 @@ class SettingsManager(Singleton):
 
         if dropped:
             logger.warning("Invalid global settings were reset to their defaults: %s", ", ".join(dropped))
-            _backup_file(path)
+            path.save_as_backup()
 
         logger.debug("Loaded global settings from %s", path)
         logger.log(DEBUG - 1, " %s", lambda: pretty_repr(settings))
@@ -317,25 +318,25 @@ class SettingsManager(Singleton):
             )
             return
 
-        # Taken before the read, so a write by another process after this point is seen when saving
-        mtime = settings_path.st_mtime_ns
-        settings = self._read_local(script_path, settings_path)
+        file = self._get_file(settings_path)
+        raw = settings_path.safe_read_bytes()
+        settings = self._read_local(script_path, settings_path, raw)
 
         if not settings.source_path:
-            settings.source_path = str(script_path)
+            settings.source_path = script_path.to_str()
 
         self._local_settings[path_to_hash(script_path)] = settings
-        self._remember(settings_path, settings, mtime)
+        file.sync(raw, settings)
 
-    def _read_local(self, script_path: VPath, settings_path: VPath) -> LocalSettings:
-        if not settings_path.exists():
+    def _read_local(self, script_path: VPath, settings_path: VPath, raw: bytes | None) -> LocalSettings:
+        if raw is None:
             logger.debug("Local settings file does not exist for %s. Using defaults.", script_path)
-            return self.default_local_settings.model_copy(update={"source_path": str(script_path)})
+            return self.default_local_settings.model_copy(update={"source_path": script_path.to_str()})
 
         try:
-            data = json.loads(settings_path.read_text(encoding="utf-8"))
+            data = json.loads(raw.decode("utf-8"))
             settings, dropped = validate_lenient(LocalSettings, data)
-        except (OSError, ValidationError, json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
+        except (ValidationError, json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
             logger.error(
                 "Local settings file is malformed or unreadable for %s. Using defaults.\nFile: %s\nError: %s",
                 script_path,
@@ -343,8 +344,8 @@ class SettingsManager(Singleton):
                 e,
             )
             logger.debug("Full traceback:", exc_info=True)
-            _backup_file(settings_path)
-            return self.default_local_settings.model_copy(update={"source_path": str(script_path)})
+            settings_path.save_as_backup()
+            return self.default_local_settings.model_copy(update={"source_path": script_path.to_str()})
 
         if dropped:
             logger.warning(
@@ -352,57 +353,63 @@ class SettingsManager(Singleton):
                 script_path,
                 ", ".join(dropped),
             )
-            _backup_file(settings_path)
+            settings_path.save_as_backup()
 
         logger.debug("Loaded local settings for %s", script_path)
         logger.log(DEBUG - 1, "%s", lambda: pretty_repr(settings))
         return settings
 
-    def _write[S: GlobalSettings | LocalSettings](self, path: VPath, settings: S) -> S:
-        """Write `settings`, after merging the changes another process saved since this one last read or wrote it."""
+    def _get_file(self, path: VPath) -> _SettingsFile:
+        if (file := self._files.get(path)) is None:
+            file = self._files[path] = _SettingsFile(path)
+
+        return file
+
+
+class _SettingsFile:
+    def __init__(self, path: VPath) -> None:
+        self.path = path
+        self._raw: bytes | None = None
+        self._base: str | None = None
+
+    def sync(self, raw: bytes | None, settings: BaseSettings) -> None:
+        self._raw = raw
+        self._base = settings.model_dump_json()
+
+    def write[S: BaseSettings](self, settings: S) -> S:
+        settings = self._merge_external_changes(settings)
         text = settings.model_dump_json(indent=2)
+        raw = text.encode("utf-8")
 
-        if (merged := self._merge_external_changes(path, settings, json.loads(text))) is not None:
-            settings = merged
-            text = settings.model_dump_json(indent=2)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.atomic_write(raw)
 
-        path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(path, text)
-        self._baselines[path] = _Baseline(json.loads(text), path.st_mtime_ns)
-
+        self._raw, self._base = raw, text
         return settings
 
-    def _merge_external_changes[S: GlobalSettings | LocalSettings](
-        self, path: VPath, settings: S, ours: dict[str, Any]
-    ) -> S | None:
-        if (baseline := self._baselines.get(path)) is None or path.st_mtime_ns in (None, baseline.mtime_ns):
-            return None
+    def _merge_external_changes[S: BaseSettings](self, settings: S) -> S:
+        theirs_raw = self.path.safe_read_bytes()
+
+        if self._base is None or theirs_raw is None or theirs_raw == self._raw:
+            return settings
 
         try:
-            theirs = json.loads(path.read_text(encoding="utf-8"))
-            merged, _ = validate_lenient(type(settings), _merge_changes(baseline.data, ours, theirs))
-        except (OSError, ValueError, TypeError):
-            logger.warning("Couldn't merge the settings saved by another vsview window into %s", path, exc_info=True)
-            return None
+            ours = json.loads(settings.model_dump_json())
+            theirs = json.loads(theirs_raw.decode("utf-8"))
+            merged, _ = validate_lenient(type(settings), _merge_changes(json.loads(self._base), ours, theirs))
+        except (ValueError, TypeError):
+            logger.warning(
+                "Couldn't merge the settings saved by another vsview window into %s",
+                self.path,
+                exc_info=True,
+            )
+            return settings
 
-        logger.info("Merged the settings saved by another vsview window into %s", path)
+        logger.info("Merged the settings saved by another vsview window into %s", self.path)
         return merged
-
-    def _remember(self, path: VPath, settings: GlobalSettings | LocalSettings, mtime: int | None) -> None:
-        self._baselines[path] = _Baseline(json.loads(settings.model_dump_json()), mtime)
-
-
-class _Baseline(NamedTuple):
-    data: dict[str, Any]
-    """The settings as this process last read or wrote them."""
-
-    mtime_ns: int | None
-    """The file modification time at that moment, or None if the file did not exist."""
 
 
 def _merge_changes(base: Any, ours: Any, theirs: Any) -> Any:
-    # A value changed by this process since `base` keeps its value. Every other value is taken from `theirs`.
-    # Dicts are merged key by key. Lists and other values are replaced as a whole.
     if not (isinstance(ours, dict) and isinstance(theirs, dict)):
         return ours if ours != base else theirs
 
@@ -413,17 +420,6 @@ def _merge_changes(base: Any, ours: Any, theirs: Any) -> Any:
         merged[key] = _merge_changes(base.get(key, MISSING), value, theirs[key]) if key in theirs else value
 
     return merged
-
-
-def _backup_file(path: VPath) -> None:
-    backup_path = path.with_name(f"{path.name}.bak")
-
-    try:
-        shutil.copy2(path, backup_path)
-    except OSError:
-        logger.exception("Failed to back up the settings file %s", path)
-    else:
-        logger.warning("Saved a copy of the unreadable settings file to %s", backup_path)
 
 
 def _callable_one_param(obj: object) -> TypeIs[Callable[[LocalSettings], LocalSettings]]:

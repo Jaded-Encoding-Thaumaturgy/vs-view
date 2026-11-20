@@ -234,10 +234,11 @@ def test_validate_lenient_raises_when_a_required_field_is_missing() -> None:
 
 def _save_from_another_window(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    before = path.stat() if path.exists() else None
     path.write_text(text, encoding="utf-8")
-    # A later modification time, even when both writes fall in the same clock tick
-    stat = path.stat()
-    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    # Sync tools and backup restores keep the old modification time, so the save must be found by its content
+    if before is not None:
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
 
 
 def test_global_save_keeps_the_changes_another_window_saved(
