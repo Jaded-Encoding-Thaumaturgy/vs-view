@@ -13,6 +13,7 @@ from jetpytools import fallback
 from PySide6.QtCore import QUrl, QUrlQuery, Slot
 from PySide6.QtGui import QCursor, QImage, QShowEvent
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QVBoxLayout, QWidget
+from vsengine.futures import UnifiedFuture
 
 from vsview.api import PluginAPI, VideoOutputProxy, WidgetPluginBase, run_in_background, run_in_loop
 from vsview.env import getenv_bool
@@ -194,11 +195,14 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
             {"outputs": outputs, "following": self._selected_idx is None},
         )
 
-    @run_in_background(name="UpdateGraph")
-    def update_graph(self, *, force_layout: bool = False, refresh: bool = False) -> None:
+    def update_graph(self, *, force_layout: bool = False, refresh: bool = False) -> UnifiedFuture[None]:
         if not self.view.bridge.is_ready:
-            return
+            return UnifiedFuture.resolve(None)
 
+        return self._update_graph(force_layout=force_layout, refresh=refresh)
+
+    @run_in_background(name="UpdateGraph")
+    def _update_graph(self, *, force_layout: bool, refresh: bool) -> None:
         if self.api.is_playing or (not force_layout and not vsengine.from_thread(self.isVisible).result()):
             self._is_dirty = True
             return
