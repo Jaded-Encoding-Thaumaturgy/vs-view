@@ -231,12 +231,12 @@ class LoaderWorkspace[T](BaseWorkspace):
         )
         sm.register_shortcut(
             ActionID.SEEK_FIRST_FRAME,
-            lambda: self.playback.request_frame(0),
+            lambda: self.playback.seek_to_frame_coalesced(Frame(0)),
             self.loaded_page,
         )
         sm.register_shortcut(
             ActionID.SEEK_LAST_FRAME,
-            lambda: self.playback.request_frame(0x7FFFFFFF),
+            lambda: self.playback.seek_to_frame_coalesced(Frame(0x7FFFFFFF)),
             self.loaded_page,
         )
         sm.register_shortcut(

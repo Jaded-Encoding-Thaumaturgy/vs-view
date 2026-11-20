@@ -455,6 +455,10 @@ class PlaybackManager(QObject):
         self.timelineCursorChanged.emit(n)
 
     def _begin_playback(self, play_range: range | None = None, loop: bool = False) -> None:
+        if self._timeline_rendering:
+            self._tbar.playback_container.play_pause_btn.setChecked(False)
+            return
+
         self._playback_epoch += 1
         self.invalidate_renders()
         self.state.is_playing = True
