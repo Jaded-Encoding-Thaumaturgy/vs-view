@@ -269,7 +269,7 @@ class SettingsManager(Singleton):
         except (OSError, ValidationError, json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
             logger.warning("Global settings file is malformed or unreadable. Using defaults.\nError: %s", e)
             logger.debug("Full traceback:", exc_info=True)
-            _back_up_unreadable_file(path)
+            _backup_file(path)
             return None
         except Exception:
             logger.exception("Unhandled exception:")
@@ -277,7 +277,7 @@ class SettingsManager(Singleton):
 
         if dropped:
             logger.warning("Invalid global settings were reset to their defaults: %s", ", ".join(dropped))
-            _back_up_unreadable_file(path)
+            _backup_file(path)
 
         logger.debug("Loaded global settings from %s", path)
         logger.log(DEBUG - 1, " %s", lambda: pretty_repr(settings))
@@ -343,7 +343,7 @@ class SettingsManager(Singleton):
                 e,
             )
             logger.debug("Full traceback:", exc_info=True)
-            _back_up_unreadable_file(settings_path)
+            _backup_file(settings_path)
             return self.default_local_settings.model_copy(update={"source_path": str(script_path)})
 
         if dropped:
@@ -352,7 +352,7 @@ class SettingsManager(Singleton):
                 script_path,
                 ", ".join(dropped),
             )
-            _back_up_unreadable_file(settings_path)
+            _backup_file(settings_path)
 
         logger.debug("Loaded local settings for %s", script_path)
         logger.log(DEBUG - 1, "%s", lambda: pretty_repr(settings))
@@ -415,7 +415,7 @@ def _merge_changes(base: Any, ours: Any, theirs: Any) -> Any:
     return merged
 
 
-def _back_up_unreadable_file(path: VPath) -> None:
+def _backup_file(path: VPath) -> None:
     backup_path = path.with_name(f"{path.name}.bak")
 
     try:
