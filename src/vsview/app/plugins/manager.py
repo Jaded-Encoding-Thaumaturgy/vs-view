@@ -369,7 +369,9 @@ class PluginManager(Singleton):
 
         with self._lock:
             for plugin in self._all_plugins():
+                if (model_cls := getattr(plugin, f"{scope}_settings_model")) is None:
+                    continue
                 try:
-                    container.get_plugin_model(plugin.identifier, getattr(plugin, f"{scope}_settings_model"))
+                    container.get_plugin_model(plugin.identifier, model_cls)
                 except Exception:
                     logger.exception("Couldn't create the %s settings of plugin %r", scope, plugin)
