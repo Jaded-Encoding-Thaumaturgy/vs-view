@@ -130,9 +130,9 @@ class RemoteWorkspace(PythonScriptWorkspace, PluginWorkspace[GlobalSettings, Non
         super().on_teardown_started()
 
     @override
-    def clear_environment(self) -> None:
+    def _release_content(self) -> None:
         self._output_metadata.clear()
-        super().clear_environment()
+        super()._release_content()
 
     @override
     def get_output_metadata(self) -> dict[int, VideoMetadata]:

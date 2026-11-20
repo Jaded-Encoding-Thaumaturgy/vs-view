@@ -21,12 +21,19 @@ def _lifecycle_in(phase: Phase) -> WorkspaceLifecycle:
             pass
         case Phase.LOADING:
             lifecycle.try_begin_load()
+        case Phase.RENDERING:
+            lifecycle.try_begin_load()
+            lifecycle.begin_rendering()
         case Phase.LOADED:
             lifecycle.try_begin_load()
-            lifecycle.finish(lifecycle.next_generation())
-        case Phase.RELOADING:
+            generation = lifecycle.next_generation()
+            lifecycle.begin_rendering()
+            lifecycle.finish(generation)
+        case Phase.REPLACING:
             lifecycle.try_begin_load()
-            lifecycle.finish(lifecycle.next_generation())
+            generation = lifecycle.next_generation()
+            lifecycle.begin_rendering()
+            lifecycle.finish(generation)
             lifecycle.try_begin_reload()
         case Phase.FAILED:
             lifecycle.try_begin_load()
@@ -42,24 +49,25 @@ def _lifecycle_in(phase: Phase) -> WorkspaceLifecycle:
 
 
 @pytest.mark.parametrize(
-    ("start", "accepted", "end"),
+    ("start", "entered"),
     [
-        (Phase.EMPTY, True, Phase.LOADING),
-        (Phase.LOADING, False, Phase.LOADING),
-        (Phase.LOADED, True, Phase.RELOADING),
-        (Phase.RELOADING, False, Phase.RELOADING),
-        (Phase.FAILED, True, Phase.LOADING),
-        (Phase.CLOSING, False, Phase.CLOSING),
-        (Phase.CLOSED, False, Phase.CLOSED),
+        (Phase.EMPTY, Phase.LOADING),
+        (Phase.LOADING, None),
+        (Phase.RENDERING, None),
+        (Phase.LOADED, Phase.REPLACING),
+        (Phase.REPLACING, None),
+        (Phase.FAILED, Phase.LOADING),
+        (Phase.CLOSING, None),
+        (Phase.CLOSED, None),
     ],
 )
-def test_try_begin_load(start: Phase, accepted: bool, end: Phase) -> None:
+def test_try_begin_load(start: Phase, entered: Phase | None) -> None:
     lifecycle = _lifecycle_in(start)
 
     result = lifecycle.try_begin_load()
 
-    assert result is accepted
-    assert lifecycle.phase is end
+    assert result is entered
+    assert lifecycle.phase is (start if entered is None else entered)
 
 
 @pytest.mark.parametrize(
@@ -67,8 +75,9 @@ def test_try_begin_load(start: Phase, accepted: bool, end: Phase) -> None:
     [
         (Phase.EMPTY, False, Phase.EMPTY),
         (Phase.LOADING, False, Phase.LOADING),
-        (Phase.LOADED, True, Phase.RELOADING),
-        (Phase.RELOADING, False, Phase.RELOADING),
+        (Phase.RENDERING, False, Phase.RENDERING),
+        (Phase.LOADED, True, Phase.REPLACING),
+        (Phase.REPLACING, False, Phase.REPLACING),
         (Phase.FAILED, False, Phase.FAILED),
         (Phase.CLOSING, False, Phase.CLOSING),
         (Phase.CLOSED, False, Phase.CLOSED),
@@ -88,8 +97,9 @@ def test_try_begin_reload(start: Phase, accepted: bool, end: Phase) -> None:
     [
         (Phase.EMPTY, True, Phase.FAILED),
         (Phase.LOADING, True, Phase.FAILED),
+        (Phase.RENDERING, True, Phase.FAILED),
         (Phase.LOADED, True, Phase.FAILED),
-        (Phase.RELOADING, True, Phase.FAILED),
+        (Phase.REPLACING, True, Phase.FAILED),
         (Phase.FAILED, False, Phase.FAILED),
         (Phase.CLOSING, False, Phase.CLOSING),
         (Phase.CLOSED, False, Phase.CLOSED),
@@ -109,8 +119,9 @@ def test_fail(start: Phase, accepted: bool, end: Phase) -> None:
     [
         (Phase.EMPTY, False, Phase.EMPTY),
         (Phase.LOADING, False, Phase.LOADING),
+        (Phase.RENDERING, False, Phase.RENDERING),
         (Phase.LOADED, True, Phase.FAILED),
-        (Phase.RELOADING, False, Phase.RELOADING),
+        (Phase.REPLACING, False, Phase.REPLACING),
         (Phase.FAILED, False, Phase.FAILED),
         (Phase.CLOSING, False, Phase.CLOSING),
         (Phase.CLOSED, False, Phase.CLOSED),
@@ -125,9 +136,8 @@ def test_fail_loaded_only_fails_nothing_but_loaded_content(start: Phase, accepte
     assert lifecycle.phase is end
 
 
-@pytest.mark.parametrize("start", [Phase.LOADING, Phase.RELOADING])
-def test_finish_marks_the_current_generation_as_loaded(start: Phase) -> None:
-    lifecycle = _lifecycle_in(start)
+def test_finish_marks_the_current_generation_as_loaded() -> None:
+    lifecycle = _lifecycle_in(Phase.RENDERING)
     generation = lifecycle.next_generation()
 
     result = lifecycle.finish(generation)
@@ -141,13 +151,14 @@ def test_an_older_generation_cannot_finish() -> None:
     lifecycle.try_begin_load()
     older = lifecycle.next_generation()
     newer = lifecycle.next_generation()
+    lifecycle.begin_rendering()
 
     older_result = lifecycle.finish(older)
     phase_after_older = lifecycle.phase
     newer_result = lifecycle.finish(newer)
 
     assert older_result is False
-    assert phase_after_older is Phase.LOADING
+    assert phase_after_older is Phase.RENDERING
     assert newer_result is True
     assert lifecycle.phase is Phase.LOADED
 
@@ -157,8 +168,9 @@ def test_an_older_generation_cannot_finish() -> None:
     [
         (Phase.EMPTY, False, Phase.EMPTY),
         (Phase.LOADING, False, Phase.LOADING),
+        (Phase.RENDERING, False, Phase.RENDERING),
         (Phase.LOADED, False, Phase.LOADED),
-        (Phase.RELOADING, True, Phase.LOADED),
+        (Phase.REPLACING, True, Phase.LOADED),
         (Phase.FAILED, False, Phase.FAILED),
         (Phase.CLOSING, False, Phase.CLOSING),
         (Phase.CLOSED, False, Phase.CLOSED),
@@ -175,8 +187,64 @@ def test_cancel_reload(start: Phase, accepted: bool, end: Phase) -> None:
     assert lifecycle.generation == generation_before
 
 
-@pytest.mark.parametrize("start", [Phase.EMPTY, Phase.LOADED, Phase.FAILED, Phase.CLOSING, Phase.CLOSED])
-def test_finish_outside_a_load_changes_nothing(start: Phase) -> None:
+@pytest.mark.parametrize(
+    ("start", "accepted", "end"),
+    [
+        (Phase.EMPTY, False, Phase.EMPTY),
+        (Phase.LOADING, False, Phase.LOADING),
+        (Phase.RENDERING, False, Phase.RENDERING),
+        (Phase.LOADED, False, Phase.LOADED),
+        (Phase.REPLACING, True, Phase.LOADING),
+        (Phase.FAILED, False, Phase.FAILED),
+        (Phase.CLOSING, False, Phase.CLOSING),
+        (Phase.CLOSED, False, Phase.CLOSED),
+    ],
+)
+def test_commit_replacement(start: Phase, accepted: bool, end: Phase) -> None:
+    lifecycle = _lifecycle_in(start)
+
+    result = lifecycle.commit_replacement()
+
+    assert result is accepted
+    assert lifecycle.phase is end
+
+
+def test_a_committed_replacement_can_no_longer_keep_the_loaded_content() -> None:
+    lifecycle = _lifecycle_in(Phase.REPLACING)
+    lifecycle.commit_replacement()
+
+    kept = lifecycle.cancel_reload()
+
+    assert kept is False
+    assert lifecycle.phase is Phase.LOADING
+
+
+@pytest.mark.parametrize(
+    ("start", "accepted", "end"),
+    [
+        (Phase.EMPTY, False, Phase.EMPTY),
+        (Phase.LOADING, True, Phase.RENDERING),
+        (Phase.RENDERING, False, Phase.RENDERING),
+        (Phase.LOADED, False, Phase.LOADED),
+        (Phase.REPLACING, False, Phase.REPLACING),
+        (Phase.FAILED, False, Phase.FAILED),
+        (Phase.CLOSING, False, Phase.CLOSING),
+        (Phase.CLOSED, False, Phase.CLOSED),
+    ],
+)
+def test_begin_rendering(start: Phase, accepted: bool, end: Phase) -> None:
+    lifecycle = _lifecycle_in(start)
+
+    result = lifecycle.begin_rendering()
+
+    assert result is accepted
+    assert lifecycle.phase is end
+
+
+@pytest.mark.parametrize(
+    "start", [Phase.EMPTY, Phase.LOADING, Phase.LOADED, Phase.REPLACING, Phase.FAILED, Phase.CLOSING, Phase.CLOSED]
+)
+def test_finish_outside_a_render_changes_nothing(start: Phase) -> None:
     lifecycle = _lifecycle_in(start)
     generation = lifecycle.next_generation()
 
@@ -186,7 +254,9 @@ def test_finish_outside_a_load_changes_nothing(start: Phase) -> None:
     assert lifecycle.phase is start
 
 
-@pytest.mark.parametrize("start", [Phase.EMPTY, Phase.LOADING, Phase.LOADED, Phase.RELOADING, Phase.FAILED])
+@pytest.mark.parametrize(
+    "start", [Phase.EMPTY, Phase.LOADING, Phase.RENDERING, Phase.LOADED, Phase.REPLACING, Phase.FAILED]
+)
 def test_begin_close_makes_every_older_generation_stale(start: Phase) -> None:
     lifecycle = _lifecycle_in(start)
     older = lifecycle.next_generation()
@@ -235,8 +305,9 @@ def test_mark_closed(start: Phase, accepted: bool, end: Phase) -> None:
     [
         (Phase.EMPTY, False),
         (Phase.LOADING, False),
+        (Phase.RENDERING, False),
         (Phase.LOADED, False),
-        (Phase.RELOADING, False),
+        (Phase.REPLACING, False),
         (Phase.FAILED, False),
         (Phase.CLOSING, True),
         (Phase.CLOSED, True),
@@ -262,6 +333,30 @@ def test_generation_check_raises_a_cancellation_once_stale() -> None:
 
 @pytest.mark.qt
 @pytest.mark.parametrize(
+    ("start", "held"),
+    [
+        (Phase.EMPTY, True),
+        (Phase.LOADING, False),
+        (Phase.RENDERING, True),
+        (Phase.LOADED, True),
+        (Phase.REPLACING, False),
+        (Phase.FAILED, True),
+        (Phase.CLOSING, False),
+        (Phase.CLOSED, False),
+    ],
+)
+def test_try_hold(qapp: QApplication, start: Phase, held: bool) -> None:
+    lifecycle = _lifecycle_in(start)
+    holder = QObject()
+
+    result = lifecycle.try_hold(holder)
+
+    assert result is held
+    assert lifecycle.busy is held
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize(
     "begin",
     [
         pytest.param(WorkspaceLifecycle.try_begin_reload, id="reload"),
@@ -269,19 +364,19 @@ def test_generation_check_raises_a_cancellation_once_stale() -> None:
     ],
 )
 def test_loaded_content_is_not_replaced_while_a_plugin_holds_the_workspace(
-    qapp: QApplication, begin: Callable[[WorkspaceLifecycle], bool]
+    qapp: QApplication, begin: Callable[[WorkspaceLifecycle], object]
 ) -> None:
     lifecycle = _lifecycle_in(Phase.LOADED)
     holder = QObject()
     lifecycle.try_hold(holder)
 
-    refused = begin(lifecycle)
+    begin(lifecycle)
+    phase_while_held = lifecycle.phase
     lifecycle.release_hold(holder)
-    accepted = begin(lifecycle)
+    begin(lifecycle)
 
-    assert refused is False
-    assert accepted is True
-    assert lifecycle.phase is Phase.RELOADING
+    assert phase_while_held is Phase.LOADED
+    assert lifecycle.phase is Phase.REPLACING
 
 
 @pytest.mark.qt
@@ -291,7 +386,7 @@ def test_plugins_can_hold_the_workspace_again_once_the_new_outputs_exist(qapp: Q
     lifecycle.try_begin_load()
 
     held_while_loading = lifecycle.try_hold(holder)
-    lifecycle.end_exclusive()
+    lifecycle.begin_rendering()
     held_after = lifecycle.try_hold(holder)
 
     assert held_while_loading is False

@@ -23,6 +23,7 @@ from ...types import Time
 from ...vsenv import run_in_loop
 from ..settings import SettingsManager
 from ..settings.models import LocalSettings
+from .lifecycle import LoadResult
 from .loader import LoaderWorkspace, VSEngineWorkspace
 
 logger = getLogger(__name__)
@@ -222,7 +223,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         frame: int | None = None,
         time: float | None = None,
         tab_index: int | None = None,
-    ) -> UnifiedFuture[int]:
+    ) -> UnifiedFuture[LoadResult]:
         remaining_time = self._stop_autosave()
         return (
             super()
@@ -231,7 +232,7 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
         )
 
     @override
-    def reload_content(self) -> UnifiedFuture[int]:
+    def reload_content(self) -> UnifiedFuture[LoadResult]:
         remaining_time = self._stop_autosave()
         return super().reload_content().add_loop_callback(lambda f: self._start_autosave(f, remaining_time))
 
@@ -250,8 +251,8 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
             super().load_plugins()
             self._restore_layout()
 
-    def _start_autosave(self, f: Future[int], remaining_time: int) -> None:
-        if f.exception() or f.result() == 1:
+    def _start_autosave(self, f: Future[LoadResult], remaining_time: int) -> None:
+        if f.exception() or f.result() is LoadResult.FAILED:
             return
 
         autosave = self.global_settings.autosave

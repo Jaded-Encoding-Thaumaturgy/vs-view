@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import Future, wait
 from logging import getLogger
 from typing import Any, ClassVar, final, override
@@ -18,7 +18,7 @@ from ..plugins.exceptions import NoEnvironmentError
 from ..settings import SettingsManager
 from ..settings.models import GlobalSettings
 from ..utils import Disposable
-from .callbacks import CallbackRegistry
+from .callbacks import CallbackHandle, CallbackRegistry
 from .lifecycle import WorkspaceLifecycle
 
 logger = getLogger(__name__)
@@ -46,8 +46,6 @@ class BaseWorkspace(QMainWindow):
         self.lifecycle = WorkspaceLifecycle()
         self._env: ManagedEnvironment | None = None
         self._destroy_callbacks = CallbackRegistry()
-        self._disposal_waits_for = list[Future[Any]]()
-        self._disposal: UnifiedFuture[None] | None = None
 
     @property
     def loop(self) -> QtEventLoop:
@@ -59,20 +57,17 @@ class BaseWorkspace(QMainWindow):
     @property
     def env(self) -> ManagedEnvironment:
         """
-        Return the managed VapourSynth environment associated with this workspace.
-
-        A workspace that does not load content creates its environment on first use.
+        Return the managed VapourSynth environment of this workspace.
+        Only `prepare_environment` creates it.
 
         Raises:
-            NoEnvironmentError: The workspace is closing.
+            NoEnvironmentError: The workspace holds no environment.
+                For a loader workspace: nothing is loaded, the last load failed,
+                a reload is between two environments, or the workspace is closing.
         """
-        if self.lifecycle.closing:
-            raise NoEnvironmentError(f"{type(self).__name__} is closing and holds no VapourSynth environment")
-
-        if not self._env or self._env.disposed:
-            self._env = self.new_environment()
-
-        return self._env
+        if (env := self._env) is None or env.disposed:
+            raise NoEnvironmentError(f"{type(self).__name__} holds no VapourSynth environment")
+        return env
 
     @property
     def outputs(self) -> dict[int, VideoOutputTuple | AudioNode]:
@@ -103,16 +98,32 @@ class BaseWorkspace(QMainWindow):
         """Create a new VapourSynth environment for this workspace. Subclasses and tests may override it."""
         return create_environment()
 
-    def register_on_destroy[**P, R](self, cb: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> Callable[P, R]:
+    def prepare_environment(self) -> ManagedEnvironment:
+        """
+        Return the environment of this workspace, and create it when the workspace holds none.
+
+        A loader workspace calls it before `loader`.
+
+        Raises:
+            NoEnvironmentError: The workspace is closing.
+        """
+        if self.lifecycle.closing:
+            raise NoEnvironmentError(f"{type(self).__name__} is closing and creates no VapourSynth environment")
+
+        if (env := self._env) is None or env.disposed:
+            self._env = env = self.new_environment()
+
+        return env
+
+    def register_on_destroy[**P](self, cb: Callable[P, Any], *args: P.args, **kwargs: P.kwargs) -> CallbackHandle:
         """
         Register a callback to run once, when this workspace closes.
 
         Registering the same callable with the same arguments again is ignored,
         unless an argument cannot be hashed.
-        The callbacks run in reverse registration order, after the environment is released.
+        The callbacks run on the GUI thread, in LIFO order, once the workspace has dropped its environment..
         """
-        self._destroy_callbacks.add(cb, *args, **kwargs)
-        return cb
+        return self._destroy_callbacks.add(cb, *args, **kwargs)
 
     def unregister_on_destroy[**P, R](self, cb: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> bool:
         """
@@ -132,7 +143,7 @@ class BaseWorkspace(QMainWindow):
 
     def on_teardown_finished(self) -> None:
         """
-        Lifecycle hook called last in the teardown, after the environment is released.
+        Lifecycle hook called last in the teardown, once the workspace has dropped its environment..
 
         Subclasses must call `super()`.
         """
@@ -147,11 +158,20 @@ class BaseWorkspace(QMainWindow):
         """Confirm if workspace can be closed. Returns True to proceed, False to cancel."""
         return True
 
-    def clear_environment(self) -> None:
-        self._dispose_environment()
+    def release_environment(self, *, strict: bool = True) -> None:
+        """
+        Release what this workspace built from its environment, then dispose the environment.
+
+        The environment is disposed before this returns. Call it only when no task of the workspace still runs.
+        """
+        self._release_content()
+        fut = self._dispose_environment()
+
+        if strict and not fut.done():
+            raise RuntimeError("Environment isn't disposed yet")
 
     @final
-    def teardown(self) -> UnifiedFuture[None] | None:
+    def teardown(self) -> UnifiedFuture[None]:
         """
         Release everything this workspace holds: its tasks, its environment and its destroy callbacks.
 
@@ -159,16 +179,19 @@ class BaseWorkspace(QMainWindow):
         Subclasses override `on_teardown_started` and `on_teardown_finished` instead.
 
         Returns:
+            A future that is done once the environment is disposed.
             When tasks of this workspace still run, the environment is disposed after they end,
-            on a background thread, and the returned future is done once it is disposed. None otherwise.
+            on a background thread. Otherwise, the future is already done.
         """
         if self.lifecycle.begin_close() is None:
-            return None
+            return UnifiedFuture.resolve(None)
 
         logger.debug("%s teardown started", type(self).__name__)
 
         self.on_teardown_started()
-        self._release_environment(self._finish_tasks())
+        still_running = self._finish_tasks()
+        self._release_content()
+        disposal = self._dispose_environment(after=still_running)
         self._destroy_callbacks.run_callbacks(self, take_all=True, reverse=True)
 
         for child in self.findChildren(QObject):
@@ -178,40 +201,46 @@ class BaseWorkspace(QMainWindow):
         self.on_teardown_finished()
         self.lifecycle.mark_closed()
 
-        disposal, self._disposal = self._disposal, None
         return disposal
 
     def _finish_tasks(self) -> list[Future[Any]]:
         """Stop the workspace's work, and return the tasks that are still running afterwards."""
         return []
 
-    def _before_delayed_disposal(self, env: ManagedEnvironment) -> None:
-        """Run on the background thread, after the remaining tasks ended and right before `env` is disposed."""
+    def _release_content(self) -> None:
+        """
+        Release what this workspace built from its environment, right before the environment is disposed.
 
-    def _release_environment(self, still_running: list[Future[Any]]) -> None:
-        self._disposal_waits_for = still_running
-        try:
-            self.clear_environment()
-        finally:
-            self._disposal_waits_for = []
+        Subclasses must call `super()`.
+        """
+
+    def _dispose_environment(self, after: Sequence[Future[Any]] = ()) -> UnifiedFuture[None]:
+        """
+        Dispose the environment, or only once every task in `after` has ended.
+
+        Returns:
+            A future that is done once the environment is disposed.
+            It is already done when the environment was disposed at once or there was none.
+        """
+        if (target := self._take_environment()) is None:
+            return UnifiedFuture.resolve(None)
+
+        def dispose() -> None:
+            wait(after)
+            self._before_disposal(target.environment if isinstance(target, Script) else target)
+            clear_environment(target)
+
+        if not after:
+            dispose()
+            return UnifiedFuture.resolve(None)
+
+        # Disposing a script waits on the lock its still-running body holds, so it must not block the GUI thread.
+        logger.debug("Disposing the environment after %d running task(s) end", len(after))
+        return self.loop.to_thread_named("ReleaseEnvironment", dispose)
 
     def _take_environment(self) -> ManagedEnvironment | Script[ManagedEnvironment] | None:
         env, self._env = self._env, None
         return env
 
-    def _dispose_environment(self) -> None:
-        if (target := self._take_environment()) is None:
-            return
-
-        if not (still_running := self._disposal_waits_for):
-            clear_environment(target)
-            return
-
-        # Disposing a script waits on the lock its still-running body holds, so it must not block the GUI thread.
-        def dispose_when_done() -> None:
-            wait(still_running)
-            self._before_delayed_disposal(target.environment if isinstance(target, Script) else target)
-            clear_environment(target)
-
-        logger.debug("Disposing the environment after %d running task(s) end", len(still_running))
-        self._disposal = self.loop.to_thread_named("ReleaseEnvironment", dispose_when_done)
+    def _before_disposal(self, env: ManagedEnvironment) -> None:
+        """Run on the background thread, after the remaining tasks ended and right before `env` is disposed."""

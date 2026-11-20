@@ -627,8 +627,7 @@ def test_closing_during_a_running_script_disposes_its_environment_after_the_scri
 def test_unload_callbacks_are_dropped_when_there_is_no_environment(loader_workspace: ConcreteLoaderWorkspace) -> None:
     calls = list[str]()
     loader_workspace.register_on_unload(calls.append, "unload")
-
-    loader_workspace.clear_environment()
+    loader_workspace.release_environment()
     loader_workspace.teardown()
 
     assert calls == []
@@ -749,9 +748,9 @@ def test_a_frame_that_fails_to_render_during_a_reload_does_not_fail_the_reload(
     qtbot.waitUntil(rendering.is_set, timeout=3000)
 
     fut_reload = ws.reload_content()
-    qtbot.waitUntil(lambda: ws.lifecycle.phase is Phase.RELOADING, timeout=3000)
+    qtbot.waitUntil(lambda: ws.lifecycle.phase is Phase.REPLACING, timeout=3000)
     gate.set()
-    qtbot.waitUntil(lambda: fut_reload.done() and ws.lifecycle.phase is not Phase.RELOADING, timeout=5000)
+    qtbot.waitUntil(lambda: fut_reload.done() and ws.lifecycle.phase in (Phase.LOADED, Phase.FAILED), timeout=5000)
 
     assert fut_reload.result() == 0
     assert ws.lifecycle.phase is Phase.LOADED

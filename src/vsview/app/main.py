@@ -70,12 +70,13 @@ from .settings import ActionID, SecretsManager, SettingsManager, ShortcutManager
 from .settings.dialog import SettingsDialog, ShortcutEditor
 from .settings.models import WindowGeometry
 from .themes import AppearanceManager
-from .utils import check_leaks
+from .utils import WorkTracker, check_leaks
 from .views import StatusWidget
 from .workspace import (
     BaseGenericFileWorkspace,
     BaseWorkspace,
     LoaderWorkspace,
+    LoadResult,
     Phase,
     PythonScriptWorkspace,
     QuickScriptWorkspace,
@@ -341,6 +342,7 @@ class MainWindow(QMainWindow):
 
         self._connected_workspace: BaseWorkspace | None = None
         self._pending_disposals = set[Future[None]]()
+        self._teardown_track = WorkTracker()
 
     def _setup_shortcuts(self) -> None:
         sm = ShortcutManager()
@@ -376,12 +378,12 @@ class MainWindow(QMainWindow):
 
     def load_new_script(
         self, path: Path, **vsargs: Any
-    ) -> tuple[WorkspaceToolButton[PythonScriptWorkspace], UnifiedFuture[int]]:
+    ) -> tuple[WorkspaceToolButton[PythonScriptWorkspace], UnifiedFuture[LoadResult]]:
         btn = self.add_workspace(PythonScriptWorkspace)
         btn.workspace.vsargs = vsargs
         return btn, btn.workspace.load_content(path)
 
-    def load_new_file(self, path: Path) -> tuple[WorkspaceToolButton[VideoFileWorkspace], UnifiedFuture[int]]:
+    def load_new_file(self, path: Path) -> tuple[WorkspaceToolButton[VideoFileWorkspace], UnifiedFuture[LoadResult]]:
         btn = self.add_workspace(VideoFileWorkspace)
         return btn, btn.workspace.load_content(path)
 
@@ -399,7 +401,7 @@ class MainWindow(QMainWindow):
                 if Shiboken.getCppPointer(child)[0] not in children_before and isinstance(child, QWidget):
                     QWidget.deleteLater(child)
 
-            self._unregister_policy_when_idle()
+            self._unregister_policy_if_idle()
             raise
 
         self.disconnect_workspace()
@@ -439,20 +441,18 @@ class MainWindow(QMainWindow):
 
         def on_disposal_done(disposal: Future[None]) -> None:
             self._pending_disposals.discard(disposal)
-            self._unregister_policy_when_idle()
+            self._unregister_policy_if_idle()
 
-        if Shiboken.isValid(btn.workspace):
-            if (disposal := btn.workspace.teardown()) is not None:
-                self._pending_disposals.add(disposal)
-                disposal.add_loop_callback(on_disposal_done)
-            btn.workspace.deleteLater()
+        with self._teardown_track:
+            disposal = btn.workspace.teardown()
+        self._pending_disposals.add(disposal)
+        disposal.add_loop_callback(on_disposal_done)
 
+        btn.workspace.deleteLater()
         btn.deleteLater()
 
         with QSignalBlocker(self.settings_manager.signals):
             self.settings_manager.save_global()
-
-        self._unregister_policy_when_idle()
 
         with check_leaks.ctx():
             QTimer.singleShot(0, gc.collect)
@@ -504,8 +504,8 @@ class MainWindow(QMainWindow):
         if isinstance(workspace, LoaderWorkspace) and workspace.outputs_manager.current_voutput:
             workspace._emit_output_info()
 
-    def _unregister_policy_when_idle(self) -> None:
-        if not self.nav_container.buttons and not self._pending_disposals:
+    def _unregister_policy_if_idle(self) -> None:
+        if not self.nav_container.buttons and not self._pending_disposals and self._teardown_track.is_idle:
             unregister_policy()
 
     def _save_geometry(self) -> None:

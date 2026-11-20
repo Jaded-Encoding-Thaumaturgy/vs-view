@@ -43,7 +43,7 @@ from vsview.api.workspace import PluginWorkspace
 from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings import SettingsManager
 from vsview.app.utils import atomic_write
-from vsview.app.workspace import BaseGenericFileWorkspace, Phase, VSEngineWorkspace, get_default_script
+from vsview.app.workspace import BaseGenericFileWorkspace, LoadResult, Phase, VSEngineWorkspace, get_default_script
 from vsview.env import getenv_bool
 from vsview.vsenv import QtEventLoop, create_environment
 
@@ -920,7 +920,7 @@ class EditorWorkspace(
             self._replace_content(code)
 
     @override
-    def reload_content(self, code: str | None = None) -> UnifiedFuture[int]:
+    def reload_content(self, code: str | None = None) -> UnifiedFuture[LoadResult]:
         self._save_current_dock_sizes()
         code = fallback(code, self.code_dock.editor.bridge.main_content)
 

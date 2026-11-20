@@ -31,7 +31,7 @@ from ...vsenv import run_in_background, run_in_loop
 from ..icon import IconReloadMixin
 from ..settings import ActionID, SettingsManager, ShortcutManager
 from ..utils import atomic_write
-from .lifecycle import Phase
+from .lifecycle import LoadResult, Phase
 from .loader import VSEngineWorkspace
 from .utils import CodeContent, get_default_script
 
@@ -473,7 +473,7 @@ class QuickScriptWorkspace(VSEngineWorkspace[CodeContent]):
         return super().loader()
 
     @override
-    def reload_content(self) -> UnifiedFuture[int]:
+    def reload_content(self) -> UnifiedFuture[LoadResult]:
         output_metadata.pop(self.filename, None)
         self.content = CodeContent(self.code_dock.editor.toPlainText(), self.filename)
 

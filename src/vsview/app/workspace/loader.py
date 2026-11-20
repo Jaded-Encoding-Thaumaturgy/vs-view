@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import Future, wait
-from contextlib import contextmanager, nullcontext, suppress
+from contextlib import ExitStack, contextmanager, suppress
 from functools import partial
 from logging import getLogger
 from pathlib import Path
@@ -42,7 +42,6 @@ from ...vsenv.loop import TaskInfo
 from ..outputs import AudioOutput, OutputsManager, VideoOutput
 from ..plugins._controller import PluginWorkspaceController
 from ..plugins.api import WidgetPluginBase
-from ..plugins.exceptions import NoEnvironmentError
 from ..settings import ActionID, ShortcutManager
 from ..utils import ProcessMemorySnapshot, has_overriding_method, measure_memory
 from ..views import PluginDock, PluginSplitter
@@ -52,7 +51,7 @@ from ..views.timeline import TimelineControlBar
 from ..views.video import GraphicsView, ViewState
 from .base import BaseWorkspace
 from .callbacks import CallbackHandle, CallbackRegistry
-from .lifecycle import Phase, StaleGenerationError
+from .lifecycle import LoadResult, Phase, StaleGenerationError
 from .playback import PlaybackManager, show_warning
 from .tab_manager import PlayHeadToolButton, TabManager
 from .utils import State, evict_packages, find_local_packages
@@ -261,62 +260,23 @@ class LoaderWorkspace[T](BaseWorkspace):
         sm.register_shortcut(ActionID.SWITCH_PREVIOUS_TAB, lambda: self.tab_manager.switch_tab(delta=-1), self)
         sm.register_shortcut(ActionID.SWITCH_NEXT_TAB, lambda: self.tab_manager.switch_tab(delta=1), self)
 
-    @property
     @override
-    def env(self) -> ManagedEnvironment:
-        """
-        Return the managed VapourSynth environment of the loaded content.
-
-        Only the load path creates it, through `prepare_environment`.
-
-        Raises:
-            NoEnvironmentError: Nothing is loaded, the last load failed, a reload is between two environments,
-                or the workspace is closing.
-        """
-        if (env := self._env) is None or env.disposed:
-            raise NoEnvironmentError(f"{type(self).__name__} holds no VapourSynth environment")
-        return env
-
-    def prepare_environment(self) -> ManagedEnvironment:
-        """
-        Return the environment for the content being loaded, and create it when the workspace holds none.
-
-        The load path calls it before `loader`.
-
-        Raises:
-            NoEnvironmentError: The workspace is closing.
-        """
-        if self.lifecycle.closing:
-            raise NoEnvironmentError(f"{type(self).__name__} is closing and creates no VapourSynth environment")
-
-        if (env := self._env) is None or env.disposed:
-            self._env = env = self.new_environment()
-
-        return env
-
-    def register_on_release(self, cb: Callable[[], Any]) -> CallbackHandle:
-        """
-        Register a callback run each time this workspace releases its environment:
-        before each reload, after a failed load and when it closes.
-        """
-        return self._release_callbacks.add(cb)
-
-    def register_on_unload[**P, R](self, cb: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> Callable[P, R]:
-        """Register a callback run once, the next time this workspace releases its environment."""
-        self._unload_callbacks.add(cb, *args, **kwargs)
-        return cb
+    def _finish_tasks(self) -> list[Future[Any]]:
+        self.playback.stop()
+        self.playback.invalidate_renders()
+        self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
+        self.plugin_controller.on_workspace_destroy()
+        self.loop.wait_for_threads(self.task_timeout_ms, owner=self)
+        return [task.future for task in self.loop.pending_tasks(owner=self)]
 
     @override
-    def clear_environment(self) -> None:
+    def _release_content(self) -> None:
         if (env := self._env) is None or env.disposed:
             # Their run's environment is gone, and VapourSynth calls made outside an environment are undefined.
             self._unload_callbacks.take_all()
         else:
             with env.use():
-                self._unload_callbacks.run_callbacks(self, take_all=True, reverse=True)
-                rcallbacks = self._release_callbacks.snapshot()
-                done, _ = wait([self.loop.from_thread(keep_environment(cb)) for cb in rcallbacks])
-
+                done, _ = wait(self.loop.from_thread(keep_environment(cb)) for cb in self._release_callbacks.snapshot())
             for f in done:
                 if (exc := f.exception()) is not None:
                     logger.error(exc, exc_info=exc)
@@ -326,23 +286,29 @@ class LoaderWorkspace[T](BaseWorkspace):
 
         self.outputs_manager.clear()
 
-        return super().clear_environment()
+        super()._release_content()
 
     @override
-    def _before_delayed_disposal(self, env: ManagedEnvironment) -> None:
-        # A script still running at close may register unload callbacks after the release already ran them.
-        if not env.disposed:
-            with env.use():
-                self._unload_callbacks.run_callbacks(self, take_all=True, reverse=True)
+    def _before_disposal(self, env: ManagedEnvironment) -> None:
+        with env.use():
+            self._unload_callbacks.run_callbacks(self, take_all=True, reverse=True)
 
-    @override
-    def _finish_tasks(self) -> list[Future[Any]]:
-        self.playback.stop()
-        self.playback.invalidate_renders()
-        self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
-        self.plugin_controller.on_workspace_destroy()
-        self.loop.wait_for_threads(self.task_timeout_ms, owner=self)
-        return [task.future for task in self.loop.pending_tasks(owner=self)]
+    def register_on_release(self, cb: Callable[[], Any]) -> CallbackHandle:
+        """
+        Register a callback run each time this workspace releases its environment,
+        before each reload, after a failed load and when it closes,
+        on the GUI thread inside the environment, in FIFO order.
+
+        Toolpanels and tooldocks use this through the controller and API.
+        """
+        return self._release_callbacks.add(cb)
+
+    def register_on_unload[**P](self, cb: Callable[P, Any], *args: P.args, **kwargs: P.kwargs) -> CallbackHandle:
+        """
+        Register a callback run once, the next time this workspace releases its environment,
+        on the releasing thread inside the environment, in LIFO order.
+        """
+        return self._unload_callbacks.add(cb, *args, **kwargs)
 
     @contextmanager
     def status_loading(self, loading_message: str, completed_message: str) -> Generator[None]:
@@ -396,12 +362,9 @@ class LoaderWorkspace[T](BaseWorkspace):
         frame: int | None = None,
         time: float | None = None,
         tab_index: int | None = None,
-    ) -> int:
+    ) -> LoadResult:
         """
         Load `content`. A workspace that holds loaded content releases it first, as a reload does.
-
-        Returns:
-            0 when the content is rendering, 1 when the load failed, 2 when the load was refused or stopped.
 
         Raises:
             Cancelled: When the workspace keeps its loaded content
@@ -409,20 +372,24 @@ class LoaderWorkspace[T](BaseWorkspace):
         """
         logger.debug("load_content called: path=%r, frame=%r, tab_index=%r", content, frame, tab_index)
 
-        if not self.lifecycle.try_begin_load():
+        if (phase := self.lifecycle.try_begin_load()) is None:
             self._warn_refused(f"load {content!r}")
-            return 2
+            return LoadResult.STOPPED
 
-        return self._run_generation(content, reload=False, frame=frame, time=time, tab_index=tab_index)
+        return self._run_generation(
+            content,
+            reload=False,
+            replacing=phase is Phase.REPLACING,
+            frame=frame,
+            time=time,
+            tab_index=tab_index,
+        )
 
     @Slot()
     @run_in_background(name="ReloadContent")
-    def reload_content(self) -> int:
+    def reload_content(self) -> LoadResult:
         """
         Reload the loaded content, and keep the current tab, frame and view.
-
-        Returns:
-            0 when the content is rendering, 1 when the reload failed, 2 when the reload was refused or stopped.
 
         Raises:
             Cancelled: When the workspace keeps its loaded content
@@ -430,40 +397,29 @@ class LoaderWorkspace[T](BaseWorkspace):
         """
         if not self.lifecycle.try_begin_reload():
             self._warn_refused("reload content")
-            return 2
+            return LoadResult.STOPPED
 
         logger.debug("Reloading content: %r", self.content)
-        return self._run_generation(self.content, reload=True)
+        return self._run_generation(self.content, reload=True, replacing=True)
 
     def _run_generation(
         self,
         content: T,
         *,
         reload: bool,
+        replacing: bool,
         frame: int | None = None,
         time: float | None = None,
         tab_index: int | None = None,
-    ) -> int:
-        # A load into a workspace that holds loaded content also starts in RELOADING.
-        replacing = self.lifecycle.phase is Phase.RELOADING
-        keeps_loaded_content = replacing
-        memory = measure_memory() if reload and getenv_bool("VSVIEW_DEBUG") else nullcontext()
-        memory.__enter__()
-        screenshot: QLabel | None = None
+    ) -> LoadResult:
+        ui = ExitStack()
+        if reload and getenv_bool("VSVIEW_DEBUG"):
+            ui.enter_context(measure_memory())
         saved_view: tuple[ViewState, int, bool] | None = None
-        ui_released = False
-
-        def release_ui() -> None:
-            nonlocal ui_released
-            if ui_released:
-                return
-            ui_released = True
-            if screenshot is not None:
-                self._destroy_freeze_screenshot(screenshot)
-            memory.__exit__(None, None, None)
 
         try:
             if replacing:
+                # Disable UI interaction so the user can't fuck this up
                 self.playback.stop()
                 self.playback.invalidate_renders()
                 if reload:
@@ -471,33 +427,36 @@ class LoaderWorkspace[T](BaseWorkspace):
                     self.statusLoadingStarted.emit("Reloading Content...")
                 self.loop.from_thread(self.content_area.setDisabled, True).result()
                 if reload:
-                    screenshot = self._create_freeze_screenshot()
+                    ui.callback(self._destroy_freeze_screenshot, self._create_freeze_screenshot())
                 self.tbar.disable()
 
+                # Wait for tasks
                 self.playback.state.wait_for_cleanup(
                     0.25,
                     stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."),
                 )
                 self.loop.wait_for_threads(self.task_timeout_ms, owner=self)
                 self.loop.next_cycle().result()
-                still_running = self.loop.pending_tasks(owner=self)
 
-                if still_running:
-                    release_ui()
+                # If there was still running tasks we refuse the (re)load
+                if still_running := self.loop.pending_tasks(owner=self):
+                    ui.close()
                     self._refuse_replacement(still_running, reload=reload)
-                    return 2
+                    return LoadResult.STOPPED
 
+                # Set the status again since it could have been changed by the stall cb above
                 if reload:
                     self.statusLoadingStarted.emit("Reloading Content...")
 
-                # The loaded content is released from here on, so a cancellation can no longer keep it.
-                keeps_loaded_content = False
+                if not self.lifecycle.commit_replacement():
+                    raise StaleGenerationError(f"The loaded content of {type(self).__name__} cannot be released")
 
                 if reload:
                     saved_view = self._capture_reload_ui_state()
                     self._clear_reload_views()
 
-                self.clear_environment()
+                # We waited for running tasks so this method can't raise an error.
+                self.release_environment()
                 self.loop.from_thread(gc.collect).result()
 
                 if getenv_bool("VSVIEW_DEBUG"):
@@ -513,6 +472,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                         evict_packages(local_packages)
                         logger.info("Local packages reloaded: %r", sorted(local_packages))
             else:
+                # First load
                 self.set_loading_page()
                 self.statusLoadingStarted.emit("Loading...")
                 self.content = content
@@ -522,10 +482,11 @@ class LoaderWorkspace[T](BaseWorkspace):
             outputs = self._get_outputs()
             generation.check()
 
+            # The workspace can't be in a state where there is no video output.
             if not outputs:
-                release_ui()
+                ui.close()
                 self.clear_failed_load()
-                return 1
+                return LoadResult.FAILED
 
             voutputs, aoutputs = outputs
 
@@ -537,6 +498,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 )
                 tabs = self.tab_manager.create_tabs(voutputs)
 
+            # PERF: Check if a subclass implemented `on_views_created`
             if has_overriding_method(LoaderWorkspace, self, "on_views_created"):
                 self.on_views_created(self.loop.from_thread(lambda: list(tabs.views())).result())
 
@@ -549,15 +511,17 @@ class LoaderWorkspace[T](BaseWorkspace):
 
             self.tbar.playback_container.set_audio_outputs(aoutputs, self.outputs_manager.current_audio_index)
 
-            # Plugins can hold the workspace again, and are built here so they can use the new environment.
-            self.lifecycle.end_exclusive()
+            if not self.lifecycle.begin_rendering():
+                raise StaleGenerationError(f"The new outputs of {type(self).__name__} cannot render")
+
+            # Plugins are built once the outputs exist, so they can use the new environment.
             self.load_plugins()
             generation.check()
             self.plugin_controller.on_workspace_loaded()
 
             @run_in_loop(return_future=False)
             def on_complete(f: Future[int]) -> None:
-                release_ui()
+                ui.close()
 
                 if not generation.is_current():
                     return
@@ -597,25 +561,24 @@ class LoaderWorkspace[T](BaseWorkspace):
                 check_busy=False,
             )
 
-            return 0
+            return LoadResult.RENDERING
         except StaleGenerationError:
             logger.debug("The load of %r stopped because the workspace is closing", content)
-            release_ui()
-            return 2
+            ui.close()
+            return LoadResult.STOPPED
         except Cancelled:
             logger.debug("The load of %r was cancelled", content)
 
             with suppress(Cancelled):
-                release_ui()
-                if keeps_loaded_content:
-                    self._keep_loaded_content()
+                ui.close()
+                if self._keep_loaded_content():
                     self.statusLoadingErrored.emit("Reload cancelled" if reload else "Load cancelled")
                 else:
                     self.clear_failed_load()
             raise
         except Exception:
             logger.error("Failed to load content: %r", content)
-            release_ui()
+            ui.close()
             self.clear_failed_load()
             raise
 
@@ -626,12 +589,15 @@ class LoaderWorkspace[T](BaseWorkspace):
             logger.warning("Workspace is %s, cannot %s", self.lifecycle.phase.name.lower(), action)
 
     @run_in_loop(return_future=False)
-    def _keep_loaded_content(self) -> None:
-        self.lifecycle.cancel_reload()
+    def _keep_loaded_content(self) -> bool:
+        """Return False when the loaded content was already released, and is no longer kept."""
+        if not self.lifecycle.cancel_reload():
+            return False
+
         self.content_area.setEnabled(True)
         self.tbar.enable()
+        return True
 
-    @run_in_loop(return_future=False)
     def _refuse_replacement(self, still_running: list[TaskInfo], *, reload: bool) -> None:
         self._keep_loaded_content()
 
@@ -647,7 +613,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         )
         logger.warning(message)
         self.statusLoadingErrored.emit(f"{kind} refused")
-        show_warning(self, message, title=f"{kind} Refused")
+        self.loop.from_thread(show_warning, self, message, title=f"{kind} Refused").result()
 
     @run_in_loop(return_future=False)
     def _capture_reload_ui_state(self) -> tuple[ViewState, int, bool]:
@@ -722,7 +688,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.playback.invalidate_renders()
         self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
 
-        self.clear_environment()
+        self.release_environment()
 
         with QSignalBlocker(self.tab_manager.tabs):
             self.tab_manager.tabs.clear()
@@ -1146,12 +1112,6 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
         self.vsargs = dict[str, Any]()
         self.persistent_state = State()
 
-    @override
-    def on_teardown_finished(self) -> None:
-        super().on_teardown_finished()
-        self.persistent_state.clear()
-        self.persistent_state = State()
-
     @property
     def _script_content(self) -> Any:
         """Return the content to be loaded by the script engine."""
@@ -1170,6 +1130,12 @@ class VSEngineWorkspace[T](LoaderWorkspace[T]):
             if self.content_type == "script"
             else self._script_kwargs.get("filename", repr(self.content))
         )
+
+    @override
+    def on_teardown_finished(self) -> None:
+        super().on_teardown_finished()
+        self.persistent_state.clear()
+        self.persistent_state = State()
 
     @override
     def loader(self) -> None:

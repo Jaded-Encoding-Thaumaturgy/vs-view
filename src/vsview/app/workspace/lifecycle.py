@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import Enum, auto
+from enum import Enum, IntEnum, auto
 from threading import Lock
 
 from PySide6.QtCore import QObject
@@ -18,11 +18,18 @@ class Phase(Enum):
     LOADING = auto()
     """Content is loading into a workspace that holds no loaded content."""
 
+    RENDERING = auto()
+    """The outputs of the content being loaded exist, and its first frame is rendering."""
+
     LOADED = auto()
     """The content is loaded and shown."""
 
-    RELOADING = auto()
-    """Content is loading into a workspace that holds loaded content."""
+    REPLACING = auto()
+    """
+    A load or reload waits for the loaded content's tasks to end.
+
+    The loaded content is still held, so the load can be cancelled and the content kept.
+    """
 
     FAILED = auto()
     """The last load failed, and the error page is shown."""
@@ -39,17 +46,37 @@ class Phase(Enum):
             case Phase.EMPTY:
                 return frozenset({Phase.LOADING, Phase.FAILED, Phase.CLOSING})
             case Phase.LOADING:
+                return frozenset({Phase.RENDERING, Phase.FAILED, Phase.CLOSING})
+            case Phase.RENDERING:
                 return frozenset({Phase.LOADED, Phase.FAILED, Phase.CLOSING})
             case Phase.LOADED:
-                return frozenset({Phase.RELOADING, Phase.FAILED, Phase.CLOSING})
-            case Phase.RELOADING:
-                return frozenset({Phase.LOADED, Phase.FAILED, Phase.CLOSING})
+                return frozenset({Phase.REPLACING, Phase.FAILED, Phase.CLOSING})
+            case Phase.REPLACING:
+                return frozenset({Phase.LOADING, Phase.LOADED, Phase.FAILED, Phase.CLOSING})
             case Phase.FAILED:
                 return frozenset({Phase.LOADING, Phase.CLOSING})
             case Phase.CLOSING:
                 return frozenset({Phase.CLOSED})
             case Phase.CLOSED:
                 return frozenset()
+
+    @property
+    def holdable(self) -> bool:
+        """Whether a plugin can hold the workspace in this phase."""
+        return self in (Phase.EMPTY, Phase.RENDERING, Phase.LOADED, Phase.FAILED)
+
+
+class LoadResult(IntEnum):
+    """The result of a load or reload."""
+
+    RENDERING = 0
+    """The new content is rendering its first frame."""
+
+    FAILED = 1
+    """The load failed, and the error page is shown."""
+
+    STOPPED = 2
+    """The load was refused, or stopped because the workspace is closing."""
 
 
 class StaleGenerationError(Cancelled):
@@ -76,14 +103,13 @@ class Generation:
 
 
 class WorkspaceLifecycle:
-    """Tracks a loader workspace's phase, generation, and plugin gate."""
+    """Tracks a loader workspace's phase, generation, and plugin holds."""
 
     def __init__(self) -> None:
         self._lock = Lock()
         self._phase = Phase.EMPTY
         self._generation = 0
         self._holders = QObjectCounter[QObject]()
-        self._exclusive = False
 
     @property
     def phase(self) -> Phase:
@@ -105,60 +131,64 @@ class WorkspaceLifecycle:
         with self._lock:
             return bool(self._holders)
 
-    def try_begin_load(self) -> bool:
+    def try_begin_load(self) -> Phase | None:
         """
         Start loading content.
 
-        A workspace that holds loaded content moves to `RELOADING`, any other one to `LOADING`.
+        A workspace that holds loaded content moves to `REPLACING`, any other one to `LOADING`.
 
         Returns:
-            False while another load runs, once the workspace is closing,
-            or when loaded content would be replaced while a plugin holds the workspace. True otherwise.
+            The phase the workspace moved to.
+            None while another load runs, once the workspace is closing,
+            or when loaded content would be replaced while a plugin holds the workspace.
         """
         with self._lock:
-            current = self._phase
-            target = Phase.RELOADING if current is Phase.LOADED else Phase.LOADING
-
-            if target not in current.transition or (target is Phase.RELOADING and self._holders):
-                return False
+            # REPLACING can also move to LOADING, but only through `commit_replacement`.
+            match self._phase:
+                case Phase.LOADED if not self._holders:
+                    target = Phase.REPLACING
+                case Phase.EMPTY | Phase.FAILED:
+                    target = Phase.LOADING
+                case _:
+                    return None
 
             self._phase = target
-            self._exclusive = True
 
-        return True
+        return target
 
     def try_begin_reload(self) -> bool:
         """
         Start reloading the loaded content.
 
         Returns:
-            True when the workspace moved from `LOADED` to `RELOADING`,
+            True when the workspace moved from `LOADED` to `REPLACING`,
             False otherwise or when a plugin holds the workspace.
         """
         with self._lock:
             if self._phase is not Phase.LOADED or self._holders:
                 return False
 
-            self._phase = Phase.RELOADING
-            self._exclusive = True
+            self._phase = Phase.REPLACING
 
         return True
 
     def cancel_reload(self) -> bool:
         """
-        Give up a reload before its new generation starts, and keep the loaded content.
+        Give up a replacement before the loaded content is released, and keep that content.
 
         Returns:
-            True when the workspace moved from `RELOADING` back to `LOADED`, False otherwise.
+            True when the workspace moved from `REPLACING` back to `LOADED`, False otherwise.
         """
-        with self._lock:
-            if self._phase is not Phase.RELOADING:
-                return False
+        return self._move(Phase.LOADED, source=Phase.REPLACING)
 
-            self._phase = Phase.LOADED
-            self._exclusive = False
+    def commit_replacement(self) -> bool:
+        """
+        Mark the loaded content as released. From here on, the replacement continues as a load.
 
-        return True
+        Returns:
+            True when the workspace moved from `REPLACING` to `LOADING`, False otherwise.
+        """
+        return self._move(Phase.LOADING, source=Phase.REPLACING)
 
     def next_generation(self) -> Generation:
         """Start a new generation. Every older `Generation` becomes stale."""
@@ -166,20 +196,23 @@ class WorkspaceLifecycle:
             self._generation += 1
             return Generation(self, self._generation)
 
-    def end_exclusive(self) -> None:
-        """Let plugins hold the workspace again, once the new outputs of a load exist."""
-        with self._lock:
-            if self._phase not in (Phase.CLOSING, Phase.CLOSED):
-                self._exclusive = False
+    def begin_rendering(self) -> bool:
+        """
+        Mark the new outputs of a load as created. Plugins can hold the workspace again.
+
+        Returns:
+            True when the workspace moved from `LOADING` to `RENDERING`, False otherwise.
+        """
+        return self._move(Phase.RENDERING)
 
     def finish(self, generation: Generation) -> bool:
         """
         Mark the content of `generation` as loaded.
 
         Returns:
-            False when `generation` is stale or no load is running, True otherwise.
+            False when `generation` is stale or no first frame is rendering, True otherwise.
         """
-        return self._move(Phase.LOADED, generation)
+        return self._move(Phase.LOADED, source=Phase.RENDERING, generation=generation)
 
     def fail(self, *, loaded_only: bool = False) -> bool:
         """
@@ -193,14 +226,7 @@ class WorkspaceLifecycle:
             False when the workspace has already failed or is closing,
             or when `loaded_only` is set and no content is loaded. True otherwise.
         """
-        with self._lock:
-            if Phase.FAILED not in self._phase.transition or (loaded_only and self._phase is not Phase.LOADED):
-                return False
-
-            self._phase = Phase.FAILED
-            self._exclusive = False
-
-        return True
+        return self._move(Phase.FAILED, source=Phase.LOADED if loaded_only else None)
 
     def begin_close(self) -> Generation | None:
         """
@@ -214,7 +240,6 @@ class WorkspaceLifecycle:
                 return None
 
             self._phase = Phase.CLOSING
-            self._exclusive = True
             self._generation += 1
             return Generation(self, self._generation)
 
@@ -235,7 +260,7 @@ class WorkspaceLifecycle:
             False while a load or reload has not created its outputs yet, or once the workspace is closing.
         """
         with self._lock:
-            if self._exclusive:
+            if not self._phase.holdable:
                 return False
 
             self._holders.add(holder)
@@ -247,17 +272,14 @@ class WorkspaceLifecycle:
         with self._lock:
             self._holders.discard(holder)
 
-    def _move(self, target: Phase, generation: Generation | None = None) -> bool:
+    def _move(self, target: Phase, *, source: Phase | None = None, generation: Generation | None = None) -> bool:
         with self._lock:
-            if target not in self._phase.transition:
+            if target not in self._phase.transition or (source is not None and self._phase is not source):
                 return False
 
             if generation is not None and generation.value != self._generation:
                 return False
 
             self._phase = target
-
-            if target is Phase.LOADED:
-                self._exclusive = False
 
         return True
