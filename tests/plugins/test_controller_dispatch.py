@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any, override
 
 import pytest
+import vapoursynth as vs
 from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QSplitter, QTabWidget, QVBoxLayout, QWidget
@@ -68,6 +69,17 @@ class RaisingPlugin(RecordingPlugin):
     @override
     def on_view_mouse_moved(self, event: QMouseEvent) -> None:
         raise RuntimeError("broken plugin")
+
+
+class FrameRecordingView(PluginGraphicsView):
+    def __init__(self, parent: QWidget, api: PluginAPI) -> None:
+        super().__init__(parent, api)
+        self.rendered = list[int]()
+
+    @override
+    def on_current_frame_changed(self, n: int, f: vs.VideoFrame) -> None:
+        self.rendered.append(n)
+        super().on_current_frame_changed(n, f)
 
 
 class SilentPlugin(WidgetPluginBase[Any, Any]):
@@ -218,6 +230,32 @@ def test_showing_the_workspace_without_missed_updates_refreshes_nothing(
 @pytest.fixture
 def env(vsview_env_factory: Callable[[], ManagedEnvironment]) -> ManagedEnvironment:
     return vsview_env_factory()
+
+
+@pytest.mark.vpy("no-policy")
+def test_a_reload_missed_while_hidden_renders_the_plugin_view_again_when_shown(
+    controller: PluginWorkspaceController,
+    workspace: MockQObject,
+    plugins: Plugins,
+    qtbot: QtBot,
+    env: ManagedEnvironment,
+    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+) -> None:
+    workspace.env = env
+    workspace.outputs_manager.current_voutput = create_test_video_output(env, 10)
+    workspace.outputs_manager.current_video_index = 0
+    workspace.playback.state.current_frame = 3
+    view = FrameRecordingView(plugins.visible, controller.api)
+    view.show()
+    controller.on_current_voutput_changed()
+    qtbot.waitUntil(lambda: not view.pixmap_item.pixmap().isNull(), timeout=5000)
+    workspace.isVisible.return_value = False
+    controller.on_current_voutput_changed(refresh=True)
+    workspace.isVisible.return_value = True
+
+    controller.on_workspace_shown()
+
+    qtbot.waitUntil(lambda: view.rendered == [3, 3], timeout=5000)
 
 
 @pytest.mark.vpy("no-policy")

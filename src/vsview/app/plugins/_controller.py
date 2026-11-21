@@ -64,6 +64,8 @@ class PluginWorkspaceController(QObject):
         self.__cursor_reset = _ViewportCursorReset(self)
         self.__cursor_reset_lock = Lock()
         self.__cursor_reset_connected = False
+        self.__missed_while_hidden: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
+        self.__missed_refresh: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
 
         SettingsManager.signals.connect_global_weak(self._on_global_settings_changed)
         SettingsManager.signals.connect_local_weak(self._on_local_settings_changed)
@@ -83,8 +85,6 @@ class PluginWorkspaceController(QObject):
         self.rect_selection_finished_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
         self.key_press_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
         self.key_release_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
-
-        self.__missed_while_hidden: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
 
         self.globalSettingsChanged.connect(self.api.globalSettingsChanged)
         self.localSettingsChanged.connect(self.api.localSettingsChanged)
@@ -232,9 +232,13 @@ class PluginWorkspaceController(QObject):
     # Lifecycle & Plugin Orchestration
     def init_plugin(self, plugin: WidgetPluginBase[Any, Any], refresh: bool = False) -> None:
         if not self._is_truly_visible(plugin):
+            if refresh:
+                self.__missed_refresh.add(plugin)
             return
 
+        refresh = refresh or plugin in self.__missed_refresh
         self.__missed_while_hidden.discard(plugin)
+        self.__missed_refresh.discard(plugin)
 
         with self._isolated("on_current_voutput_changed", plugin.identifier):
             plugin.on_current_voutput_changed(
@@ -298,6 +302,8 @@ class PluginWorkspaceController(QObject):
             return
 
         if not self._is_truly_visible(plugin):
+            if refresh:
+                self.__missed_refresh.add(plugin)
             return
 
         tab_index = self.__workspace.outputs_manager.current_video_index
@@ -352,8 +358,7 @@ class PluginWorkspaceController(QObject):
 
     def on_current_voutput_changed(self, refresh: bool = False) -> None:
         for plugin in self.__workspace.plugins:
-            if self._is_truly_visible(plugin):
-                self.init_plugin(plugin, refresh)
+            self.init_plugin(plugin, refresh)
 
     def on_current_frame_changed(self, n: int, plugin_frames: dict[str, vs.VideoFrame] | None = None) -> None:
         for plugin in self.__workspace.plugins:
