@@ -3,8 +3,8 @@ from typing import Annotated, Any, Literal, override
 from pydantic import BaseModel
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QHBoxLayout, QWidget
-from vapoursynth import VideoNode
-from vstools import DitherType, Range, finalize_output, initialize_input, join, split, stack_planes
+from vapoursynth import SampleType, VideoNode
+from vstools import DitherType, Range, finalize_output, join, split, stack_planes
 
 from vsview.api import (
     Checkbox,
@@ -98,9 +98,9 @@ class FFTSpectrumView(PluginGraphicsView):
         self.autofit = self.settings.global_.autofit
 
     @finalize_output(bits=8, range_in=Range.FULL, range_out=Range.FULL, dither_type=DitherType.NONE)
-    @initialize_input(bits=32)
     @override
     def get_node(self, clip: VideoNode) -> VideoNode:
+        clip = clip.resize.Point(format=clip.format.replace(sample_type=SampleType.FLOAT, bits_per_sample=32))
         planes = split(clip)
 
         if len(planes) == 1:

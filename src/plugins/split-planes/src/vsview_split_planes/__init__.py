@@ -5,8 +5,8 @@ from jetpytools import fallback
 from pydantic import BaseModel
 from PySide6.QtCore import QSignalBlocker, QTimer, Slot
 from PySide6.QtWidgets import QBoxLayout, QDoubleSpinBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QWidgetAction
-from vapoursynth import VideoNode
-from vstools import scale_mask, stack_planes
+from vapoursynth import ColorFamily, SampleType, VideoNode
+from vstools import Range, scale_mask, stack_planes
 
 from vsview.api import (
     Checkbox,
@@ -191,9 +191,21 @@ class SplitPlanesView(PluginGraphicsView):
         else:
             offset = offset_chroma
 
+        shift_float_chroma = self.settings.global_.shift_float_chroma
+
+        if (
+            shift_float_chroma
+            and clip.format.color_family == ColorFamily.YUV
+            and clip.format.sample_type == SampleType.FLOAT
+        ):
+            full = clip.std.Expr(["", "x 0.5 +"])
+            limited = clip.std.Expr(["", "x 0.5 + 224 219 / *"])
+            clip = full.std.FrameEval(lambda n, f: limited if Range.from_video(f).is_limited else full, prop_src=clip)
+            shift_float_chroma = False
+
         return stack_planes(
             clip,
-            self.settings.global_.shift_float_chroma,
+            shift_float_chroma,
             offset,
             self.settings.global_.mode,
             self.settings.global_.write_plane_name,
