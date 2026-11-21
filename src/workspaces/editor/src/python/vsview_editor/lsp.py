@@ -34,7 +34,6 @@ class LSPConfig:
     name: str
     command: Sequence[str]
     language: str
-    file_events_pattern: str | None
     configuration_section: str | Sequence[str] | None = None
     progress_notifications: Sequence[Mapping[str, str]] | None = None
 
@@ -49,7 +48,6 @@ class LSPConfig:
             "port": port,
             "path": path,
             "language": self.language,
-            "fileEventsPattern": self.file_events_pattern,
         }
         if self.configuration_section is not None:
             payload["configurationSection"] = self.configuration_section
@@ -63,7 +61,6 @@ LSP_PYREFLY_CONFIG = LSPConfig(
     name="Pyrefly Language Server",
     command=["pyrefly", "lsp"],
     language="python",
-    file_events_pattern="**/*.py",
     configuration_section=["pyrefly", "python"],
     progress_notifications=None,
 )

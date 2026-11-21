@@ -85,7 +85,6 @@ class TestLSPConfigAndServer:
             name="Test Language Server",
             command=["test-lsp", "--stdio"],
             language="python",
-            file_events_pattern="**/*.py",
         )
         assert config.id == "test_lsp"
         assert config.language == "python"
@@ -97,7 +96,6 @@ class TestLSPConfigAndServer:
                 name="Empty Server",
                 command=[],
                 language="python",
-                file_events_pattern=None,
             )
 
     def test_build_uri_variations_windows(self) -> None:
@@ -128,7 +126,6 @@ class TestLSPConfigAndServer:
             name="Test Language Server",
             command=["test-lsp", "--stdio"],
             language="python",
-            file_events_pattern="**/*.py",
         )
 
         port = manager.start_server(config)
@@ -147,7 +144,6 @@ class TestLSPConfigAndServer:
             name="Test Server",
             command=["test-lsp", "--stdio"],
             language="python",
-            file_events_pattern="**/*.py",
         )
         server = LSPProcessServer(config)
         server.real_uri = "file:///C:/Users/test/workspace"
@@ -179,7 +175,6 @@ class TestLSPConfigAndServer:
             name="Test Server",
             command=["test-lsp", "--stdio"],
             language="python",
-            file_events_pattern="**/*.py",
         )
         server = LSPProcessServer(config)
         mock_client = mocker.MagicMock()
@@ -213,34 +208,15 @@ class TestEditorShortcuts:
         bridge.dispatchFromJs(JsToPyCommand.RESTART_LSP_REQUESTED, "{}")
         assert received == [(JsToPyCommand.RESTART_LSP_REQUESTED, {})]
 
-    def test_monaco_bridge_session_state_signal(self) -> None:
+    def test_monaco_bridge_main_content_tracking(self) -> None:
         bridge = MonacoBridge()
-        received: list[tuple[JsToPyCommand, dict[str, Any]]] = []
-        session: list[TabInfo] = [
-            {
-                "uri": "file:///workspace/script.py",
-                "title": "script.py",
-                "isMain": True,
-                "isDirty": True,
-                "language": "python",
-                "content": "clip = core.std.BlankClip()\n",
-            }
-        ]
-        bridge.commandReceived.connect(lambda cmd, payload: received.append((cmd, payload)))
-
-        bridge.dispatchFromJs(JsToPyCommand.SESSION_STATE_CHANGED, json.dumps({"tabs": session}))
-
-        assert received == [(JsToPyCommand.SESSION_STATE_CHANGED, {"tabs": session})]
-
-    def test_monaco_bridge_content_state_tracking(self) -> None:
-        bridge = MonacoBridge()
-        assert bridge.content == ""
         assert bridge.main_content == ""
 
-        bridge.dispatchFromJs(JsToPyCommand.CONTENT_CHANGED, json.dumps({"content": "active = 1"}))
-        bridge.dispatchFromJs(JsToPyCommand.MAIN_CONTENT_CHANGED, json.dumps({"content": "main = 2"}))
+        bridge.dispatchFromJs(
+            JsToPyCommand.MAIN_CONTENT_CHANGED,
+            json.dumps({"uri": "file:///workspace/script.py", "versionId": 3, "content": "main = 2"}),
+        )
 
-        assert bridge.content == "active = 1"
         assert bridge.main_content == "main = 2"
 
     def test_workspace_shortcuts_contain_all_definitions(self) -> None:
@@ -689,6 +665,16 @@ class TestEditorDragAndDrop:
         mocker.patch.object(editor_dock.editor.bridge, "dispatch")
         assert editor_dock.open_file(script_file) is True
         assert editor_dock.open_tabs[0].get("content") == "unsaved editor edits"
+
+    def test_tab_state_without_text_keeps_the_last_text_and_version(self, editor_dock: MonacoEditorDock) -> None:
+        uri = "file:///workspace/script.py"
+        meta = TabInfo(uri=uri, title="script.py", isMain=True, isDirty=True, language="python")
+        other = TabInfo(uri="file:///workspace/other.py", title="other.py", isMain=False, isDirty=False, language="py")
+        _set_editor_tabs(editor_dock, [TabInfo({**meta, "content": "edited", "versionId": 4})])
+
+        _set_editor_tabs(editor_dock, [meta, other])
+
+        assert editor_dock.open_tabs == (TabInfo({**meta, "content": "edited", "versionId": 4}), other)
 
     def test_monaco_dock_open_file_normalizes_uri_lookup(
         self, editor_dock: MonacoEditorDock, tmp_path: Path, mocker: MockerFixture

@@ -1,16 +1,17 @@
 import { updateUserConfiguration } from '@codingame/monaco-vscode-configuration-service-override';
 import * as monaco from 'monaco-editor';
 import * as vscode from 'vscode';
-import { DisposableStore, Result } from 'vsview-shared';
+import { DisposableStore, Result, toDisposable } from 'vsview-shared';
 
 import { BridgeService } from '../bridge/python';
 import { findExistingModel } from '../services/models';
-import type { EditorOptionsPayload, TabInfo } from '../types';
+import type { EditorOptionsPayload, TabInfo, TabSnapshot } from '../types';
 import { DEFAULT_SCRIPT_URI, DOM_IDS } from '../ui/constants';
 import { TabBarView } from '../ui/tabbar';
 import { applyDocumentTheme, getInitialTheme, getThemeDefinition } from '../utils/theme';
 import { isSameResource } from '../utils/uri';
 import * as config from './config';
+import { minimalEdit } from './edits';
 
 interface TabRecord {
   uri: monaco.Uri;
@@ -19,7 +20,11 @@ interface TabRecord {
   model: monaco.editor.ITextModel;
   ownsModel: boolean;
   viewState: monaco.editor.ICodeEditorViewState | null;
+  /** Added to the model's version ids, so a late reply about a replaced model never matches the new one. */
+  versionBase: number;
   savedVersionId: number;
+  /** The version whose text Python last received, or null before the first send. */
+  sentVersionId: number | null;
   isDirty: boolean;
   isMain: boolean;
   disposables: DisposableStore;
@@ -42,6 +47,7 @@ export class EditorService implements vscode.Disposable {
   private activeUri: string | null = null;
   private mainUri: string | null = null;
   private modelOptions: monaco.editor.ITextModelUpdateOptions = {};
+  private sentMain: { tab: TabRecord; versionId: number } | null = null;
 
   constructor() {
     const container = document.getElementById(DOM_IDS.EDITOR)!;
@@ -165,24 +171,55 @@ export class EditorService implements vscode.Disposable {
     return this.mainUri;
   }
 
-  /** Get the text content of the active tab. */
-  public getValue(): string {
-    return this.editor.getValue();
+  public getActiveSnapshot(): TabSnapshot | undefined {
+    const tab = this.activeUri ? this.tabs.get(this.activeUri) : undefined;
+    return tab && this.getSnapshot(tab);
   }
 
-  /** Get the text content of the Main Tab. */
-  public getMainValue(): string {
-    if (this.mainUri && this.tabs.has(this.mainUri)) {
-      return this.tabs.get(this.mainUri)!.model.getValue();
-    }
-    return this.getValue();
+  public takeChangedMainSnapshot(): TabSnapshot | undefined {
+    const tab = this.mainUri ? this.tabs.get(this.mainUri) : undefined;
+    if (!tab || tab.model.isDisposed()) return undefined;
+
+    const versionId = this.versionOf(tab);
+    if (this.sentMain?.tab === tab && this.sentMain.versionId === versionId) return undefined;
+
+    this.sentMain = { tab, versionId };
+    return this.getSnapshot(tab);
   }
 
-  /** Set the text content of the active tab. */
-  public setValue(text: string): void {
-    if (text !== this.getValue()) {
-      this.editor.setValue(text);
-    }
+  /** Answers `false`, and changes nothing, when the tab is gone or was edited after `versionId`. */
+  public applyFormat(uriInput: string, versionId: number, text: string): Result<boolean> {
+    return Result.fromThrowable(() => {
+      const tab = this.tabs.get(this.normalizeUri(uriInput).toString());
+      if (!tab || tab.model.isDisposed() || this.versionOf(tab) !== versionId) {
+        return false;
+      }
+
+      const model = tab.model;
+      const edit = minimalEdit(model.getValue(), text);
+      if (!edit) return true;
+
+      const start = model.getPositionAt(edit.start);
+      const end = model.getPositionAt(edit.end);
+      model.pushStackElement();
+      model.pushEditOperations(
+        [],
+        [
+          {
+            range: {
+              startLineNumber: start.lineNumber,
+              startColumn: start.column,
+              endLineNumber: end.lineNumber,
+              endColumn: end.column,
+            },
+            text: edit.text,
+          },
+        ],
+        () => null,
+      );
+      model.pushStackElement();
+      return true;
+    });
   }
 
   public setTheme(theme: string): void {
@@ -301,15 +338,11 @@ export class EditorService implements vscode.Disposable {
       const uriString = uri.toString();
 
       let tab = this.tabs.get(uriString);
-      if (tab && tab.model.isDisposed()) {
-        tab.disposables.dispose();
-        this.tabs.delete(uriString);
-        tab = undefined;
+      if (tab?.model.isDisposed()) {
+        this.reattachTab(tab, content, language, false);
       }
 
       if (!tab) {
-        const tabDisposables = new DisposableStore();
-
         let model = findExistingModel(uri);
         let ownsModel = false;
         if (!model || model.isDisposed()) {
@@ -321,40 +354,27 @@ export class EditorService implements vscode.Disposable {
         if (content && model.getValue() !== content) {
           model.setValue(content);
         }
-        this.applyModelOptions(model);
-
-        const title = this.deriveTitle(uriInput);
 
         tab = {
           uri,
           uriString,
-          title,
+          title: this.deriveTitle(uriInput),
           model,
           ownsModel,
           viewState: null,
+          versionBase: 0,
           savedVersionId: model.getAlternativeVersionId(),
+          sentVersionId: null,
           isDirty: false,
           isMain,
-          disposables: tabDisposables,
+          disposables: new DisposableStore(),
         };
-
-        // Listen for content changes for dirty state tracking
-        const currentTabRecord = tab;
-        tabDisposables.add(
-          model.onDidChangeContent(() => {
-            const dirty = model.getAlternativeVersionId() !== currentTabRecord.savedVersionId;
-            if (currentTabRecord.isDirty !== dirty) {
-              currentTabRecord.isDirty = dirty;
-              this.updateTabBar();
-            }
-            this.contentChangeEmitter.fire();
-          }),
-        );
+        this.attachModel(tab, model, ownsModel);
 
         this.tabs.set(uriString, tab);
       } else if (!tab.isDirty && tab.model.getValue() !== content) {
         tab.model.setValue(content);
-        tab.savedVersionId = tab.model.getAlternativeVersionId();
+        tab.savedVersionId = this.versionOf(tab);
         tab.isDirty = false;
         this.updateTabBar();
       }
@@ -440,35 +460,15 @@ export class EditorService implements vscode.Disposable {
     });
   }
 
-  public markTabSaved(uriInput: string, oldUriInput?: string): void {
-    const newUriString = this.normalizeUri(uriInput).toString();
-    const oldUriString = oldUriInput ? this.normalizeUri(oldUriInput).toString() : undefined;
+  /** Edits made after `versionId` stay unsaved. Without it, the current version is saved. */
+  public markTabSaved(uriInput: string, oldUriInput: string, versionId?: number): void {
+    const tab = this.tabs.get(this.normalizeUri(oldUriInput).toString());
+    if (!tab || tab.model.isDisposed()) return;
 
-    let tab = this.tabs.get(newUriString);
-    if (!tab) {
-      const targetOldUri =
-        oldUriString && this.tabs.has(oldUriString)
-          ? oldUriString
-          : this.activeUri && this.tabs.has(this.activeUri)
-            ? this.activeUri
-            : undefined;
-
-      if (targetOldUri) {
-        tab = this.tabs.get(targetOldUri);
-        if (tab) {
-          this.renameTabInternal(targetOldUri, newUriString);
-        }
-      }
-    }
-
-    if (tab) {
-      tab.savedVersionId = tab.model.getAlternativeVersionId();
-      const dirty = tab.model.getAlternativeVersionId() !== tab.savedVersionId;
-      if (tab.isDirty !== dirty) {
-        tab.isDirty = dirty;
-        this.updateTabBar();
-      }
-    }
+    tab.savedVersionId = versionId ?? this.versionOf(tab);
+    this.refreshDirty(tab);
+    // Mark it saved before the rename, which carries the dirty state over to the new model.
+    this.renameTabInternal(tab.uriString, this.normalizeUri(uriInput).toString());
   }
 
   /** Rename an existing tab URI and update its model/title. */
@@ -484,17 +484,26 @@ export class EditorService implements vscode.Disposable {
   }
 
   public updateTabBar(): void {
-    const tabInfos = this.getTabState(false);
-
-    this.tabBarView.render(tabInfos, this.activeUri);
+    this.tabBarView.render(
+      Array.from(this.tabs.values(), (tab) => this.getTabInfo(tab)),
+      this.activeUri,
+    );
 
     BridgeService.active
       .unwrapOr(undefined)
-      ?.sendEvent('editor.tabStateChanged', { tabs: tabInfos });
+      ?.sendEvent('editor.tabStateChanged', { tabs: this.takeTabState() });
   }
 
-  public getSessionState(): TabInfo[] {
-    return this.getTabState(true);
+  public getTabs(): TabInfo[] {
+    return Array.from(this.tabs.values(), (tab) =>
+      tab.model.isDisposed()
+        ? this.getTabInfo(tab)
+        : {
+            ...this.getTabInfo(tab),
+            content: tab.model.getValue(),
+            versionId: this.versionOf(tab),
+          },
+    );
   }
 
   public requestSave(): void {
@@ -555,6 +564,82 @@ export class EditorService implements vscode.Disposable {
     if (Object.keys(this.modelOptions).length > 0) {
       model.updateOptions(this.modelOptions);
     }
+  }
+
+  private attachModel(tab: TabRecord, model: monaco.editor.ITextModel, ownsModel: boolean): void {
+    if (tab.model !== model && !tab.model.isDisposed()) {
+      tab.versionBase += tab.model.getVersionId();
+    }
+    tab.disposables.dispose();
+    tab.disposables = new DisposableStore();
+    tab.model = model;
+    tab.ownsModel = ownsModel;
+    this.applyModelOptions(model);
+
+    tab.disposables.add(
+      model.onDidChangeContent(() => {
+        this.refreshDirty(tab);
+        this.contentChangeEmitter.fire();
+      }),
+    );
+    if (!ownsModel) {
+      // VS Code releases a borrowed model (a go-to-definition target) a few minutes after its last reference,
+      // even while the tab is open.
+      tab.disposables.add(
+        model.onWillDispose(() => {
+          const content = tab.model.getValue();
+          const language = tab.model.getLanguageId();
+          const wasDirty = tab.isDirty;
+          // attachModel cannot read the version of a disposed model.
+          tab.versionBase += tab.model.getVersionId();
+          if (this.activeUri === tab.uriString) {
+            tab.viewState = this.editor.saveViewState();
+          }
+
+          // Wait until the dispose has finished, so the URI is free and the editor has let go of the old model.
+          const timer = setTimeout(() => this.reattachTab(tab, content, language, wasDirty), 0);
+          tab.disposables.add(toDisposable(() => clearTimeout(timer)));
+        }),
+      );
+    }
+  }
+
+  private reattachTab(tab: TabRecord, content: string, language: string, wasDirty: boolean): void {
+    if (this.tabs.get(tab.uriString) !== tab) return;
+
+    const existing = findExistingModel(tab.uri);
+    const model = existing ?? monaco.editor.createModel(content, language, tab.uri);
+    if (existing && existing.getValue() !== content) {
+      existing.setValue(content);
+    }
+    this.attachModel(tab, model, existing === undefined);
+    tab.savedVersionId = wasDirty ? -1 : this.versionOf(tab);
+    tab.isDirty = wasDirty;
+
+    if (this.activeUri === tab.uriString) {
+      this.editor.setModel(model);
+      if (tab.viewState) {
+        this.editor.restoreViewState(tab.viewState);
+      }
+    }
+    this.updateTabBar();
+  }
+
+  private versionOf(tab: TabRecord): number {
+    return tab.versionBase + tab.model.getAlternativeVersionId();
+  }
+
+  private refreshDirty(tab: TabRecord): void {
+    const dirty = this.versionOf(tab) !== tab.savedVersionId;
+    if (tab.isDirty !== dirty) {
+      tab.isDirty = dirty;
+      this.updateTabBar();
+    }
+  }
+
+  private getSnapshot(tab: TabRecord): TabSnapshot | undefined {
+    if (tab.model.isDisposed()) return undefined;
+    return { uri: tab.uriString, versionId: this.versionOf(tab), content: tab.model.getValue() };
   }
 
   private disposeTab(tab: TabRecord): void {
@@ -683,15 +768,30 @@ export class EditorService implements vscode.Disposable {
     await conf.update('workbench.colorTheme', themeId, vscode.ConfigurationTarget.Workspace);
   }
 
-  private getTabState(includeContent: boolean): TabInfo[] {
-    return Array.from(this.tabs.values()).map((t) => ({
-      uri: t.uriString,
-      title: t.title,
-      isMain: t.isMain,
-      isDirty: t.isDirty,
-      language: t.model.getLanguageId(),
-      content: includeContent || t.isDirty ? t.model.getValue() : undefined,
-    }));
+  private getTabInfo(tab: TabRecord): TabInfo {
+    return {
+      uri: tab.uriString,
+      title: tab.title,
+      isMain: tab.isMain,
+      isDirty: tab.isDirty,
+      language: tab.model.isDisposed() ? 'plaintext' : tab.model.getLanguageId(),
+    };
+  }
+
+  /** Includes a tab's text only when it changed since the last call. */
+  private takeTabState(): TabInfo[] {
+    return Array.from(this.tabs.values(), (tab) => {
+      const info = this.getTabInfo(tab);
+      if (!tab.model.isDisposed()) {
+        const versionId = this.versionOf(tab);
+        if (tab.sentVersionId !== versionId) {
+          tab.sentVersionId = versionId;
+          info.content = tab.model.getValue();
+          info.versionId = versionId;
+        }
+      }
+      return info;
+    });
   }
 
   private renameTabInternal(oldUriString: string, newUriString: string): void {
@@ -716,9 +816,6 @@ export class EditorService implements vscode.Disposable {
 
     const viewState = this.activeUri === oldUriString ? this.editor.saveViewState() : tab.viewState;
 
-    tab.disposables.dispose();
-    tab.disposables = new DisposableStore();
-
     let newModel = findExistingModel(newUri);
     let ownsModel = false;
     if (!newModel || newModel.isDisposed()) {
@@ -730,17 +827,14 @@ export class EditorService implements vscode.Disposable {
         newModel.setValue(tab.model.getValue());
       }
     }
-    this.applyModelOptions(newModel);
-
     const oldModel = tab.model;
     const oldOwnsModel = tab.ownsModel;
 
-    tab.savedVersionId = tab.isDirty ? -1 : newModel.getAlternativeVersionId();
+    this.attachModel(tab, newModel, ownsModel);
+    tab.savedVersionId = tab.isDirty ? -1 : this.versionOf(tab);
     tab.uri = newUri;
     tab.uriString = newUriString;
     tab.title = newTitle;
-    tab.model = newModel;
-    tab.ownsModel = ownsModel;
     tab.viewState = viewState;
 
     this.replaceTabInMap(oldUriString, newUriString, tab);
@@ -760,18 +854,6 @@ export class EditorService implements vscode.Disposable {
       this.mainUri = newUriString;
       this.mainTabChangeEmitter.fire(this.mainUri);
     }
-
-    const targetTabRecord = tab;
-    tab.disposables.add(
-      newModel.onDidChangeContent(() => {
-        const dirty = newModel.getAlternativeVersionId() !== targetTabRecord.savedVersionId;
-        if (targetTabRecord.isDirty !== dirty) {
-          targetTabRecord.isDirty = dirty;
-          this.updateTabBar();
-        }
-        this.contentChangeEmitter.fire();
-      }),
-    );
 
     this.updateTabBar();
     this.contentChangeEmitter.fire();

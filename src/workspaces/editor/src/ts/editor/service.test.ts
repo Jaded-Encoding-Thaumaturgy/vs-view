@@ -72,6 +72,7 @@ const { FakeEmitter, FakeUri, FakeCodeEditor, FakeTextModel, modelsMap, editorSt
       private versionId = 1;
       private _isDisposed = false;
       private contentListeners: Array<() => void> = [];
+      private willDisposeListeners: Array<() => void> = [];
       public options: Record<string, unknown> = {};
 
       constructor(content: string, languageId: string, uri: FakeUri) {
@@ -94,6 +95,52 @@ const { FakeEmitter, FakeUri, FakeCodeEditor, FakeTextModel, modelsMap, editorSt
         }
       }
 
+      public getPositionAt(offset: number): { lineNumber: number; column: number } {
+        const lines = this.content.slice(0, offset).split('\n');
+        return { lineNumber: lines.length, column: lines[lines.length - 1]!.length + 1 };
+      }
+
+      public pushStackElement(): void {}
+
+      public pushEditOperations(
+        _selections: unknown,
+        operations: Array<{
+          range: {
+            startLineNumber: number;
+            startColumn: number;
+            endLineNumber: number;
+            endColumn: number;
+          };
+          text: string;
+        }>,
+      ): null {
+        for (const { range, text } of operations) {
+          const start = this.getOffsetAt(range.startLineNumber, range.startColumn);
+          const end = this.getOffsetAt(range.endLineNumber, range.endColumn);
+          this.setValue(this.content.slice(0, start) + text + this.content.slice(end));
+        }
+        return null;
+      }
+
+      public onWillDispose(listener: () => void): { dispose: () => void } {
+        this.willDisposeListeners.push(listener);
+        return {
+          dispose: () => {
+            const idx = this.willDisposeListeners.indexOf(listener);
+            if (idx !== -1) this.willDisposeListeners.splice(idx, 1);
+          },
+        };
+      }
+
+      private getOffsetAt(lineNumber: number, column: number): number {
+        const lines = this.content.split('\n');
+        let offset = 0;
+        for (let i = 0; i < lineNumber - 1; i++) {
+          offset += lines[i]!.length + 1;
+        }
+        return offset + column - 1;
+      }
+
       public getLanguageId(): string {
         return this.languageId;
       }
@@ -103,6 +150,10 @@ const { FakeEmitter, FakeUri, FakeCodeEditor, FakeTextModel, modelsMap, editorSt
       }
 
       public getAlternativeVersionId(): number {
+        return this.versionId;
+      }
+
+      public getVersionId(): number {
         return this.versionId;
       }
 
@@ -125,8 +176,12 @@ const { FakeEmitter, FakeUri, FakeCodeEditor, FakeTextModel, modelsMap, editorSt
       }
 
       public dispose(): void {
+        for (const listener of [...this.willDisposeListeners]) {
+          listener();
+        }
         this._isDisposed = true;
         this.contentListeners = [];
+        this.willDisposeListeners = [];
         modelsMap.delete(this.uri.toString());
       }
     }
@@ -323,7 +378,9 @@ vi.mock('../services/models', () => ({
 
 import { updateUserConfiguration } from '@codingame/monaco-vscode-configuration-service-override';
 import * as monaco from 'monaco-editor';
+import { Result } from 'vsview-shared';
 
+import { BridgeService } from '../bridge/python';
 import { EditorService } from './service';
 
 describe('EditorService', () => {
@@ -353,10 +410,28 @@ describe('EditorService', () => {
     vi.restoreAllMocks();
   });
 
+  function activeContent(): string | undefined {
+    return service.getActiveSnapshot()?.content;
+  }
+
+  function mainContent(): string | undefined {
+    return service.getTabs().find((tab) => tab.isMain)?.content;
+  }
+
+  /** Type into the active tab, as the user would. */
+  function editActiveTab(text: string): void {
+    editorState.lastCreatedEditor!.getModel()!.setValue(text);
+  }
+
+  function tabState(uri: string): { isDirty: boolean; content: string | undefined } | undefined {
+    const tab = service.getTabs().find((t) => t.uri === uri);
+    return tab && { isDirty: tab.isDirty, content: tab.content };
+  }
+
   describe('Initialization & Default Tab', () => {
     it("creates default main tab 'file:///workspace/script.py' and sets up Monaco editor", () => {
-      expect(service.getValue()).toBe('');
-      expect(service.getMainValue()).toBe('');
+      expect(activeContent()).toBe('');
+      expect(mainContent()).toBe('');
       expect(editorState.lastCreatedEditor).not.toBeNull();
       expect(editorState.lastCreatedEditor?.currentModel?.uri.toString()).toBe(
         'file:///workspace/script.py',
@@ -408,7 +483,7 @@ describe('EditorService', () => {
         false,
       );
       expect(res1.ok).toBe(true);
-      expect(service.getValue()).toBe('def help(): pass');
+      expect(activeContent()).toBe('def help(): pass');
 
       // Special case: pkg/__init__.py
       const res2 = service.openTab(
@@ -444,20 +519,20 @@ describe('EditorService', () => {
       expect(titles).toContain('workspace/__init__.py');
 
       // Active tab should be the last opened tab
-      expect(service.getValue()).toBe('# root init');
+      expect(activeContent()).toBe('# root init');
     });
 
     it('openTab() on existing tab selects it and updates content if changed', () => {
       service.openTab('file:///workspace/test.py', 'version 1', 'python', false);
-      expect(service.getValue()).toBe('version 1');
+      expect(activeContent()).toBe('version 1');
 
       // Switch back to script.py
       service.selectTab('file:///workspace/script.py');
-      expect(service.getValue()).toBe('');
+      expect(activeContent()).toBe('');
 
       // Open existing tab with updated content
       service.openTab('file:///workspace/test.py', 'version 2', 'python', false);
-      expect(service.getValue()).toBe('version 2');
+      expect(activeContent()).toBe('version 2');
     });
 
     it('openTab() on the active clean tab with new content leaves the tab bar clean', () => {
@@ -466,17 +541,17 @@ describe('EditorService', () => {
 
       service.openTab(uri, 'updated from disk', 'python', false).unwrap();
 
-      expect(service.getValue()).toBe('updated from disk');
-      expect(service.getSessionState().find((t) => t.uri === uri)?.isDirty).toBe(false);
+      expect(activeContent()).toBe('updated from disk');
+      expect(service.getTabs().find((t) => t.uri === uri)?.isDirty).toBe(false);
       const activeTabEl = document.getElementById(DOM_IDS.TAB_BAR)!.querySelector('.tab.active')!;
       expect(activeTabEl.classList.contains('dirty')).toBe(false);
 
-      service.setValue('edited');
-      expect(service.getSessionState().find((t) => t.uri === uri)?.isDirty).toBe(true);
+      editActiveTab('edited');
+      expect(service.getTabs().find((t) => t.uri === uri)?.isDirty).toBe(true);
     });
 
     it('openTab() with replaceUri removes target tab, disposes its model, and sets new tab as active and main', () => {
-      const sessionBefore = service.getSessionState();
+      const sessionBefore = service.getTabs();
       expect(sessionBefore.map((t) => t.uri)).toEqual(['file:///workspace/script.py']);
 
       const oldModel = modelsMap.get('file:///workspace/script.py')!;
@@ -491,18 +566,18 @@ describe('EditorService', () => {
       );
       expect(res.ok).toBe(true);
 
-      const sessionAfter = service.getSessionState();
+      const sessionAfter = service.getTabs();
       expect(sessionAfter.map((t) => t.uri)).toEqual(['file:///workspace/replaced.py']);
       expect(sessionAfter[0]?.isMain).toBe(true);
       expect(service.getActiveUri()).toBe('file:///workspace/replaced.py');
       expect(service.getMainUri()).toBe('file:///workspace/replaced.py');
-      expect(service.getValue()).toBe('print("hello")');
+      expect(activeContent()).toBe('print("hello")');
       expect(oldModel.isDisposed()).toBe(true);
     });
 
     it('openTab() with replaceUri does not replace target tab if target tab has unsaved edits', () => {
       service.openTab('file:///workspace/dirty.py', 'original', 'python', false);
-      service.setValue('modified by user');
+      editActiveTab('modified by user');
 
       const res = service.openTab(
         'file:///workspace/new.py',
@@ -513,7 +588,7 @@ describe('EditorService', () => {
       );
       expect(res.ok).toBe(true);
 
-      const session = service.getSessionState();
+      const session = service.getTabs();
       const uris = session.map((t) => t.uri);
       expect(uris).toContain('file:///workspace/dirty.py');
       expect(uris).toContain('file:///workspace/new.py');
@@ -529,7 +604,7 @@ describe('EditorService', () => {
       );
       expect(res.ok).toBe(true);
 
-      const session = service.getSessionState();
+      const session = service.getTabs();
       expect(session.map((t) => t.uri)).toContain('file:///workspace/same.py');
     });
 
@@ -543,7 +618,7 @@ describe('EditorService', () => {
       );
       expect(res.ok).toBe(true);
 
-      const session = service.getSessionState();
+      const session = service.getTabs();
       expect(session.map((t) => t.uri)).toContain('file:///workspace/fresh.py');
     });
 
@@ -560,7 +635,7 @@ describe('EditorService', () => {
       );
 
       expect(service.getMainUri()).toBe('file:///workspace/script.py');
-      const session = service.getSessionState();
+      const session = service.getTabs();
       const uris = session.map((t) => t.uri);
       expect(uris).toContain('file:///workspace/replacement_sub.py');
       expect(uris).not.toContain('file:///workspace/sub.py');
@@ -568,15 +643,15 @@ describe('EditorService', () => {
 
     it('openTab() does not overwrite unsaved content when tab is dirty', () => {
       service.openTab('file:///workspace/dirty.py', 'original', 'python', false);
-      expect(service.getValue()).toBe('original');
+      expect(activeContent()).toBe('original');
 
       // Mutate content to make it dirty
-      service.setValue('user edited content');
-      expect(service.getValue()).toBe('user edited content');
+      editActiveTab('user edited content');
+      expect(activeContent()).toBe('user edited content');
 
       // Re-opening dirty tab with disk content should NOT overwrite user edits
       service.openTab('file:///workspace/dirty.py', 'disk content', 'python', false);
-      expect(service.getValue()).toBe('user edited content');
+      expect(activeContent()).toBe('user edited content');
     });
 
     it('selectTab() switches active tab and saves/restores viewState', () => {
@@ -589,7 +664,7 @@ describe('EditorService', () => {
       // Select file1.py
       const selRes = service.selectTab('file:///workspace/file1.py');
       expect(selRes.ok).toBe(true);
-      expect(service.getValue()).toBe('content 1');
+      expect(activeContent()).toBe('content 1');
       expect(activeTabChanges).toEqual(['file:///workspace/file1.py']);
 
       // Verify view state was restored on editor
@@ -608,11 +683,11 @@ describe('EditorService', () => {
 
       // file3 is active. Close it -> should switch to file2
       service.closeTab('file:///workspace/file3.py');
-      expect(service.getValue()).toBe('2');
+      expect(activeContent()).toBe('2');
 
       // file2 is active. Close it -> should switch to file1
       service.closeTab('file:///workspace/file2.py');
-      expect(service.getValue()).toBe('1');
+      expect(activeContent()).toBe('1');
     });
 
     it('closeTab() on main tab re-assigns main tab to next available tab and fires onDidChangeMainTab', () => {
@@ -625,7 +700,7 @@ describe('EditorService', () => {
       service.closeTab('file:///workspace/script.py');
 
       expect(mainTabChanges).toContain('file:///workspace/secondary.py');
-      expect(service.getMainValue()).toBe('secondary content');
+      expect(mainContent()).toBe('secondary content');
     });
 
     it("closeTab() and closeSavedTabs() on the lone default 'file:///workspace/script.py' tab recreate a fresh default tab and model", () => {
@@ -643,7 +718,7 @@ describe('EditorService', () => {
       expect(secondModel.isDisposed()).toBe(false);
       expect(service.getActiveUri()).toBe('file:///workspace/script.py');
       expect(service.getMainUri()).toBe('file:///workspace/script.py');
-      expect(service.getSessionState().map((t) => t.uri)).toEqual(['file:///workspace/script.py']);
+      expect(service.getTabs().map((t) => t.uri)).toEqual(['file:///workspace/script.py']);
 
       // 2. closeSavedTabs on the only default tab
       const savedRes = service.closeSavedTabs();
@@ -655,21 +730,21 @@ describe('EditorService', () => {
       expect(thirdModel.isDisposed()).toBe(false);
       expect(service.getActiveUri()).toBe('file:///workspace/script.py');
       expect(service.getMainUri()).toBe('file:///workspace/script.py');
-      expect(service.getSessionState().map((t) => t.uri)).toEqual(['file:///workspace/script.py']);
+      expect(service.getTabs().map((t) => t.uri)).toEqual(['file:///workspace/script.py']);
     });
 
     it("closeTab() when last custom tab is closed recreates default 'file:///workspace/script.py' main tab", () => {
       // Open a custom tab and close default script.py tab
       service.openTab('file:///workspace/custom.py', 'custom code', 'python', true);
       service.closeTab('file:///workspace/script.py');
-      expect(service.getValue()).toBe('custom code');
+      expect(activeContent()).toBe('custom code');
 
       // Close the last remaining tab (custom.py)
       service.closeTab('file:///workspace/custom.py');
 
       // Should automatically re-open default script.py tab
-      expect(service.getValue()).toBe('');
-      expect(service.getMainValue()).toBe('');
+      expect(activeContent()).toBe('');
+      expect(mainContent()).toBe('');
 
       const tabBarContainer = document.getElementById(DOM_IDS.TAB_BAR)!;
       expect(tabBarContainer.children).toHaveLength(1);
@@ -680,7 +755,7 @@ describe('EditorService', () => {
 
     it('closeTab() on dirty tab prompts confirmation; cancels if rejected', () => {
       service.openTab('file:///workspace/dirty.py', 'initial', 'python', false);
-      service.setValue('modified');
+      editActiveTab('modified');
 
       // Mock confirm to return false (user cancelled)
       vi.mocked(window.confirm).mockReturnValue(false);
@@ -688,7 +763,7 @@ describe('EditorService', () => {
       service.closeTab('file:///workspace/dirty.py');
 
       // Tab should still exist and still be active
-      expect(service.getValue()).toBe('modified');
+      expect(activeContent()).toBe('modified');
       const tabBarContainer = document.getElementById(DOM_IDS.TAB_BAR)!;
       const titles = Array.from(tabBarContainer.children).map(
         (tab) => tab.querySelector('.tab-title')?.textContent,
@@ -714,7 +789,7 @@ describe('EditorService', () => {
       const res = service.setMainTab('file:///workspace/tabB.py');
       expect(res.ok).toBe(true);
       expect(mainTabChanges).toContain('file:///workspace/tabB.py');
-      expect(service.getMainValue()).toBe('code B');
+      expect(mainContent()).toBe('code B');
 
       const tabBarContainer = document.getElementById(DOM_IDS.TAB_BAR)!;
       const titles = Array.from(tabBarContainer.children).map(
@@ -730,7 +805,7 @@ describe('EditorService', () => {
     it('closeOtherTabs() and closeSavedTabs() batch state transitions and fire events once', () => {
       service.openTab('file:///workspace/clean1.py', 'c1', 'python', false);
       service.openTab('file:///workspace/dirty1.py', 'd1', 'python', false);
-      service.setValue('d1 edited');
+      editActiveTab('d1 edited');
       service.openTab('file:///workspace/clean2.py', 'c2', 'python', false);
 
       const activeChanges: Array<string | null> = [];
@@ -743,14 +818,14 @@ describe('EditorService', () => {
       const savedRes = service.closeSavedTabs();
       expect(savedRes.ok).toBe(true);
 
-      expect(service.getSessionState().map((t) => t.uri)).toEqual(['file:///workspace/dirty1.py']);
+      expect(service.getTabs().map((t) => t.uri)).toEqual(['file:///workspace/dirty1.py']);
       expect(activeChanges).toEqual(['file:///workspace/dirty1.py']);
       expect(mainChanges).toEqual(['file:///workspace/dirty1.py']);
 
       // Open two more tabs, make drop.py dirty and active
       service.openTab('file:///workspace/keep.py', 'keep', 'python', false);
       service.openTab('file:///workspace/drop.py', 'drop', 'python', false);
-      service.setValue('drop edited');
+      editActiveTab('drop edited');
 
       activeChanges.length = 0;
       mainChanges.length = 0;
@@ -760,7 +835,7 @@ describe('EditorService', () => {
       const otherRes = service.closeOtherTabs('file:///workspace/keep.py');
       expect(otherRes.ok).toBe(true);
       expect(window.confirm).toHaveBeenCalledTimes(1);
-      expect(service.getSessionState().map((t) => t.uri)).toEqual(['file:///workspace/keep.py']);
+      expect(service.getTabs().map((t) => t.uri)).toEqual(['file:///workspace/keep.py']);
       expect(activeChanges).toEqual(['file:///workspace/keep.py']);
       expect(mainChanges).toEqual(['file:///workspace/keep.py']);
 
@@ -783,7 +858,7 @@ describe('EditorService', () => {
 
       expect(activeChanges).toContain('file:///workspace/new_name.py');
       expect(mainChanges).toContain('file:///workspace/new_name.py');
-      expect(service.getValue()).toBe("print('hello')");
+      expect(activeContent()).toBe("print('hello')");
 
       const tabBarContainer = document.getElementById(DOM_IDS.TAB_BAR)!;
       const titles = Array.from(tabBarContainer.children).map(
@@ -805,7 +880,7 @@ describe('EditorService', () => {
       expect(overwriteRename.ok).toBe(true);
       expect(collidedModel.isDisposed()).toBe(true);
       expect(service.getActiveUri()).toBe('file:///workspace/collided.py');
-      expect(service.getValue()).toBe("print('hello')");
+      expect(activeContent()).toBe("print('hello')");
       expect(editorState.lastCreatedEditor?.currentModel?.isDisposed()).toBe(false);
 
       // Renaming a non-main tab onto the main tab inherits isMain = true
@@ -819,10 +894,8 @@ describe('EditorService', () => {
       );
       expect(mainOverwrite.ok).toBe(true);
       expect(service.getMainUri()).toBe('file:///workspace/main_target.py');
-      expect(service.getMainValue()).toBe('other code');
-      const mainState = service
-        .getSessionState()
-        .find((t) => t.uri === 'file:///workspace/main_target.py');
+      expect(mainContent()).toBe('other code');
+      const mainState = service.getTabs().find((t) => t.uri === 'file:///workspace/main_target.py');
       expect(mainState?.isMain).toBe(true);
 
       // Renaming non-existent tab returns Result.err
@@ -837,51 +910,264 @@ describe('EditorService', () => {
       const oldUri = 'file:///workspace/clean_old.py';
       const newUri = 'file:///workspace/clean_new.py';
       service.openTab(oldUri, 'v1', 'python', false).unwrap();
-      service.setValue('v2');
-      service.markTabSaved(oldUri);
+      editActiveTab('v2');
+      service.markTabSaved(oldUri, oldUri);
 
       service.renameTab(oldUri, newUri).unwrap();
-      expect(service.getSessionState().find((t) => t.uri === newUri)?.isDirty).toBe(false);
+      expect(service.getTabs().find((t) => t.uri === newUri)?.isDirty).toBe(false);
 
-      service.setValue('v3');
-      expect(service.getSessionState().find((t) => t.uri === newUri)?.isDirty).toBe(true);
+      editActiveTab('v3');
+      expect(service.getTabs().find((t) => t.uri === newUri)?.isDirty).toBe(true);
     });
 
     it('renameTab() on a dirty tab keeps it dirty after more edits', () => {
       const oldUri = 'file:///workspace/dirty_old.py';
       const newUri = 'file:///workspace/dirty_new.py';
       service.openTab(oldUri, 'v1', 'python', false).unwrap();
-      service.setValue('v2');
-      service.markTabSaved(oldUri);
-      service.setValue('v3');
+      editActiveTab('v2');
+      service.markTabSaved(oldUri, oldUri);
+      editActiveTab('v3');
 
       service.renameTab(oldUri, newUri).unwrap();
-      expect(service.getSessionState().find((t) => t.uri === newUri)?.isDirty).toBe(true);
+      expect(service.getTabs().find((t) => t.uri === newUri)?.isDirty).toBe(true);
 
-      service.setValue('v4');
-      expect(service.getSessionState().find((t) => t.uri === newUri)?.isDirty).toBe(true);
+      editActiveTab('v4');
+      expect(service.getTabs().find((t) => t.uri === newUri)?.isDirty).toBe(true);
     });
 
     it('markTabSaved() clears dirty flag on tab and handles URI updates', () => {
       service.openTab('file:///workspace/save_test.py', 'original', 'python', false);
-      service.setValue('modified text');
+      editActiveTab('modified text');
 
       const tabBarContainer = document.getElementById(DOM_IDS.TAB_BAR)!;
       let activeTabEl = tabBarContainer.querySelector('.tab.active')!;
       expect(activeTabEl.classList.contains('dirty')).toBe(true);
 
-      service.markTabSaved('file:///workspace/save_test.py');
+      service.markTabSaved('file:///workspace/save_test.py', 'file:///workspace/save_test.py');
       activeTabEl = tabBarContainer.querySelector('.tab.active')!;
       expect(activeTabEl.classList.contains('dirty')).toBe(false);
 
       // Test markTabSaved with rename mapping
-      service.setValue('another change');
+      editActiveTab('another change');
       expect(tabBarContainer.querySelector('.tab.active')!.classList.contains('dirty')).toBe(true);
 
       service.markTabSaved('file:///workspace/saved_as.py', 'file:///workspace/save_test.py');
       const savedTabEl = tabBarContainer.querySelector('.tab.active')!;
       expect(savedTabEl.querySelector('.tab-title')?.textContent).toBe('saved_as.py');
       expect(savedTabEl.classList.contains('dirty')).toBe(false);
+    });
+  });
+
+  describe('Versioned save', () => {
+    const uri = 'file:///workspace/versioned.py';
+
+    it.each([
+      { case: 'no edit during the save', typedDuringSave: false, dirty: false },
+      { case: 'an edit during the save', typedDuringSave: true, dirty: true },
+    ])('markTabSaved() with the saved version: $case', ({ typedDuringSave, dirty }) => {
+      service.openTab(uri, 'v1', 'python', false).unwrap();
+      editActiveTab('v2');
+      const saved = service.getActiveSnapshot()!;
+      if (typedDuringSave) editActiveTab('v3');
+
+      service.markTabSaved(uri, uri, saved.versionId);
+
+      expect(tabState(uri)?.isDirty).toBe(dirty);
+    });
+
+    it('markTabSaved() to a new path keeps edits made during the save dirty', () => {
+      const oldUri = 'file:///workspace/untitled_ab12.py';
+      const newUri = 'file:///workspace/chosen.py';
+      service.openTab(oldUri, 'v1', 'python', false).unwrap();
+      editActiveTab('v2');
+      const saved = service.getActiveSnapshot()!;
+      editActiveTab('v3');
+
+      service.markTabSaved(newUri, oldUri, saved.versionId);
+
+      expect(tabState(oldUri)).toBeUndefined();
+      expect(tabState(newUri)).toEqual({ isDirty: true, content: 'v3' });
+    });
+
+    it('markTabSaved() for a closed tab renames no other tab', () => {
+      service.openTab('file:///workspace/other.py', 'other', 'python', false).unwrap();
+      editActiveTab('other edited');
+
+      service.markTabSaved('file:///workspace/new.py', 'file:///workspace/closed.py', 1);
+
+      expect(service.getTabs().map((t) => [t.uri, t.isDirty])).toEqual([
+        ['file:///workspace/script.py', false],
+        ['file:///workspace/other.py', true],
+      ]);
+    });
+  });
+
+  describe('Format results', () => {
+    const uriA = 'file:///workspace/a.py';
+    const uriB = 'file:///workspace/b.py';
+
+    it('applyFormat() changes the tab it was computed from, not the active tab', () => {
+      service.openTab(uriA, 'a=1\nb=2\n', 'python', false).unwrap();
+      const snapshot = service.getActiveSnapshot()!;
+      service.openTab(uriB, 'b content', 'python', false).unwrap();
+
+      const result = service.applyFormat(uriA, snapshot.versionId, 'a = 1\nb = 2\n');
+
+      expect(result.unwrap()).toBe(true);
+      expect(tabState(uriA)).toEqual({ isDirty: true, content: 'a = 1\nb = 2\n' });
+      expect(tabState(uriB)).toEqual({ isDirty: false, content: 'b content' });
+      expect(activeContent()).toBe('b content');
+    });
+
+    it('applyFormat() drops a result for a tab edited since the snapshot', () => {
+      service.openTab(uriA, 'a=1', 'python', false).unwrap();
+      const snapshot = service.getActiveSnapshot()!;
+      editActiveTab('a=12');
+
+      const result = service.applyFormat(uriA, snapshot.versionId, 'a = 1');
+
+      expect(result.unwrap()).toBe(false);
+      expect(tabState(uriA)?.content).toBe('a=12');
+    });
+
+    it('applyFormat() drops a result for a closed tab', () => {
+      service.openTab(uriA, 'a=1', 'python', false).unwrap();
+      const snapshot = service.getActiveSnapshot()!;
+      service.closeTab(uriA).unwrap();
+
+      const result = service.applyFormat(uriA, snapshot.versionId, 'a = 1');
+
+      expect(result.unwrap()).toBe(false);
+      expect(tabState(uriA)).toBeUndefined();
+    });
+  });
+
+  describe('Borrowed models', () => {
+    const libUri = 'file:///lib/module.pyi';
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function openBorrowedTab(): InstanceType<typeof FakeTextModel> {
+      const borrowed = monaco.editor.createModel(
+        'lib code',
+        'python',
+        FakeUri.parse(libUri) as unknown as monaco.Uri,
+      ) as unknown as InstanceType<typeof FakeTextModel>;
+      service.openTab(libUri, 'lib code', 'python', false).unwrap();
+      return borrowed;
+    }
+
+    it.each([
+      { case: 'clean', edit: undefined, expected: { isDirty: false, content: 'lib code' } },
+      { case: 'dirty', edit: 'lib edited', expected: { isDirty: true, content: 'lib edited' } },
+    ])('reattaches a $case tab whose model VS Code released', ({ edit, expected }) => {
+      const borrowed = openBorrowedTab();
+      if (edit) editActiveTab(edit);
+
+      borrowed.dispose();
+      expect(tabState(libUri)?.content).toBeUndefined();
+      vi.runAllTimers();
+
+      expect(tabState(libUri)).toEqual(expected);
+      const shownModel = editorState.lastCreatedEditor!.getModel()!;
+      expect(shownModel).not.toBe(borrowed);
+      expect(shownModel.getValue()).toBe(expected.content);
+    });
+
+    it.each([
+      {
+        case: 'save ack',
+        reply: (versionId: number) => service.markTabSaved(libUri, libUri, versionId),
+      },
+      {
+        case: 'format result',
+        reply: (versionId: number) => service.applyFormat(libUri, versionId, 'formatted').unwrap(),
+      },
+    ])('ignores a late $case for the model VS Code released', ({ reply }) => {
+      const borrowed = openBorrowedTab();
+      editActiveTab('lib edited');
+      const requested = service.getActiveSnapshot()!;
+      borrowed.dispose();
+      vi.runAllTimers();
+      editActiveTab('typed after the reattach');
+
+      reply(requested.versionId);
+
+      expect(tabState(libUri)).toEqual({ isDirty: true, content: 'typed after the reattach' });
+    });
+
+    it('does not bring back a tab closed before the reattach', () => {
+      const borrowed = openBorrowedTab();
+
+      borrowed.dispose();
+      service.closeTab(libUri).unwrap();
+      vi.runAllTimers();
+
+      expect(tabState(libUri)).toBeUndefined();
+    });
+  });
+
+  describe('Python sync', () => {
+    function spyOnTabState(): Array<Array<{ uri: string; content?: string; versionId?: number }>> {
+      const sent: Array<Array<{ uri: string; content?: string; versionId?: number }>> = [];
+      const fakeBridge = {
+        sendEvent: (command: string, payload: { tabs: (typeof sent)[number] }) => {
+          if (command === 'editor.tabStateChanged') sent.push(payload.tabs);
+        },
+      };
+      vi.spyOn(BridgeService, 'active', 'get').mockReturnValue(
+        Result.ok(fakeBridge as unknown as BridgeService),
+      );
+      return sent;
+    }
+
+    it('sends the text of a tab only when it changed since the last message', () => {
+      const uri = 'file:///workspace/sync.py';
+      const sent = spyOnTabState();
+      const sentForUri = () => sent.flatMap((tabs) => tabs.filter((t) => t.uri === uri));
+
+      service.openTab(uri, 'first', 'python', false).unwrap();
+      service.updateTabBar();
+      const repeated = sentForUri().at(-1);
+      editActiveTab('second');
+
+      expect(
+        sentForUri()
+          .filter((t) => t.content !== undefined)
+          .map((t) => [t.content, t.versionId]),
+      ).toEqual([
+        ['first', 1],
+        ['second', 2],
+      ]);
+      expect(repeated).toEqual({
+        uri,
+        title: 'sync.py',
+        isMain: false,
+        isDirty: false,
+        language: 'python',
+      });
+    });
+
+    it('takeChangedMainSnapshot() answers only after the main text or main tab changed', () => {
+      const other = 'file:///workspace/other_main.py';
+      const first = service.takeChangedMainSnapshot();
+      const again = service.takeChangedMainSnapshot();
+      editActiveTab('edited main');
+      const afterEdit = service.takeChangedMainSnapshot();
+      service.openTab(other, 'other code', 'python', false).unwrap();
+      service.setMainTab(other).unwrap();
+      const afterSwitch = service.takeChangedMainSnapshot();
+
+      expect(first?.uri).toBe('file:///workspace/script.py');
+      expect(again).toBeUndefined();
+      expect(afterEdit?.content).toBe('edited main');
+      expect(afterSwitch).toEqual(expect.objectContaining({ uri: other, content: 'other code' }));
     });
   });
 
@@ -952,14 +1238,14 @@ describe('EditorService', () => {
       expect(activeTabEl.classList.contains('dirty')).toBe(false);
 
       // Modify content -> marks dirty
-      service.setValue('changed content');
+      editActiveTab('changed content');
 
       expect(contentChangedCalls).toBeGreaterThanOrEqual(1);
       activeTabEl = tabBarContainer.querySelector('.tab.active')!;
       expect(activeTabEl.classList.contains('dirty')).toBe(true);
 
       // Save tab -> clears dirty state
-      service.markTabSaved('file:///workspace/dirty_track.py');
+      service.markTabSaved('file:///workspace/dirty_track.py', 'file:///workspace/dirty_track.py');
       activeTabEl = tabBarContainer.querySelector('.tab.active')!;
       expect(activeTabEl.classList.contains('dirty')).toBe(false);
     });

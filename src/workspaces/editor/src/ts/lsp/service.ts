@@ -66,7 +66,6 @@ export interface LspServerConfig {
   port: number;
   path: string;
   language: string;
-  fileEventsPattern?: string | undefined;
   configurationSection?: string | string[] | undefined;
   progressNotifications?: LspProgressNotificationPair[] | undefined;
 }
@@ -140,19 +139,11 @@ export class LspService implements vscode.Disposable {
       const lifecycle = { closing: true };
       const isClosing = () => lifecycle.closing;
 
-      const synchronizeOptions: NonNullable<LanguageClientOptions['synchronize']> = {};
-      if (config.fileEventsPattern) {
-        const watcher = vscode.workspace.createFileSystemWatcher(config.fileEventsPattern);
-        sessionDisposables.add(watcher);
-        synchronizeOptions.fileEvents = watcher;
-      }
-
       const syncedUris = new Set<string>();
       const progressTracker = new LspProgressTracker();
 
       const clientOptions: LanguageClientOptions = {
         documentSelector: [{ language: config.language }],
-        synchronize: synchronizeOptions,
         middleware: {
           didOpen: async (document, next) => {
             if (isClosing()) return;

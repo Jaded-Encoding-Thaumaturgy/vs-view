@@ -52,7 +52,6 @@ const {
 
   const vscodeWorkspaceMock = {
     configChangeListeners,
-    createFileSystemWatcher: vi.fn((_pattern: string) => ({ dispose: vi.fn() })),
     openTextDocument: vi.fn((_uri: unknown) => Promise.resolve({ uri: _uri })),
     onDidChangeConfiguration: vi.fn((listener: ConfigChangeListener) => {
       configChangeListeners.push(listener);
@@ -343,23 +342,6 @@ describe('LspService and Language Client Lifecycle', () => {
 
       const client = clientRecord.instance;
       expect(client.start).toHaveBeenCalled();
-    });
-
-    it('registers file events pattern in synchronize options when provided', async () => {
-      const config: LspServerConfig = {
-        id: 'pyright',
-        name: 'Pyright',
-        port: 8080,
-        path: '',
-        language: 'python',
-        fileEventsPattern: '**/*.py',
-      };
-
-      await service.connect(config);
-      const ws = lspState.createdSockets[0] as MockWebSocket;
-      ws.simulateOpen();
-
-      expect(vscodeWorkspaceMock.createFileSystemWatcher).toHaveBeenCalledWith('**/*.py');
     });
 
     it('disconnects existing session first when connecting an already connected client ID', async () => {

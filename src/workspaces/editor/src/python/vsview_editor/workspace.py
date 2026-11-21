@@ -52,7 +52,15 @@ from .lsp import DEV_SERVER_ORIGIN, LSP_PYREFLY_CONFIG, LSPProcessManager
 from .settings import GlobalSettings, LocalSettings
 from .stubs import get_stubs_dir
 from .utils import ContentPath, WorkspaceUri, disk_stamp, extract_supported_script_files, find_ruff
-from .web import JsToPyCommand, MonacoEditorWidget, OpenTabPayload, PyToJsCommand, TabInfo
+from .web import (
+    ApplyFormatPayload,
+    JsToPyCommand,
+    MonacoEditorWidget,
+    OpenTabPayload,
+    PyToJsCommand,
+    TabInfo,
+    TabSavedPayload,
+)
 
 logger = getLogger(__name__)
 
@@ -359,7 +367,13 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             )
         return True
 
-    def save_script(self, filepath: Path, content: str, tab_uri: str | None = None) -> UnifiedFuture[Path]:
+    def save_script(
+        self,
+        filepath: Path,
+        content: str,
+        tab_uri: str | None = None,
+        version_id: int | None = None,
+    ) -> UnifiedFuture[Path]:
         old_uri = tab_uri or self._active_tab_uri or filepath.resolve().as_uri()
         self.statusSavingScriptStarted.emit("Saving script...")
 
@@ -373,7 +387,10 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
 
             self._record_disk_stamp(filepath.resolve())
             self.statusSavingScriptFinished.emit("Saved")
-            self.editor.bridge.dispatch(PyToJsCommand.TAB_SAVED, {"uri": filepath.as_uri(), "oldUri": old_uri})
+            payload: TabSavedPayload = {"uri": filepath.as_uri(), "oldUri": old_uri}
+            if version_id is not None:
+                payload["versionId"] = version_id
+            self.editor.bridge.dispatch(PyToJsCommand.TAB_SAVED, payload)
 
         def on_failed(filepath: Path, exc: BaseException | None = None) -> None:
             if exc is not None:
@@ -438,8 +455,6 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
     @Slot(str, dict)
     def _on_command_received(self, command: JsToPyCommand, payload: dict[str, Any]) -> None:
         match command:
-            case JsToPyCommand.CONTENT_CHANGED:
-                self._on_content_changed(str(payload["content"]))
             case JsToPyCommand.MAIN_CONTENT_CHANGED | JsToPyCommand.COPY_TO_CLIPBOARD:
                 ...
             case JsToPyCommand.CURSOR_POSITION_CHANGED:
@@ -451,15 +466,12 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             case JsToPyCommand.TAB_STATE_CHANGED:
                 if isinstance(tabs := payload["tabs"], list):
                     self._on_tab_state_changed(tabs)
-            case JsToPyCommand.SESSION_STATE_CHANGED:
-                if isinstance(tabs := payload["tabs"], list):
-                    self._on_session_state_changed(tabs)
             case JsToPyCommand.SAVE_REQUESTED:
-                self._on_save_clicked()
+                self._on_save_clicked(payload["content"], payload["uri"], payload["versionId"])
             case JsToPyCommand.SAVE_AS_REQUESTED:
-                self._on_save_as_clicked()
+                self._on_save_as_clicked(payload["content"], payload["uri"], payload["versionId"])
             case JsToPyCommand.FORMAT_REQUESTED:
-                self._on_format_clicked()
+                self._on_format_clicked(payload["content"], payload["uri"], payload["versionId"])
             case JsToPyCommand.RUN_REQUESTED:
                 self.runClicked.emit()
             case JsToPyCommand.GENERATE_STUBS_REQUESTED:
@@ -475,20 +487,12 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         self.cursor_label.setText(f"Ln {line}, Col {col}")
 
     def _on_tab_state_changed(self, tabs: list[TabInfo]) -> None:
-        content_by_uri = {tab["uri"]: tab.get("content", "") for tab in self._open_tabs}
-        self._open_tabs = [
-            TabInfo({**tab, "content": tab.get("content", content_by_uri.get(tab["uri"], ""))}) for tab in tabs
-        ]
-
-    def _on_session_state_changed(self, tabs: list[TabInfo]) -> None:
-        self._open_tabs = tabs
-
-    def _on_content_changed(self, content: str) -> None:
-        if not (uri := self._active_tab_uri):
-            return
-
-        if tab := self._find_tab(uri):
-            tab["content"] = content
+        # Update the known dicts in place: confirm_close holds them while its dialog lets new state arrive.
+        previous = {tab["uri"]: tab for tab in self._open_tabs}
+        for tab in tabs:
+            if (old := previous.get(tab["uri"])) is not None:
+                old.update(tab)
+        self._open_tabs = [previous.get(tab["uri"], tab) for tab in tabs]
 
     def _on_tab_changed(self, uri: str, kind: Literal["active", "main"]) -> None:
         setattr(self, f"_{kind}_tab_uri", uri or None)
@@ -503,14 +507,14 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
         if kind == "main":
             self.mainFileChanged.emit(self._main_filepath)
 
-    def _on_save_clicked(self) -> None:
-        if self._active_filepath:
-            if self.confirm_overwrite(self._active_filepath):
-                self.save_script(self._active_filepath, self.editor.bridge.content)
+    def _on_save_clicked(self, content: str, tab_uri: str, version_id: int) -> None:
+        if filepath := WorkspaceUri(tab_uri).local_path:
+            if self.confirm_overwrite(filepath):
+                self.save_script(filepath, content, tab_uri, version_id)
         else:
-            self._on_save_as_clicked()
+            self._on_save_as_clicked(content, tab_uri, version_id)
 
-    def _on_save_as_clicked(self) -> None:
+    def _on_save_as_clicked(self, content: str, tab_uri: str, version_id: int) -> None:
         filepath, _ = QFileDialog.getSaveFileName(
             self,
             "Save Script",
@@ -518,9 +522,9 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             "VapourSynth Script (*.vpy);;All Files (*)",
         )
         if filepath and self.confirm_overwrite(Path(filepath)):
-            self.save_script(Path(filepath), self.editor.bridge.content)
+            self.save_script(Path(filepath), content, tab_uri, version_id)
 
-    def _on_format_clicked(self) -> None:
+    def _on_format_clicked(self, content: str, tab_uri: str, version_id: int) -> None:
         self.format_btn.setDisabled(True)
 
         if not (ruff_binary := find_ruff()):
@@ -528,20 +532,19 @@ class MonacoEditorDock(QDockWidget, IconReloadMixin):
             self.format_btn.setEnabled(True)
             return
 
-        code = self.editor.bridge.content
-
         @run_in_background(name="RuffFormat", owner=self)
         def run_ruff() -> None:
             res = subprocess.run(
                 [ruff_binary, "format", "-"],
-                input=code.encode("utf-8"),
+                input=content.encode("utf-8"),
                 capture_output=True,
                 check=True,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
 
-            if (formatted := res.stdout.decode("utf-8")) and formatted != code:
-                self.loop.from_thread(lambda: setattr(self.editor.bridge, "content", formatted)).result(timeout=1.0)
+            if (formatted := res.stdout.decode("utf-8")) and formatted != content:
+                payload: ApplyFormatPayload = {"uri": tab_uri, "versionId": version_id, "text": formatted}
+                self.loop.from_thread(self.editor.bridge.dispatch, PyToJsCommand.APPLY_FORMAT, payload).result(1.0)
                 logger.debug("Formatted with Ruff")
 
         (
@@ -865,10 +868,9 @@ class EditorWorkspace(
                 return False
 
             if reply == QMessageBox.StandardButton.Save:
-                if uri == self.code_dock._active_tab_uri and self.code_dock.editor.bridge.content:
-                    content = self.code_dock.editor.bridge.content
-                else:
-                    content = tab.get("content") or self.code_dock.editor.bridge.content
+                if (content := tab.get("content")) is None:
+                    QMessageBox.warning(self, "Save Failed", f"'{title}' could not be saved: its text is not known.")
+                    return False
 
                 if not (target := WorkspaceUri(uri).local_path):
                     filepath, _ = QFileDialog.getSaveFileName(
@@ -885,7 +887,7 @@ class EditorWorkspace(
                     return False
 
                 try:
-                    self.code_dock.save_script(target, content, tab_uri=uri).result()
+                    self.code_dock.save_script(target, content, uri, tab.get("versionId")).result()
                 except (OSError, UnicodeError, ValueError):
                     QMessageBox.warning(
                         self,

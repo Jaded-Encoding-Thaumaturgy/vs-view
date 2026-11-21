@@ -15,7 +15,7 @@ from .utils import extract_supported_script_files
 
 
 class PyToJsCommand(StrEnum):
-    SET_VALUE = "editor.setValue"
+    APPLY_FORMAT = "editor.applyFormat"
     SET_THEME = "editor.setTheme"
     TOGGLE_WORD_WRAP = "editor.toggleWordWrap"
     UPDATE_LSP_SETTINGS = "editor.updateLspSettings"
@@ -34,13 +34,11 @@ class PyToJsCommand(StrEnum):
 
 
 class JsToPyCommand(StrEnum):
-    CONTENT_CHANGED = "editor.contentChanged"
     MAIN_CONTENT_CHANGED = "editor.mainContentChanged"
     CURSOR_POSITION_CHANGED = "editor.cursorPositionChanged"
     ACTIVE_TAB_CHANGED = "editor.activeTabChanged"
     MAIN_TAB_CHANGED = "editor.mainTabChanged"
     TAB_STATE_CHANGED = "editor.tabStateChanged"
-    SESSION_STATE_CHANGED = "editor.sessionStateChanged"
     SAVE_REQUESTED = "editor.saveRequested"
     SAVE_AS_REQUESTED = "editor.saveAsRequested"
     FORMAT_REQUESTED = "editor.formatRequested"
@@ -51,7 +49,9 @@ class JsToPyCommand(StrEnum):
     COPY_TO_CLIPBOARD = "clipboard.copy"
 
 
-class SetValuePayload(TypedDict):
+class ApplyFormatPayload(TypedDict):
+    uri: str
+    versionId: int
     text: str
 
 
@@ -82,7 +82,8 @@ class SelectTabPayload(TypedDict):
 
 class TabSavedPayload(TypedDict):
     uri: str
-    oldUri: NotRequired[str]
+    oldUri: str
+    versionId: NotRequired[int]
 
 
 class ConsoleAppendPayload(TypedDict):
@@ -100,7 +101,6 @@ class LspConnectPayload(TypedDict):
     port: int
     path: str
     language: str
-    fileEventsPattern: NotRequired[str | None]
     configurationSection: NotRequired[str | Sequence[str]]
     progressNotifications: NotRequired[Sequence[Mapping[str, str]]]
 
@@ -115,7 +115,9 @@ class TabInfo(TypedDict):
     isMain: bool
     isDirty: bool
     language: str
+    # Sent only when the tab's version changed since the last message, always with versionId.
     content: NotRequired[str]
+    versionId: NotRequired[int]
 
 
 class MonacoBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
@@ -123,21 +125,11 @@ class MonacoBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self._content = ""
-        self._main_content: str | None = None
-
-    @property
-    def content(self) -> str:
-        return self._content
-
-    @content.setter
-    def content(self, text: str) -> None:
-        self._content = text
-        self.dispatch(PyToJsCommand.SET_VALUE, {"text": text})
+        self._main_content = ""
 
     @property
     def main_content(self) -> str:
-        return self._main_content if self._main_content is not None else self._content
+        return self._main_content
 
     @overload  # type: ignore[override]
     def dispatch(
@@ -163,7 +155,7 @@ class MonacoBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
         payload: LspDisconnectPayload | None = None,
     ) -> None: ...
     @overload
-    def dispatch(self, command: Literal[PyToJsCommand.SET_VALUE], payload: SetValuePayload) -> None: ...
+    def dispatch(self, command: Literal[PyToJsCommand.APPLY_FORMAT], payload: ApplyFormatPayload) -> None: ...
     @overload
     def dispatch(self, command: Literal[PyToJsCommand.SET_THEME], payload: SetThemePayload) -> None: ...
     @overload
@@ -189,8 +181,6 @@ class MonacoBridge(BaseWebChannelBridge[PyToJsCommand, JsToPyCommand]):
     @override
     def on_command_received(self, command: JsToPyCommand, payload: dict[str, Any]) -> None:
         match command:
-            case JsToPyCommand.CONTENT_CHANGED:
-                self._content = str(payload.get("content", ""))
             case JsToPyCommand.MAIN_CONTENT_CHANGED:
                 self._main_content = str(payload.get("content", ""))
             case JsToPyCommand.COPY_TO_CLIPBOARD:

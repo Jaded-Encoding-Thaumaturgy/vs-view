@@ -96,6 +96,11 @@ and selecting "VapourSynth: Generate Stubs".
 
 Like any other plugin, the language server can be configured through the **Settings** menu.
 
+!!! note "Changes made outside VSView"
+    The editor does not watch files on disk.
+    If you change an imported module in another program, diagnostics and hovers that depend on it can stay out of date.
+    To refresh them, select "Pyrefly: Restart Language Server" in the command palette.
+
 ---
 
 ## Configuration Settings

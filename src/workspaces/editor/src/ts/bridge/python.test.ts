@@ -55,12 +55,14 @@ import type { ConsolePanelService } from '../ui/console';
 import { DOM_IDS } from '../ui/constants';
 import { BridgeService } from './python';
 
+const ACTIVE_SNAPSHOT = { uri: 'file:///workspace/a.py', versionId: 7, content: 'active content' };
+const MAIN_SNAPSHOT = { uri: 'file:///workspace/script.py', versionId: 3, content: 'main content' };
+
 interface MockEditorServiceFixture {
   service: EditorService;
-  getValue: ReturnType<typeof vi.fn>;
-  getMainValue: ReturnType<typeof vi.fn>;
-  getSessionState: ReturnType<typeof vi.fn>;
-  setValue: ReturnType<typeof vi.fn>;
+  getActiveSnapshot: ReturnType<typeof vi.fn>;
+  takeChangedMainSnapshot: ReturnType<typeof vi.fn>;
+  applyFormat: ReturnType<typeof vi.fn>;
   setTheme: ReturnType<typeof vi.fn>;
   toggleWordWrap: ReturnType<typeof vi.fn>;
   openTab: ReturnType<typeof vi.fn>;
@@ -92,19 +94,9 @@ function createMockEditorService(): MockEditorServiceFixture {
   const saveAsRequestEmitter = new MockEventEmitter<void>();
   const formatRequestEmitter = new MockEventEmitter<void>();
 
-  const getValue = vi.fn().mockReturnValue('active content');
-  const getMainValue = vi.fn().mockReturnValue('main content');
-  const getSessionState = vi.fn().mockReturnValue([
-    {
-      uri: 'file:///workspace/script.py',
-      title: 'script.py',
-      isMain: true,
-      isDirty: true,
-      language: 'python',
-      content: 'main content',
-    },
-  ]);
-  const setValue = vi.fn();
+  const getActiveSnapshot = vi.fn().mockReturnValue(ACTIVE_SNAPSHOT);
+  const takeChangedMainSnapshot = vi.fn().mockReturnValue(MAIN_SNAPSHOT);
+  const applyFormat = vi.fn(() => Result.ok(true));
   const setTheme = vi.fn();
   const toggleWordWrap = vi.fn();
   const openTab = vi.fn(() => Result.ok('file:///workspace/script.py'));
@@ -118,10 +110,9 @@ function createMockEditorService(): MockEditorServiceFixture {
   const updateTabBar = vi.fn();
 
   const service = {
-    getValue,
-    getMainValue,
-    getSessionState,
-    setValue,
+    getActiveSnapshot,
+    takeChangedMainSnapshot,
+    applyFormat,
     setTheme,
     toggleWordWrap,
     openTab,
@@ -150,10 +141,9 @@ function createMockEditorService(): MockEditorServiceFixture {
 
   return {
     service,
-    getValue,
-    getMainValue,
-    getSessionState,
-    setValue,
+    getActiveSnapshot,
+    takeChangedMainSnapshot,
+    applyFormat,
     setTheme,
     toggleWordWrap,
     openTab,
@@ -334,17 +324,23 @@ describe('BridgeService', () => {
   }
 
   describe('1. Command Bus Dispatching', () => {
-    it('dispatches editor.setValue', () => {
+    it('dispatches editor.applyFormat with the tab and version it was computed from', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
-      mockBridgeFixture.emitCommand('editor.setValue', JSON.stringify({ text: "print('hello')" }));
-      expect(mockEditor.setValue).toHaveBeenCalledWith("print('hello')");
+      mockBridgeFixture.emitCommand(
+        'editor.applyFormat',
+        JSON.stringify({ uri: 'file:///a.py', versionId: 4, text: 'a = 1\n' }),
+      );
+      expect(mockEditor.applyFormat).toHaveBeenCalledWith('file:///a.py', 4, 'a = 1\n');
 
-      // Non-string payload ignored
-      mockEditor.setValue.mockClear();
-      mockBridgeFixture.emitCommand('editor.setValue', JSON.stringify({ text: 123 }));
-      expect(mockEditor.setValue).not.toHaveBeenCalled();
+      // A result without a version cannot be checked against the tab, so it is ignored.
+      mockEditor.applyFormat.mockClear();
+      mockBridgeFixture.emitCommand(
+        'editor.applyFormat',
+        JSON.stringify({ uri: 'file:///a.py', text: 'a = 1\n' }),
+      );
+      expect(mockEditor.applyFormat).not.toHaveBeenCalled();
     });
 
     it('dispatches editor.setTheme to both editor and console services', () => {
@@ -469,22 +465,30 @@ describe('BridgeService', () => {
       expect(errorSpy).toHaveBeenCalledWith("Failed to select tab 'file:///missing.py':", failure);
     });
 
-    it('dispatches editor.tabSaved with and without oldUri', () => {
+    it('dispatches editor.tabSaved with and without versionId', () => {
       using fixture = setupInitializedBridgeService().bridgeService;
       void fixture;
 
       mockBridgeFixture.emitCommand(
         'editor.tabSaved',
-        JSON.stringify({ uri: 'file:///new.py', oldUri: 'file:///old.py' }),
+        JSON.stringify({ uri: 'file:///new.py', oldUri: 'file:///old.py', versionId: 5 }),
       );
-      expect(mockEditor.markTabSaved).toHaveBeenCalledWith('file:///new.py', 'file:///old.py');
+      expect(mockEditor.markTabSaved).toHaveBeenCalledWith('file:///new.py', 'file:///old.py', 5);
 
+      mockEditor.markTabSaved.mockClear();
+      mockBridgeFixture.emitCommand(
+        'editor.tabSaved',
+        JSON.stringify({ uri: 'file:///saved.py', oldUri: 'file:///saved.py' }),
+      );
+      expect(mockEditor.markTabSaved).toHaveBeenCalledWith(
+        'file:///saved.py',
+        'file:///saved.py',
+        undefined,
+      );
+
+      // Without the saved tab, no tab is marked: guessing one could mark the wrong tab saved.
       mockEditor.markTabSaved.mockClear();
       mockBridgeFixture.emitCommand('editor.tabSaved', JSON.stringify({ uri: 'file:///saved.py' }));
-      expect(mockEditor.markTabSaved).toHaveBeenCalledWith('file:///saved.py', undefined);
-
-      // Missing uri ignored
-      mockEditor.markTabSaved.mockClear();
       mockBridgeFixture.emitCommand(
         'editor.tabSaved',
         JSON.stringify({ oldUri: 'file:///old.py' }),
@@ -492,7 +496,7 @@ describe('BridgeService', () => {
       expect(mockEditor.markTabSaved).not.toHaveBeenCalled();
     });
 
-    it('dispatches editor.triggerSave, editor.triggerSaveAs, editor.triggerFormat with flush', () => {
+    it('dispatches editor.triggerSave, editor.triggerSaveAs, editor.triggerFormat', () => {
       const { bridgeService, bridge } = setupInitializedBridgeService();
       using fixture = bridgeService;
       void fixture;
@@ -500,10 +504,7 @@ describe('BridgeService', () => {
       mockBridgeFixture.emitCommand('editor.triggerSave', '{}');
       expect(mockEditor.requestSave).toHaveBeenCalledOnce();
       expect(vi.mocked(bridge.dispatchFromJs).mock.calls).toEqual([
-        ['editor.contentChanged', JSON.stringify({ content: 'active content' })],
-        ['editor.mainContentChanged', JSON.stringify({ content: 'main content' })],
-        ['editor.sessionStateChanged', expect.any(String)],
-        ['editor.saveRequested', '{}'],
+        ['editor.saveRequested', JSON.stringify(ACTIVE_SNAPSHOT)],
       ]);
 
       mockBridgeFixture.emitCommand('editor.triggerSaveAs', '{}');
@@ -522,11 +523,20 @@ describe('BridgeService', () => {
       mockBridgeFixture.emitCommand('editor.triggerRun', '{}');
 
       expect(vi.mocked(bridge.dispatchFromJs).mock.calls).toEqual([
-        ['editor.contentChanged', JSON.stringify({ content: 'active content' })],
-        ['editor.mainContentChanged', JSON.stringify({ content: 'main content' })],
-        ['editor.sessionStateChanged', expect.any(String)],
+        ['editor.mainContentChanged', JSON.stringify(MAIN_SNAPSHOT)],
         ['editor.runRequested', '{}'],
       ]);
+    });
+
+    it('sends no main content when the main tab did not change', () => {
+      const { bridgeService, bridge } = setupInitializedBridgeService();
+      using fixture = bridgeService;
+      void fixture;
+      mockEditor.takeChangedMainSnapshot.mockReturnValue(undefined);
+
+      mockBridgeFixture.emitCommand('editor.triggerRun', '{}');
+
+      expect(vi.mocked(bridge.dispatchFromJs).mock.calls).toEqual([['editor.runRequested', '{}']]);
     });
 
     it('dispatches editor.updateOptions', () => {
@@ -677,7 +687,6 @@ describe('BridgeService', () => {
           port: 9000,
           path: '/token',
           language: 'python',
-          fileEventsPattern: '**/*.py',
           configurationSection: 'pyrefly',
           progressNotifications: [{ begin: 'startProgress', end: 'endProgress' }],
         }),
@@ -689,7 +698,6 @@ describe('BridgeService', () => {
         port: 9000,
         path: '/token',
         language: 'python',
-        fileEventsPattern: '**/*.py',
         configurationSection: 'pyrefly',
         progressNotifications: [{ begin: 'startProgress', end: 'endProgress' }],
       });
@@ -714,7 +722,6 @@ describe('BridgeService', () => {
         port: 9001,
         path: '/token',
         language: 'python',
-        fileEventsPattern: undefined,
         configurationSection: ['pylsp', 'python'],
         progressNotifications: undefined,
       });
@@ -788,14 +795,14 @@ describe('BridgeService', () => {
       void fixture;
 
       expect(() => {
-        mockBridgeFixture.emitCommand('editor.setValue', '{malformed JSON syntax');
+        mockBridgeFixture.emitCommand('editor.applyFormat', '{malformed JSON syntax');
       }).not.toThrow();
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to parse command payload for editor.setValue:',
+        'Failed to parse command payload for editor.applyFormat:',
         expect.any(Error),
       );
-      expect(mockEditor.setValue).not.toHaveBeenCalled();
+      expect(mockEditor.applyFormat).not.toHaveBeenCalled();
     });
 
     it('safely handles non-object JSON payloads (e.g. primitives)', () => {
@@ -804,13 +811,13 @@ describe('BridgeService', () => {
       void fixture;
 
       expect(() => {
-        mockBridgeFixture.emitCommand('editor.setValue', '123');
-        mockBridgeFixture.emitCommand('editor.setValue', '"just a string"');
-        mockBridgeFixture.emitCommand('editor.setValue', 'null');
-        mockBridgeFixture.emitCommand('editor.setValue', 'true');
+        mockBridgeFixture.emitCommand('editor.applyFormat', '123');
+        mockBridgeFixture.emitCommand('editor.applyFormat', '"just a string"');
+        mockBridgeFixture.emitCommand('editor.applyFormat', 'null');
+        mockBridgeFixture.emitCommand('editor.applyFormat', 'true');
       }).not.toThrow();
 
-      expect(mockEditor.setValue).not.toHaveBeenCalled();
+      expect(mockEditor.applyFormat).not.toHaveBeenCalled();
     });
 
     it('safely ignores payloads with invalid property types', () => {
@@ -1000,29 +1007,10 @@ describe('BridgeService', () => {
 
       // Complete the remaining 100ms
       vi.advanceTimersByTime(100);
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
-        'editor.contentChanged',
-        JSON.stringify({ content: 'active content' }),
-      );
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
-        'editor.mainContentChanged',
-        JSON.stringify({ content: 'main content' }),
-      );
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
-        'editor.sessionStateChanged',
-        JSON.stringify({
-          tabs: [
-            {
-              uri: 'file:///workspace/script.py',
-              title: 'script.py',
-              isMain: true,
-              isDirty: true,
-              language: 'python',
-              content: 'main content',
-            },
-          ],
-        }),
-      );
+      expect(vi.mocked(bridge.dispatchFromJs).mock.calls).toEqual([
+        ['editor.mainContentChanged', JSON.stringify(MAIN_SNAPSHOT)],
+      ]);
+      expect(mockEditor.updateTabBar).toHaveBeenCalledOnce();
     });
 
     it('flushes pending content changes immediately on tab changes', () => {
@@ -1036,18 +1024,10 @@ describe('BridgeService', () => {
 
       // Active tab changed triggers immediate flush
       mockEditor.emitActiveTabChange('file:///new_tab.py');
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
-        'editor.activeTabChanged',
-        JSON.stringify({ uri: 'file:///new_tab.py' }),
-      );
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
-        'editor.contentChanged',
-        JSON.stringify({ content: 'active content' }),
-      );
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
-        'editor.mainContentChanged',
-        JSON.stringify({ content: 'main content' }),
-      );
+      expect(vi.mocked(bridge.dispatchFromJs).mock.calls).toEqual([
+        ['editor.activeTabChanged', JSON.stringify({ uri: 'file:///new_tab.py' })],
+        ['editor.mainContentChanged', JSON.stringify(MAIN_SNAPSHOT)],
+      ]);
 
       // Timer should have been cleared; advancing 300ms does not fire duplicate call
       const callCount = vi.mocked(bridge.dispatchFromJs).mock.calls.length;
@@ -1055,7 +1035,7 @@ describe('BridgeService', () => {
       expect(bridge.dispatchFromJs).toHaveBeenCalledTimes(callCount);
     });
 
-    it('flushes pending content changes immediately on main tab changes', () => {
+    it('flushes pending content changes on main tab changes, before editor.mainTabChanged', () => {
       const { bridgeService, bridge } = setupInitializedBridgeService();
       using fixture = bridgeService;
       void fixture;
@@ -1064,18 +1044,10 @@ describe('BridgeService', () => {
       expect(bridge.dispatchFromJs).not.toHaveBeenCalled();
 
       mockEditor.emitMainTabChange('file:///main_script.py');
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
-        'editor.mainTabChanged',
-        JSON.stringify({ uri: 'file:///main_script.py' }),
-      );
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
-        'editor.contentChanged',
-        JSON.stringify({ content: 'active content' }),
-      );
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith(
-        'editor.mainContentChanged',
-        JSON.stringify({ content: 'main content' }),
-      );
+      expect(vi.mocked(bridge.dispatchFromJs).mock.calls).toEqual([
+        ['editor.mainContentChanged', JSON.stringify(MAIN_SNAPSHOT)],
+        ['editor.mainTabChanged', JSON.stringify({ uri: 'file:///main_script.py' })],
+      ]);
 
       const callCount = vi.mocked(bridge.dispatchFromJs).mock.calls.length;
       vi.advanceTimersByTime(300);
@@ -1219,34 +1191,15 @@ describe('BridgeService', () => {
         JSON.stringify({ line: 42, column: 10 }),
       );
 
+      const snapshot = JSON.stringify(ACTIVE_SNAPSHOT);
       mockEditor.emitSaveRequest();
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith('editor.saveRequested', '{}');
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith('editor.saveRequested', snapshot);
 
       mockEditor.emitSaveAsRequest();
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith('editor.saveAsRequested', '{}');
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith('editor.saveAsRequested', snapshot);
 
       mockEditor.emitFormatRequest();
-      expect(bridge.dispatchFromJs).toHaveBeenCalledWith('editor.formatRequested', '{}');
-    });
-
-    it.each([
-      { emit: 'emitSaveRequest', command: 'editor.saveRequested' },
-      { emit: 'emitSaveAsRequest', command: 'editor.saveAsRequested' },
-      { emit: 'emitFormatRequest', command: 'editor.formatRequested' },
-    ] as const)('flushes pending content before $command', ({ emit, command }) => {
-      const { bridgeService, bridge } = setupInitializedBridgeService();
-      using fixture = bridgeService;
-      void fixture;
-      mockEditor.emitContentChange();
-
-      mockEditor[emit]();
-
-      expect(vi.mocked(bridge.dispatchFromJs).mock.calls).toEqual([
-        ['editor.contentChanged', JSON.stringify({ content: 'active content' })],
-        ['editor.mainContentChanged', JSON.stringify({ content: 'main content' })],
-        ['editor.sessionStateChanged', expect.any(String)],
-        [command, '{}'],
-      ]);
+      expect(bridge.dispatchFromJs).toHaveBeenCalledWith('editor.formatRequested', snapshot);
     });
 
     it('forwards console service toggle and resize events to editor layout', () => {

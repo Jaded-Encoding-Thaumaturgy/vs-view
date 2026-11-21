@@ -26,7 +26,16 @@ export interface TabInfo {
   isMain: boolean;
   isDirty: boolean;
   language: string;
+  /** Sent only when the tab's version changed since the last message, always with `versionId`. */
   content?: string | undefined;
+  versionId?: number | undefined;
+}
+
+/** The same `versionId` always means the same text of that tab, even after the tab gets a new model. */
+export interface TabSnapshot {
+  uri: string;
+  versionId: number;
+  content: string;
 }
 
 export interface EditorOptionsPayload {
@@ -48,14 +57,13 @@ export interface LspConnectPayload {
   port: number;
   path: string;
   language: string;
-  fileEventsPattern?: string | null;
   configurationSection?: string | string[];
   progressNotifications?: Array<{ begin: string; end: string }>;
 }
 
 /** Commands dispatched from Python to JavaScript. */
 export interface PyToJsCommandMap {
-  'editor.setValue': { text: string };
+  'editor.applyFormat': { uri: string; versionId: number; text: string };
   'editor.setTheme': { theme: string };
   'editor.toggleWordWrap': Record<string, never>;
   'editor.updateLspSettings': { section: string; settingsJson: string };
@@ -68,7 +76,7 @@ export interface PyToJsCommandMap {
     replaceUri?: string;
   };
   'editor.selectTab': { uri: string };
-  'editor.tabSaved': { uri: string; oldUri?: string };
+  'editor.tabSaved': { uri: string; oldUri: string; versionId?: number };
   'editor.triggerSave': Record<string, never>;
   'editor.triggerSaveAs': Record<string, never>;
   'editor.triggerFormat': Record<string, never>;
@@ -81,16 +89,14 @@ export interface PyToJsCommandMap {
 
 /** Commands dispatched from JavaScript to Python. */
 export interface JsToPyCommandMap {
-  'editor.contentChanged': { content: string };
-  'editor.mainContentChanged': { content: string };
+  'editor.mainContentChanged': TabSnapshot;
   'editor.cursorPositionChanged': { line: number; column: number };
   'editor.activeTabChanged': { uri: string };
   'editor.mainTabChanged': { uri: string };
   'editor.tabStateChanged': { tabs: TabInfo[] };
-  'editor.sessionStateChanged': { tabs: TabInfo[] };
-  'editor.saveRequested': Record<string, never>;
-  'editor.saveAsRequested': Record<string, never>;
-  'editor.formatRequested': Record<string, never>;
+  'editor.saveRequested': TabSnapshot;
+  'editor.saveAsRequested': TabSnapshot;
+  'editor.formatRequested': TabSnapshot;
   'editor.runRequested': Record<string, never>;
   'editor.generateStubsRequested': Record<string, never>;
   'lsp.restartRequested': Record<string, never>;

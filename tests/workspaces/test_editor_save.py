@@ -53,15 +53,27 @@ def send_from_js(workspace: EditorWorkspace, command: JsToPyCommand, payload: di
     workspace.code_dock.editor.bridge.dispatchFromJs(command, json.dumps(payload))
 
 
-def open_dirty_tab(workspace: EditorWorkspace, uri: str, content: str) -> None:
+def snapshot(uri: str, content: str, version_id: int = 1) -> dict[str, Any]:
+    return {"uri": uri, "versionId": version_id, "content": content}
+
+
+def send_dirty_tab(workspace: EditorWorkspace, uri: str, content: str, version_id: int = 1) -> None:
     tab = {"uri": uri, "title": "script.vpy", "isMain": True, "isDirty": True, "language": "python"}
-    send_from_js(workspace, JsToPyCommand.TAB_STATE_CHANGED, {"tabs": [{**tab, "content": content}]})
+    send_from_js(
+        workspace, JsToPyCommand.TAB_STATE_CHANGED, {"tabs": [{**tab, "content": content, "versionId": version_id}]}
+    )
+
+
+def open_dirty_tab(workspace: EditorWorkspace, uri: str, content: str) -> None:
+    send_dirty_tab(workspace, uri, content)
     send_from_js(workspace, JsToPyCommand.ACTIVE_TAB_CHANGED, {"uri": uri})
-    send_from_js(workspace, JsToPyCommand.CONTENT_CHANGED, {"content": content})
 
 
-def tab_saved(uri: str, old_uri: str) -> Any:
-    return call(PyToJsCommand.TAB_SAVED, {"uri": uri, "oldUri": old_uri})
+def tab_saved(uri: str, old_uri: str, version_id: int | None = None) -> Any:
+    payload: dict[str, Any] = {"uri": uri, "oldUri": old_uri}
+    if version_id is not None:
+        payload["versionId"] = version_id
+    return call(PyToJsCommand.TAB_SAVED, payload)
 
 
 class TestConfirmCloseSave:
@@ -81,7 +93,7 @@ class TestConfirmCloseSave:
 
         assert editor_workspace.confirm_close() is True
         assert script.read_bytes() == b"new content\n"
-        qtbot.waitUntil(lambda: tab_saved(uri, uri) in dispatch.call_args_list, timeout=2000)
+        qtbot.waitUntil(lambda: tab_saved(uri, uri, 1) in dispatch.call_args_list, timeout=2000)
 
     def test_saves_dirty_untitled_tab(
         self,
@@ -99,7 +111,7 @@ class TestConfirmCloseSave:
         assert editor_workspace.confirm_close() is True
         assert target.read_bytes() == b"untitled content\n"
         qtbot.waitUntil(
-            lambda: tab_saved(target.resolve().as_uri(), UNTITLED_URI) in dispatch.call_args_list, timeout=2000
+            lambda: tab_saved(target.resolve().as_uri(), UNTITLED_URI, 1) in dispatch.call_args_list, timeout=2000
         )
 
     def test_failed_save_keeps_workspace_open_and_warns(
@@ -124,6 +136,69 @@ class TestConfirmCloseSave:
         assert warning.call_args.args[1] == "Save Failed"
         assert "script.vpy" in warning.call_args.args[2]
         assert not any(c.args[0] == PyToJsCommand.TAB_SAVED for c in dispatch.call_args_list)
+
+    def test_saves_the_text_that_arrives_while_the_dialog_is_open(
+        self,
+        editor_workspace: EditorWorkspace,
+        dispatch: MagicMock,
+        qtbot: QtBot,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"old\n")
+        uri = script.resolve().as_uri()
+        open_dirty_tab(editor_workspace, uri, "a")
+
+        def answer_after_the_editor_flushed(*_: Any) -> QMessageBox.StandardButton:
+            send_dirty_tab(editor_workspace, uri, "abc", version_id=3)
+            return QMessageBox.StandardButton.Save
+
+        mocker.patch.object(QMessageBox, "question", side_effect=answer_after_the_editor_flushed)
+
+        closed = editor_workspace.confirm_close()
+
+        assert closed is True
+        assert script.read_bytes() == b"abc"
+        qtbot.waitUntil(lambda: tab_saved(uri, uri, 3) in dispatch.call_args_list, timeout=2000)
+
+    def test_dirty_tab_without_known_text_is_not_written_and_warns(
+        self,
+        editor_workspace: EditorWorkspace,
+        dispatch: MagicMock,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"precious\n")
+        tab = {"uri": script.resolve().as_uri(), "title": "script.vpy", "isMain": True, "isDirty": True}
+        send_from_js(editor_workspace, JsToPyCommand.TAB_STATE_CHANGED, {"tabs": [{**tab, "language": "python"}]})
+        mocker.patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Save)
+        warning = mocker.patch.object(QMessageBox, "warning", return_value=QMessageBox.StandardButton.Ok)
+
+        closed = editor_workspace.confirm_close()
+
+        assert closed is False
+        assert script.read_bytes() == b"precious\n"
+        warning.assert_called_once()
+        assert "script.vpy" in warning.call_args.args[2]
+
+
+class TestSaveRequest:
+    def test_saves_the_requested_tab_and_reports_its_version_after_a_tab_switch(
+        self, editor_workspace: EditorWorkspace, dispatch: MagicMock, qtbot: QtBot, tmp_path: Path
+    ) -> None:
+        script = tmp_path / "script.vpy"
+        script.write_bytes(b"old\n")
+        uri = script.resolve().as_uri()
+        assert editor_workspace.code_dock.open_file(script) is True
+        send_from_js(editor_workspace, JsToPyCommand.ACTIVE_TAB_CHANGED, {"uri": UNTITLED_URI})
+
+        with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, snapshot(uri, "mine\n", 7))
+
+        assert script.read_bytes() == b"mine\n"
+        assert tab_saved(uri, uri, 7) in dispatch.call_args_list
 
 
 class TestSaveScript:
@@ -195,7 +270,7 @@ class TestSaveScript:
         mocker.patch.object(QFileDialog, "getSaveFileName", return_value=(str(target), ""))
 
         with qtbot.waitSignal(editor_workspace.statusLoadingErrored, timeout=2000):
-            send_from_js(editor_workspace, JsToPyCommand.SAVE_AS_REQUESTED, {})
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_AS_REQUESTED, snapshot(UNTITLED_URI, "x = 1\n"))
 
         assert editor_workspace.code_dock.active_filepath is None
 
@@ -252,14 +327,15 @@ class TestLineEndings:
         assert script.read_bytes() == b"a = 1\nb = 2\n"
 
     @pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff is not on PATH")
-    def test_format_keeps_crlf(self, editor_workspace: EditorWorkspace, dispatch: MagicMock, qtbot: QtBot) -> None:
-        bridge = editor_workspace.code_dock.editor.bridge
-        send_from_js(editor_workspace, JsToPyCommand.CONTENT_CHANGED, {"content": "a=1\r\nb=2\r\n"})
-
-        send_from_js(editor_workspace, JsToPyCommand.FORMAT_REQUESTED, {})
+    def test_format_keeps_crlf_and_targets_the_requested_version(
+        self, editor_workspace: EditorWorkspace, dispatch: MagicMock, qtbot: QtBot
+    ) -> None:
+        send_from_js(editor_workspace, JsToPyCommand.FORMAT_REQUESTED, snapshot(UNTITLED_URI, "a=1\r\nb=2\r\n", 5))
 
         qtbot.waitUntil(lambda: editor_workspace.code_dock.format_btn.isEnabled(), timeout=10000)
-        assert bridge.content == "a = 1\r\nb = 2\r\n"
+        assert dispatch.call_args_list == [
+            call(PyToJsCommand.APPLY_FORMAT, {"uri": UNTITLED_URI, "versionId": 5, "text": "a = 1\r\nb = 2\r\n"})
+        ]
 
 
 def change_on_disk(path: Path, data: bytes, *, keep_mtime: bool = False) -> None:
@@ -273,9 +349,9 @@ def change_on_disk(path: Path, data: bytes, *, keep_mtime: bool = False) -> None
 
 
 class TestDiskChangeWarning:
-    def open_and_edit(self, workspace: EditorWorkspace, path: Path, content: str) -> None:
+    def open_with_edit(self, workspace: EditorWorkspace, path: Path, content: str) -> dict[str, Any]:
         assert workspace.code_dock.open_file(path) is True
-        send_from_js(workspace, JsToPyCommand.CONTENT_CHANGED, {"content": content})
+        return snapshot(path.resolve().as_uri(), content, 2)
 
     @pytest.mark.parametrize(
         ("external", "keep_mtime"),
@@ -296,12 +372,12 @@ class TestDiskChangeWarning:
     ) -> None:
         script = tmp_path / "script.vpy"
         script.write_bytes(b"old\n")
-        self.open_and_edit(editor_workspace, script, "mine\n")
+        request = self.open_with_edit(editor_workspace, script, "mine\n")
         change_on_disk(script, external, keep_mtime=keep_mtime)
         warning = mocker.patch.object(QMessageBox, "warning", return_value=QMessageBox.StandardButton.Cancel)
 
         with qtbot.assertNotEmitted(editor_workspace.statusLoadingStarted, wait=100):
-            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, request)
 
         warning.assert_called_once()
         assert warning.call_args.args[1] == "File Changed on Disk"
@@ -318,12 +394,12 @@ class TestDiskChangeWarning:
     ) -> None:
         script = tmp_path / "script.vpy"
         script.write_bytes(b"old\n")
-        self.open_and_edit(editor_workspace, script, "mine\n")
+        request = self.open_with_edit(editor_workspace, script, "mine\n")
         change_on_disk(script, b"other\n")
         warning = mocker.patch.object(QMessageBox, "warning", return_value=QMessageBox.StandardButton.Save)
 
         with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
-            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, request)
 
         warning.assert_called_once()
         assert script.read_bytes() == b"mine\n"
@@ -338,11 +414,11 @@ class TestDiskChangeWarning:
     ) -> None:
         script = tmp_path / "script.vpy"
         script.write_bytes(b"old\n")
-        self.open_and_edit(editor_workspace, script, "mine\n")
+        request = self.open_with_edit(editor_workspace, script, "mine\n")
         warning = mocker.patch.object(QMessageBox, "warning")
 
         with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
-            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, request)
 
         warning.assert_not_called()
         assert script.read_bytes() == b"mine\n"
@@ -357,14 +433,14 @@ class TestDiskChangeWarning:
     ) -> None:
         script = tmp_path / "script.vpy"
         script.write_bytes(b"old\n")
-        self.open_and_edit(editor_workspace, script, "first save, longer\n")
+        request = self.open_with_edit(editor_workspace, script, "first save, longer\n")
+        uri = script.resolve().as_uri()
         warning = mocker.patch.object(QMessageBox, "warning")
         with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
-            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
-        send_from_js(editor_workspace, JsToPyCommand.CONTENT_CHANGED, {"content": "second\n"})
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, request)
 
         with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
-            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, snapshot(uri, "second\n", 3))
 
         warning.assert_not_called()
         assert script.read_bytes() == b"second\n"
@@ -379,12 +455,12 @@ class TestDiskChangeWarning:
     ) -> None:
         script = tmp_path / "script.vpy"
         script.write_bytes(b"old\n")
-        self.open_and_edit(editor_workspace, script, "mine\n")
+        request = self.open_with_edit(editor_workspace, script, "mine\n")
         script.unlink()
         warning = mocker.patch.object(QMessageBox, "warning")
 
         with qtbot.waitSignal(editor_workspace.statusLoadingFinished, timeout=5000):
-            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, request)
 
         warning.assert_not_called()
         assert script.read_bytes() == b"mine\n"
@@ -406,7 +482,7 @@ class TestDiskChangeWarning:
         warning = mocker.patch.object(QMessageBox, "warning", return_value=QMessageBox.StandardButton.Cancel)
 
         with qtbot.assertNotEmitted(editor_workspace.statusLoadingStarted, wait=100):
-            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, {})
+            send_from_js(editor_workspace, JsToPyCommand.SAVE_REQUESTED, snapshot(script.resolve().as_uri(), "mine\n"))
 
         warning.assert_called_once()
         assert script.read_bytes() == b"other\n"

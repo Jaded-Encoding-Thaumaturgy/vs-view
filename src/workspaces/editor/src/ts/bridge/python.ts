@@ -103,8 +103,20 @@ export class BridgeService
 
   private setupCommandHandlers(): void {
     this._disposables.add(
-      this.onCommand('editor.setValue', (p) => {
-        if (typeof p.text === 'string') this.editorService.setValue(p.text);
+      this.onCommand('editor.applyFormat', (p) => {
+        if (
+          typeof p.uri === 'string' &&
+          typeof p.versionId === 'number' &&
+          typeof p.text === 'string'
+        ) {
+          const uri = p.uri;
+          this.editorService.applyFormat(uri, p.versionId, p.text).match({
+            ok: (applied) => {
+              if (!applied) console.debug(`Dropped a format result for '${uri}': the tab changed.`);
+            },
+            err: (err) => console.error(`Failed to apply the format result to '${uri}':`, err),
+          });
+        }
       }),
     );
     this._disposables.add(
@@ -162,8 +174,6 @@ export class BridgeService
             port: p.port,
             path: p.path,
             language: p.language,
-            fileEventsPattern:
-              typeof p.fileEventsPattern === 'string' ? p.fileEventsPattern : undefined,
             configurationSection,
             progressNotifications,
           };
@@ -227,9 +237,9 @@ export class BridgeService
     );
     this._disposables.add(
       this.onCommand('editor.tabSaved', (p) => {
-        if (typeof p.uri === 'string') {
-          const oldUri = typeof p.oldUri === 'string' ? p.oldUri : undefined;
-          this.editorService.markTabSaved(p.uri, oldUri);
+        if (typeof p.uri === 'string' && typeof p.oldUri === 'string') {
+          const versionId = typeof p.versionId === 'number' ? p.versionId : undefined;
+          this.editorService.markTabSaved(p.uri, p.oldUri, versionId);
         }
       }),
     );
@@ -283,36 +293,34 @@ export class BridgeService
     );
     this._disposables.add(
       this.editorService.onDidChangeMainTab((uri) => {
+        this.flushContentChanged();
         if (this.bridge) {
           this.sendEvent('editor.mainTabChanged', { uri: uri ?? '' });
         }
-        this.flushContentChanged();
       }),
     );
     this._disposables.add(
-      this.editorService.onDidRequestSave(() => {
-        this.flushState();
-        if (this.bridge) {
-          this.sendEvent('editor.saveRequested');
-        }
-      }),
+      this.editorService.onDidRequestSave(() => this.sendActiveSnapshot('editor.saveRequested')),
     );
     this._disposables.add(
-      this.editorService.onDidRequestSaveAs(() => {
-        this.flushState();
-        if (this.bridge) {
-          this.sendEvent('editor.saveAsRequested');
-        }
-      }),
+      this.editorService.onDidRequestSaveAs(() =>
+        this.sendActiveSnapshot('editor.saveAsRequested'),
+      ),
     );
     this._disposables.add(
-      this.editorService.onDidRequestFormat(() => {
-        this.flushState();
-        if (this.bridge) {
-          this.sendEvent('editor.formatRequested');
-        }
-      }),
+      this.editorService.onDidRequestFormat(() =>
+        this.sendActiveSnapshot('editor.formatRequested'),
+      ),
     );
+  }
+
+  private sendActiveSnapshot(
+    command: 'editor.saveRequested' | 'editor.saveAsRequested' | 'editor.formatRequested',
+  ): void {
+    const snapshot = this.editorService.getActiveSnapshot();
+    if (this.bridge && snapshot) {
+      this.sendEvent(command, snapshot);
+    }
   }
 
   private removeLoadingOverlay(): void {
@@ -349,9 +357,10 @@ export class BridgeService
       this.debounceTimer = null;
     }
     if (this.bridge) {
-      this.sendEvent('editor.contentChanged', { content: this.editorService.getValue() });
-      this.sendEvent('editor.mainContentChanged', { content: this.editorService.getMainValue() });
-      this.sendEvent('editor.sessionStateChanged', { tabs: this.editorService.getSessionState() });
+      const main = this.editorService.takeChangedMainSnapshot();
+      if (main) {
+        this.sendEvent('editor.mainContentChanged', main);
+      }
     }
     this.editorService.updateTabBar();
   }
