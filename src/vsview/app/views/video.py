@@ -1216,9 +1216,18 @@ class GraphicsView(BaseGraphicsView):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.setMouseTracking(True)
+        self._panning = False
+
+    @property
+    def is_panning(self) -> bool:
+        """Whether a left-button drag is scrolling the view."""
+        return self._panning
 
     @override
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if self._panning and not event.buttons() & Qt.MouseButton.LeftButton:
+            self.end_pan()
+
         if self._update_rect_selection_drag(event):
             if self.isVisible():
                 self.mouseMoved.emit(event)
@@ -1241,6 +1250,9 @@ class GraphicsView(BaseGraphicsView):
 
         super().mousePressEvent(event)
 
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._panning = True
+
         if self.isVisible():
             self.mousePressed.emit(event)
 
@@ -1252,6 +1264,10 @@ class GraphicsView(BaseGraphicsView):
             return
 
         super().mouseReleaseEvent(event)
+
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._panning = False
+            self.viewport().releaseMouse()
 
         if self.isVisible():
             self.mouseReleased.emit(event)
@@ -1282,9 +1298,40 @@ class GraphicsView(BaseGraphicsView):
         if value:
             self.zoomChanged.emit(self.current_zoom)
 
+    def start_pan(self) -> None:
+        """
+        Continue at the cursor a pan that started in another view.
+
+        Plugins are not notified, because the button was pressed only once.
+        """
+        self._panning = True
+        super().mousePressEvent(self._make_pan_event(QEvent.Type.MouseButtonPress, Qt.MouseButton.LeftButton))
+        self.viewport().grabMouse()
+
+    def end_pan(self) -> None:
+        """End the current pan without a mouse release. Plugins are not notified."""
+        if not self._panning:
+            return
+
+        self._panning = False
+        self.viewport().releaseMouse()
+        super().mouseReleaseEvent(self._make_pan_event(QEvent.Type.MouseButtonRelease, Qt.MouseButton.NoButton))
+
     @Slot()
     @override
     def _on_autofit_action(self) -> None:
         super()._on_autofit_action()
 
         self.autofitChanged.emit(self.autofit)
+
+    def _make_pan_event(self, kind: QEvent.Type, buttons: Qt.MouseButton) -> QMouseEvent:
+        global_pos = QCursor.pos().toPointF()
+
+        return QMouseEvent(
+            kind,
+            self.viewport().mapFromGlobal(global_pos),
+            global_pos,
+            Qt.MouseButton.LeftButton,
+            buttons,
+            QApplication.keyboardModifiers(),
+        )

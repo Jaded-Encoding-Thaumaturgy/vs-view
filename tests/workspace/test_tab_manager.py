@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 import vapoursynth as vs
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
-from PySide6.QtGui import QContextMenuEvent, QImage, QKeyEvent, QMouseEvent, QPixmap, QShortcut, QTransform
+from PySide6.QtGui import QContextMenuEvent, QCursor, QImage, QKeyEvent, QMouseEvent, QPixmap, QShortcut, QTransform
 from PySide6.QtWidgets import QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
@@ -614,6 +614,55 @@ def test_pan_sync_skipped_when_disabled_or_autofit(
     mgr.switch_tab(0)
     qtbot.wait(50)
     spy0.assert_not_called()
+
+
+@pytest.mark.vpy("no-core")
+def test_pan_continues_on_the_new_tab(
+    qtbot: QtBot,
+    tab_manager: TabManager,
+    plugin_controller: HarnessPluginController,
+    make_video_output: Callable[..., VideoOutput],
+) -> None:
+    mgr = tab_manager
+    mgr.sync_scroll_btn.setChecked(False)
+    tabs = mgr.create_tabs([make_video_output("A", 0), make_video_output("B", 1)])
+    mgr.swap_tabs(tabs, 0)
+    mgr.resize(400, 300)
+    mgr.window().resize(400, 300)
+    mgr.window().show()
+    qtbot.waitExposed(mgr.window())
+
+    pix = QPixmap(2000, 2000)
+    pix.fill(Qt.GlobalColor.red)
+    old_view, new_view = mgr.tabs.view(0), mgr.tabs.view(1)
+    old_view.set_pixmap(pix)
+    new_view.set_pixmap(pix)
+
+    # Events sent to the QWindow go through Qt's mouse routing, which keeps them on the widget that got the press.
+    window = mgr.window().windowHandle()
+    start = old_view.viewport().mapTo(mgr.window(), old_view.viewport().rect().center())
+
+    def move(pos: QPoint) -> None:
+        # QTest does not move the cursor under the offscreen platform.
+        QCursor.setPos(window.mapToGlobal(pos))
+        qtbot.mouseMove(window, pos=pos)  # type: ignore[no-untyped-call]
+
+    qtbot.mousePress(window, Qt.MouseButton.LeftButton, pos=start)  # type: ignore[no-untyped-call]
+    move(start + QPoint(-10, -10))
+
+    mgr.switch_tab(1)
+    h_before, v_before = new_view.horizontalScrollBar().value(), new_view.verticalScrollBar().value()
+    move(start + QPoint(-40, -30))
+
+    assert new_view.horizontalScrollBar().value() == h_before + 30
+    assert new_view.verticalScrollBar().value() == v_before + 20
+    assert old_view.is_panning is False
+    assert plugin_controller.on_view_mouse_pressed.call_count == 1  # type: ignore[attr-defined]
+
+    qtbot.mouseRelease(window, Qt.MouseButton.LeftButton, pos=start + QPoint(-40, -30))  # type: ignore[no-untyped-call]
+
+    assert new_view.is_panning is False
+    assert QWidget.mouseGrabber() is None
 
 
 @pytest.mark.vpy("no-core")

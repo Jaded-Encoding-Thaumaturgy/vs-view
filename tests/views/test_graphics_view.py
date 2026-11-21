@@ -4,8 +4,9 @@ import math
 from typing import TYPE_CHECKING
 
 import pytest
-from PySide6.QtCore import QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QNativeGestureEvent, QPixmap, QPointingDevice, QTransform
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, Qt
+from PySide6.QtGui import QColor, QMouseEvent, QNativeGestureEvent, QPixmap, QPointingDevice, QTransform
+from PySide6.QtWidgets import QApplication
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
@@ -67,6 +68,38 @@ def test_rect_selection_drag_creates_pixel_rect(qtbot: QtBot) -> None:
     qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=end)  # type: ignore[no-untyped-call]
 
     assert view.rect_selection == QRect(10, 12, 32, 24)
+
+
+def test_pan_without_release_ends_on_the_next_move(qtbot: QtBot) -> None:
+    view = GraphicsView()
+    qtbot.addWidget(view)
+    view.resize(400, 300)
+    view.show()
+    qtbot.waitExposed(view)
+
+    pixmap = QPixmap(2000, 2000)
+    pixmap.fill(Qt.GlobalColor.white)
+    view.set_pixmap(pixmap)
+
+    start = QPoint(150, 120)
+    qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=start)  # type: ignore[no-untyped-call]
+    qtbot.mouseMove(view.viewport(), pos=start + QPoint(-10, -10))  # type: ignore[no-untyped-call]
+    scroll = (view.horizontalScrollBar().value(), view.verticalScrollBar().value())
+
+    # The release went to another widget, so the next move arrives with no button held.
+    pos = QPointF(start + QPoint(-50, -50))
+    move = QMouseEvent(
+        QEvent.Type.MouseMove,
+        pos,
+        view.viewport().mapToGlobal(pos),
+        Qt.MouseButton.NoButton,
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    QApplication.sendEvent(view.viewport(), move)
+
+    assert (view.horizontalScrollBar().value(), view.verticalScrollBar().value()) == scroll
+    assert view.is_panning is False
 
 
 # Zoom & Slider Mapping

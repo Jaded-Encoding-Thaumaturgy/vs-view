@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Self, overload, override
 from jetpytools import fallback
 from PySide6.QtCore import QSignalBlocker, QSize, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPixmap
-from PySide6.QtWidgets import QHBoxLayout, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QToolButton, QVBoxLayout, QWidget
 from vapoursynth import VideoFrame
 
 from ...assets import IconName
@@ -392,6 +392,14 @@ class TabManager(QWidget, IconReloadMixin):
 
         new_view = self.tabs.view(index)
         prev_view = self.previous_view
+
+        if (
+            prev_view is not new_view
+            and prev_view.is_panning
+            and QApplication.mouseButtons() & Qt.MouseButton.LeftButton
+        ):
+            prev_view.end_pan()
+            new_view.start_pan()
 
         if (
             self.sync_scroll_btn.isChecked()
