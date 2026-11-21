@@ -354,6 +354,12 @@ class LoaderWorkspace[T](BaseWorkspace):
     def on_content_ready(self, *, is_reload: bool = False) -> None:
         """Lifecycle hook called when content is ready (either initial load or reload)."""
 
+    def on_shown(self) -> None:
+        """Replay the plugin updates that were skipped while this workspace was not the current page."""
+        if self.lifecycle.phase is Phase.LOADED:
+            with self.env.use():
+                self.plugin_controller.on_workspace_shown()
+
     @run_in_background(name="LoadContent")
     def load_content(
         self,

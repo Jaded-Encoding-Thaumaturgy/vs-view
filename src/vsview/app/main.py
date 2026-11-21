@@ -733,6 +733,9 @@ class MainWindow(QMainWindow):
         if isinstance(widget, BaseWorkspace):
             self.update_connection(widget)
 
+        if isinstance(widget, LoaderWorkspace):
+            widget.on_shown()
+
         self.stack.last_widget = widget
 
 

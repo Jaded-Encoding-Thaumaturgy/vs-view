@@ -84,6 +84,8 @@ class PluginWorkspaceController(QObject):
         self.key_press_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
         self.key_release_subscribers: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
 
+        self.__missed_while_hidden: QObjectSet[WidgetPluginBase[Any, Any]] = QObjectSet()
+
         self.globalSettingsChanged.connect(self.api.globalSettingsChanged)
         self.localSettingsChanged.connect(self.api.localSettingsChanged)
         self.aboutToSaveGlobal.connect(self.api.aboutToSaveGlobal)
@@ -232,6 +234,8 @@ class PluginWorkspaceController(QObject):
         if not self._is_truly_visible(plugin):
             return
 
+        self.__missed_while_hidden.discard(plugin)
+
         with self._isolated("on_current_voutput_changed", plugin.identifier):
             plugin.on_current_voutput_changed(
                 self.current_voutput,
@@ -279,6 +283,10 @@ class PluginWorkspaceController(QObject):
         for plugin in self.__workspace.plugins:
             with self._isolated("on_workspace_destroy", plugin.identifier):
                 plugin.on_workspace_destroy()
+
+    def on_workspace_shown(self) -> None:
+        for plugin in list(self.__missed_while_hidden):
+            self.init_plugin(plugin)
 
     def init_view(
         self,
@@ -461,6 +469,12 @@ class PluginWorkspaceController(QObject):
     # Internal helperss
     @run_in_loop(return_future=False)
     def _is_truly_visible(self, plugin: WidgetPluginBase[Any, Any]) -> bool:
+        if not self.__workspace.isVisible():
+            # Showing the workspace page again sends no visibility signal to panel plugins,
+            # so on_workspace_shown replays what was skipped here.
+            self.__missed_while_hidden.add(plugin)
+            return False
+
         if not plugin.isVisible():
             return False
 

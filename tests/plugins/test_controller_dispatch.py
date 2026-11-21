@@ -15,6 +15,7 @@ from vsview.app.outputs.buffer import FrameBuffer
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.plugins._controller import PluginWorkspaceController
 from vsview.app.plugins.api import PluginAPI, PluginGraphicsView, WidgetPluginBase
+from vsview.app.plugins.contracts import VideoOutputProxy
 from vsview.vsenv.loop import QtEventLoop
 
 pytestmark = [pytest.mark.unit, pytest.mark.qt]
@@ -27,6 +28,10 @@ class RecordingPlugin(WidgetPluginBase[Any, Any]):
     def __init__(self, parent: QWidget | None, api: PluginAPI) -> None:
         super().__init__(parent, api)  # pyright: ignore[reportArgumentType]
         self.events = list[str]()
+
+    @override
+    def on_current_voutput_changed(self, voutput: VideoOutputProxy, tab_index: int) -> None:
+        self.events.append("voutput")
 
     @override
     def on_current_frame_changed(self, n: int) -> None:
@@ -173,6 +178,41 @@ def test_events_reach_only_plugins_the_user_can_see(
     dispatch(controller)
 
     assert events(plugins) == {"visible": [event], "background_tab": [], "collapsed": [], "hidden": []}
+
+
+def test_showing_the_workspace_again_refreshes_the_plugins_that_missed_updates(
+    controller: PluginWorkspaceController, workspace: MockQObject, plugins: Plugins
+) -> None:
+    workspace.isVisible.return_value = False
+    controller.on_playback_stopped()
+    workspace.isVisible.return_value = True
+
+    controller.on_workspace_shown()
+
+    assert events(plugins) == {"visible": ["voutput"], "background_tab": [], "collapsed": [], "hidden": []}
+
+
+def test_a_plugin_refreshed_before_the_workspace_is_shown_is_not_refreshed_twice(
+    controller: PluginWorkspaceController, workspace: MockQObject, plugins: Plugins
+) -> None:
+    workspace.isVisible.return_value = False
+    controller.on_playback_stopped()
+    workspace.isVisible.return_value = True
+    controller.init_plugin(plugins.visible)
+
+    controller.on_workspace_shown()
+
+    assert plugins.visible.events == ["voutput"]
+
+
+def test_showing_the_workspace_without_missed_updates_refreshes_nothing(
+    controller: PluginWorkspaceController, plugins: Plugins
+) -> None:
+    controller.on_playback_stopped()
+
+    controller.on_workspace_shown()
+
+    assert plugins.visible.events == ["stopped"]
 
 
 @pytest.fixture
