@@ -369,6 +369,13 @@ class PluginWorkspaceController(QObject):
                             view.on_current_frame_changed(n, frame)
 
     @run_in_loop(return_future=False)
+    def on_frame_displayed(self, n: int) -> None:
+        for plugin in self.__workspace.plugins:
+            if self._is_truly_visible(plugin):
+                with self._isolated("on_frame_displayed", plugin.identifier):
+                    plugin.on_frame_displayed(n)
+
+    @run_in_loop(return_future=False)
     def on_playback_started(self) -> None:
         for plugin in self.__workspace.plugins:
             if self._is_truly_visible(plugin):

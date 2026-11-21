@@ -865,6 +865,22 @@ class WidgetPluginBase(_PluginBase[TGlobalSettings, TLocalSettings], QWidget, me
         Execution Thread: **Main or Background**.
 
         Any UI updates MUST use the `@run_in_loop` decorator
+
+        Warning:
+            On a seek, this runs before frame `n` is on screen, and `self.api.current_frame`
+            may still return the previous frame.
+
+            Use `n`, or `on_frame_displayed` to read the shown frame.
+        """
+
+    def on_frame_displayed(self, n: int) -> None:
+        """
+        Called after a seek, once frame `n` is on screen and `self.api.current_frame` returns `n`.
+
+        Not called for each frame during playback, and not called when the output tab changes
+        (`on_current_voutput_changed` is called then).
+
+        Execution Thread: **Main**.
         """
 
     def on_playback_started(self) -> None:

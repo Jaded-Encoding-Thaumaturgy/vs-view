@@ -946,6 +946,36 @@ def test_rapid_seeks_render_the_first_and_the_last_target_only(
     assert frames == [10, 30]
 
 
+@pytest.mark.parametrize(
+    ("notify_plugins", "expected"),
+    [(True, ["painted", "displayed 7 at 7"]), (False, ["painted"])],
+    ids=["notify", "silent"],
+)
+def test_plugins_hear_that_a_seeked_frame_is_displayed_after_it_is_painted(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    qtbot: QtBot,
+    mocker: MockerFixture,
+    notify_plugins: bool,
+    expected: list[str],
+) -> None:
+    manager, env, plugin_controller, _, _, _ = playback_manager_setup
+    use_voutput(create_test_video_output(env, 20))
+    order = list[str]()
+    manager.frameRendered.connect(lambda *_: order.append("painted"))
+    mocker.patch.object(
+        plugin_controller,
+        "on_frame_displayed",
+        side_effect=lambda n: order.append(f"displayed {n} at {manager.state.current_frame}"),
+    )
+
+    manager.request_frame(7, notify_plugins=notify_plugins)
+    qtbot.waitUntil(lambda: manager.is_idle, timeout=5000)
+
+    assert order == expected
+
+
 def gated_voutput(env: ManagedEnvironment, gate: threading.Event, length: int = 30) -> VideoOutput:
     """A video output whose frames are rendered only once `gate` is set."""
     base = make_clip(env, length=length)

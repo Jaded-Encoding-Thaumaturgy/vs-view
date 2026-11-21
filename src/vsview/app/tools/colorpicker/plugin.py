@@ -245,20 +245,15 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
             with self.api.vs_context():
                 self.outputs[voutput] = cache_clip(voutput.vs_output.clip, 10)
 
-        super().on_current_voutput_changed(voutput, tab_index)
+        if self.tracking == TrackingState.ACTIVE and not self.api.is_playing:
+            self._refresh_tracking()
 
     @override
-    def on_current_frame_changed(self, n: int) -> None:
-        if self.api.is_playing:
-            return None
-
-        # Add the voutput to the `outputs` dict and call `on_current_frame_changed` again
+    def on_frame_displayed(self, n: int) -> None:
         if (voutput := self.api.current_voutput) not in self.outputs:
-            return self.on_current_voutput_changed(voutput, self.api.current_video_index)
-
-        if self.tracking == TrackingState.ACTIVE:
+            self.on_current_voutput_changed(voutput, self.api.current_video_index)
+        elif self.tracking == TrackingState.ACTIVE:
             self._refresh_tracking()
-        return None
 
     @override
     def on_view_context_menu(self, event: QContextMenuEvent) -> None:

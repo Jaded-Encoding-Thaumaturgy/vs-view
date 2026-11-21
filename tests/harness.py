@@ -450,6 +450,8 @@ class HarnessPluginController(QObject):
         self._update_frame_state(frame)
         for plugin in self.managed_plugins:
             plugin.on_current_frame_changed(frame)
+        for plugin in self.managed_plugins:
+            plugin.on_frame_displayed(frame)
 
     def set_rect_selection(self, rect: QRect, *, finished: bool = False) -> None:
         """Update graphics view rect selection and forward to managed plugins."""
@@ -472,6 +474,7 @@ class HarnessPluginController(QObject):
     on_playback_started = MagicMock()
     on_playback_stopped = MagicMock()
     on_current_frame_changed = MagicMock()
+    on_frame_displayed = MagicMock()
     register_plugin_nodes_to_buffer = MagicMock()
 
     def destroy(self) -> None:

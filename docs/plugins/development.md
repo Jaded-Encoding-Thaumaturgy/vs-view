@@ -69,6 +69,9 @@ These are just some of the most common hooks available in `WidgetPluginBase`. Fo
 
 - `on_current_voutput_changed(...)`: Triggered when the user switches to a different video output tab.
 - `on_current_frame_changed(...)`: Triggered continuously as the user scrubs the timeline or during playback.
+  On a seek it runs before the new frame is on screen.
+- `on_frame_displayed(...)`: Triggered on the main thread after a seek, once the new frame is on screen.
+  Use it to read the displayed frame, for example to sample pixels under the cursor.
 - `on_playback_started()` / `on_playback_stopped()`: Triggered when video playback begins or pauses.
 
 ## Public API

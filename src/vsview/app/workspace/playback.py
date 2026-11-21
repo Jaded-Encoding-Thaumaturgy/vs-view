@@ -302,6 +302,10 @@ class PlaybackManager(QObject):
                 self.state.current_frame = n
                 self.state.current_time = voutput.frame_to_time(n)
 
+                # The frameRendered signal was queued before this callback, so frame n is on screen now.
+                if notify_plugins and res == 0:
+                    self._controller.on_frame_displayed(n)
+
             if cb_render:
                 cb_render(fut)
 

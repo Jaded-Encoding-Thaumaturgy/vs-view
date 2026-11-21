@@ -33,6 +33,10 @@ class RecordingPlugin(WidgetPluginBase[Any, Any]):
         self.events.append(f"frame {n}")
 
     @override
+    def on_frame_displayed(self, n: int) -> None:
+        self.events.append(f"displayed {n}")
+
+    @override
     def on_playback_started(self) -> None:
         self.events.append("started")
 
@@ -137,6 +141,7 @@ def events(plugins: Plugins) -> dict[str, list[str]]:
         (lambda c: c.on_playback_started(), "started"),
         (lambda c: c.on_playback_stopped(), "stopped"),
         (lambda c: c.on_current_frame_changed(7), "frame 7"),
+        (lambda c: c.on_frame_displayed(7), "displayed 7"),
         (
             lambda c: c.on_view_mouse_moved(
                 QMouseEvent(
@@ -157,7 +162,7 @@ def events(plugins: Plugins) -> dict[str, list[str]]:
             "key pressed",
         ),
     ],
-    ids=["playback_started", "playback_stopped", "frame_changed", "mouse_moved", "key_press"],
+    ids=["playback_started", "playback_stopped", "frame_changed", "frame_displayed", "mouse_moved", "key_press"],
 )
 def test_events_reach_only_plugins_the_user_can_see(
     controller: PluginWorkspaceController,
