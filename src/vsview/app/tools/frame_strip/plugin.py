@@ -498,7 +498,7 @@ class FrameStripPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
             vo: VideoOutputProxy,
         ) -> None:
             with frame:
-                qimage = vo.packer_sdr.frame_to_qimage(frame).owned(frame.get_read_ptr(0))
+                qimage = vo.packer_sdr.frame_to_qimage(frame)
             self._on_frame_rendered(slot, frame_num, request_gen, vo, qimage)
 
         def on_frame_error(

@@ -755,56 +755,6 @@ class ClosableFrame:
         self.closed = True
 
 
-@pytest.mark.vpy("no-core")
-def test_update_current_view_backing_frame_closed(
-    tab_manager: TabManager,
-    make_video_output: Callable[..., VideoOutput],
-) -> None:
-    mgr = tab_manager
-
-    tabs = mgr.create_tabs([make_video_output("A", 0)])
-    mgr.swap_tabs(tabs, 0)
-
-    frame = ClosableFrame()
-    pix = QPixmap(32, 32)
-    mgr.update_current_view(pix, backing_frame=frame)  # pyright: ignore[reportArgumentType]
-
-    assert frame.closed is True
-
-
-def test_update_current_view_empty_tabs_closes_frame(tab_manager: TabManager) -> None:
-    mgr = tab_manager
-
-    assert mgr.tabs.currentIndex() == -1
-
-    frame = ClosableFrame()
-    pix = QPixmap(32, 32)
-    mgr.update_current_view(pix, backing_frame=frame)  # pyright: ignore[reportArgumentType]
-
-    assert frame.closed is True
-
-
-@pytest.mark.vpy("no-core")
-def test_update_current_view_exception_closes_frame(
-    tab_manager: TabManager,
-    make_video_output: Callable[..., VideoOutput],
-    mocker: MockerFixture,
-) -> None:
-    mgr = tab_manager
-
-    tabs = mgr.create_tabs([make_video_output("A", 0)])
-    mgr.swap_tabs(tabs, 0)
-
-    mocker.patch.object(mgr.current_view, "set_pixmap", side_effect=RuntimeError("render failure"))
-    frame = ClosableFrame()
-    pix = QPixmap(32, 32)
-
-    with pytest.raises(RuntimeError, match="render failure"):
-        mgr.update_current_view(pix, backing_frame=frame)  # pyright: ignore[reportArgumentType]
-
-    assert frame.closed is True
-
-
 # Tab Visibility Tests
 @pytest.mark.parametrize(("setting", "hidden"), [(Qt.CheckState.Unchecked, True), (Qt.CheckState.Checked, False)])
 def test_tab_visibility_follows_the_setting(tab_manager: TabManager, setting: Qt.CheckState, hidden: bool) -> None:

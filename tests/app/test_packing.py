@@ -220,22 +220,6 @@ def test_packer_frame_to_qimage_8bit(width: int, height: int) -> None:
 
     frame_ptr = frame.get_read_ptr(0).value
 
-    # 8-bit frame conversion to QImage without copy_qimage (shares buffer memory)
-    SettingsManager.global_settings.view.copy_qimage = False
-    qimg = packer.frame_to_qimage(frame)
-
-    assert isinstance(qimg, QImage)
-    assert qimg.isNull() is False
-    assert qimg.width() == width
-    assert qimg.height() == height
-    assert qimg.bytesPerLine() == frame.get_stride(0)
-    assert qimg.format() == QImage.Format.Format_RGB32
-    assert qimg.colorSpace() == QColorSpace(QColorSpace.NamedColorSpace.SRgb)
-    # Memory ownership check: buffer pointer matches VapourSynth frame read pointer directly
-    assert ctypes.addressof(ctypes.c_char.from_buffer(qimg.bits())) == frame_ptr
-
-    # With copy_qimage = True (allocates independent memory copy)
-    SettingsManager.global_settings.view.copy_qimage = True
     qimg_copy = packer.frame_to_qimage(frame)
     assert qimg_copy.isNull() is False
     assert qimg_copy.width() == width

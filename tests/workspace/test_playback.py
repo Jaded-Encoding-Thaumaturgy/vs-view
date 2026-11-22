@@ -500,7 +500,7 @@ def test_playback_manager_treats_a_non_positive_sar_as_square_pixels(
         qtbot.waitUntil(lambda: manager.is_idle, timeout=2000)
 
         assert blocker.args
-        assert blocker.args[2] == expected
+        assert blocker.args[1] == expected
     finally:
         voutput.clear()
         mock_outputs.current_voutput = None

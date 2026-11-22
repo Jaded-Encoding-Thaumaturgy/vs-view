@@ -11,7 +11,6 @@ from jetpytools import fallback
 from PySide6.QtCore import QSignalBlocker, QSize, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QIcon, QImage, QMouseEvent, QPixmap
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QToolButton, QVBoxLayout, QWidget
-from vapoursynth import VideoFrame
 
 from ...assets import IconName
 from ...vsenv import run_in_loop
@@ -340,32 +339,23 @@ class TabManager(QWidget, IconReloadMixin):
     @Slot(QImage, object, float)
     @Slot(QPixmap, object, float)
     @run_in_loop(return_future=False)
-    def update_current_view(
-        self,
-        image: QImage | QPixmap,
-        backing_frame: VideoFrame | None = None,
-        sar: float | None = None,
-    ) -> None:
+    def update_current_view(self, image: QImage | QPixmap, sar: float | None = None) -> None:
         """Update the view with a new rendered frame."""
 
         if self.tabs.currentIndex() == -1:
-            if backing_frame:
-                backing_frame.close()
             return
 
-        try:
-            pixmap = (
-                image
-                if isinstance(image, QPixmap)
-                else QPixmap.fromImage(image, Qt.ImageConversionFlag.NoFormatConversion)
-            )
-            self.current_view.set_pixmap(pixmap, image if isinstance(image, QImage) else None)
+        if isinstance(image, QPixmap):
+            pixmap = image
+            hdr_image = None
+        else:
+            pixmap = QPixmap.fromImage(image, Qt.ImageConversionFlag.NoFormatConversion)
+            hdr_image = image
 
-            if sar is not None:
-                self.current_view.set_sar(sar)
-        finally:
-            if backing_frame:
-                backing_frame.close()
+        self.current_view.set_pixmap(pixmap, hdr_image)
+
+        if sar is not None:
+            self.current_view.set_sar(sar)
 
     @Slot(bool)
     def set_global_autofit(self, enabled: bool, under_reload: bool = False) -> None:

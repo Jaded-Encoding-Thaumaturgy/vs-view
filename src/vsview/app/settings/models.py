@@ -622,18 +622,6 @@ class ViewSettings(BaseModel):
         ),
     ] = "#FFD64F"
 
-    copy_qimage: Annotated[
-        bool,
-        Checkbox(
-            label="Copy QImage",
-            text="Copy QImage to transfer ownership to Qt",
-            tooltip=(
-                "Copy the QImage memory to transfer ownership to Qt. "
-                "Prevents crashes but uses more memory and is slower."
-            ),
-        ),
-    ] = True
-
 
 class WindowGeometry(BaseModel):
     """Window position and size."""

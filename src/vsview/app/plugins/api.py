@@ -1045,14 +1045,12 @@ class PluginGraphicsView(BaseGraphicsView):
         Warning:
             - Do not call `self.refresh()` here, as it will cause an infinite loop.
             - The `f` VideoFrame is closed immediately after this method exits.
-              Any `QImage` produced via `frame_to_qimage(f)` MUST be copied (`.copy()`)
-              to prevent memory corruption from accessing freed frame memory.
 
         Args:
             n: Frame number.
             f: Packed VideoFrame in GRAY32 / packed format.
         """
-        self.update_display(self.api.current_voutput.packer_sdr.frame_to_qimage(f).copy())
+        self.update_display(self.api.current_voutput.packer_sdr.frame_to_qimage(f))
 
     def get_node(self, clip: vs.VideoNode) -> vs.VideoNode:
         """

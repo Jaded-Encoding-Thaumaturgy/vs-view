@@ -502,7 +502,7 @@ class HarnessPluginController(QObject):
             if prepared_clip is not None:
                 with self.vs_context():
                     pf = prepared_clip.get_frame(frame)
-                    qimg = self._current_raw_voutput.packer.frame_to_qimage(pf).copy()
+                    qimg = self._current_raw_voutput.packer.frame_to_qimage(pf)
                     self.current_view_proxy._set_image(qimg)
 
     def _wait_for_background_tasks(self) -> None:

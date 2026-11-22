@@ -557,7 +557,7 @@ class FrameThumbnailList(QListWidget):
             if not (voutput := voutputs.get(idx)):
                 return
             with frame:
-                image = voutput.packer_sdr.frame_to_qimage(frame).copy()
+                image = voutput.packer_sdr.frame_to_qimage(frame)
                 pict_type = get_prop(frame, "_PictType", str, default="?", func=self._fetch_thumbnail)
             item.metadata[idx] = ThumbnailItem.Metadata(image, pict_type)
 

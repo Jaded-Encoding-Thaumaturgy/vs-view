@@ -153,7 +153,7 @@ class PlaybackManager(QObject):
     """
 
     # Signals for UI communication
-    frameRendered = Signal(QImage, object, float)  # image, backing frame, sar
+    frameRendered = Signal(QImage, float)  # image, sar
     timelineCursorChanged = Signal(int)  # frame number
     seekRefused = Signal(int)  # frame number still shown
 
@@ -341,7 +341,7 @@ class PlaybackManager(QObject):
             try:
                 with voutput.prepared_clip.get_frame(n) as frame:
                     logger.debug("Frame %d rendered", n)
-                    image = voutput.packer.frame_to_qimage(frame).owned(frame.get_read_ptr(0))
+                    image = voutput.packer.frame_to_qimage(frame)
             except Exception as e:
                 if (
                     isinstance(e, (TimeoutError, ConnectionError))  # no fmt
@@ -424,7 +424,7 @@ class PlaybackManager(QObject):
             logger.debug("Dropping the stale render of frame %d", n)
             return
 
-        self.frameRendered.emit(image, None, sar)
+        self.frameRendered.emit(image, sar)
         self.timelineCursorChanged.emit(n)
 
     def _begin_playback(self, play_range: range | None = None, loop: bool = False) -> None:
@@ -579,7 +579,7 @@ class PlaybackManager(QObject):
                 try:
                     image = voutput.packer.frame_to_qimage(frame)
 
-                    self.frameRendered.emit(image, frame, self._get_sar_from_props(frame_n))
+                    self.frameRendered.emit(image, self._get_sar_from_props(frame_n))
                     self.timelineCursorChanged.emit(frame_n)
 
                     self._controller.on_current_frame_changed(frame_n, plugin_frames)

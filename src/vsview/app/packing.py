@@ -205,18 +205,7 @@ class Packer(ABC):
         return packed.std.SetFrameProp("VSViewHasAlpha", True) if alpha else packed
 
     def frame_to_qimage(self, frame: vs.VideoFrame, **kwargs: Any) -> SafeImage:
-        """
-        Wraps a packed VapourSynth VideoFrame into a QImage.
-
-        If the `copy_qimage` setting is enabled, ownership of the memory is transferred to Qt
-        by returning a copy of the image.
-        Otherwise, the returned QImage **does not own its memory** and points directly
-        to the VapourSynth frame's buffer.
-
-        !!! warning
-            When `copy_qimage` is disabled, you MUST either keep the source `frame` alive as long
-            as the QImage is used, or call ``.copy()`` on the returned QImage.
-        """
+        """Wraps a packed VapourSynth VideoFrame into a owned QImage."""
 
         alpha = "VSViewHasAlpha" in frame.props or "_Alpha" in frame.props
 
@@ -253,11 +242,7 @@ class Packer(ABC):
 
         img.setColorSpace(cs)
 
-        # If we are in HDR/(16/32)-bit mode, we must copy the image
-        if self.format.bitdepth >= 16 or SettingsManager.global_settings.view.copy_qimage:
-            return img.owned(force=True)
-
-        return img
+        return img.owned(force=True)
 
 
 class SafeImage(QImage):
