@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from logging import getLogger
-from typing import override
+from typing import ClassVar, override
 
 from jetpytools import clamp
 from PySide6.QtCore import QRect, QSignalBlocker, QSize, Qt, Slot
@@ -26,8 +26,8 @@ logger = getLogger(__name__)
 
 
 class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
-    identifier = "jet_vsview_regionselector"
-    display_name = "Region Selector"
+    identifier: ClassVar[str] = "jet_vsview_regionselector"
+    display_name: ClassVar[str] = "Region Selector"
 
     shortcuts = (ActionDefinition(f"{identifier}.toggle", "Toggle region selector", "C"),)
 

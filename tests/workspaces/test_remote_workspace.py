@@ -18,7 +18,6 @@ from PySide6.QtGui import QDropEvent
 from PySide6.QtWidgets import QDialogButtonBox, QFileDialog, QMessageBox
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
-from vsengine.policy import ManagedEnvironment
 from vsremote import RemoteTimeoutError, TransportClosedError, TransportNotConnectedError
 from vsremote.protocol import Command, StatusCode
 from vsremote.protocol.messages import RemoteErrorPayload, StackFrame
@@ -826,16 +825,12 @@ def test_drop_with_a_connection_loads_without_the_dialog(
     dialog_exec.assert_not_called()
 
 
-@pytest.mark.vpy("no-policy")
+@pytest.mark.vpy("no-core")
 def test_load_without_a_connection_shows_the_reason(
     qtbot: QtBot,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
     script: Path,
     dialogs: list[str],
-    mocker: MockerFixture,
 ) -> None:
-    # A subclass would lose the plugin settings model, so the method is replaced on the class itself.
-    mocker.patch.object(RemoteWorkspace, "new_environment", side_effect=vsview_env_factory)
     ws = RemoteWorkspace()
     qtbot.addWidget(ws)
     statuses = list[str]()

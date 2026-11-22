@@ -8,7 +8,14 @@ from .loop import (
     to_thread_scoped,
     wait_for_threads,
 )
-from .policy import clear_environment, create_environment, get_policy, unregister_policy, unset_environment
+from .policy import (
+    clear_environment,
+    create_environment,
+    get_policy,
+    new_policy,
+    unregister_policy,
+    unset_environment,
+)
 
 __all__ = [
     "QtEventLoop",
@@ -16,6 +23,7 @@ __all__ = [
     "create_environment",
     "from_thread",
     "get_policy",
+    "new_policy",
     "run_in_background",
     "run_in_loop",
     "to_thread",

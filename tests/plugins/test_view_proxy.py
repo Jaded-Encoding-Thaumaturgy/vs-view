@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
-from typing import override
 
 import pytest
 from PySide6.QtCore import SIGNAL, Qt
 from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
-from vsengine.policy import ManagedEnvironment
 
 from tests.scripts import dual_output_script, script_source
 from vsview.app.plugins.manager import PluginManager
@@ -16,7 +13,7 @@ from vsview.app.workspace.loader import VSEngineWorkspace
 from vsview.assets import IconName
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
 
 TAB_CHANGED = SIGNAL("tabChanged(int)")
 
@@ -28,27 +25,18 @@ class ScriptWorkspace(VSEngineWorkspace[Path]):
     icon = IconName.FILE_TEXT
     content_type = "script"
 
-    def __init__(self, env_factory: Callable[[], ManagedEnvironment], parent: QWidget | None = None) -> None:
-        self._env_factory = env_factory
-        super().__init__(parent)
-
-    @override
-    def new_environment(self) -> ManagedEnvironment:
-        return self._env_factory()
-
 
 @pytest.fixture
 def workspace(
     qtbot: QtBot,
     qt_event_loop: QtEventLoop,
     init_plugin_manager: PluginManager,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
     tmp_path: Path,
 ) -> ScriptWorkspace:
     script_file = tmp_path / "dual_output.vpy"
     script_file.write_text(DUAL_OUTPUT_SCRIPT, encoding="utf-8")
 
-    ws = ScriptWorkspace(vsview_env_factory)
+    ws = ScriptWorkspace()
     qtbot.addWidget(ws)
 
     fut = ws.load_content(script_file)

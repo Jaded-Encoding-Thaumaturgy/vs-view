@@ -3251,14 +3251,14 @@ wheels = [
 
 [[package]]
 name = "vsjetengine"
-version = "2.0.1"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "vapoursynth" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bd/60/82f1728b606b7fcd78eced6b6da2e488e52291e4815251f18c7b735e6671/vsjetengine-2.0.1.tar.gz", hash = "sha256:b5e11661bdfa70ad67d16d38a17939300e983df1df150a60553ae59634d0da14", size = 64231, upload-time = "2026-11-20T16:57:03.398Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/d9/3964dea25d983dc9fdcf34cc6e4a73d8ab68e6ef4a5e33c62efd13ce5b81/vsjetengine-2.2.0.tar.gz", hash = "sha256:1ef30f73af79e9e3551929f9709f1305fe067740ccb4aa61de59045bec78bdad", size = 69538, upload-time = "2026-11-22T21:30:30.635Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/76/d9/2b9bceb262246b71a6c8a5847820d373426e590cf6eac61d4b3b13f87c4b/vsjetengine-2.0.1-py3-none-any.whl", hash = "sha256:8ef56367076c2a52298f0d17c26ceb1f2d7a8c4f6f5c5af077855b63dd3015e2", size = 44407, upload-time = "2026-11-20T16:57:02.17Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/93/a1a4edd2064e09aefe5946d7b7474a3f840f5a4812e967c6e23c74b281ce/vsjetengine-2.2.0-py3-none-any.whl", hash = "sha256:17454085a182483ed5e1a6802ec098b9f401f5c6a368aaebdbda59f1fc712e84", size = 46511, upload-time = "2026-11-22T21:30:29.487Z" },
 ]
 
 [[package]]
@@ -3669,7 +3669,7 @@ requires-dist = [
     { name = "typing-extensions", marker = "python_full_version < '3.13'", specifier = ">=4.15.0" },
     { name = "vapoursynth", specifier = ">=78" },
     { name = "vapoursynth-bestsource", specifier = ">=17.0" },
-    { name = "vsjetengine", specifier = ">=2.0.1" },
+    { name = "vsjetengine", specifier = ">=2.2.0" },
     { name = "vspackrgb", editable = "src/vspackrgb" },
     { name = "vsview-comp", marker = "extra == 'full'", editable = "src/plugins/comp" },
     { name = "vsview-comp", marker = "extra == 'recommended'", editable = "src/plugins/comp" },

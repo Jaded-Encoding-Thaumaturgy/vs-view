@@ -24,7 +24,7 @@ from vsview.app.views.timeline import FrameEdit
 if TYPE_CHECKING:
     from tests.harness import HarnessPluginController
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
 
 
 @pytest.fixture(autouse=True)
@@ -35,11 +35,11 @@ def _use_qt_event_loop(qt_event_loop: Any) -> Any:
 @pytest.fixture
 def plugin_controller(
     plugin_controller: HarnessPluginController,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    vpy_env_factory: Callable[[], ManagedEnvironment],
+    create_test_video_output: Callable[[int], VideoOutput],
 ) -> HarnessPluginController:
-    env = vsview_env_factory()
-    voutput = create_test_video_output(env, 100)
+    with (env := vpy_env_factory()).use():
+        voutput = create_test_video_output(100)
     plugin_controller.env = env
     plugin_controller.set_current_voutput(voutput)
     return plugin_controller

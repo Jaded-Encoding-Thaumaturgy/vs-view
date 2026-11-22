@@ -19,7 +19,7 @@ from vsview.app.outputs.video import VideoOutput
 from vsview.app.packing import Packer
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
 
 
 @pytest.fixture(autouse=True)
@@ -65,10 +65,10 @@ def make_video_output(
 
 @pytest.fixture
 def populated_controller(
-    plugin_controller: HarnessPluginController, vsview_env_factory: Callable[[], ManagedEnvironment]
+    plugin_controller: HarnessPluginController, vpy_env_factory: Callable[[], ManagedEnvironment]
 ) -> Generator[HarnessPluginController]:
     """Fixture providing a HarnessPluginController loaded with a valid RGB24 test VideoOutput."""
-    plugin_controller.env = vsview_env_factory()
+    plugin_controller.env = vpy_env_factory()
 
     with plugin_controller.env.use():
         voutput = make_video_output(vs.RGB24)

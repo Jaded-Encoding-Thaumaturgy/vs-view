@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import linecache
 import sys
-from collections.abc import Callable
 from types import ModuleType
 from typing import Any, override
 
@@ -10,7 +9,6 @@ import pytest
 from PySide6.QtWidgets import QWidget
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
-from vsengine.policy import ManagedEnvironment
 
 from tests.scripts import blank_clip_script, script_source
 from vsview.api._helpers import output_metadata
@@ -211,14 +209,8 @@ def test_quick_script_workspace_delete_later_cleans_caches(
 def test_quick_script_workspace_loader_registers_source_length(
     qtbot: QtBot,
     qt_event_loop: QtEventLoop,
-    vpy_env_factory: Callable[[], ManagedEnvironment],
 ) -> None:
-    class TestQuickScriptWorkspace(QuickScriptWorkspace):
-        @override
-        def new_environment(self) -> ManagedEnvironment:
-            return vpy_env_factory()
-
-    workspace = TestQuickScriptWorkspace()
+    workspace = QuickScriptWorkspace()
     qtbot.addWidget(workspace)
 
     test_code = script_source(blank_clip_script, length=5)

@@ -18,7 +18,7 @@ from vsview.app.plugins import PluginAPI, specs
 from vsview.app.plugins.api import NodeProcessor
 from vsview.app.plugins.manager import PluginManager
 
-pytestmark = [pytest.mark.integration, pytest.mark.qt, pytest.mark.vpy("no-policy")]
+pytestmark = [pytest.mark.integration, pytest.mark.qt, pytest.mark.vpy("no-core")]
 
 core = vs.core
 
@@ -30,9 +30,9 @@ def use_plugin_manager(init_plugin_manager: PluginManager) -> None: ...
 @pytest.fixture
 def manager(
     plugin_controller: HarnessPluginController,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
+    vpy_env_factory: Callable[[], ManagedEnvironment],
 ) -> Generator[OutputsManager]:
-    plugin_controller.env = vsview_env_factory()
+    plugin_controller.env = vpy_env_factory()
 
     with plugin_controller.env.use():
         yield OutputsManager()
@@ -392,7 +392,7 @@ def test_outputs_manager_clear(
 
 
 # VideoOutput Tests
-@pytest.mark.vpy("no-policy")
+@pytest.mark.vpy("unique-core")
 @pytest.mark.parametrize(
     ("sar_num", "sar_den", "expected"),
     [(1, 0, 1.0), (0, 1, 1.0), (-4, 3, 1.0), (4, -3, 1.0), (16, 11, 16 / 11)],
@@ -400,31 +400,29 @@ def test_outputs_manager_clear(
 )
 def test_video_output_info_treats_an_invalid_sar_as_square_pixels(
     plugin_controller: HarnessPluginController,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
+    vpy_env: ManagedEnvironment,
     sar_num: int,
     sar_den: int,
     expected: float,
 ) -> None:
-    env = vsview_env_factory()
-    plugin_controller.env = env
-    with env.use():
-        clip = env.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=10, fpsnum=24, fpsden=1)
-        clip = env.core.std.SetFrameProps(
-            clip,
-            _Matrix=vs.MATRIX_RGB,
-            _Primaries=vs.PRIMARIES_BT709,
-            _Transfer=vs.TRANSFER_BT709,
-            _SARNum=sar_num,
-            _SARDen=sar_den,
-        )
-        packer = Packer()
-        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, packer)
-        voutput.prepare_video(plugin_controller.api)
-        try:
-            voutput.prepared_clip.get_frame(0).close()
-            assert voutput.info.sar == expected
-        finally:
-            voutput.clear()
+    plugin_controller.env = vpy_env
+    clip = core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=10, fpsnum=24, fpsden=1)
+    clip = core.std.SetFrameProps(
+        clip,
+        _Matrix=vs.MATRIX_RGB,
+        _Primaries=vs.PRIMARIES_BT709,
+        _Transfer=vs.TRANSFER_BT709,
+        _SARNum=sar_num,
+        _SARDen=sar_den,
+    )
+    packer = Packer()
+    voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, packer)
+    voutput.prepare_video(plugin_controller.api)
+    try:
+        voutput.prepared_clip.get_frame(0).close()
+        assert voutput.info.sar == expected
+    finally:
+        voutput.clear()
 
 
 @pytest.mark.vpy("unique-core")

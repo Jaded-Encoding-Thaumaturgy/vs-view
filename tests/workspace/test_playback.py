@@ -27,19 +27,18 @@ from vsview.app.workspace.playback import PlaybackManager, PlaybackState
 from vsview.types import Frame
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("unique-core")]
 
 
 # PlaybackState Tests
 def test_playback_state_reset(
     qapp: QApplication,
     qt_event_loop: QtEventLoop,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
-    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    vpy_env: ManagedEnvironment,
+    create_test_video_output: Callable[[int], VideoOutput],
+    create_test_audio_output: Callable[[int], AudioOutput],
 ) -> None:
     state = PlaybackState(qapp)
-    env = vsview_env_factory()
 
     # Mutate all fields from initial defaults
     state.last_fps_update_ns = 1_000_000
@@ -54,12 +53,12 @@ def test_playback_state_reset(
     assert state.video_timer.isActive()
     assert state.audio_timer.isActive()
 
-    voutput = create_test_video_output(env, 100)
-    video_buffer = FrameBuffer(voutput, env)
+    voutput = create_test_video_output(100)
+    video_buffer = FrameBuffer(voutput, vpy_env)
     state.buffer = video_buffer
 
-    aoutput = create_test_audio_output(env, 1000)
-    audio_buffer = AudioBuffer(aoutput, env)
+    aoutput = create_test_audio_output(1000)
+    audio_buffer = AudioBuffer(aoutput, vpy_env)
     state.audio_buffer = audio_buffer
 
     state.reset()
@@ -84,19 +83,18 @@ def test_playback_state_reset(
 def test_playback_state_reset_audio(
     qapp: QApplication,
     qt_event_loop: QtEventLoop,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
-    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    vpy_env: ManagedEnvironment,
+    create_test_audio_output: Callable[[int], AudioOutput],
 ) -> None:
     state = PlaybackState(qapp)
-    env = vsview_env_factory()
 
     state.next_audio_frame_time_ns = 77_777_777
     state.audio_frame_interval_ns = 21_333_333
     state.audio_timer.start(100)
     assert state.audio_timer.isActive()
 
-    aoutput = create_test_audio_output(env, 1000)
-    audio_buffer = AudioBuffer(aoutput, env)
+    aoutput = create_test_audio_output(1000)
+    audio_buffer = AudioBuffer(aoutput, vpy_env)
     state.audio_buffer = audio_buffer
 
     state.reset_audio()
@@ -112,12 +110,11 @@ def test_playback_state_reset_audio(
 def test_playback_state_wait_for_cleanup(
     qapp: QApplication,
     qt_event_loop: QtEventLoop,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    vpy_env: ManagedEnvironment,
+    create_test_video_output: Callable[[int], VideoOutput],
     mocker: MockerFixture,
 ) -> None:
     state = PlaybackState(qapp)
-    env = vsview_env_factory()
 
     # 1. No pending futures - completes immediately
     state.wait_for_cleanup()
@@ -125,8 +122,8 @@ def test_playback_state_wait_for_cleanup(
     assert state.audio_buffer is None
 
     # 2. Reset real buffer and wait for cleanup without stalling
-    voutput = create_test_video_output(env, 10)
-    state.buffer = FrameBuffer(voutput, env)
+    voutput = create_test_video_output(10)
+    state.buffer = FrameBuffer(voutput, vpy_env)
     state.reset()
     assert state.buffer is None
 
@@ -148,7 +145,7 @@ def test_playback_state_wait_for_cleanup(
         stall_triggered = True
         undone_fut.set_result(None)
 
-    slow_buffer = FrameBuffer(voutput, env)
+    slow_buffer = FrameBuffer(voutput, vpy_env)
     mocker.patch.object(FrameBuffer, "invalidate", return_value=undone_fut)
     state.buffer = slow_buffer
     state.reset()
@@ -170,11 +167,10 @@ class PlaybackManagerSetup(NamedTuple):
 @pytest.fixture
 def playback_manager_setup(
     qt_event_loop: QtEventLoop,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
+    vpy_env: ManagedEnvironment,
     plugin_controller: HarnessPluginController,
     qtbot: QtBot,
 ) -> Generator[PlaybackManagerSetup, None, None]:
-    env = vsview_env_factory()
 
     mock_outputs = MagicMock()
     mock_outputs.current_voutput = None
@@ -189,7 +185,7 @@ def playback_manager_setup(
 
     manager = PlaybackManager(
         loop=qt_event_loop,
-        get_env=lambda: env,
+        get_env=lambda: vpy_env,
         controller=plugin_controller,  # pyright: ignore[reportArgumentType]
         outputs_manager=mock_outputs,
         tab_manager=mock_tabs,
@@ -197,7 +193,7 @@ def playback_manager_setup(
     )
 
     try:
-        yield PlaybackManagerSetup(manager, env, plugin_controller, mock_outputs, mock_tabs, tbar)
+        yield PlaybackManagerSetup(manager, vpy_env, plugin_controller, mock_outputs, mock_tabs, tbar)
     finally:
         manager.stop()
 
@@ -205,11 +201,11 @@ def playback_manager_setup(
 # PlaybackManager Tests
 def test_playback_manager_seek_bounds(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
     qtbot: QtBot,
 ) -> None:
-    manager, env, _, mock_outputs, _, _ = playback_manager_setup
-    voutput = create_test_video_output(env, 100)
+    manager, _, _, mock_outputs, _, _ = playback_manager_setup
+    voutput = create_test_video_output(100)
     mock_outputs.current_voutput = voutput
 
     try:
@@ -263,7 +259,7 @@ def test_playback_manager_seek_bounds(
 
 def test_playback_manager_volume_and_mute(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    create_test_audio_output: Callable[[int], AudioOutput],
     mocker: MockerFixture,
 ) -> None:
     manager, env, _, mock_outputs, _, tbar = playback_manager_setup
@@ -285,7 +281,7 @@ def test_playback_manager_volume_and_mute(
     # Mute changed to True: stops audio sink and invalidates audio buffer
     mock_outputs.current_aoutput = mock_aoutput
     mock_outputs.aoutputs = [mock_aoutput]
-    aoutput = create_test_audio_output(env, 10000)
+    aoutput = create_test_audio_output(10000)
     real_audio_buffer = AudioBuffer(aoutput, env)
     spy_invalidate = mocker.spy(AudioBuffer, "invalidate")
     manager.state.audio_buffer = real_audio_buffer
@@ -320,12 +316,12 @@ def test_playback_manager_volume_and_mute(
 
 def test_playback_manager_muted_playback_lifecycle(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_audio_output: Callable[[int], AudioOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
 ) -> None:
-    manager, env, _, mock_outputs, _, tbar = playback_manager_setup
-    voutput = create_test_video_output(env, 100)
-    aoutput = create_test_audio_output(env, 100)
+    manager, _, _, mock_outputs, _, tbar = playback_manager_setup
+    voutput = create_test_video_output(100)
+    aoutput = create_test_audio_output(100)
     mock_outputs.current_voutput = voutput
     mock_outputs.current_aoutput = aoutput
 
@@ -400,10 +396,10 @@ def test_playback_manager_playback_settings_changed(
 
 def test_playback_manager_api_busy_frame_request(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
 ) -> None:
-    manager, env, plugin_controller, mock_outputs, _, _ = playback_manager_setup
-    voutput = create_test_video_output(env, 10)
+    manager, _, plugin_controller, mock_outputs, _, _ = playback_manager_setup
+    voutput = create_test_video_output(10)
     mock_outputs.current_voutput = voutput
 
     try:
@@ -423,11 +419,11 @@ def test_playback_manager_api_busy_frame_request(
 
 def test_playback_manager_reports_the_shown_frame_when_a_busy_plugin_refuses_a_seek(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
     qtbot: QtBot,
 ) -> None:
-    manager, env, plugin_controller, mock_outputs, _, tbar = playback_manager_setup
-    voutput = create_test_video_output(env, 100)
+    manager, _, plugin_controller, mock_outputs, _, tbar = playback_manager_setup
+    voutput = create_test_video_output(100)
     mock_outputs.current_voutput = voutput
     manager.state.current_frame = 7
 
@@ -448,11 +444,11 @@ def test_playback_manager_reports_the_shown_frame_when_a_busy_plugin_refuses_a_s
 
 def test_playback_manager_does_not_refuse_a_seek_queued_behind_a_render(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
     qtbot: QtBot,
 ) -> None:
-    manager, env, _, mock_outputs, _, tbar = playback_manager_setup
-    voutput = create_test_video_output(env, 100)
+    manager, _, _, mock_outputs, _, tbar = playback_manager_setup
+    voutput = create_test_video_output(100)
     mock_outputs.current_voutput = voutput
     refused = list[int]()
     manager.seekRefused.connect(refused.append)
@@ -483,26 +479,27 @@ def test_playback_manager_treats_a_non_positive_sar_as_square_pixels(
     sar_den: int,
     expected: float,
 ) -> None:
-    manager, env, _, mock_outputs, _, _ = playback_manager_setup
-    with env.use():
-        clip = env.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=10, fpsnum=24, fpsden=1)
-        clip = env.core.std.SetFrameProps(
-            clip,
-            _Matrix=vs.MATRIX_RGB,
-            _Primaries=vs.PRIMARIES_BT709,
-            _Transfer=vs.TRANSFER_BT709,
-            _SARNum=sar_num,
-            _SARDen=sar_den,
-        )
-        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
-        voutput.prepare_video(plugin_controller.api)
-        mock_outputs.current_voutput = voutput
+    manager, _, _, mock_outputs, _, _ = playback_manager_setup
+
+    clip = vs.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=10, fpsnum=24, fpsden=1)
+    clip = vs.core.std.SetFrameProps(
+        clip,
+        _Matrix=vs.MATRIX_RGB,
+        _Primaries=vs.PRIMARIES_BT709,
+        _Transfer=vs.TRANSFER_BT709,
+        _SARNum=sar_num,
+        _SARDen=sar_den,
+    )
+    voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
+    voutput.prepare_video(plugin_controller.api)
+    mock_outputs.current_voutput = voutput
 
     try:
         with qtbot.waitSignal(manager.frameRendered, timeout=2000) as blocker:
             manager.request_frame(0)
         qtbot.waitUntil(lambda: manager.is_idle, timeout=2000)
 
+        assert blocker.args
         assert blocker.args[2] == expected
     finally:
         voutput.clear()
@@ -511,12 +508,12 @@ def test_playback_manager_treats_a_non_positive_sar_as_square_pixels(
 
 def test_playback_manager_buffered_audio_backpressure(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    create_test_audio_output: Callable[[int], AudioOutput],
     mocker: MockerFixture,
     qtbot: QtBot,
 ) -> None:
     manager, env, _, mock_outputs, _, _ = playback_manager_setup
-    aoutput = create_test_audio_output(env, 100)
+    aoutput = create_test_audio_output(100)
     mock_outputs.current_aoutput = aoutput
 
     # Mock audio sink with backpressure (free bytes strictly less than bytes_per_frame)
@@ -548,12 +545,12 @@ def test_playback_manager_buffered_audio_backpressure(
 
 def test_playback_manager_buffered_audio_buffer_exhaustion(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    create_test_audio_output: Callable[[int], AudioOutput],
     mocker: MockerFixture,
     qtbot: QtBot,
 ) -> None:
     manager, env, _, mock_outputs, _, _ = playback_manager_setup
-    aoutput = create_test_audio_output(env, 100)
+    aoutput = create_test_audio_output(100)
     mock_outputs.current_aoutput = aoutput
 
     # Mock audio sink with sufficient space
@@ -605,12 +602,12 @@ def test_playback_manager_rapid_stop_cancels_startup(playback_manager_setup: Pla
 
 def test_audio_delay_change_applies_to_every_output_when_one_fails(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    create_test_audio_output: Callable[[int], AudioOutput],
     init_plugin_manager: PluginManager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _, env, _, mock_outputs, _, tbar = playback_manager_setup
-    failing, healthy = create_test_audio_output(env, 100), create_test_audio_output(env, 100)
+    _, _, _, mock_outputs, _, tbar = playback_manager_setup
+    failing, healthy = create_test_audio_output(100), create_test_audio_output(100)
     failing.vs_name, healthy.vs_name = "Failing audio", "Healthy audio"
     mock_outputs.aoutputs = [failing, healthy]
     orig_prepare = AudioOutput.prepare_audio
@@ -630,16 +627,17 @@ def test_audio_delay_change_applies_to_every_output_when_one_fails(
 
 def test_playback_starts_without_audio_past_the_end_of_a_shorter_audio_track(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
     init_plugin_manager: PluginManager,
     fake_audio_sinks: list[FakeAudioSink],
     qtbot: QtBot,
 ) -> None:
-    manager, env, plugin_controller, mock_outputs, _, tbar = playback_manager_setup
-    voutput = create_test_video_output(env, 100)
-    with env.use():
-        aoutput = AudioOutput(env.core.std.BlankAudio(length=48000, samplerate=48000), 0)
-        aoutput.prepare_audio(0.0, plugin_controller.api)
+    manager, _, plugin_controller, mock_outputs, _, tbar = playback_manager_setup
+    voutput = create_test_video_output(100)
+
+    aoutput = AudioOutput(vs.core.std.BlankAudio(length=48000, samplerate=48000), 0)
+    aoutput.prepare_audio(0.0, plugin_controller.api)
+
     mock_outputs.current_voutput = voutput
     mock_outputs.current_aoutput = aoutput
     mock_outputs.aoutputs = [aoutput]
@@ -665,10 +663,10 @@ def test_playback_starts_without_audio_past_the_end_of_a_shorter_audio_track(
 
 def test_stopping_playback_resets_the_sink_of_every_audio_track(
     playback_manager_setup: PlaybackManagerSetup,
-    create_test_audio_output: Callable[[ManagedEnvironment, int], AudioOutput],
+    create_test_audio_output: Callable[[int], AudioOutput],
 ) -> None:
-    manager, env, _, mock_outputs, _, _ = playback_manager_setup
-    aoutputs = [create_test_audio_output(env, 10000) for _ in range(2)]
+    manager, _, _, mock_outputs, _, _ = playback_manager_setup
+    aoutputs = [create_test_audio_output(10000) for _ in range(2)]
     sinks = [FakeAudioSink(None) for _ in aoutputs]
     for aoutput, sink in zip(aoutputs, sinks, strict=True):
         sink.setup(0, 1.0)
@@ -724,36 +722,34 @@ def wait_until_stopped(manager: PlaybackManager, qtbot: QtBot) -> None:
     qtbot.waitUntil(lambda: not manager.state.is_playing and manager.is_idle, timeout=5000)
 
 
-def make_clip(env: ManagedEnvironment, length: int = 10, fpsnum: int = 24, **props: Any) -> vs.VideoNode:
-    with env.use():
-        clip = env.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=length, fpsnum=fpsnum, fpsden=1)
-        return env.core.std.SetFrameProps(
-            clip, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709, **props
-        )
+def make_clip(length: int = 10, fpsnum: int = 24, **props: Any) -> vs.VideoNode:
+    clip = vs.core.std.BlankClip(format=vs.RGB24, width=64, height=64, length=length, fpsnum=fpsnum, fpsden=1)
+    return vs.core.std.SetFrameProps(
+        clip, _Matrix=vs.MATRIX_RGB, _Primaries=vs.PRIMARIES_BT709, _Transfer=vs.TRANSFER_BT709, **props
+    )
 
 
-def failing_clip(env: ManagedEnvironment, failing_frame: int) -> vs.VideoNode:
-    base = make_clip(env)
+def failing_clip(failing_frame: int) -> vs.VideoNode:
+    base = make_clip()
 
     def select(n: int) -> vs.VideoNode:
         if n == failing_frame:
             raise RuntimeError("broken frame")
         return base
 
-    with env.use():
-        return base.std.FrameEval(select)
+    return base.std.FrameEval(select)
 
 
 @pytest.mark.parametrize("uncapped", [False, True], ids=["capped", "uncapped"])
 def test_playback_shows_each_frame_in_order_and_stops_on_the_last_one(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
     qtbot: QtBot,
     uncapped: bool,
 ) -> None:
-    manager, env, _, _, _, tbar = playback_manager_setup
-    use_voutput(create_test_video_output(env, 10))
+    manager, _, _, _, _, tbar = playback_manager_setup
+    use_voutput(create_test_video_output(10))
     tbar.playback_container.settings.uncapped = uncapped
     frames = record_frames(manager)
 
@@ -778,15 +774,15 @@ def test_playback_shows_each_frame_in_order_and_stops_on_the_last_one(
 def test_play_zone_plays_from_the_current_frame_and_stops_at_the_zone_end(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
     qtbot: QtBot,
     start: int,
     zone_frames: int,
     step: int,
     expected: list[int],
 ) -> None:
-    manager, env, _, _, _, tbar = playback_manager_setup
-    use_voutput(create_test_video_output(env, 10))
+    manager, _, _, _, _, tbar = playback_manager_setup
+    use_voutput(create_test_video_output(10))
     manager.state.current_frame = start
     frames = record_frames(manager)
 
@@ -799,11 +795,11 @@ def test_play_zone_plays_from_the_current_frame_and_stops_at_the_zone_end(
 def test_play_zone_with_loop_starts_again_from_the_zone_start(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
     qtbot: QtBot,
 ) -> None:
-    manager, env, _, _, _, tbar = playback_manager_setup
-    use_voutput(create_test_video_output(env, 10))
+    manager, _, _, _, _, tbar = playback_manager_setup
+    use_voutput(create_test_video_output(10))
     frames = record_frames(manager)
 
     tbar.playback_container.playZone.emit(2, True, 1)
@@ -826,13 +822,14 @@ def test_variable_frame_rate_playback_reaches_the_last_frame(
     framedurs: tuple[float, ...] | None,
     props: dict[str, int],
 ) -> None:
-    manager, env, plugin_controller, _, _, _ = playback_manager_setup
-    with env.use():
-        clip = make_clip(env, 6, fpsnum=0, **props)
-        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer(), VideoMetadata("VFR", framedurs))
-        voutput.prepare_video(plugin_controller.api)
-        voutput.prepared_clip.get_frame(0).close()
+    manager, _, plugin_controller, _, _, _ = playback_manager_setup
+
+    clip = make_clip(6, fpsnum=0, **props)
+    voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer(), VideoMetadata("VFR", framedurs))
+    voutput.prepare_video(plugin_controller.api)
+    voutput.prepared_clip.get_frame(0).close()
     use_voutput(voutput)
+
     frames = record_frames(manager)
 
     manager.toggle_playback()
@@ -847,12 +844,13 @@ def test_variable_frame_rate_playback_without_durations_does_not_start(
     init_plugin_manager: PluginManager,
     qtbot: QtBot,
 ) -> None:
-    manager, env, plugin_controller, _, _, tbar = playback_manager_setup
-    with env.use():
-        voutput = VideoOutput(vs.VideoOutputTuple(make_clip(env, 6, fpsnum=0), None, 0), 0, Packer())
-        voutput.prepare_video(plugin_controller.api)
-        voutput.prepared_clip.get_frame(0).close()
+    manager, _, plugin_controller, _, _, tbar = playback_manager_setup
+
+    voutput = VideoOutput(vs.VideoOutputTuple(make_clip(6, fpsnum=0), None, 0), 0, Packer())
+    voutput.prepare_video(plugin_controller.api)
+    voutput.prepared_clip.get_frame(0).close()
     use_voutput(voutput)
+
     frames = record_frames(manager)
 
     manager.toggle_playback()
@@ -867,12 +865,13 @@ def test_a_frame_that_fails_during_playback_reports_a_load_failure(
     use_voutput: Callable[[VideoOutput], VideoOutput],
     qtbot: QtBot,
 ) -> None:
-    manager, env, _, _, _, _ = playback_manager_setup
-    clip = failing_clip(env, failing_frame=3)
-    with env.use():
-        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
-        voutput.prepared_clip = voutput.packer.pack_clip(clip, None)
+    manager, _, _, _, _, _ = playback_manager_setup
+
+    clip = failing_clip(failing_frame=3)
+    voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
+    voutput.prepared_clip = voutput.packer.pack_clip(clip, None)
     use_voutput(voutput)
+
     frames = record_frames(manager)
 
     with qtbot.waitSignal(manager.loadFailed, timeout=5000):
@@ -886,11 +885,11 @@ def test_seeking_to_a_frame_the_script_cannot_render_reports_a_load_failure(
     use_voutput: Callable[[VideoOutput], VideoOutput],
     qtbot: QtBot,
 ) -> None:
-    manager, env, _, _, _, _ = playback_manager_setup
-    clip = failing_clip(env, failing_frame=3)
-    with env.use():
-        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
-        voutput.prepared_clip = voutput.packer.pack_clip(clip, None)
+    manager, _, _, _, _, _ = playback_manager_setup
+    clip = failing_clip(failing_frame=3)
+
+    voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
+    voutput.prepared_clip = voutput.packer.pack_clip(clip, None)
     use_voutput(voutput)
 
     with qtbot.waitSignal(manager.loadFailed, timeout=5000):
@@ -902,12 +901,12 @@ def test_seeking_to_a_frame_that_fails_after_the_script_shows_a_failure_image(
     use_voutput: Callable[[VideoOutput], VideoOutput],
     qtbot: QtBot,
 ) -> None:
-    manager, env, _, _, _, tbar = playback_manager_setup
+    manager, _, _, _, _, tbar = playback_manager_setup
     tbar.show()
-    with env.use():
-        voutput = VideoOutput(vs.VideoOutputTuple(make_clip(env), None, 0), 0, Packer())
-        # The script frame renders, but a later step of the prepared clip fails.
-        voutput.prepared_clip = voutput.packer.pack_clip(failing_clip(env, failing_frame=3), None)
+
+    voutput = VideoOutput(vs.VideoOutputTuple(make_clip(), None, 0), 0, Packer())
+    # The script frame renders, but a later step of the prepared clip fails.
+    voutput.prepared_clip = voutput.packer.pack_clip(failing_clip(failing_frame=3), None)
     use_voutput(voutput)
     load_failures = list[None]()
     manager.loadFailed.connect(lambda: load_failures.append(None))
@@ -929,11 +928,11 @@ def test_seeking_to_a_frame_that_fails_after_the_script_shows_a_failure_image(
 def test_rapid_seeks_render_the_first_and_the_last_target_only(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
     qtbot: QtBot,
 ) -> None:
-    manager, env, _, _, _, _ = playback_manager_setup
-    use_voutput(create_test_video_output(env, 100))
+    manager, _, _, _, _, _ = playback_manager_setup
+    use_voutput(create_test_video_output(100))
     frames = record_frames(manager)
 
     for target in (10, 20, 30):
@@ -954,14 +953,14 @@ def test_rapid_seeks_render_the_first_and_the_last_target_only(
 def test_plugins_hear_that_a_seeked_frame_is_displayed_after_it_is_painted(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
     qtbot: QtBot,
     mocker: MockerFixture,
     notify_plugins: bool,
     expected: list[str],
 ) -> None:
-    manager, env, plugin_controller, _, _, _ = playback_manager_setup
-    use_voutput(create_test_video_output(env, 20))
+    manager, _, plugin_controller, _, _, _ = playback_manager_setup
+    use_voutput(create_test_video_output(20))
     order = list[str]()
     manager.frameRendered.connect(lambda *_: order.append("painted"))
     mocker.patch.object(
@@ -976,18 +975,17 @@ def test_plugins_hear_that_a_seeked_frame_is_displayed_after_it_is_painted(
     assert order == expected
 
 
-def gated_voutput(env: ManagedEnvironment, gate: threading.Event, length: int = 30) -> VideoOutput:
+def gated_voutput(gate: threading.Event, length: int = 30) -> VideoOutput:
     """A video output whose frames are rendered only once `gate` is set."""
-    base = make_clip(env, length=length)
+    base = make_clip(length=length)
 
     def select(n: int) -> vs.VideoNode:
         gate.wait(10)
         return base
 
-    with env.use():
-        clip = base.std.FrameEval(select)
-        voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
-        voutput.prepared_clip = voutput.packer.pack_clip(clip, None)
+    clip = base.std.FrameEval(select)
+    voutput = VideoOutput(vs.VideoOutputTuple(clip, None, 0), 0, Packer())
+    voutput.prepared_clip = voutput.packer.pack_clip(clip, None)
     return voutput
 
 
@@ -996,9 +994,9 @@ def test_a_render_replaced_by_a_tab_change_does_not_reach_the_view(
     use_voutput: Callable[[VideoOutput], VideoOutput],
     qtbot: QtBot,
 ) -> None:
-    manager, env, _, _, _, _ = playback_manager_setup
+    manager, _, _, _, _, _ = playback_manager_setup
     gate = threading.Event()
-    use_voutput(gated_voutput(env, gate))
+    use_voutput(gated_voutput(gate))
     frames = record_frames(manager)
     painted = list[QImage]()
     manager.frameRendered.connect(lambda image, *_: painted.append(image))
@@ -1020,9 +1018,9 @@ def test_play_stop_play_while_the_first_start_is_buffering_starts_playback_once(
     use_voutput: Callable[[VideoOutput], VideoOutput],
     qtbot: QtBot,
 ) -> None:
-    manager, env, _, _, _, _ = playback_manager_setup
+    manager, _, _, _, _, _ = playback_manager_setup
     gate = threading.Event()
-    use_voutput(gated_voutput(env, gate))
+    use_voutput(gated_voutput(gate))
     statuses = list[str]()
     manager.statusLoadingStarted.connect(statuses.append)
     manager.toggle_playback()

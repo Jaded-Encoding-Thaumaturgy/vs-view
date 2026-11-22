@@ -15,7 +15,6 @@ from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import QFileDialog
 from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
-from vsengine.policy import ManagedEnvironment
 
 from tests.scripts import blank_clip_script, script_source
 from vsview.api import WidgetPluginBase
@@ -31,7 +30,7 @@ from vsview.app.workspace.quick_script import QuickScriptWorkspace
 from vsview.app.workspace.utils import CodeContent
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
 
 output_metadata = OutputMetadata(dict)
 
@@ -40,17 +39,10 @@ output_metadata = OutputMetadata(dict)
 def video_workspace(
     qt_event_loop: QtEventLoop,
     qtbot: QtBot,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
     init_plugin_manager: PluginManager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[VideoFileWorkspace]:
     class TestVideoFileWorkspace(VideoFileWorkspace):
-        @property
-        def env(self) -> ManagedEnvironment:
-            if not self._env or self._env.disposed:
-                self._env = vsview_env_factory()
-            return self._env
-
         def get_output_metadata(self) -> dict[int, Any]:
             return output_metadata.get(str(self.content), {})
 
@@ -79,16 +71,9 @@ def video_workspace(
 def python_workspace(
     qt_event_loop: QtEventLoop,
     qtbot: QtBot,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
     init_plugin_manager: PluginManager,
 ) -> Generator[PythonScriptWorkspace]:
     class TestPythonScriptWorkspace(PythonScriptWorkspace):
-        @property
-        def env(self) -> ManagedEnvironment:
-            if not self._env or self._env.disposed:
-                self._env = vsview_env_factory()
-            return self._env
-
         def get_output_metadata(self) -> dict[int, Any]:
             return output_metadata.get(str(self.content), {})
 
@@ -105,14 +90,9 @@ def python_workspace(
 def quick_script_workspace(
     qt_event_loop: QtEventLoop,
     qtbot: QtBot,
-    vsview_env_factory: Callable[[], ManagedEnvironment],
     init_plugin_manager: PluginManager,
 ) -> Generator[QuickScriptWorkspace]:
     class TestQuickScriptWorkspace(QuickScriptWorkspace):
-        @override
-        def new_environment(self) -> ManagedEnvironment:
-            return vsview_env_factory()
-
         def get_output_metadata(self) -> dict[int, Any]:
             return output_metadata.get(str(self.content), {})
 
@@ -515,6 +495,7 @@ def test_video_workspace_bestsource_loading(
 ) -> None:
     ws = video_workspace
     ws.content = fixture_video_file
+    ws.prepare_environment()
 
     ws.loader()
 
@@ -537,6 +518,7 @@ def test_video_workspace_loader_real_video(
 ) -> None:
     ws = video_workspace
     ws.content = fixture_video_file
+    ws.prepare_environment()
 
     ws.loader()
 

@@ -39,7 +39,7 @@ from vsview.app.packing import Packer
 from vsview.app.settings.manager import SettingsManager
 from vsview.vsenv.loop import QtEventLoop
 
-pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-policy")]
+pytestmark = [pytest.mark.unit, pytest.mark.qt, pytest.mark.vpy("no-core")]
 
 
 # Fixtures & Helpers
@@ -81,8 +81,8 @@ def make_video_output(clip: vs.VideoNode, index: int = 0) -> VideoOutput:
 
 
 @pytest.fixture
-def graph_env(vsview_env_factory: Callable[[], ManagedEnvironment]) -> ManagedEnvironment:
-    return vsview_env_factory()
+def graph_env(vpy_env_factory: Callable[[], ManagedEnvironment]) -> ManagedEnvironment:
+    return vpy_env_factory()
 
 
 @pytest.fixture

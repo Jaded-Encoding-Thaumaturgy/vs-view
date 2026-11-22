@@ -228,21 +228,22 @@ def test_showing_the_workspace_without_missed_updates_refreshes_nothing(
 
 
 @pytest.fixture
-def env(vsview_env_factory: Callable[[], ManagedEnvironment]) -> ManagedEnvironment:
-    return vsview_env_factory()
+def env(vpy_env_factory: Callable[[], ManagedEnvironment]) -> ManagedEnvironment:
+    return vpy_env_factory()
 
 
-@pytest.mark.vpy("no-policy")
+@pytest.mark.vpy("no-core")
 def test_a_reload_missed_while_hidden_renders_the_plugin_view_again_when_shown(
     controller: PluginWorkspaceController,
     workspace: MockQObject,
     plugins: Plugins,
     qtbot: QtBot,
     env: ManagedEnvironment,
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
 ) -> None:
     workspace.env = env
-    workspace.outputs_manager.current_voutput = create_test_video_output(env, 10)
+    with workspace.env.use():
+        workspace.outputs_manager.current_voutput = create_test_video_output(10)
     workspace.outputs_manager.current_video_index = 0
     workspace.playback.state.current_frame = 3
     view = FrameRecordingView(plugins.visible, controller.api)
@@ -258,13 +259,13 @@ def test_a_reload_missed_while_hidden_renders_the_plugin_view_again_when_shown(
     qtbot.waitUntil(lambda: view.rendered == [3, 3], timeout=5000)
 
 
-@pytest.mark.vpy("no-policy")
+@pytest.mark.vpy("no-core")
 def test_each_visible_plugin_view_gets_its_own_frames_from_the_buffer(
     controller: PluginWorkspaceController,
     workspace: MockQObject,
     qtbot: QtBot,
     env: ManagedEnvironment,
-    create_test_video_output: Callable[[ManagedEnvironment, int], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
 ) -> None:
     shown, hidden = RecordingPlugin(None, controller.api), RecordingPlugin(None, controller.api)
     qtbot.addWidget(shown)
@@ -278,7 +279,8 @@ def test_each_visible_plugin_view_gets_its_own_frames_from_the_buffer(
     qtbot.waitExposed(shown)
     views[2].hide()
     workspace.plugins = [shown, hidden]
-    buffer = FrameBuffer(create_test_video_output(env, 10), env)
+    with env.use():
+        buffer = FrameBuffer(create_test_video_output(10), env)
 
     controller.register_plugin_nodes_to_buffer(buffer)
     buffer.allocate(range(3))

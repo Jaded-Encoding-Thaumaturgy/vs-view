@@ -18,18 +18,33 @@ from vapoursynth import clear_outputs as vs_clear_outputs
 from vsengine.policy import ManagedEnvironment, Policy, ThreadLocalStore
 from vsengine.vpy import Script
 
+DEFAULT_FLAGS = ENABLE_GRAPH_INSPECTION | DISABLE_LIBRARY_UNLOADING
+
 _policy: CustomPolicy | None = None
 _logger = getLogger(__name__)
 
 
 class CustomPolicy(Policy):
     @override
+    def register(self) -> None:
+        global _policy
+        super().register()
+        _policy = self
+
+    @override
+    def unregister(self) -> None:
+        global _policy
+        super().unregister()
+        if _policy is self:
+            _policy = None
+
+    @override
     def new_environment(
         self,
         flags_creation: int | None = None,
         logger: bool | Callable[[int, str], None] | None = None,
     ) -> ManagedEnvironment:
-        if callable(logger) or logger is None or callable(self._logger):
+        if callable(logger) or callable(self._logger):
             raise NotImplementedError
 
         _logger.debug("Creating new VS environment")
@@ -46,16 +61,21 @@ class CustomPolicy(Policy):
         return menv
 
 
-def get_policy(flags: CoreCreationFlags = ENABLE_GRAPH_INSPECTION | DISABLE_LIBRARY_UNLOADING) -> CustomPolicy:
-    global _policy
+def new_policy(flags: CoreCreationFlags = DEFAULT_FLAGS) -> CustomPolicy:
+    """Create an unregistered policy. Registering it makes it the policy of `get_policy`."""
+    return CustomPolicy(ThreadLocalStore(), flags)
 
-    if _policy is None:
-        if has_policy():
-            raise RuntimeError("A Policy already exists")
-        _policy = CustomPolicy(ThreadLocalStore(), flags)
-        _policy.register()
 
-    return _policy
+def get_policy(flags: CoreCreationFlags = DEFAULT_FLAGS) -> CustomPolicy:
+    if _policy is not None:
+        return _policy
+
+    if has_policy():
+        raise RuntimeError("A Policy already exists")
+
+    policy = new_policy(flags)
+    policy.register()
+    return policy
 
 
 def unregister_policy() -> None:

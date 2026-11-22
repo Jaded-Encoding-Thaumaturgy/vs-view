@@ -95,7 +95,7 @@ class BaseWorkspace(QMainWindow):
         super().deleteLater()
 
     def new_environment(self) -> ManagedEnvironment:
-        """Create a new VapourSynth environment for this workspace. Subclasses and tests may override it."""
+        """Create a new VapourSynth environment for this workspace. Subclasses may override it."""
         return create_environment()
 
     def prepare_environment(self) -> ManagedEnvironment:
