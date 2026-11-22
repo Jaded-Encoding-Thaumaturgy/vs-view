@@ -89,6 +89,7 @@ jobs:
 
     env:
       UV_NO_SYNC: '1'
+      UV_PYTHON_PREFERENCE: only-managed
 
     steps:
       - name: Checkout repository
