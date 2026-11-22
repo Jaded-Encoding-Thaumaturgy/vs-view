@@ -64,6 +64,7 @@ from vsengine.loops import set_loop
 
 from ..assets import app_icon, load_fonts
 from ..vsenv import QtEventLoop, get_policy, unregister_policy
+from .garbage import GarbageCollector
 from .icon import IconReloadMixin
 from .plugins.manager import PluginManager
 from .settings import ActionID, SecretsManager, SettingsManager, ShortcutManager
@@ -130,6 +131,8 @@ class Application(QApplication):
         # Appearance & Themes
         AppearanceManager.apply_all(SettingsManager.global_settings.appearance)
         SettingsManager.signals.globalChanged.connect(self._on_global_settings_changed)
+
+        GarbageCollector.start()
 
         if sys.platform == "win32":
             loop.to_thread_scoped(self, "WarmupCJK", self._warmup_cjk_fallback, self.font())

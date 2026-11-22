@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import faulthandler
+import gc
 import importlib.metadata
 import logging
 import os
@@ -116,10 +117,28 @@ class InMemoryKeyring:
 
 def pytest_configure(config: pytest.Config) -> None:
     config.stash[faulthandler_fd_key] = os.dup(sys.stderr.fileno())
+    gc.disable()
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
+    gc.unfreeze()
+    gc.enable()
     os.close(config.stash[faulthandler_fd_key])
+
+
+def pytest_collection_finish() -> None:
+    # Objects alive after collection last for the whole session, so the collection after each test skips them.
+    gc.collect()
+    gc.freeze()
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_teardown() -> Generator[None]:
+    """Collect cyclic garbage post-teardown on the main thread to avoid QObject races on worker threads."""
+    try:
+        return (yield)
+    finally:
+        gc.collect()
 
 
 # Logging Isolation

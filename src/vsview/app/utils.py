@@ -38,6 +38,8 @@ from PySide6.QtCore import QObject, Qt, QThread, QTimer, SignalInstance
 from PySide6.QtWidgets import QApplication
 from shiboken6 import Shiboken
 
+from .garbage import collect_garbage
+
 type AnyPath = str | os.PathLike[str]
 
 logger = getLogger(__name__)
@@ -153,11 +155,11 @@ def measure_memory(
 
     Args:
         label: Label to prepend to log messages.
-        force_gc: Whether to run gc.collect() before taking each snapshot.
+        force_gc: Whether to run a full garbage collection on the main thread before taking each snapshot.
         log_level: Logging level (defaults to logging.DEBUG / 10).
     """
     if force_gc:
-        gc.collect()
+        collect_garbage()
 
     before = ProcessMemorySnapshot()
     logger.log(log_level, "[%s] Memory (before) -> %s", label, before.format())
@@ -166,7 +168,7 @@ def measure_memory(
         yield before
     finally:
         if force_gc:
-            gc.collect()
+            collect_garbage()
 
         after = ProcessMemorySnapshot()
         logger.log(log_level, "[%s] Memory (after) -> %s", label, after.format(before))
@@ -287,7 +289,7 @@ class _CheckLeaks:
 
 @_CheckLeaks
 def check_leaks(stage: Literal["before", "after"], *, before: ProcessMemorySnapshot | None = None) -> None:
-    gc.collect()
+    collect_garbage()
 
     mem = ProcessMemorySnapshot()
     logger.debug("--- Memory Snapshot (%s) --- %s", stage, mem.format(before if stage == "after" else None))

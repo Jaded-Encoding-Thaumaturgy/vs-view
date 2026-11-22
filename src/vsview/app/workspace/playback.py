@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 from ...assets import get_monospace_font
 from ...types import Frame, Time
 from ...vsenv import run_in_background, run_in_loop
+from ..garbage import GarbageCollector
 from ..outputs import AudioBuffer, FrameBuffer
 from ..settings import SettingsManager
 from ..utils import WorkTracker
@@ -434,6 +435,7 @@ class PlaybackManager(QObject):
         self._playback_epoch += 1
         self.invalidate_renders()
         self.state.is_playing = True
+        GarbageCollector.defer_full_collections(self)
         self._start_playback(self._playback_epoch, play_range, loop)
 
     @run_in_background(name="StartPlayback")
@@ -515,6 +517,7 @@ class PlaybackManager(QObject):
         self._playback_epoch += 1
         self._stop_audio()
         self.state.is_playing = False
+        GarbageCollector.resume_full_collections(self)
 
         self.state.reset()
 
