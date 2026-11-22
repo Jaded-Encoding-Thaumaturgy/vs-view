@@ -21,10 +21,14 @@ def lifecycle() -> WorkspaceLifecycle:
 
 
 @pytest.fixture
-def api(lifecycle: WorkspaceLifecycle) -> PluginAPI:
-    workspace = MockQObject(lifecycle=lifecycle)
-    controller = PluginWorkspaceController(workspace)  # pyright: ignore[reportArgumentType]
-    return controller.api
+def workspace(mock_qobject: MockQObject, lifecycle: WorkspaceLifecycle) -> MockQObject:
+    mock_qobject.lifecycle = lifecycle
+    return mock_qobject
+
+
+@pytest.fixture
+def api(workspace: MockQObject) -> PluginAPI:
+    return PluginWorkspaceController(workspace).api  # pyright: ignore[reportArgumentType]
 
 
 def test_workspace_blocker_acquire_release(api: PluginAPI) -> None:
