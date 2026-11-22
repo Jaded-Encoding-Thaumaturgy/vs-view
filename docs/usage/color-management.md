@@ -94,6 +94,19 @@ To preview content in HDR, you must meet the following requirements:
 1. **System & Display**: An HDR-capable display must be connected and HDR must be enabled in your operating system settings.
 2. **Command Line Flag**: Launch VSView with the [`--hdr` CLI option](configuration.md#-hdr) (or set the `VSVIEW_HDR=true` environment variable).
 
+!!! warning "Variable Refresh Rate (VRR) on Windows"
+
+    HDR output uses a flip-model swapchain. This lets G-SYNC or FreeSync apply to VSView, even when windowed VRR is off.
+
+    VSView redraws only when something changes, so the refresh rate follows those updates. On OLED panels, this can cause flicker.
+
+    Without `--hdr`, this does not happen.
+
+    If you need HDR on a VRR display, you can:
+
+    - disable G-SYNC / FreeSync while using VSView, or
+    - create a driver profile with a fixed refresh rate for `vsview.exe` (or your `python.exe`). Results vary between drivers.
+
 ### Script Configuration
 
 By default, when `--hdr` is enabled, all outputs will attempt HDR conversion.

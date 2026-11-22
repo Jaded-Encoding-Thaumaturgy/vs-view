@@ -273,6 +273,10 @@ def main(
         if sys.platform == "linux":
             os.environ.setdefault("QSG_RHI_BACKEND", "vulkan")
             os.environ.setdefault("QSG_RENDER_LOOP", "basic")
+    elif sys.platform == "win32":
+        # HDR requires flip model, so this is only applied without --hdr. This "fixes" #212.
+        # If an user needs `--hdr` and has VRR enabled, they can just cope or disable fucking VRR.
+        os.environ.setdefault("QT_D3D_NO_FLIP", "1")
 
     if settings_roaming:
         os.environ["VSVIEW_GLOBAL_SETTINGS_ROAMING"] = "true"

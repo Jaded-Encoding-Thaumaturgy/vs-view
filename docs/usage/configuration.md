@@ -81,6 +81,9 @@ vsview COMMAND [OPTIONS] [ARGS...]
 #### `--hdr`
 :   Enable High Dynamic Range (HDR) support and configure target graphics API (Direct3D12, Vulkan, Metal).
 
+    On Windows, this can make VRR displays (G-SYNC / FreeSync) change refresh rate and flicker.
+    See [Variable Refresh Rate (VRR) on Windows](color-management.md#high-dynamic-range-hdr).
+
     **Env:** `VSVIEW_HDR`
 
 #### `--verbose` / `-v`
