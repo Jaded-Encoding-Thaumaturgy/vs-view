@@ -312,6 +312,80 @@ def test_timeline_mouse_right_click_ignored_by_scrubber(timeline_control_bar: Ti
     assert len(emitted) == 0
 
 
+def _mouse_event(
+    event_type: QEvent.Type,
+    x: float,
+    *,
+    pressed: bool = False,
+    shift: bool = False,
+) -> QMouseEvent:
+    button = Qt.MouseButton.LeftButton if event_type == QEvent.Type.MouseButtonPress else Qt.MouseButton.NoButton
+    buttons = Qt.MouseButton.LeftButton if pressed else Qt.MouseButton.NoButton
+    modifiers = Qt.KeyboardModifier.ShiftModifier if shift else Qt.KeyboardModifier.NoModifier
+    return QMouseEvent(event_type, QPointF(x, 15), QPointF(x, 15), button, buttons, modifiers)
+
+
+def _fine_seek_timeline(qtbot: QtBot, total_frames: int) -> tuple[Timeline, list[tuple[Frame, Time]]]:
+    timeline = Timeline()
+    qtbot.addWidget(timeline)
+    timeline.resize(1000, 33)
+    timeline.rect_f = QRectF(0, 0, 1000, 33)
+    timeline.set_data(total_frames, [Time(seconds=(i + 1) / 25) for i in range(total_frames)])
+
+    emitted: list[tuple[Frame, Time]] = []
+    timeline.clicked.connect(lambda f, t: emitted.append((f, t)))
+    return timeline, emitted
+
+
+@pytest.mark.parametrize("distance", [1, 2, 5])
+def test_timeline_shift_drag_seeks_one_frame_per_fine_seek_distance(qtbot: QtBot, distance: int) -> None:
+    SettingsManager.global_settings.timeline.fine_seek_distance = distance
+    timeline, emitted = _fine_seek_timeline(qtbot, 10_000)
+
+    timeline.mousePressEvent(_mouse_event(QEvent.Type.MouseButtonPress, 500, pressed=True))
+    timeline.mouseMoveEvent(_mouse_event(QEvent.Type.MouseMove, 500, pressed=True, shift=True))
+    timeline.mouseMoveEvent(_mouse_event(QEvent.Type.MouseMove, 500 + 3 * distance, pressed=True, shift=True))
+    timeline.mouseMoveEvent(_mouse_event(QEvent.Type.MouseMove, 500 - 2 * distance, pressed=True, shift=True))
+
+    assert [frame for frame, _ in emitted] == [Frame(5000), Frame(5000), Frame(5003), Frame(4998)]
+    assert timeline.hover_frame == Frame(4998)
+
+
+def test_timeline_releasing_shift_returns_to_the_mouse_position(qtbot: QtBot) -> None:
+    timeline, emitted = _fine_seek_timeline(qtbot, 10_000)
+
+    timeline.mousePressEvent(_mouse_event(QEvent.Type.MouseButtonPress, 500, pressed=True))
+    timeline.mouseMoveEvent(_mouse_event(QEvent.Type.MouseMove, 500, pressed=True, shift=True))
+    timeline.mouseMoveEvent(_mouse_event(QEvent.Type.MouseMove, 600, pressed=True, shift=True))
+    timeline.mouseMoveEvent(_mouse_event(QEvent.Type.MouseMove, 601, pressed=True))
+
+    assert [frame for frame, _ in emitted] == [Frame(5000), Frame(5000), Frame(5050), Frame(6010)]
+    assert timeline.hover_x == 601
+
+
+def test_timeline_shift_hover_then_click_seeks_the_fine_frame(qtbot: QtBot) -> None:
+    timeline, emitted = _fine_seek_timeline(qtbot, 10_000)
+
+    timeline.mouseMoveEvent(_mouse_event(QEvent.Type.MouseMove, 500))
+    timeline.mouseMoveEvent(_mouse_event(QEvent.Type.MouseMove, 500, shift=True))
+    timeline.mouseMoveEvent(_mouse_event(QEvent.Type.MouseMove, 514, shift=True))
+    assert emitted == []
+
+    timeline.mousePressEvent(_mouse_event(QEvent.Type.MouseButtonPress, 514, pressed=True, shift=True))
+
+    assert emitted == [(Frame(5007), Time(seconds=5007 / 25))]
+    assert timeline.cursor_x == timeline.cursor_to_x(Frame(5007))
+
+
+def test_timeline_shift_is_ignored_when_frames_are_wider_than_the_fine_distance(qtbot: QtBot) -> None:
+    timeline, emitted = _fine_seek_timeline(qtbot, 100)
+
+    timeline.mousePressEvent(_mouse_event(QEvent.Type.MouseButtonPress, 500, pressed=True, shift=True))
+    timeline.mouseMoveEvent(_mouse_event(QEvent.Type.MouseMove, 520, pressed=True, shift=True))
+
+    assert [frame for frame, _ in emitted] == [Frame(50), Frame(52)]
+
+
 def test_timeline_notch_management(timeline_control_bar: TimelineControlBar) -> None:
     timeline = timeline_control_bar.timeline
 

@@ -381,6 +381,20 @@ class TimelineSettings(BaseModel):
         ),
     ] = 100
 
+    fine_seek_distance: Annotated[
+        int,
+        Spin(
+            label="Fine Seek Distance",
+            min=1,
+            max=50,
+            suffix=" px per frame",
+            tooltip=(
+                "Hold Shift over the timeline to seek frame by frame.\n"
+                "The mouse must move this many pixels to go to the next frame."
+            ),
+        ),
+    ] = 2
+
 
 class PlaybackSettings(BaseModel):
     """Settings for the video playback stuff"""

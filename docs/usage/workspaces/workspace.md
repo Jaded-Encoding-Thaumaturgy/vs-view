@@ -106,6 +106,7 @@ The Timeline provides precise navigation and visual reference markers for the ac
 
 - **Scrub with left-click + drag** on the timeline bar to seek interactively.
 - **Hover preview**: Moving the mouse over the timeline shows the current hover position as frame/time; optional hover zoom can be enabled in timeline settings.
+- **Fine seek**: Hold ++shift++ while hovering or dragging to move one frame at a time. The **Fine Seek Distance** timeline setting controls how many pixels the mouse moves for each frame.
 - **Frame / Time display modes**: The scale and labels can be shown as frame numbers or timestamps.
 - **Custom markers/notches**: Plugins and tools can add timeline markers (for example, bookmarks/keyframe-like markers), including optional ranges.
 

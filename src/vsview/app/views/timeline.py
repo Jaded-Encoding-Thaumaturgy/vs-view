@@ -637,7 +637,9 @@ class Timeline(QWidget):
         # Interaction state
         self.mousepressed = False
         self.hover_x: int | None = None
+        self.hover_frame: Frame | None = None
         self.is_events_blocked = False
+        self._fine_anchor: tuple[float, Frame] | None = None  # Mouse x and frame where Shift fine seeking started
 
         # Initialize cache
         self.notches_cache = self._init_notches_cache()
@@ -920,11 +922,11 @@ class Timeline(QWidget):
         painter.drawLine(cursor_line)
 
         # Draw hover indicator if mouse is over the widget
-        if self.hover_x is not None:
+        if self.hover_x is not None and self.hover_frame is not None:
             if self.mode == "frame":
-                text = str(self.x_to_frame(self.hover_x))
+                text = str(self.hover_frame)
             else:
-                text = self.x_to_time(self.hover_x).to_ts(self.HOVER_TIME_FORMAT)
+                text = self.frame_to_time(self.hover_frame).to_ts(self.HOVER_TIME_FORMAT)
 
             hover_pen = QPen(self.hover_indicator_color, 1, Qt.PenStyle.DashLine)
             hover_pen.setCosmetic(True)
@@ -976,18 +978,14 @@ class Timeline(QWidget):
     def leaveEvent(self, event: QEvent) -> None:
         super().leaveEvent(event)
         if not self.mousepressed:
-            self.hover_x = None
-            self._hide_hover_popup()
-            self.update()
+            self._clear_hover()
 
     @override
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if not self.is_events_blocked:
             self.mousepressed = False
             if not self.rect().contains(event.position().toPoint()):
-                self.hover_x = None
-                self._hide_hover_popup()
-                self.update()
+                self._clear_hover()
 
     @override
     def mousePressEvent(self, event: QMouseEvent) -> None:
@@ -1010,11 +1008,33 @@ class Timeline(QWidget):
         if self.is_events_blocked:
             return
 
-        self.hover_x = int(clamp(event.position().x(), 0, self.rect_f.width()))
+        x = clamp(event.position().x(), 0, self.rect_f.width())
+        fine_distance = SettingsManager.global_settings.timeline.fine_seek_distance
+
+        if (
+            event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            and self.total_frames * fine_distance > self.rect_f.width()
+        ):
+            if self._fine_anchor is None:
+                start_frame = self.hover_frame
+                if start_frame is None:
+                    start_frame = self._clamp_frame(self.x_to_frame(int(x)))
+                self._fine_anchor = (x, start_frame)
+
+            anchor_x, anchor_frame = self._fine_anchor
+            frame = self._clamp_frame(anchor_frame + int((x - anchor_x) / fine_distance))
+            hover_x = self.cursor_to_x(frame)
+        else:
+            self._fine_anchor = None
+            hover_x = int(x)
+            frame = self._clamp_frame(self.x_to_frame(hover_x))
+
+        self.hover_x = hover_x
+        self.hover_frame = frame
 
         if SettingsManager.global_settings.timeline.view_hover_zoom:
             if Shiboken.isValid(self.hover_popup):
-                self.hover_popup.update_state(self.hover_x)
+                self.hover_popup.update_state(hover_x)
                 self.hover_popup.show()
         else:
             self._hide_hover_popup()
@@ -1024,11 +1044,8 @@ class Timeline(QWidget):
         if not self.mousepressed:
             return
 
-        new_x = self.hover_x
-        self.force_cursor(new_x)
-
-        frame = clamp(self.x_to_frame(new_x), Frame(0), Frame(max(0, self.total_frames - 1)))
-        self.clicked.emit(frame, self.x_to_time(new_x))
+        self.force_cursor(hover_x)
+        self.clicked.emit(frame, self.frame_to_time(frame))
 
     @override
     def resizeEvent(self, event: QResizeEvent) -> None:
@@ -1094,13 +1111,14 @@ class Timeline(QWidget):
 
     def x_to_time(self, x: int) -> Time:
         """Converts an X pixel coordinate to a Time value."""
-        if self.rect_f.width() == 0:
+        return self.frame_to_time(self.x_to_frame(x))
+
+    def frame_to_time(self, frame: Frame) -> Time:
+        """Converts a Frame number to the Time at which that frame starts."""
+        if not self.cum_durations or frame <= 0:
             return Time()
 
-        if not self.cum_durations:
-            return Time()
-
-        return self.cum_durations[frame - 1] if (frame := self.x_to_frame(x)) > 0 else Time()
+        return self.cum_durations[frame - 1]
 
     def x_to_frame(self, x: int) -> Frame:
         """Converts an X pixel coordinate to a Frame number."""
@@ -1185,7 +1203,15 @@ class Timeline(QWidget):
 
     def reset_interaction(self) -> None:
         self.mousepressed = False
+        self._clear_hover()
+
+    def _clamp_frame(self, frame: int) -> Frame:
+        return Frame(clamp(frame, 0, max(0, self.total_frames - 1)))
+
+    def _clear_hover(self) -> None:
         self.hover_x = None
+        self.hover_frame = None
+        self._fine_anchor = None
         self._hide_hover_popup()
         self.update()
 
