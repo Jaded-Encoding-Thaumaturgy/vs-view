@@ -7,13 +7,13 @@ catalogMode: prefer
 
 catalog:
   '@types/node': 26.6.6
-  '@vitest/coverage-v8': 5.1.0
+  '@vitest/coverage-v8': 5.1.1
   'happy-dom': 21.0.4
   'lit-html': 3.3.3
   'typescript': 7.0.2
   'vite': npm:@voidzero-dev/vite-plus-core@8.3.8000
   'vite-plus': 1.7.0
-  'vitest': 5.1.0
+  'vitest': 5.1.1
 overrides:
   'vite@*': 'catalog:'
   'vitest@*': 'catalog:'
