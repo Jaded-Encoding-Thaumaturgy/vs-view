@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import shutil
 import sys
-from bisect import bisect_left, bisect_right
 from collections.abc import Sequence
 from enum import StrEnum
 from functools import cache
@@ -96,11 +95,6 @@ class ShortcutDefinition(StrEnum):
     VALIDATE_RANGE = "validate_range", "Validate selected range", "E"
     ADD_SINGLE_FRAME = "add_single_frame", "Add Single Frame", "R"
     REMOVE_RANGE = "remove_range", "Remove selected range", "Delete"
-
-    SEEK_PREV_BOUND = "seek_prev_bound", "Seek to previous range boundary", "Ctrl+Left"
-    SEEK_NEXT_BOUND = "seek_next_bound", "Seek to next range boundary", "Ctrl+Right"
-    SEEK_PREV_RANGE = "seek_prev_range", "Seek to previous range", "Ctrl+Shift+Left"
-    SEEK_NEXT_RANGE = "seek_next_range", "Seek to next range", "Ctrl+Shift+Right"
 
     def __new__(cls, value: str, label: str, default_key: str = "") -> Self:
         obj = str.__new__(cls, value)
@@ -417,31 +411,6 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             ShortcutDefinition.REMOVE_RANGE.definition,
             self.remove_range_action,
             context=Qt.ShortcutContext.WidgetShortcut,
-        )
-
-        self.api.register_shortcut(
-            ShortcutDefinition.SEEK_PREV_BOUND.definition,
-            self.on_seek_prev_bound,
-            self.ranges_view,
-            context=Qt.ShortcutContext.WindowShortcut,
-        )
-        self.api.register_shortcut(
-            ShortcutDefinition.SEEK_NEXT_BOUND.definition,
-            self.on_seek_next_bound,
-            self.ranges_view,
-            context=Qt.ShortcutContext.WindowShortcut,
-        )
-        self.api.register_shortcut(
-            ShortcutDefinition.SEEK_PREV_RANGE.definition,
-            self.on_seek_prev_range,
-            self.ranges_view,
-            context=Qt.ShortcutContext.WindowShortcut,
-        )
-        self.api.register_shortcut(
-            ShortcutDefinition.SEEK_NEXT_RANGE.definition,
-            self.on_seek_next_range,
-            self.ranges_view,
-            context=Qt.ShortcutContext.WindowShortcut,
         )
 
         self.api.register_shortcut(
@@ -777,22 +746,6 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
 
         self.api.timeline.update()
 
-    @Slot()
-    def on_seek_prev_bound(self) -> None:
-        self._seek_to_neighbor(self._get_visible_range_boundaries(), forward=False)
-
-    @Slot()
-    def on_seek_next_bound(self) -> None:
-        self._seek_to_neighbor(self._get_visible_range_boundaries(), forward=True)
-
-    @Slot()
-    def on_seek_prev_range(self) -> None:
-        self._seek_to_neighbor(self._get_visible_range_boundaries(starts_only=True), forward=False)
-
-    @Slot()
-    def on_seek_next_range(self) -> None:
-        self._seek_to_neighbor(self._get_visible_range_boundaries(starts_only=True), forward=True)
-
     def _add_range(self, start: Frame | Time, end: Frame | Time, scene: SceneRow) -> None:
         r: RangeFrame | RangeTime
 
@@ -1010,36 +963,6 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             QMessageBox.StandardButton.No,
         )
         return answer == QMessageBox.StandardButton.Yes
-
-    def _get_visible_range_boundaries(self, starts_only: bool = False) -> list[int]:
-        v = self.api.current_voutput
-        points = set[int]()
-
-        for r, _ in self.ranges_model.ranges:
-            start, end = r.as_frames(v)
-            points.add(start)
-
-            if not starts_only:
-                points.add(end)
-
-        return sorted(points)
-
-    def _seek_to_neighbor(self, points: list[int], forward: bool) -> None:
-        if not points:
-            return
-
-        current = int(self.api.current_frame)
-
-        if forward:
-            idx = bisect_right(points, current)
-
-            if idx < len(points):
-                self.api.playback.seek(points[idx])
-        else:
-            idx = bisect_left(points, current)
-
-            if idx > 0:
-                self.api.playback.seek(points[idx - 1])
 
     @Slot()
     def _update_ranges_header_width(self) -> None:

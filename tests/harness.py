@@ -164,6 +164,7 @@ class HarnessTimelineProxy:
         label: str = "",
         notch_id: Any = None,
         *,
+        seekable: bool = True,
         update: bool = True,
     ) -> None:
         self._notches.setdefault(identifier, []).append((data, color, label, notch_id))

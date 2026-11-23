@@ -159,6 +159,44 @@ def test_loader_calculate_target_frame(
     assert ws.calculate_target_frame(PlayHeadToolButton.State.LINK_ADAPT) == 30
 
 
+@pytest.mark.parametrize(
+    ("starts_only", "forward_stops", "backward_stops"),
+    [
+        pytest.param(False, [10, 20, 48, 90, 90], [48, 20, 10, 10], id="boundaries"),
+        pytest.param(True, [10, 48, 90, 90], [48, 10, 10], id="starts-only"),
+    ],
+)
+def test_seek_to_notch_visits_the_seekable_notches_of_every_provider(
+    qtbot: QtBot, tmp_path: Path, starts_only: bool, forward_stops: list[int], backward_stops: list[int]
+) -> None:
+    script_file = tmp_path / "notches.vpy"
+    script_file.write_text(script_source(blank_clip_script, length=100), encoding="utf-8")
+    ws = ConcreteScriptWorkspace()
+    qtbot.addWidget(ws)
+    fut = ws.load_content(script_file)
+    qtbot.waitUntil(lambda: fut.done() and ws.stack.currentWidget() is ws.loaded_page, timeout=3000)
+    assert fut.result() == 0
+
+    timeline = ws.tbar.timeline
+    timeline.add_notch("scenes", Frame(10), Frame(20), label="Scene")
+    # 2 seconds is frame 48 at 24 fps.
+    timeline.add_notch("bookmarks", Time(seconds=2), label="Bookmark")
+    timeline.add_notch("bookmarks", Frame(90), label="Bookmark")
+    timeline.add_notch("bookmarks", Frame(150), label="Past the clip")
+    timeline.add_notch("hidden", Frame(30), Frame(40), seekable=False)
+
+    def seek(*, forward: bool) -> int:
+        ws.seek_to_notch(forward=forward, starts_only=starts_only)
+        qtbot.waitUntil(lambda: not ws.playback.has_pending_frame and ws.playback.is_idle, timeout=3000)
+        return ws.playback.state.current_frame
+
+    visited_forward = [seek(forward=True) for _ in forward_stops]
+    visited_backward = [seek(forward=False) for _ in backward_stops]
+
+    assert visited_forward == forward_stops
+    assert visited_backward == backward_stops
+
+
 # Script Compilation and Loading Error Tests
 def test_script_loading_syntax_error(
     qtbot: QtBot,

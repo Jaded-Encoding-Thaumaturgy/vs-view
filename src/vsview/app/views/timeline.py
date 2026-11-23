@@ -154,10 +154,13 @@ class CustomNotch[T: (Time, Frame)](Notch[T]):
         line: QLineF | None = None,
         end_line: QLineF | None = None,
         label: str = "",
+        *,
+        seekable: bool = True,
     ) -> None:
         # mypy bug
         super().__init__(data, end_data, color, line, end_line, label)  # type: ignore[arg-type]
         self.id = id
+        self.seekable = seekable
 
     @override
     def __hash__(self) -> int:
@@ -1152,6 +1155,8 @@ class Timeline(QWidget):
         color: Qt.GlobalColor | QColor | QRgba64 | str | int = Qt.GlobalColor.black,
         label: str = "",
         id: Hashable | None = None,
+        *,
+        seekable: bool = True,
     ) -> None:
         cursor_x = self.cursor_to_x(data)
         top = self.scroll_rect.top()
@@ -1173,6 +1178,7 @@ class Timeline(QWidget):
                 cursor_line,
                 end_line,
                 label,
+                seekable=seekable,
             )
         )
         self._notches_version += 1
@@ -1188,6 +1194,22 @@ class Timeline(QWidget):
             )
         )
         self._notches_version += 1
+
+    def seek_points(self, *, starts_only: bool = False) -> Iterator[Frame | Time]:
+        """
+        Yield the positions of the seekable custom notches.
+
+        Args:
+            starts_only: Yield only the start of each notch, and skip the ends of ranges.
+        """
+        for notch in chain.from_iterable(self.custom_notches.values()):
+            if not notch.seekable:
+                continue
+
+            yield notch.data
+
+            if not starts_only and notch.end_data is not None:
+                yield notch.end_data
 
     def custom_notches_in_range(self, left: float, right: float) -> Iterator[CustomNotch[Any]]:
         for key in self._notch_spans.keys() - self.custom_notches.keys():

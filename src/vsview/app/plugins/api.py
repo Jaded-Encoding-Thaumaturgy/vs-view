@@ -211,6 +211,7 @@ class TimelineProxy(_TimelineProxy):
         label: str = "",
         notch_id: Hashable | None = None,
         *,
+        seekable: bool = True,
         update: bool = True,
     ) -> None:
         """
@@ -220,13 +221,15 @@ class TimelineProxy(_TimelineProxy):
             identifier: A string identifier for the group of notches.
             data: The position(s) or range(s) of the notch(es).
                 Accepts a single frame/time, a sequence of positions, or `(start, end)` tuples for range spans.
+                The `end` of a range is its last frame or the time of its last frame.
             color: The color of the notch markers. Defaults to black.
             label: An optional label to display with the notch.
             notch_id: An optional hashable ID to uniquely identify this specific notch within the group.
+            seekable: If True (default), the notch positions are targets of the seek to previous/next notch shortcuts.
             update: If True (default), triggers a visual update of the timeline.
         """
         for start, end in self._norm_data(data):
-            self.__timeline.add_notch(identifier, start, end, color=color, label=label, id=notch_id)
+            self.__timeline.add_notch(identifier, start, end, color=color, label=label, id=notch_id, seekable=seekable)
 
         if update:
             self.__timeline.update()

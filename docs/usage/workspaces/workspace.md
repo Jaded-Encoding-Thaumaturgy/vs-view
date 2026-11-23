@@ -109,6 +109,16 @@ The Timeline provides precise navigation and visual reference markers for the ac
 - **Fine seek**: Hold ++shift++ while hovering or dragging to move one frame at a time. The **Fine Seek Distance** timeline setting controls how many pixels the mouse moves for each frame.
 - **Frame / Time display modes**: The scale and labels can be shown as frame numbers or timestamps.
 - **Custom markers/notches**: Plugins and tools can add timeline markers (for example, bookmarks/keyframe-like markers), including optional ranges.
+- **Notch seeking**: Jump to the notches shown on the timeline, from any plugin or tool.
+
+    | Shortcut             | Action                                         |
+    | :------------------- | :--------------------------------------------- |
+    | ++ctrl+left++        | Seek to the previous notch or range boundary   |
+    | ++ctrl+right++       | Seek to the next notch or range boundary       |
+    | ++ctrl+shift+left++  | Seek to the previous notch, or start of range  |
+    | ++ctrl+shift+right++ | Seek to the next notch, or start of range      |
+
+    Each shortcut is customizable in the **Settings** menu.
 
 Right-click the Timeline to switch display mode:
 

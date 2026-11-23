@@ -11,7 +11,6 @@ from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 from vsengine.policy import ManagedEnvironment
 
-from vsview.api import Frame
 from vsview.app.outputs.video import VideoOutput
 from vsview.app.tools.scening.api import Serializer
 from vsview.app.tools.scening.models import RangeFrame, RangeTime
@@ -118,55 +117,6 @@ def test_scening_inverted_and_single_frame_ranges(plugin_controller: HarnessPlug
     assert plugin.ranges_model.rowCount() == 2
     single_item, _ = plugin.ranges_model.ranges[1]
     assert single_item.as_frames(plugin_controller.current_voutput) == (55, 55)
-
-
-def test_scening_boundary_seeking_navigation(plugin_controller: HarnessPluginController) -> None:
-    plugin = plugin_controller.create_plugin(SceningPlugin)
-    plugin_controller.on_workspace_loaded()
-    plugin.on_new_scene()
-
-    # Add range [10, 20]
-    plugin_controller.set_current_frame(10)
-    plugin.range_start_action.setChecked(True)
-    plugin_controller.set_current_frame(20)
-    plugin.range_end_action.setChecked(True)
-    plugin.on_add_range_triggered()
-
-    # Add range [40, 60]
-    plugin_controller.set_current_frame(40)
-    plugin.range_start_action.setChecked(True)
-    plugin_controller.set_current_frame(60)
-    plugin.range_end_action.setChecked(True)
-    plugin.on_add_range_triggered()
-
-    # Forward seek across boundaries [10, 20, 40, 60]
-    plugin_controller.set_current_frame(0)
-    plugin.on_seek_next_bound()
-    assert plugin_controller.current_frame == Frame(10)
-
-    plugin.on_seek_next_bound()
-    assert plugin_controller.current_frame == Frame(20)
-
-    plugin.on_seek_next_bound()
-    assert plugin_controller.current_frame == Frame(40)
-
-    plugin.on_seek_next_bound()
-    assert plugin_controller.current_frame == Frame(60)
-
-    # Backward seek
-    plugin.on_seek_prev_bound()
-    assert plugin_controller.current_frame == Frame(40)
-
-    plugin.on_seek_prev_bound()
-    assert plugin_controller.current_frame == Frame(20)
-
-    # Starts-only range seeking (should jump 10 -> 40, skipping 20)
-    plugin_controller.set_current_frame(10)
-    plugin.on_seek_next_range()
-    assert plugin_controller.current_frame == Frame(40)
-
-    plugin.on_seek_prev_range()
-    assert plugin_controller.current_frame == Frame(10)
 
 
 def test_scening_exclusive_bounds_and_shortcut_toggles(plugin_controller: HarnessPluginController) -> None:

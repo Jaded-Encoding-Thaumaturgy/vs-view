@@ -158,19 +158,17 @@ If you prefer Python-style ranges, go to **Settings** -> **Plugin - Scening** an
 
 ### Keyboard Shortcuts
 
-| Shortcut             | Action                           |
-| :------------------- | :------------------------------- |
-| ++q++                | Toggle range start (Mark in)     |
-| ++w++                | Toggle range end (Mark out)      |
-| ++e++                | Validate / add the pending range |
-| ++r++                | Add the current frame as a range |
-| ++del++              | Remove selected range or scene   |
-| ++ctrl+left++        | Seek to previous range boundary  |
-| ++ctrl+right++       | Seek to next range boundary      |
-| ++ctrl+shift+left++  | Seek to previous range           |
-| ++ctrl+shift+right++ | Seek to next range               |
+| Shortcut | Action                           |
+| :------- | :------------------------------- |
+| ++q++    | Toggle range start (Mark in)     |
+| ++w++    | Toggle range end (Mark out)      |
+| ++e++    | Validate / add the pending range |
+| ++r++    | Add the current frame as a range |
+| ++del++  | Remove selected range or scene   |
 
 Each shortcut is customizable in the **Settings** menu.
+
+To jump between the ranges shown on the timeline, use the [notch seeking](../usage/workspaces/workspace.md#4-timeline) shortcuts of the workspace.
 
 ### Timeline Integration
 

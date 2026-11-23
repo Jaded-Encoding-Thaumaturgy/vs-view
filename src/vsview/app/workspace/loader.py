@@ -238,6 +238,17 @@ class LoaderWorkspace[T](BaseWorkspace):
             lambda: self.playback.seek_to_frame_coalesced(Frame(0x7FFFFFFF)),
             self.loaded_page,
         )
+        for action, forward, starts_only in (
+            (ActionID.SEEK_PREVIOUS_NOTCH, False, False),
+            (ActionID.SEEK_NEXT_NOTCH, True, False),
+            (ActionID.SEEK_PREVIOUS_NOTCH_START, False, True),
+            (ActionID.SEEK_NEXT_NOTCH_START, True, True),
+        ):
+            sm.register_shortcut(
+                action,
+                partial(self.seek_to_notch, forward=forward, starts_only=starts_only),
+                self.loaded_page,
+            )
         sm.register_shortcut(
             ActionID.JUMP_TO_TIME,
             self.tbar.playback_container.time_edit.show_focus_for_user,
@@ -944,6 +955,23 @@ class LoaderWorkspace[T](BaseWorkspace):
     @Slot()
     def _on_render_failed(self) -> None:
         self.clear_failed_load(loaded_only=True)
+
+    def seek_to_notch(self, *, forward: bool, starts_only: bool = False) -> None:
+        """
+        Seek to the nearest seekable timeline notch after or before the current frame.
+
+        Args:
+            forward: Seek to the next notch, or to the previous one when False.
+            starts_only: Seek only to the start of each notch, and skip the ends of ranges.
+        """
+        if not (voutput := self.outputs_manager.current_voutput):
+            return
+
+        points = (
+            p if isinstance(p, Frame) else voutput.time_to_frame(p)
+            for p in self.tbar.timeline.seek_points(starts_only=starts_only)
+        )
+        self.playback.seek_to_neighbor(points, forward=forward)
 
     @Slot()
     def _copy_current_frame_to_clipboard(self) -> None:

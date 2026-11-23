@@ -257,6 +257,44 @@ def test_playback_manager_seek_bounds(
         mock_outputs.current_voutput = None
 
 
+@pytest.mark.parametrize(
+    ("start", "points", "forward", "expected"),
+    [
+        pytest.param(15, [40, 10, 20, 20], True, 20, id="next"),
+        pytest.param(15, [40, 10, 20, 20], False, 10, id="previous"),
+        pytest.param(20, [10, 20, 40], True, 40, id="next-skips-the-current-frame"),
+        pytest.param(20, [10, 20, 40], False, 10, id="previous-skips-the-current-frame"),
+        pytest.param(40, [10, 40, 100, 150], True, 40, id="next-skips-points-past-the-clip"),
+        pytest.param(10, [-5, 10, 20], False, 10, id="previous-skips-negative-points"),
+        pytest.param(15, [], True, 15, id="no-points"),
+    ],
+)
+def test_playback_manager_seek_to_neighbor(
+    playback_manager_setup: PlaybackManagerSetup,
+    create_test_video_output: Callable[[int], VideoOutput],
+    qtbot: QtBot,
+    start: int,
+    points: list[int],
+    forward: bool,
+    expected: int,
+) -> None:
+    manager, _, _, mock_outputs, _, _ = playback_manager_setup
+    voutput = create_test_video_output(100)
+    mock_outputs.current_voutput = voutput
+
+    try:
+        manager.seek_to_frame_coalesced(Frame(start))
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
+
+        manager.seek_to_neighbor(points, forward=forward)
+        qtbot.waitUntil(lambda: not manager.has_pending_frame and not manager.is_rendering, timeout=2000)
+
+        assert manager.state.current_frame == expected
+    finally:
+        voutput.clear()
+        mock_outputs.current_voutput = None
+
+
 def test_playback_manager_volume_and_mute(
     playback_manager_setup: PlaybackManagerSetup,
     create_test_audio_output: Callable[[int], AudioOutput],

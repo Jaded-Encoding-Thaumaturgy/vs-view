@@ -69,6 +69,12 @@ class ActionID(StrEnum):
     SEEK_N_FRAMES_FORWARD = "workspace.loader.timeline.seek_n_frames_forward", "Seek N Frames Forward", "Shift+Right"
     SEEK_FIRST_FRAME = "workspace.loader.timeline.seek_first_frame", "Seek First Frame", ""
     SEEK_LAST_FRAME = "workspace.loader.timeline.seek_last_frame", "Seek Last Frame", ""
+    SEEK_PREVIOUS_NOTCH = "workspace.loader.timeline.seek_previous_notch", "Seek Previous Notch Boundary", "Ctrl+Left"
+    SEEK_NEXT_NOTCH = "workspace.loader.timeline.seek_next_notch", "Seek Next Notch Boundary", "Ctrl+Right"
+    # fmt: off
+    SEEK_PREVIOUS_NOTCH_START = "workspace.loader.timeline.seek_previous_notch_start", "Seek Previous Notch Start", "Ctrl+Shift+Left"  # noqa: E501
+    SEEK_NEXT_NOTCH_START = "workspace.loader.timeline.seek_next_notch_start", "Seek Next Notch Start", "Ctrl+Shift+Right"  # noqa: E501
+    # fmt: on
     JUMP_TO_TIME = "workspace.loader.timeline.jump_to_time", "Jump to Time", "Ctrl+F"
     JUMP_TO_FRAME = "workspace.loader.timeline.jump_to_frame", "Jump to Frame", "Ctrl+G"
 

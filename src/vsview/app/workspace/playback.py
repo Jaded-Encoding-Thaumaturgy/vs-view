@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from concurrent.futures import Future, wait
 from logging import getLogger
 from time import perf_counter_ns
@@ -386,6 +386,27 @@ class PlaybackManager(QObject):
         base = self._pending_frame if self._pending_frame is not None else self.state.current_frame
         target = Frame(clamp(base + delta, 0, voutput.vs_output.clip.num_frames - 1))
         self.seek_to_frame_coalesced(target)
+
+    def seek_to_neighbor(self, points: Iterable[int], *, forward: bool) -> None:
+        """
+        Seek to the nearest of `points` after or before the current frame.
+
+        Points outside the clip are skipped. Nothing happens when no point is in that direction.
+        """
+        if not (voutput := self._outputs_manager.current_voutput):
+            logger.warning("No current video output, ignoring seek")
+            return
+
+        num_frames = voutput.vs_output.clip.num_frames
+        base = self._pending_frame if self._pending_frame is not None else self.state.current_frame
+
+        if forward:
+            target = min((p for p in points if base < p < num_frames), default=None)
+        else:
+            target = max((p for p in points if 0 <= p < base), default=None)
+
+        if target is not None:
+            self.seek_to_frame_coalesced(Frame(target))
 
     @Slot(int)
     def seek_n_frames(self, direction: int) -> None:
