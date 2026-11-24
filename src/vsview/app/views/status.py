@@ -124,10 +124,6 @@ class StatusWidget(IconReloadMixin, QWidget):
 
         layout.addStretch()
 
-        # Plugins section (right aligned)
-        self.plugins_label = QLabel(self)
-        layout.addWidget(self.plugins_label)
-
     def _setup_timers(self) -> None:
         self._message_timer = QTimer(self)
         self._message_timer.setSingleShot(True)
@@ -140,10 +136,6 @@ class StatusWidget(IconReloadMixin, QWidget):
         self._settings_saved_timer = QTimer(self)
         self._settings_saved_timer.setSingleShot(True)
         self._settings_saved_timer.timeout.connect(self._clear_settings_saved)
-
-        self._plugin_message_timer = QTimer(self)
-        self._plugin_message_timer.setSingleShot(True)
-        self._plugin_message_timer.timeout.connect(self._clear_plugin_message)
 
         self._is_loading = False
         self._spinner_frame_index = 0
@@ -230,20 +222,9 @@ class StatusWidget(IconReloadMixin, QWidget):
 
         self.output_info_label.setText(f"{info.width}x{info.height} {sar_info} {info.format_name} @{info.fps:.3f}fps")
 
-    @Slot(str)
-    def set_plugin_message(self, message: str) -> None:
-        """Display a message for a plugin."""
-        self.plugins_label.setText(message)
-        self._plugin_message_timer.start(SettingsManager.global_settings.status_message_timeout)
-
-    @Slot()
-    def _clear_plugin_message(self) -> None:
-        self.plugins_label.clear()
-
     def clear(self) -> None:
         """Reset all status sections to empty state."""
         self._message_timer.stop()
-        self._plugin_message_timer.stop()
         self._is_loading = False
         self._spinner_timer.stop()
         self.message_icon_label.clear()
@@ -251,7 +232,6 @@ class StatusWidget(IconReloadMixin, QWidget):
         self.duration_label.clear()
         self.frames_label.clear()
         self.output_info_label.clear()
-        self.plugins_label.clear()
         self._clear_settings_saved()
 
     def set_ready(self) -> None:
@@ -273,8 +253,6 @@ class StatusWidget(IconReloadMixin, QWidget):
         workspace.tab_manager.statusLoadingFinished.connect(self.stop_loading)
         workspace.tab_manager.statusLoadingErrored.connect(self.error_loading)
 
-        workspace.plugin_controller.statusMessage.connect(self.set_plugin_message)
-
     def disconnect_workspace(self, workspace: LoaderWorkspace[Any]) -> None:
         """Disconnect this status widget from a workspace's signals."""
         self.clear()
@@ -291,8 +269,6 @@ class StatusWidget(IconReloadMixin, QWidget):
         workspace.tab_manager.statusLoadingStarted.disconnect(self.start_loading)
         workspace.tab_manager.statusLoadingFinished.disconnect(self.stop_loading)
         workspace.tab_manager.statusLoadingErrored.disconnect(self.error_loading)
-
-        workspace.plugin_controller.statusMessage.disconnect(self.set_plugin_message)
 
     @Slot()
     def _clear_message(self) -> None:

@@ -40,6 +40,7 @@ Most of these symbols are re-exported through the top-level `vsview.api` module 
            - ActionDefinition
            - LocalSettingsModel
            - WorkspaceBlocker
+           - NotificationSeverity
 
 
 ## Custom Widgets

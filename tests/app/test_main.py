@@ -21,6 +21,7 @@ from vsview.app.plugins.manager import PluginManager
 from vsview.app.settings.dialog import ShortcutEditor
 from vsview.app.settings.manager import SettingsManager
 from vsview.app.settings.models import GlobalSettings, WindowGeometry
+from vsview.app.views.notifications import Notification, NotificationManager
 from vsview.app.workspace import BaseWorkspace, PythonScriptWorkspace, VideoFileWorkspace
 from vsview.assets import IconName
 from vsview.vsenv import QtEventLoop, unregister_policy
@@ -132,6 +133,65 @@ def test_deleting_an_inactive_workspace_keeps_the_active_one_connected(main_wind
     assert main_window.stack.currentWidget() is active.workspace
     assert _HookRecordingFileWorkspace.hooks == ["on_connected"]
     assert main_window.status_widget.message_text_label.text() == "after delete"
+
+
+def test_plugins_of_every_open_workspace_show_notifications(main_window: MainWindow) -> None:
+    background = main_window.add_workspace(PythonScriptWorkspace)
+    active = main_window.add_workspace(VideoFileWorkspace)
+    assert main_window.stack.currentWidget() is active.workspace
+
+    background.workspace.plugin_controller.api.statusMessage.emit("from the background")
+    active.workspace.plugin_controller.api.notify("from the active one", Notification.Severity.SUCCESS)
+
+    assert main_window.notification_manager.notifications == [
+        Notification("from the background"),
+        Notification("from the active one", Notification.Severity.SUCCESS),
+    ]
+
+
+def test_notifications_sit_above_the_status_bar_and_follow_the_window_size(
+    main_window: MainWindow, qtbot: QtBot
+) -> None:
+    manager = main_window.notification_manager
+    manager.notify(Notification("message", timeout_ms=0))
+    (card,) = manager.cards
+    margin = QPoint(NotificationManager.MARGIN, NotificationManager.MARGIN)
+
+    def corner() -> QPoint:
+        return card.mapTo(main_window, QPoint(card.width(), card.height()))
+
+    qtbot.waitUntil(lambda: corner() == QPoint(main_window.width(), main_window.statusBar().y()) - margin)
+
+    main_window.resize(main_window.width() + 100, main_window.height() + 50)
+
+    qtbot.waitUntil(lambda: corner() == QPoint(main_window.width(), main_window.statusBar().y()) - margin)
+
+
+def test_notification_timers_run_only_while_the_window_is_active(main_window: MainWindow, qtbot: QtBot) -> None:
+    other = QWidget()
+    qtbot.addWidget(other)
+    other.show()
+    other.activateWindow()
+    qtbot.waitUntil(lambda: not main_window.isActiveWindow())
+    manager = main_window.notification_manager
+
+    manager.notify(Notification("message", timeout_ms=150))
+    qtbot.wait(400)
+    assert len(manager.cards) == 1
+
+    main_window.activateWindow()
+    qtbot.waitUntil(lambda: manager.cards == [], timeout=2000)
+
+
+def test_a_deleted_workspace_no_longer_shows_notifications(main_window: MainWindow) -> None:
+    btn = main_window.add_workspace(PythonScriptWorkspace)
+    api = btn.workspace.plugin_controller.api
+
+    assert main_window.delete_workspace(btn) is True
+    api.statusMessage.emit("message")
+    api.notify("notification")
+
+    assert main_window.notification_manager.notifications == []
 
 
 class _HookRecordingBaseWorkspace(BaseWorkspace):

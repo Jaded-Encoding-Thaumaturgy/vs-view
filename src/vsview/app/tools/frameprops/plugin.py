@@ -54,6 +54,7 @@ from vsview.api import (
     IconName,
     IconReloadMixin,
     LocalSettingsModel,
+    NotificationSeverity,
     Packer,
     PluginAPI,
     PluginSettings,
@@ -800,10 +801,7 @@ class FramePropsPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconRelo
 
     @Slot(str)
     def status_message(self, message: str) -> None:
-        if len(msg_lines := message.split("\n")) > 1:
-            self.api.statusMessage.emit(f"{self.display_name}: {msg_lines[0]}...")
-        else:
-            self.api.statusMessage.emit(f"{self.display_name}: {message}")
+        self.api.notify(message, NotificationSeverity.SUCCESS, title=self.display_name)
 
     def _make_labeled_toggle(self, label_text: str, tooltip: str, container: QWidget) -> tuple[AnimatedToggle, QWidget]:
         row = QWidget(container)

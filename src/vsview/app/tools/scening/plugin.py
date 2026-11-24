@@ -40,6 +40,7 @@ from vsview.api import (
     IconName,
     IconReloadMixin,
     LocalSettingsModel,
+    NotificationSeverity,
     PluginAPI,
     Time,
     VideoOutputProxy,
@@ -497,10 +498,13 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             if failed:
                 parts.append(f"Importing failed for {', '.join(failed)}")
 
-            self.api.statusMessage.emit(". ".join(parts) or f"Importing {', '.join(files)} completed")
+            self.api.notify(
+                ". ".join(parts) or f"Importing {', '.join(files)} completed",
+                NotificationSeverity.WARNING if failed or without_ranges else NotificationSeverity.SUCCESS,
+            )
 
         def on_error(exc: BaseException) -> None:
-            self.api.statusMessage.emit(f"Importing {', '.join(files)} failed: {exc}")
+            self.api.notify(f"Importing {', '.join(files)} failed: {exc}", NotificationSeverity.ERROR)
 
         self.parse_imported_files(
             files,
@@ -566,8 +570,8 @@ class SceningPlugin(WidgetPluginBase[GlobalSettings, LocalSettings], IconReloadM
             return
 
         self.serialize_exported_scene(file, filters[selected_filter], self.ranges_model.end_offset).then(
-            lambda _: self.api.statusMessage.emit(f"Exporting {file} completed"),
-            lambda exc: self.api.statusMessage.emit(f"Exporting {file} failed: {exc}"),
+            lambda _: self.api.notify(f"Exporting {file} completed", NotificationSeverity.SUCCESS),
+            lambda exc: self.api.notify(f"Exporting {file} failed: {exc}", NotificationSeverity.ERROR),
         )
 
     @run_in_background(name="SerializeExportedScene")

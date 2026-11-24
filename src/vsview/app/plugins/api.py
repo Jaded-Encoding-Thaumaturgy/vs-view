@@ -34,6 +34,7 @@ from PySide6.QtWidgets import QGraphicsView, QWidget
 
 from vsview.app.settings import SettingsManager, ShortcutManager
 from vsview.app.settings.action import ActionDefinition
+from vsview.app.views.notifications import Notification
 from vsview.app.views.video import BaseGraphicsView
 from vsview.types import Frame, Time
 from vsview.vsenv.loop import run_in_loop
@@ -421,7 +422,14 @@ class PluginAPI(QObject):
     """API for plugins to interact with the workspace."""
 
     statusMessage = Signal(str)  # message
-    """Signal to emit status messages displayed in the main window status bar."""
+    """
+    Signal to show a message as an info notification in the main window.
+
+    Use `notify` to choose a severity or to update a message in place.
+    """
+
+    notificationRequested = Signal(object)  # Notification
+    """Signal emitted by `notify` with the notification to show."""
 
     globalSettingsChanged = Signal()
     """Signal emitted when global settings change or are invalidated."""
@@ -555,6 +563,31 @@ class PluginAPI(QObject):
         It changes when a load or reload starts its new content, and when the workspace starts to close.
         """
         return _get_controller(self).generation
+
+    def notify(
+        self,
+        message: str,
+        severity: str = Notification.Severity.INFO,
+        title: str = "",
+        key: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> None:
+        """
+        Show a notification in the bottom-right corner of the main window.
+
+        Args:
+            message: The text of the notification.
+            severity: Sets the icon and the color of the notification.
+            title: An optional bold title above the message.
+            key: A new notification with the same key replaces the previous one instead of adding a new one,
+                for example to show progress. All plugins share the keys, so start the key with your plugin
+                identifier.
+            timeout_ms: The delay in milliseconds before the notification closes by itself.
+                `0` keeps it until the user closes it.
+                `None` keeps error notifications until the user closes them,
+                and uses the notification timeout setting for the other severities.
+        """
+        self.notificationRequested.emit(Notification(message, Notification.Severity(severity), title, key, timeout_ms))
 
     def get_local_storage(self, plugin: _PluginBase[Any, Any]) -> Path | None:
         """

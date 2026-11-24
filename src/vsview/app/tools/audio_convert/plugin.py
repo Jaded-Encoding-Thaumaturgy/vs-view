@@ -6,7 +6,7 @@ from typing import Annotated, Self, override
 from pydantic import BaseModel, model_validator
 from vapoursynth import AudioNode, Error, SampleType
 
-from vsview.api import Dropdown, NodeProcessor, Spin
+from vsview.api import Dropdown, NodeProcessor, NotificationSeverity, Spin
 
 logger = getLogger(__name__)
 
@@ -87,5 +87,8 @@ class AudioConvert(NodeProcessor[AudioNode, GlobalSettings]):
             )
         except Error as e:
             logger.exception("std.AudioResample failed on audio %r", audio)
-            self.api.statusMessage.emit(f"{self.display_name} failed, playing the audio unconverted: {e}")
+            self.api.notify(
+                f"{self.display_name} failed, playing the audio unconverted: {e}",
+                NotificationSeverity.WARNING,
+            )
             return audio

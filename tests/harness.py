@@ -215,6 +215,7 @@ class HarnessPluginController(QObject):
     instances: ClassVar[WeakSet[HarnessPluginController]] = WeakSet()
 
     statusMessage = Signal(str)
+    notificationRequested = Signal(object)  # Notification
     globalSettingsChanged = Signal()
     localSettingsChanged = Signal(str)
     aboutToSaveGlobal = Signal()
@@ -253,6 +254,7 @@ class HarnessPluginController(QObject):
         self.aboutToSaveGlobal.connect(self.api.aboutToSaveGlobal)
         self.aboutToSaveLocal.connect(self.api.aboutToSaveLocal)
         self.api.statusMessage.connect(self.statusMessage)
+        self.api.notificationRequested.connect(self.notificationRequested)
 
         SettingsManager.signals.connect_global_weak(self._on_global_settings_changed)
         SettingsManager.signals.connect_local_weak(self._on_local_settings_changed)

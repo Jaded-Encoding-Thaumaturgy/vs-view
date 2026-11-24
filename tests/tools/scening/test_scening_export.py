@@ -20,6 +20,7 @@ from vsview.app.plugins.contracts import VideoOutputProxy
 from vsview.app.tools.scening.models import RangeFrame
 from vsview.app.tools.scening.plugin import GlobalSettings
 from vsview.app.tools.scening.worker import FFV1_ARGS, H264_ARGS, ExportJob, ExportQueueManager
+from vsview.app.views.notifications import Notification
 
 if TYPE_CHECKING:
     from tests.harness import HarnessPluginController
@@ -92,7 +93,7 @@ def export_harness(
 
 @pytest.fixture
 def manager(export_harness: HarnessPluginController, mock_settings: SimpleNamespace) -> ExportQueueManager:
-    return ExportQueueManager(export_harness, mock_settings)  # pyright: ignore[reportArgumentType]
+    return ExportQueueManager(export_harness.api, mock_settings)  # pyright: ignore[reportArgumentType]
 
 
 def test_export_queue_manager_lifecycle(
@@ -102,8 +103,8 @@ def test_export_queue_manager_lifecycle(
     sample_voutput_proxy: VideoOutputProxy,
 ) -> None:
     # Arrange
-    status_messages = list[str]()
-    export_harness.statusMessage.connect(status_messages.append)
+    notifications = list[Notification]()
+    export_harness.notificationRequested.connect(notifications.append)
 
     assert export_harness.busy is False
     assert [t for t in threading.enumerate() if t.name == "ExportWorkerThread" and t.is_alive()] == []
@@ -119,8 +120,8 @@ def test_export_queue_manager_lifecycle(
     manager.enqueue([], sample_voutput_proxy, [Path("test.mp4")], [], "h264")
 
     # Assert 2: Observable signal emitted and worker thread is active
-    qtbot.waitUntil(lambda: len(status_messages) == 1, timeout=2000)
-    assert status_messages[0].startswith("Queued export of 1 clip(s). Queue size:")
+    qtbot.waitUntil(lambda: len(notifications) == 1, timeout=2000)
+    assert notifications[0].message.startswith("Queued export of 1 clip(s). Queue size:")
 
     worker_threads_active = [t for t in threading.enumerate() if t.name == "ExportWorkerThread" and t.is_alive()]
     assert len(worker_threads_active) == 1
@@ -177,8 +178,8 @@ def test_an_export_refused_by_a_reload_is_reported_and_the_next_one_still_runs(
     manager: ExportQueueManager,
     sample_voutput_proxy: VideoOutputProxy,
 ) -> None:
-    status_messages = list[str]()
-    export_harness.statusMessage.connect(status_messages.append)
+    notifications = list[Notification]()
+    export_harness.notificationRequested.connect(notifications.append)
     executed_jobs = list[str]()
     mocker.patch.object(manager, "_execute_job", side_effect=lambda job: executed_jobs.append(job.dest_files[0].stem))
     export_harness.refused_holds = 1
@@ -192,9 +193,12 @@ def test_an_export_refused_by_a_reload_is_reported_and_the_next_one_still_runs(
             fmt="h264",
         )
     qtbot.waitUntil(
-        lambda: executed_jobs == ["accepted"] and any(m.startswith("Export skipped") for m in status_messages),
+        lambda: executed_jobs == ["accepted"] and any(n.message.startswith("Export skipped") for n in notifications),
         timeout=3000,
     )
+    assert [n.severity for n in notifications if n.message.startswith("Export skipped")] == [
+        Notification.Severity.WARNING
+    ]
 
     assert executed_jobs == ["accepted"]
     manager.shutdown(timeout=1.0)
@@ -283,8 +287,8 @@ def test_export_job_cancel_keeps_existing_files(
     second = tmp_path / "clip_2.mp4"
     second.write_bytes(b"old clip 2")
 
-    status_messages = list[str]()
-    export_harness.statusMessage.connect(status_messages.append)
+    notifications = list[Notification]()
+    export_harness.notificationRequested.connect(notifications.append)
 
     # Popen creates its output like ffmpeg, then the user cancels while the first clip is written
     def mock_popen(cmd: Any, **kwargs: Any) -> Any:
@@ -309,7 +313,7 @@ def test_export_job_cancel_keeps_existing_files(
         fmt="h264",
     )
 
-    qtbot.waitUntil(lambda: any("Export cancelled" in msg for msg in status_messages), timeout=3000)
+    qtbot.waitUntil(lambda: any("Export cancelled" in n.message for n in notifications), timeout=3000)
     qtbot.waitUntil(lambda: export_harness.busy is False, timeout=3000)
     manager.shutdown(timeout=1.0)
 
@@ -341,12 +345,12 @@ def test_export_job_failure_keeps_an_existing_file(
         return proc
 
     mocker.patch("subprocess.Popen", side_effect=mock_popen)
-    status_messages = list[str]()
-    export_harness.statusMessage.connect(status_messages.append)
+    notifications = list[Notification]()
+    export_harness.notificationRequested.connect(notifications.append)
 
     manager.enqueue([RangeFrame(start=0, end=5)], sample_voutput_proxy, [existing], [], "h264")
 
-    qtbot.waitUntil(lambda: any("Export failed for clip.mp4" in msg for msg in status_messages), timeout=3000)
+    qtbot.waitUntil(lambda: any("Export failed for clip.mp4" in n.message for n in notifications), timeout=3000)
     qtbot.waitUntil(lambda: export_harness.busy is False, timeout=3000)
     manager.shutdown(timeout=1.0)
 
@@ -381,8 +385,8 @@ def test_export_clip_pipes_frame_chunks_to_stdin(
 
     mocker.patch("subprocess.Popen", side_effect=fake_popen)
 
-    status_messages = list[str]()
-    export_harness.statusMessage.connect(status_messages.append)
+    notifications = list[Notification]()
+    export_harness.notificationRequested.connect(notifications.append)
 
     # Real in-memory 4x2 GRAY8 clip filled with 'A' (65)
     real_clip = core.std.BlankClip(width=4, height=2, length=1, format=vs.GRAY8, color=65, fpsnum=24, fpsden=1)
@@ -398,9 +402,11 @@ def test_export_clip_pipes_frame_chunks_to_stdin(
     )
 
     # Assert: wait until export completes successfully
-    qtbot.waitUntil(lambda: any("Successfully exported" in msg for msg in status_messages), timeout=3000)
+    qtbot.waitUntil(lambda: any("Successfully exported" in n.message for n in notifications), timeout=3000)
     assert b"AAAA" in bytes(written_bytes)
-    assert any("Successfully exported 1 clip(s)." in msg for msg in status_messages)
+    assert notifications[-1].message == "Successfully exported 1 clip(s)."
+    assert notifications[-1].severity is Notification.Severity.SUCCESS
+    assert len({n.key for n in notifications}) == 1
 
     manager.shutdown(timeout=1.0)
 
@@ -441,14 +447,14 @@ def test_export_job_includes_the_last_frame_of_a_range(
         return mock_proc
 
     mocker.patch("subprocess.Popen", side_effect=fake_popen)
-    status_messages = list[str]()
-    export_harness.statusMessage.connect(status_messages.append)
+    notifications = list[Notification]()
+    export_harness.notificationRequested.connect(notifications.append)
     clip = core.std.BlankClip(width=4, height=2, length=10, format=vs.GRAY8, fpsnum=24, fpsden=1)
     voutput = make_voutput_proxy(make_video_output(clip=clip, num_frames=10))
 
     manager.enqueue([r], voutput, [tmp_path / "clip.mp4"], [], "h264")
 
-    qtbot.waitUntil(lambda: "Successfully exported 1 clip(s)." in status_messages, timeout=3000)
+    qtbot.waitUntil(lambda: "Successfully exported 1 clip(s)." in [n.message for n in notifications], timeout=3000)
     manager.shutdown(timeout=1.0)
 
     assert bytes(written).count(b"FRAME" + bytes([10])) == frames
@@ -479,8 +485,8 @@ def test_export_clip_ffmpeg_error(
 
     mocker.patch("subprocess.Popen", side_effect=mock_popen)
 
-    status_messages = list[str]()
-    export_harness.statusMessage.connect(status_messages.append)
+    notifications = list[Notification]()
+    export_harness.notificationRequested.connect(notifications.append)
 
     # Act
     manager.enqueue(
@@ -492,10 +498,12 @@ def test_export_clip_ffmpeg_error(
     )
 
     # Assert: worker catches error and emits status message
-    qtbot.waitUntil(lambda: any("Export failed for out.mp4" in msg for msg in status_messages), timeout=3000)
+    qtbot.waitUntil(lambda: any("Export failed for out.mp4" in n.message for n in notifications), timeout=3000)
     assert any(
-        "Export failed for out.mp4: FFmpeg returned exit code 1: Error initializing encoder: invalid parameter" in msg
-        for msg in status_messages
+        "Export failed for out.mp4: FFmpeg returned exit code 1: Error initializing encoder: invalid parameter"
+        in n.message
+        and n.severity is Notification.Severity.ERROR
+        for n in notifications
     )
     manager.shutdown(timeout=1.0)
     assert list(tmp_path.iterdir()) == []
@@ -512,8 +520,8 @@ def test_e2e_export_h264(
 ) -> None:
     dest_file = tmp_path / "e2e_out.mp4"
 
-    status_messages = list[str]()
-    export_harness.statusMessage.connect(status_messages.append)
+    notifications = list[Notification]()
+    export_harness.notificationRequested.connect(notifications.append)
 
     voutput_proxy = make_voutput_proxy(make_video_output(num_frames=12, color_family=vs.RGB))
 
@@ -525,7 +533,7 @@ def test_e2e_export_h264(
         fmt="h264",
     )
 
-    qtbot.waitUntil(lambda: "Successfully exported 1 clip(s)." in status_messages, timeout=5000)
+    qtbot.waitUntil(lambda: "Successfully exported 1 clip(s)." in [n.message for n in notifications], timeout=5000)
     manager.shutdown(timeout=5.0)
 
     assert dest_file.is_file()
@@ -542,8 +550,8 @@ def test_e2e_export_ffv1(
 ) -> None:
     dest_file = tmp_path / "e2e_out.mkv"
 
-    status_messages = list[str]()
-    export_harness.statusMessage.connect(status_messages.append)
+    notifications = list[Notification]()
+    export_harness.notificationRequested.connect(notifications.append)
 
     voutput_proxy = make_voutput_proxy(make_video_output(num_frames=12, color_family=vs.YUV))
 
@@ -555,7 +563,7 @@ def test_e2e_export_ffv1(
         fmt="ffv1",
     )
 
-    qtbot.waitUntil(lambda: "Successfully exported 1 clip(s)." in status_messages, timeout=5000)
+    qtbot.waitUntil(lambda: "Successfully exported 1 clip(s)." in [n.message for n in notifications], timeout=5000)
     manager.shutdown(timeout=5.0)
 
     assert dest_file.is_file()

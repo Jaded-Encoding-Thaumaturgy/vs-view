@@ -66,6 +66,10 @@ class IconName(StrEnum):
     BRACKETS_ANGLE = "brackets-angle"
     TERMINAL = "terminal-window"
     MONITOR_UP = "monitor-arrow-up"
+    INFO = "info"
+    CHECK_CIRCLE = "check-circle"
+    WARNING_CIRCLE = "warning-circle"
+    CLOSE = "x"
 
     modifier: str
 
@@ -233,6 +237,9 @@ class MaterialProvider(IconProvider):
         IconName.BRACKETS_ANGLE: "code-tags",
         IconName.TERMINAL: "console",
         IconName.MONITOR_UP: "monitor-share",
+        IconName.INFO: "information",
+        IconName.WARNING_CIRCLE: "alert-circle",
+        IconName.CLOSE: "close",
     }
 
     @property
@@ -301,6 +308,8 @@ class LucideProvider(IconProvider):
         IconName.BRACKETS_ANGLE: "code",
         IconName.TERMINAL: "square-terminal",
         IconName.MONITOR_UP: "monitor-up",
+        IconName.CHECK_CIRCLE: "circle-check",
+        IconName.WARNING_CIRCLE: "circle-exclamation-point",
     }
 
     @property

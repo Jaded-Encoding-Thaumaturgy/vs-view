@@ -137,6 +137,7 @@ class AudioOutput:
 
     def prepare_audio(self, delay_s: float, api: PluginAPI) -> None:
         from ..plugins.manager import PluginManager
+        from ..views.notifications import Notification
 
         audio = self._cache_delay_audio.get(delay_s)
 
@@ -153,9 +154,10 @@ class AudioOutput:
                         name,
                         self.vs_name,
                     )
-                    api.statusMessage.emit(
+                    api.notify(
                         f"Audio processor {name!r} failed on audio output {self.vs_name!r}, "  # no format
-                        f"playing the raw audio: {e}"
+                        f"playing the raw audio: {e}",
+                        Notification.Severity.WARNING,
                     )
 
             if self.vs_output.num_channels > 2 and self.downmix:

@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 from vsview.api import (
     IconName,
     IconReloadMixin,
+    NotificationSeverity,
     Packer,
     PluginAPI,
     Spin,
@@ -547,4 +548,4 @@ class ColorPickerPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
         QApplication.clipboard().setText(text)
         QToolTip.showText(QCursor.pos(), "Copied!", copy_btns_dict[row_name])
-        self.api.statusMessage.emit(f"Copied {text!r} to clipboard")
+        self.api.notify(f"Copied {text!r} to clipboard", NotificationSeverity.SUCCESS)

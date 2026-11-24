@@ -19,7 +19,7 @@ import vapoursynth as vs
 import vsengine.video
 from vsengine import Cancelled
 
-from vsview.api import BlockerRefusedError, PluginAPI, PluginSettings, VideoOutputProxy
+from vsview.api import BlockerRefusedError, NotificationSeverity, PluginAPI, PluginSettings, VideoOutputProxy
 
 from .models import AbstractRange
 
@@ -38,6 +38,7 @@ class ExportJob:
     fmt: Literal["h264", "ffv1"]
     cancel_event: threading.Event = field(default_factory=threading.Event)
     done_event: threading.Event = field(default_factory=threading.Event)
+    notification_key: str = field(default_factory=lambda: f"scening.export.{uuid4().hex}")
 
 
 class ExportQueueManager:
@@ -59,9 +60,13 @@ class ExportQueueManager:
         fmt: Literal["h264", "ffv1"],
     ) -> None:
         ranges = [r.model_copy() for r in ranges]
-        self._queue.put(ExportJob(ranges, voutput, dest_files, ffmpeg_args, fmt))
+        job = ExportJob(ranges, voutput, dest_files, ffmpeg_args, fmt)
+        self._queue.put(job)
         self._ensure_worker_started()
-        self.api.statusMessage.emit(f"Queued export of {len(dest_files)} clip(s). Queue size: {self._queue.qsize()}")
+        self.api.notify(
+            f"Queued export of {len(dest_files)} clip(s). Queue size: {self._queue.qsize()}",
+            key=job.notification_key,
+        )
 
     def cancel_current(self, *, wait: bool = False, timeout: float = 3.0) -> None:
         job_to_wait: ExportJob | None = None
@@ -127,9 +132,14 @@ class ExportQueueManager:
                     with self.api.blocker(), self.api.vs_context():
                         self._execute_job(job)
                 except BlockerRefusedError:
-                    self.api.statusMessage.emit("Export skipped: the workspace was reloading or closing.")
-                except Exception:
+                    self.api.notify(
+                        "Export skipped: the workspace was reloading or closing.",
+                        NotificationSeverity.WARNING,
+                        key=job.notification_key,
+                    )
+                except Exception as exc:
                     logger.exception("Unexpected error during export job execution")
+                    self.api.notify(f"Export failed: {exc}", NotificationSeverity.ERROR, key=job.notification_key)
                 finally:
                     job.done_event.set()
                     with self._lock:
@@ -145,10 +155,10 @@ class ExportQueueManager:
 
         for i, (r, dest_file) in enumerate(zip(job.ranges, job.dest_files), 1):
             if job.cancel_event.is_set():
-                self.api.statusMessage.emit("Export cancelled.")
+                self.api.notify("Export cancelled.", key=job.notification_key)
                 return
 
-            self.api.statusMessage.emit(f"Exporting clip {i}/{total}: {dest_file.name[:100]}...")
+            self.api.notify(f"Exporting clip {i}/{total}: {dest_file.name[:100]}...", key=job.notification_key)
 
             s, e = r.as_frames(job.voutput)
             try:
@@ -181,21 +191,29 @@ class ExportQueueManager:
             try:
                 self._export_clip(job, trimmed, dest_file, job.ffmpeg_args)
             except Cancelled:
-                self.api.statusMessage.emit(f"Export cancelled for {dest_file.name}.")
+                self.api.notify(f"Export cancelled for {dest_file.name}.", key=job.notification_key)
                 return
             except Exception as exc:
                 logger.exception("Export failed for %s", dest_file)
-                self.api.statusMessage.emit(f"Export failed for {dest_file.name}: {exc}")
+                self.api.notify(
+                    f"Export failed for {dest_file.name}: {exc}",
+                    NotificationSeverity.ERROR,
+                    key=job.notification_key,
+                )
                 return
 
         if failed:
             message = f"Exported {total - len(failed)} of {total} clip(s). Failed: {', '.join(failed)}"
             logger.warning(message)
-            self.api.statusMessage.emit(message)
+            self.api.notify(message, NotificationSeverity.WARNING, key=job.notification_key)
             return
 
         logger.info("Successfully exported %s clip(s).", total)
-        self.api.statusMessage.emit(f"Successfully exported {total} clip(s).")
+        self.api.notify(
+            f"Successfully exported {total} clip(s).",
+            NotificationSeverity.SUCCESS,
+            key=job.notification_key,
+        )
 
     def _export_clip(self, job: ExportJob, clip: vs.VideoNode, destination_file: Path, ffmpeg_args: list[str]) -> None:
         if destination_file.exists() and not os.access(destination_file, os.W_OK):

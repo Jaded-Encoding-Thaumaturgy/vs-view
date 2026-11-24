@@ -912,6 +912,33 @@ class GlobalSettings(BaseSettings):
         ),
     ] = 5000
 
+    notification_timeout: Annotated[
+        int,
+        DoubleSpin(
+            label="Notification timeout",
+            min=0,
+            max=1_000_000,
+            suffix=" s",
+            decimals=3,
+            to_ui=lambda v: v / 1000.0,
+            from_ui=lambda v: round(v * 1000.0),
+            tooltip="How long a notification stays visible.\n"
+            "0 keeps notifications until they are closed.\n"
+            "Error notifications always stay until they are closed.",
+        ),
+    ] = 5000
+
+    notification_max_visible: Annotated[
+        int,
+        Spin(
+            label="Visible notifications",
+            min=1,
+            max=10,
+            tooltip="Maximum number of notifications shown at the same time.\n"
+            "Other notifications wait until a notification closes.",
+        ),
+    ] = 3
+
     chdir: Annotated[
         bool,
         Checkbox(

@@ -18,6 +18,7 @@ from vsview.app.tools.scening.parsers import PythonListFramesParser, QPFileParse
 from vsview.app.tools.scening.plugin import SceningPlugin
 from vsview.app.tools.scening.serializer import PythonListFramesSerializer, PythonListTimestampsSerializer
 from vsview.app.tools.scening.ui import ROLE_CHECK_STATE, Col, RangeCol
+from vsview.app.views.notifications import Notification
 from vsview.app.views.timeline import FrameEdit
 
 if TYPE_CHECKING:
@@ -486,10 +487,12 @@ def test_import_scene_adds_the_parsed_scenes(
     label = QPFileParser.filter.label
     mocker.patch.object(QFileDialog, "getOpenFileNames", return_value=([str(qp_file)], f"{label} (*.qp *.txt)"))
 
-    with qtbot.waitSignal(plugin_controller.statusMessage, timeout=5000):
+    with qtbot.waitSignal(plugin_controller.notificationRequested, timeout=5000) as blocker:
         plugin.on_import_scene()
 
     assert [s.name for s in plugin.scenes_model.scenes] == ["chapters"]
+    assert blocker.args
+    assert blocker.args[0].severity is Notification.Severity.SUCCESS
 
 
 @pytest.mark.parametrize(

@@ -52,6 +52,7 @@ logger = getLogger(__name__)
 @final
 class PluginWorkspaceController(QObject):
     statusMessage = Signal(str)
+    notificationRequested = Signal(object)  # Notification
     globalSettingsChanged = Signal()
     localSettingsChanged = Signal(str)
     aboutToSaveGlobal = Signal()
@@ -91,6 +92,7 @@ class PluginWorkspaceController(QObject):
         self.aboutToSaveGlobal.connect(self.api.aboutToSaveGlobal)
         self.aboutToSaveLocal.connect(self.api.aboutToSaveLocal)
         self.api.statusMessage.connect(self.statusMessage)
+        self.api.notificationRequested.connect(self.notificationRequested)
 
     @override
     def __init_subclass__(cls) -> None:

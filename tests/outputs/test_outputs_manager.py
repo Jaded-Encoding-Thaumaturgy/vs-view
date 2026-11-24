@@ -17,6 +17,7 @@ from vsview.app.packing import Packer
 from vsview.app.plugins import PluginAPI, specs
 from vsview.app.plugins.api import NodeProcessor
 from vsview.app.plugins.manager import PluginManager
+from vsview.app.views.notifications import Notification
 
 pytestmark = [pytest.mark.integration, pytest.mark.qt, pytest.mark.vpy("no-core")]
 
@@ -336,7 +337,7 @@ def test_create_aoutputs_plays_the_raw_audio_of_an_output_whose_processor_fails(
     stereo = core.std.BlankAudio(length=10000)
     mono = core.std.BlankAudio(channels=[vs.AudioChannels.FRONT_LEFT], length=10000)
 
-    with qtbot.waitSignal(plugin_controller.statusMessage, timeout=1000) as blocker:
+    with qtbot.waitSignal(plugin_controller.notificationRequested, timeout=1000) as blocker:
         aouts = manager.create_aoutputs(
             "mixed_audio", {0: stereo, 1: mono}, {1: AudioMetadata(name="Mono")}, plugin_controller.api
         )
@@ -347,7 +348,11 @@ def test_create_aoutputs_plays_the_raw_audio_of_an_output_whose_processor_fails(
     assert aouts[1].prepared_audio is mono
     assert aouts[1].qformat.channelCount() == 1
     assert blocker.args == [
-        "Audio processor 'Stereo Only' failed on audio output 'Mono', playing the raw audio: cannot process 1 channels"
+        Notification(
+            "Audio processor 'Stereo Only' failed on audio output 'Mono', "
+            "playing the raw audio: cannot process 1 channels",
+            Notification.Severity.WARNING,
+        )
     ]
 
 

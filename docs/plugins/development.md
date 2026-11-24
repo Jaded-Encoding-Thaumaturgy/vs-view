@@ -97,6 +97,33 @@ class MyPlugin(WidgetPluginBase):
 Timeline notches added with `self.api.timeline.add_notch(...)` survive a workspace reload.
 Call `self.api.timeline.clear_notches(...)` when they no longer apply.
 
+### Notifications
+
+`self.api.notify(...)` shows a notification card in the bottom-right corner of the main window.
+You can call it from any thread.
+
+```py
+from vsview.api import NotificationSeverity
+
+
+class MyPlugin(WidgetPluginBase):
+    # ...
+
+    def export(self, files: list[str]) -> None:
+        key = f"{self.identifier}.export"
+
+        for i, file in enumerate(files, 1):
+            self.api.notify(f"Exporting {i}/{len(files)}: {file}", key=key)  # (1)!
+
+        self.api.notify("Export done", NotificationSeverity.SUCCESS, key=key)
+```
+
+1. A notification with the same `key` updates the existing card instead of adding a new one.
+   All plugins share the keys, so start the key with your plugin identifier.
+
+Error notifications stay until the user closes them. The other severities close after the delay set in the
+settings, unless you pass `timeout_ms`. `self.api.statusMessage.emit(...)` still works and shows an info notification.
+
 See the [API reference](../api/developer/#vsview.api.PluginAPI) page for a complete list of capabilities.
 
 ## Settings Management

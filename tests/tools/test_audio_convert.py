@@ -6,6 +6,7 @@ import pytest
 import vapoursynth as vs
 
 from vsview.app.tools.audio_convert.plugin import AudioConvert, GlobalSettings
+from vsview.app.views.notifications import Notification
 
 if TYPE_CHECKING:
     from tests.harness import HarnessPluginController
@@ -48,15 +49,16 @@ def test_prepare_failure_returns_the_input_and_reports(plugin_controller: Harnes
     plugin = AudioConvert(plugin_controller.api)
     plugin.update_global_settings(sample_type=vs.INTEGER, bits=16, dither_type="bogus")
     audio = vs.core.std.BlankAudio(sampletype=vs.FLOAT, bits=32)
-    messages = list[str]()
-    plugin_controller.statusMessage.connect(messages.append)
+    notifications = list[Notification]()
+    plugin_controller.notificationRequested.connect(notifications.append)
 
     out = plugin.prepare(audio)
 
     assert out is audio
-    assert messages == [
-        (
+    assert notifications == [
+        Notification(
             "Audio Convert failed, playing the audio unconverted: "
-            "AudioResample: invalid dither_type, must be none, rectangular or triangular"
+            "AudioResample: invalid dither_type, must be none, rectangular or triangular",
+            Notification.Severity.WARNING,
         )
     ]

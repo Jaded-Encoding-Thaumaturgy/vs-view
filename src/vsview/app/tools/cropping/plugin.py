@@ -13,6 +13,7 @@ from vsview.api import (
     IconName,
     IconReloadMixin,
     NoCurrentViewError,
+    NotificationSeverity,
     PluginAPI,
     VideoOutputProxy,
     WidgetPluginBase,
@@ -225,7 +226,7 @@ class RegionSelectorPlugin(WidgetPluginBase[GlobalSettings], IconReloadMixin):
 
     @Slot(str)
     def _on_command_copied(self, text: str) -> None:
-        self.api.statusMessage.emit(f"Copied to clipboard: {text}")
+        self.api.notify(f"Copied to clipboard: {text}", NotificationSeverity.SUCCESS)
 
     @Slot()
     def _on_global_settings_changed(self) -> None:

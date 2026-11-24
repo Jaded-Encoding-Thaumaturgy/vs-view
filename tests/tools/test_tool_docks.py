@@ -20,6 +20,7 @@ from vsview.app.tools.cropping.plugin import RegionSelectorPlugin
 from vsview.app.tools.frame_strip.constants import MAX_NEIGHBOR_COUNT
 from vsview.app.tools.frame_strip.plugin import FrameStripPlugin
 from vsview.app.tools.frameprops.plugin import FramePropPreviewGraphicsView, FramePropsModel, FramePropsPlugin
+from vsview.app.views.notifications import Notification
 
 if TYPE_CHECKING:
     from tests.harness import HarnessPluginController
@@ -338,16 +339,15 @@ def test_color_picker_copy_row(qtbot: QtBot, plugin_controller: HarnessPluginCon
     plugin.on_view_mouse_moved(move_event)
     qtbot.waitUntil(lambda: plugin.position_label.cursor_pos == QPoint(5, 5))
 
-    status_messages = list[str]()
-    plugin_controller.statusMessage.connect(status_messages.append)
+    notifications = list[Notification]()
+    plugin_controller.notificationRequested.connect(notifications.append)
 
     # Click copy button via user interaction with qtbot
     copy_btn = plugin.src_copy_btns["Dec"]
     qtbot.mouseClick(copy_btn, Qt.MouseButton.LeftButton)
 
     assert QApplication.clipboard().text() == "0  , 0  , 0  "
-    assert len(status_messages) == 1
-    assert "Copied '0  , 0  , 0  ' to clipboard" in status_messages[0]
+    assert notifications == [Notification("Copied '0  , 0  , 0  ' to clipboard", Notification.Severity.SUCCESS)]
 
 
 def _make_colored_voutput(

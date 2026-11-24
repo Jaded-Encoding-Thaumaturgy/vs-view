@@ -40,6 +40,7 @@ from PySide6.QtGui import (
     QKeySequence,
     QMouseEvent,
     QPalette,
+    QResizeEvent,
 )
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -72,7 +73,7 @@ from .settings.dialog import SettingsDialog, ShortcutEditor
 from .settings.models import WindowGeometry
 from .themes import AppearanceManager
 from .utils import WorkTracker, check_leaks
-from .views import StatusWidget
+from .views import NotificationManager, StatusWidget
 from .workspace import (
     BaseGenericFileWorkspace,
     BaseWorkspace,
@@ -172,6 +173,8 @@ class MainWindow(QMainWindow):
 
         self.settings_manager = SettingsManager()
         self.plugin_manager = PluginManager()
+        self.notification_manager = NotificationManager(self)
+        self._update_notifications_paused()
 
         self._setup_ui()
         self._setup_shortcuts()
@@ -190,6 +193,20 @@ class MainWindow(QMainWindow):
             return True
 
         return super().eventFilter(watched, event)
+
+    @override
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        status_bar = self.statusBar()
+        bottom = status_bar.y() if status_bar.isVisibleTo(self) else self.height()
+        self.notification_manager.set_anchor(QPoint(self.width(), bottom))
+
+    @override
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+
+        if event.type() in (QEvent.Type.ActivationChange, QEvent.Type.WindowStateChange):
+            self._update_notifications_paused()
 
     def _setup_ui(self) -> None:
         # Window Setup
@@ -407,6 +424,11 @@ class MainWindow(QMainWindow):
             self._unregister_policy_if_idle()
             raise
 
+        # Connected for the workspace's whole life, so plugins of background workspaces can still notify.
+        if isinstance(workspace, LoaderWorkspace):
+            workspace.plugin_controller.statusMessage.connect(self.notification_manager.notify_message)
+            workspace.plugin_controller.notificationRequested.connect(self.notification_manager.notify)
+
         self.disconnect_workspace()
 
         btn = WorkspaceToolButton(self, workspace.title, workspace)
@@ -441,6 +463,10 @@ class MainWindow(QMainWindow):
 
         self.button_group.removeButton(btn)
         self.nav_container.remove_button(btn)
+
+        if isinstance(btn.workspace, LoaderWorkspace):
+            btn.workspace.plugin_controller.statusMessage.disconnect(self.notification_manager.notify_message)
+            btn.workspace.plugin_controller.notificationRequested.disconnect(self.notification_manager.notify)
 
         def on_disposal_done(disposal: Future[None]) -> None:
             self._pending_disposals.discard(disposal)
@@ -510,6 +536,9 @@ class MainWindow(QMainWindow):
     def _unregister_policy_if_idle(self) -> None:
         if not self.nav_container.buttons and not self._pending_disposals and self._teardown_track.is_idle:
             unregister_policy()
+
+    def _update_notifications_paused(self) -> None:
+        self.notification_manager.set_paused(not self.isActiveWindow() or self.isMinimized())
 
     def _save_geometry(self) -> None:
         # For maximized windows, use normalGeometry to get the unmaximized dimensions

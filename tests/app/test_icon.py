@@ -100,6 +100,14 @@ class TestLoadIconAndMakeIcon:
         assert not pixmap.isNull()
         assert pixmap.size() == expected_size
 
+    @pytest.mark.parametrize("provider_id", list(ICON_PROVIDERS))
+    def test_every_icon_name_has_a_file_in_every_provider(self, provider_id: str) -> None:
+        provider = ICON_PROVIDERS[provider_id]
+
+        missing = [name for name in IconName if not provider.get_icon_path(name, provider.default_weight).is_file()]
+
+        assert missing == []
+
     def test_load_icon_explicit_provider_weight_and_dpr(self, qapp: QApplication) -> None:
         provider_id = next(iter(ICON_PROVIDERS))
         provider = ICON_PROVIDERS[provider_id]

@@ -52,7 +52,7 @@ from ..app.settings.widgets import (
     PathListEditWidget,
 )
 from ..app.utils import ObjectType, QObjectCounter, QObjectSet, cache_clip, path_to_hash
-from ..app.views import OutputInfo
+from ..app.views import NotificationSeverity, OutputInfo
 from ..app.views.components import AbstractTableModel, Accordion, AnimatedToggle, NonClosingMenu, SegmentedControl
 from ..app.views.timeline import FrameEdit, TimeEdit
 from ..app.views.video import BaseGraphicsView
@@ -129,6 +129,7 @@ __all__ = [
     "NoEnvironmentError",
     "NodeProcessor",
     "NonClosingMenu",
+    "NotificationSeverity",
     "ObjectType",
     "OutputInfo",
     "Packer",
