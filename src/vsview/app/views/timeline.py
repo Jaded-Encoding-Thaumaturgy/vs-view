@@ -186,7 +186,11 @@ class NotchSpans:
             entries.append((min(x1, x2), max(x1, x2), notch))
         entries.sort(key=itemgetter(0))
 
-        self.lefts, self.rights, self.notches = zip(*entries)
+        if entries:
+            self.lefts, self.rights, self.notches = zip(*entries)
+        else:
+            self.lefts, self.rights, self.notches = (), (), ()
+
         self.max_width = max((right - left for left, right, _ in entries), default=0.0)
 
     def is_current(self, source: set[CustomNotch[Any]], version: int) -> bool:
