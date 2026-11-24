@@ -350,12 +350,8 @@ class SelectFrameWorker(QObject):
             # Convert frame -> time, then use each clip's own time_to_frame to get a valid frame index
             # for that specific clip
             rtime = v.frame_to_time(rnum)
-            node_frames = core.std.FrameEval(
-                base_clip,
-                lambda n: base_clip.std.CopyFrameProps(
-                    (c := other_clips[n]).clip[c.time_to_frame(rtime)], props=["_PictType", "_Combed"]
-                ),
-            )
+            sources = core.std.Splice([c.clip[c.time_to_frame(rtime)] for c in other_clips], mismatch=True)
+            node_frames = base_clip.std.CopyFrameProps(sources, props=["_PictType", "_Combed"])
 
             for f in node_frames.frames(close=True):
                 if self.is_cancelled:
