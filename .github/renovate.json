@@ -9,7 +9,8 @@
     ":disableRateLimiting",
     ":semanticCommits",
     ":semanticCommitScopeDisabled",
-    ":semanticCommitTypeAll(deps)"
+    ":semanticCommitTypeAll(deps)",
+    "group:vitePlus"
   ],
   "vulnerabilityAlerts": {
     "enabled": true,
