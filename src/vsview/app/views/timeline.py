@@ -691,8 +691,20 @@ class Timeline(QWidget):
         self.mode_selector.index = self.MODES.index(self._mode)
         self.mode_selector.segmentChanged.connect(self._on_mode_segment_changed)
 
+        mode_header = QWidget(self.context_menu)
+        mode_header_layout = QVBoxLayout(mode_header)
+        mode_header_layout.setContentsMargins(8, 4, 8, 4)
+        mode_header_layout.setSpacing(2)
+
+        self.mode_title_label = QLabel("Mode", mode_header)
+        mode_title_font = self.mode_title_label.font()
+        mode_title_font.setBold(True)
+        self.mode_title_label.setFont(mode_title_font)
+        mode_header_layout.addWidget(self.mode_title_label)
+        mode_header_layout.addWidget(self.mode_selector)
+
         self.mode_selector_action = QWidgetAction(self.context_menu)
-        self.mode_selector_action.setDefaultWidget(self.mode_selector)
+        self.mode_selector_action.setDefaultWidget(mode_header)
         self.context_menu.addAction(self.mode_selector_action)
         self.context_menu.addSeparator()
 
