@@ -58,6 +58,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QToolButton,
     QToolTip,
+    QVBoxLayout,
     QWidget,
     QWidgetAction,
 )
@@ -695,15 +696,24 @@ class Timeline(QWidget):
         self.context_menu.addAction(self.mode_selector_action)
         self.context_menu.addSeparator()
 
-        cache_title = QLabel("Cache", self.context_menu)
-        cache_title.setContentsMargins(8, 4, 8, 4)
-        cache_title_font = cache_title.font()
-        cache_title_font.setBold(True)
-        cache_title.setFont(cache_title_font)
+        cache_header = QWidget(self.context_menu)
+        cache_header_layout = QVBoxLayout(cache_header)
+        cache_header_layout.setContentsMargins(8, 4, 8, 4)
+        cache_header_layout.setSpacing(2)
 
-        cache_title_action = QWidgetAction(self.context_menu)
-        cache_title_action.setDefaultWidget(cache_title)
-        self.context_menu.addAction(cache_title_action)
+        self.cache_title_label = QLabel("Cache", cache_header)
+        cache_title_font = self.cache_title_label.font()
+        cache_title_font.setBold(True)
+        self.cache_title_label.setFont(cache_title_font)
+        cache_header_layout.addWidget(self.cache_title_label)
+
+        self.cache_details_label = QLabel(cache_header)
+        self.cache_details_label.setVisible(False)
+        cache_header_layout.addWidget(self.cache_details_label)
+
+        self.cache_header_action = QWidgetAction(self.context_menu)
+        self.cache_header_action.setDefaultWidget(cache_header)
+        self.context_menu.addAction(self.cache_header_action)
 
         self.cache_start_action = QAction("Set start", self.context_menu)
         self.cache_end_action = QAction("Set end", self.context_menu)
@@ -1311,6 +1321,13 @@ class Timeline(QWidget):
         ):
             action.setEnabled(enabled)
             action.setToolTip(unavailable_reason or "")
+
+    def set_cache_summary(self, title: str, details: str) -> None:
+        self.cache_title_label.setText(title)
+        self.cache_details_label.setText(details)
+        self.cache_details_label.setVisible(bool(details))
+
+        self.cache_header_action.setText(" · ".join(filter(None, (title, details))))
 
     def set_cache_notches(
         self,

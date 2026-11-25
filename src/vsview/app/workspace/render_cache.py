@@ -110,7 +110,7 @@ class RenderCacheController(QObject):
         """The cached frames of the current output, as sorted, inclusive `(first, last)` runs."""
         return store.runs() if (store := self._current_store) is not None else []
 
-    def range_label(self) -> str:
+    def range_parts(self) -> list[str]:
         voutput = self._outputs_manager.current_voutput
 
         if (
@@ -119,7 +119,7 @@ class RenderCacheController(QObject):
             or (r := self._ranges.get(voutput.vs_index)) is None
             or (frames := r.frames) is None
         ):
-            return ""
+            return []
 
         store = cache.store
         done = store.count_in(frames) if store is not None else 0
@@ -150,7 +150,7 @@ class RenderCacheController(QObject):
             parts.append(f"{progress.fps:.1f} fps")
             parts.append(f"ETA {format_duration((total - done) / progress.fps)}")
 
-        return " · ".join(parts)
+        return parts
 
     def set_start(self, frame: int) -> None:
         if (voutput := self._current_cacheable) is None:

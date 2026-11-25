@@ -1024,13 +1024,12 @@ class LoaderWorkspace[T](BaseWorkspace):
     @Slot()
     def _on_render_cache_changed(self) -> None:
         r = self.render_cache.current_range() or CacheRange()
+        parts = self.render_cache.range_parts()
 
-        self.tbar.timeline.set_cache_notches(
-            r.start,
-            r.end,
-            self.render_cache.range_label(),
-            self.render_cache.cached_runs(),
-        )
+        self.tbar.timeline.set_cache_notches(r.start, r.end, " · ".join(parts), self.render_cache.cached_runs())
+
+        title, *details = parts or ["Cache"]
+        self.tbar.timeline.set_cache_summary(title, " · ".join(details))
         self.tbar.playback_container.zone_editor.set_cache_state(r.frames, self.render_cache.unavailable_reason())
 
     @Slot(object)
