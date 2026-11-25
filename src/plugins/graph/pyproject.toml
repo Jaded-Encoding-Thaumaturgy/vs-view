@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: Multimedia :: Video",
     "Typing :: Typed",
 ]
-dependencies = ["vapoursynth-graph>=1.0.2", "vsview>=0.15.0"]
+dependencies = ["vapoursynth-graph>=1.0.2", "vsview>=0.16.0"]
 dynamic = ["version"]
 
 [project.entry-points.vsview]

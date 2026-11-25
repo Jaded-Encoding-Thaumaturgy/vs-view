@@ -484,7 +484,7 @@ class GraphPlugin(WidgetPluginBase[GraphSettings, None]):
 
             with self.api.vs_context():
                 try:
-                    graph = vsgraph.get_graph(voutput.vs_output.clip)
+                    graph = vsgraph.get_graph(voutput.source_clip)
                     cached = CachedGraph(graph=graph, payload=enrich_cytoscape_payload(graph, graph.to_cytoscape()))
                 except Exception as e:
                     logger.error("Failed to extract graph from output %d: %s", key, e)
