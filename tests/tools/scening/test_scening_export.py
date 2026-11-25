@@ -62,6 +62,7 @@ def make_voutput_proxy(vo: VideoOutput) -> VideoOutputProxy:
         vo.vs_index,
         vo.vs_name,
         vo.vs_output,
+        vo.source_clip,
         vo.props,
         vo.framedurs,
         vo.cum_durations,

@@ -848,6 +848,37 @@ def test_play_zone_with_loop_starts_again_from_the_zone_start(
 
 
 @pytest.mark.parametrize(
+    ("current", "play_range", "expected"),
+    [
+        (0, range(5, 9), [5, 6, 7, 8]),
+        (5, range(5, 9), [6, 7, 8]),
+        (0, range(8, 4, -1), [8, 7, 6, 5]),
+        (0, range(2, 9, 3), [2, 5, 8]),
+    ],
+    ids=["shows_the_first_frame_first", "first_frame_already_shown", "backward", "with_a_step"],
+)
+def test_play_range_plays_each_frame_of_the_range_once(
+    playback_manager_setup: PlaybackManagerSetup,
+    use_voutput: Callable[[VideoOutput], VideoOutput],
+    create_test_video_output: Callable[[int], VideoOutput],
+    qtbot: QtBot,
+    current: int,
+    play_range: range,
+    expected: list[int],
+) -> None:
+    manager, _, _, _, _, _ = playback_manager_setup
+    use_voutput(create_test_video_output(10))
+    manager.state.current_frame = current
+    frames = record_frames(manager)
+
+    manager.play_range(play_range)
+    qtbot.waitUntil(lambda: frames[-1:] == expected[-1:], timeout=5000)
+    wait_until_stopped(manager, qtbot)
+
+    assert frames == expected
+
+
+@pytest.mark.parametrize(
     ("framedurs", "props"),
     [((0.01,) * 6, {}), (None, {"_DurationNum": 1, "_DurationDen": 100})],
     ids=["frame_durations", "duration_props"],

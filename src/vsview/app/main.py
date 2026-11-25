@@ -65,6 +65,7 @@ from vsengine.loops import set_loop
 
 from ..assets import app_icon, load_fonts
 from ..vsenv import QtEventLoop, get_policy, unregister_policy
+from .cache.session import close_session
 from .garbage import GarbageCollector
 from .icon import IconReloadMixin
 from .plugins.manager import PluginManager
@@ -119,6 +120,7 @@ class Application(QApplication):
         loop = QtEventLoop(self)
         set_loop(loop)
         self.aboutToQuit.connect(loop.cancel)
+        self.aboutToQuit.connect(close_session)
         ShortcutManager()
         SecretsManager()
         AppearanceManager()
@@ -426,6 +428,7 @@ class MainWindow(QMainWindow):
 
         # Connected for the workspace's whole life, so plugins of background workspaces can still notify.
         if isinstance(workspace, LoaderWorkspace):
+            workspace.notificationRequested.connect(self.notification_manager.notify)
             workspace.plugin_controller.statusMessage.connect(self.notification_manager.notify_message)
             workspace.plugin_controller.notificationRequested.connect(self.notification_manager.notify)
 
@@ -465,6 +468,7 @@ class MainWindow(QMainWindow):
         self.nav_container.remove_button(btn)
 
         if isinstance(btn.workspace, LoaderWorkspace):
+            btn.workspace.notificationRequested.disconnect(self.notification_manager.notify)
             btn.workspace.plugin_controller.statusMessage.disconnect(self.notification_manager.notify_message)
             btn.workspace.plugin_controller.notificationRequested.disconnect(self.notification_manager.notify)
 

@@ -527,6 +527,11 @@ def cache_clip(clip: vs.VideoNode, cache_size: int) -> vs.VideoNode:
     return vs.core.std.FrameEval(blank, lambda n: from_cache_node if n in cache else to_cache_node)
 
 
+def download_clip(clip: vs.VideoNode) -> vs.VideoNode:
+    """Return `clip` with its frames in CPU memory."""
+    return clip.std.GPUDownload() if vs.__version__.release_major >= 80 and clip.gpu_resident else clip
+
+
 if TYPE_CHECKING:
 
     class ObjectType(type):

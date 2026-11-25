@@ -203,7 +203,7 @@ class BaseWorkspace(QMainWindow):
 
         return disposal
 
-    def _finish_tasks(self) -> list[Future[Any]]:
+    def _finish_tasks(self) -> Sequence[Future[Any]]:
         """Stop the workspace's work, and return the tasks that are still running afterwards."""
         return []
 
@@ -230,7 +230,7 @@ class BaseWorkspace(QMainWindow):
             self._before_disposal(target.environment if isinstance(target, Script) else target)
             clear_environment(target)
 
-        if not after:
+        if not after or all(f.done() for f in after):
             dispose()
             return UnifiedFuture.resolve(None)
 

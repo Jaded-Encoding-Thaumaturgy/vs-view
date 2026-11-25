@@ -13,9 +13,10 @@ import vapoursynth as vs
 from jetpytools import KwargsNotNone, cround
 
 from ...types import Frame, Time
+from ..cache import OutputCache
 from ..packing import Packer
 from ..settings import SettingsManager
-from ..utils import LRUCache, cache_clip
+from ..utils import LRUCache, cache_clip, download_clip
 
 if TYPE_CHECKING:
     from ..plugins import PluginAPI
@@ -56,6 +57,19 @@ class VideoOutput:
                 logger.warning("Alpha plane not found")
             else:
                 self.vs_output = self.vs_output._replace(alpha=alpha_plane)
+
+        self.source_clip = self.vs_output.clip
+        self.cache: OutputCache | None = None
+        self.cache_unavailable_reason: str | None = None
+
+        if SettingsManager.global_settings.render_cache.enabled:
+            if self.vs_output.alpha is not None or self._alpha_prop:
+                self.cache_unavailable_reason = "alpha plane"
+            elif self.vs_output.clip.format.id == vs.NONE:
+                self.cache_unavailable_reason = "variable format"
+            else:
+                self.cache = OutputCache(self.vs_output.clip)
+                self.vs_output = self.vs_output._replace(clip=self.cache.clip)
 
         if self.framedurs:
             self.cum_durations: tuple[float, ...] | None = tuple(accumulate(self.framedurs))
@@ -122,9 +136,7 @@ class VideoOutput:
         else:
             clip = self.vs_output.clip
 
-        if vs.__version__.release_major >= 80 and clip.gpu_resident:
-            clip = clip.std.GPUDownload()
-
+        clip = download_clip(clip)
         clip = clip.std.ModifyFrame(clip, self._get_props_on_render)
 
         if clip.format.id == vs.GRAY32:
@@ -151,7 +163,11 @@ class VideoOutput:
         """Clear VapourSynth resources."""
         self.props.clear()
 
-        for attr in ["vs_output", "prepared_clip", "kwargs"]:
+        if self.cache is not None and (store := self.cache.detach_store()) is not None:
+            store.close()
+        self.cache = None
+
+        for attr in ["vs_output", "source_clip", "prepared_clip", "kwargs"]:
             with suppress(AttributeError):
                 delattr(self, attr)
 

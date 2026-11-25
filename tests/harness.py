@@ -406,6 +406,7 @@ class HarnessPluginController(QObject):
                 voutput.vs_index,
                 voutput.vs_name,
                 voutput.vs_output,
+                voutput.source_clip,
                 voutput.props,
                 voutput.framedurs,
                 voutput.cum_durations,

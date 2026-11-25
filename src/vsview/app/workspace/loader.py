@@ -39,20 +39,23 @@ from ...env import getenv_bool
 from ...types import Frame
 from ...vsenv import run_in_background, run_in_loop, unset_environment
 from ...vsenv.loop import TaskInfo
+from ..cache.job import JobState
 from ..outputs import AudioOutput, OutputsManager, VideoOutput
 from ..plugins._controller import PluginWorkspaceController
 from ..plugins.api import WidgetPluginBase
-from ..settings import ActionID, ShortcutManager
+from ..settings import ActionID, SettingsManager, ShortcutManager
+from ..settings.models import CacheRange
 from ..utils import ProcessMemorySnapshot, has_overriding_method, measure_memory
 from ..views import PluginDock, PluginSplitter
 from ..views.components import BlockableWidget, CustomLoadingPage, DockButton
 from ..views.tab import TabViewWidget
-from ..views.timeline import TimelineControlBar
+from ..views.timeline import CacheRenderAction, TimelineControlBar
 from ..views.video import GraphicsView, ViewState
 from .base import BaseWorkspace
 from .callbacks import CallbackHandle, CallbackRegistry
 from .lifecycle import LoadResult, Phase, StaleGenerationError
 from .playback import PlaybackManager, show_warning
+from .render_cache import RenderCacheController
 from .tab_manager import PlayHeadToolButton, TabManager
 from .utils import State, evict_packages, find_local_packages
 
@@ -74,6 +77,9 @@ class LoaderWorkspace[T](BaseWorkspace):
     statusLoadingFinished = Signal(str)  # completed message
     statusLoadingErrored = Signal(str)  # error message
     statusOutputChanged = Signal(object)  # OutputInfo dataclass
+
+    # Notification signal
+    notificationRequested = Signal(object)  # Notification
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -196,10 +202,35 @@ class LoaderWorkspace[T](BaseWorkspace):
             lambda index: setattr(self.outputs_manager, "current_audio_index", index)
         )
 
+        self.render_cache = RenderCacheController(self.loop, lambda: self.env, self.outputs_manager, parent=self)
+        self.render_cache.changed.connect(self._on_render_cache_changed)
+        self.render_cache.notificationRequested.connect(self.notificationRequested)
+
+        # Connected after `_on_tab_changed`, which sets the current output the render cache reads.
+        self.tab_manager.tabChanged.connect(self.render_cache.on_current_output_changed)
+        self.playback.playbackStateChanged.connect(self.render_cache.set_playing)
+
+        self.tbar.timeline.contextMenuRequested.connect(self._on_timeline_context_menu)
+        self.tbar.timeline.cacheStartRequested.connect(self.render_cache.set_start)
+        self.tbar.timeline.cacheEndRequested.connect(self.render_cache.set_end)
+        self.tbar.timeline.cacheRenderToggled.connect(self.render_cache.toggle_render)
+        self.tbar.timeline.cacheClearRequested.connect(self.render_cache.clear)
+        self.tbar.timeline.cacheConcurrencyChanged.connect(self.render_cache.set_concurrency_override)
+        self.tbar.playback_container.playCacheRange.connect(self._on_play_cache_range)
+
+        self._set_shorcuts()
         self._register_shortcuts()
 
+        SettingsManager.signals.connect_global_weak(self._set_shorcuts)
+
+    def _set_shorcuts(self) -> None:
+        sm = ShortcutManager()
+        self.tbar.timeline.cache_start_action.setShortcut(sm.get_key(ActionID.CACHE_SET_START))
+        self.tbar.timeline.cache_end_action.setShortcut(sm.get_key(ActionID.CACHE_SET_END))
+        self.tbar.timeline.cache_render_action.setShortcut(sm.get_key(ActionID.CACHE_TOGGLE_RENDER))
+        self.tbar.timeline.cache_clear_action.setShortcut(sm.get_key(ActionID.CACHE_CLEAR))
+
     def _register_shortcuts(self) -> None:
-        """Register workspace shortcuts with the shortcut manager."""
         sm = ShortcutManager()
 
         # Playback controls
@@ -260,6 +291,20 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.loaded_page,
         )
 
+        # Render cache
+        sm.register_shortcut(
+            ActionID.CACHE_SET_START,
+            lambda: self.render_cache.set_start(self.playback.state.current_frame),
+            self.loaded_page,
+        )
+        sm.register_shortcut(
+            ActionID.CACHE_SET_END,
+            lambda: self.render_cache.set_end(self.playback.state.current_frame),
+            self.loaded_page,
+        )
+        sm.register_shortcut(ActionID.CACHE_TOGGLE_RENDER, self.render_cache.toggle_render, self.loaded_page)
+        sm.register_shortcut(ActionID.CACHE_CLEAR, self.render_cache.clear, self.loaded_page)
+
         sm.register_shortcut(ActionID.RELOAD, self.reload_content, self.loaded_page)
         sm.register_shortcut(ActionID.RELOAD, self.reload_btn.click, self.error_page)
         sm.register_shortcut(ActionID.COPY_CURRENT_FRAME, self._copy_current_frame_to_clipboard, self.loaded_page)
@@ -272,16 +317,21 @@ class LoaderWorkspace[T](BaseWorkspace):
         sm.register_shortcut(ActionID.SWITCH_NEXT_TAB, lambda: self.tab_manager.switch_tab(delta=1), self)
 
     @override
-    def _finish_tasks(self) -> list[Future[Any]]:
+    def _finish_tasks(self) -> Sequence[Future[Any]]:
         self.playback.stop()
         self.playback.invalidate_renders()
         self.playback.state.wait_for_cleanup(0, stall_cb=lambda: self.statusLoadingStarted.emit("Clearing buffer..."))
+        render_cache_release = self.render_cache.release()
         self.plugin_controller.on_workspace_destroy()
         self.loop.wait_for_threads(self.task_timeout_ms, owner=self)
-        return [task.future for task in self.loop.pending_tasks(owner=self)]
+
+        return [*(task.future for task in self.loop.pending_tasks(owner=self)), render_cache_release]
 
     @override
     def _release_content(self) -> None:
+        if not wait([self.render_cache.release()], timeout=self.task_timeout_ms / 1000).done:
+            logger.warning("Releasing the environment while render cache frames are still in flight")
+
         if (env := self._env) is None or env.disposed:
             # Their run's environment is gone, and VapourSynth calls made outside an environment are undefined.
             self._unload_callbacks.take_all()
@@ -341,6 +391,9 @@ class LoaderWorkspace[T](BaseWorkspace):
 
     def init_load(self, frame: int | None = None, time: float | None = None, tab_index: int | None = None) -> None:
         from ..plugins.manager import PluginManager
+
+        self.render_cache.set_ranges({})
+        self.render_cache.set_concurrency_override(None)
 
         try:
             PluginManager.wait_for_loaded()
@@ -559,6 +612,7 @@ class LoaderWorkspace[T](BaseWorkspace):
                 self.content_area.setEnabled(True)
                 self.tab_manager.tabs.setEnabled(True)
                 self.tbar.enable()
+                self.render_cache.on_outputs_ready(is_reload=reload)
 
                 if reload:
                     self.content_area.setFocus()
@@ -955,6 +1009,47 @@ class LoaderWorkspace[T](BaseWorkspace):
     @Slot()
     def _on_render_failed(self) -> None:
         self.clear_failed_load(loaded_only=True)
+
+    @Slot()
+    def _on_render_cache_changed(self) -> None:
+        r = self.render_cache.current_range() or CacheRange()
+
+        self.tbar.timeline.set_cache_notches(
+            r.start,
+            r.end,
+            self.render_cache.range_label(),
+            self.render_cache.cached_runs(),
+        )
+        self.tbar.playback_container.play_cache_btn.setEnabled(r.frames is not None)
+
+    @Slot(object)
+    def _on_timeline_context_menu(self, frame: Frame) -> None:
+        r = self.render_cache.current_range()
+
+        match self.render_cache.render_state():
+            case JobState.PAUSED:
+                render = CacheRenderAction.RESUME
+            case JobState.RUNNING | JobState.WAITING:
+                render = CacheRenderAction.PAUSE
+            case _:
+                render = CacheRenderAction.RENDER
+
+        self.tbar.timeline.set_cache_actions(
+            render,
+            can_render=r is not None and r.frames is not None,
+            can_clear=r is not None or bool(self.render_cache.cached_runs()),
+            concurrency=self.render_cache.concurrency,
+            concurrency_overridden=self.render_cache.concurrency_override is not None,
+            unavailable_reason=self.render_cache.unavailable_reason(),
+        )
+
+    @Slot(bool, int)
+    def _on_play_cache_range(self, loop: bool, step: int) -> None:
+        if (r := self.render_cache.current_range()) is None or (frames := r.frames) is None:
+            return
+
+        # A negative step plays the range backwards, from its end.
+        self.playback.play_range(frames[::step], loop)
 
     def seek_to_notch(self, *, forward: bool, starts_only: bool = False) -> None:
         """

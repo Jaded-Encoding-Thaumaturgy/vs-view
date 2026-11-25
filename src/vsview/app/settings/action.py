@@ -78,6 +78,12 @@ class ActionID(StrEnum):
     JUMP_TO_TIME = "workspace.loader.timeline.jump_to_time", "Jump to Time", "Ctrl+F"
     JUMP_TO_FRAME = "workspace.loader.timeline.jump_to_frame", "Jump to Frame", "Ctrl+G"
 
+    # Render cache
+    CACHE_SET_START = "workspace.loader.render_cache.set_start", "Set Cache Start", "I"
+    CACHE_SET_END = "workspace.loader.render_cache.set_end", "Set Cache End", "O"
+    CACHE_TOGGLE_RENDER = "workspace.loader.render_cache.toggle_render", "Render / Pause Cache Range", "Ctrl+B"
+    CACHE_CLEAR = "workspace.loader.render_cache.clear", "Clear cache range", ""
+
     # Tab switching
     SWITCH_TAB_0 = "workspace.loader.tab.switch_0", "Switch to Output 0", "1"
     SWITCH_TAB_1 = "workspace.loader.tab.switch_1", "Switch to Output 1", "2"

@@ -3,14 +3,15 @@ from __future__ import annotations
 import math
 import weakref
 from bisect import bisect_left, bisect_right
-from collections.abc import Hashable, Iterator, Sequence
+from collections.abc import Hashable, Iterable, Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
+from enum import StrEnum
 from functools import cache
 from itertools import chain
 from logging import getLogger
 from operator import itemgetter
-from typing import Any, Literal, NamedTuple, override
+from typing import Any, Literal, NamedTuple, Self, override
 
 from jetpytools import clamp, complex_hash
 from PySide6.QtCore import (
@@ -30,6 +31,7 @@ from PySide6.QtCore import (
     Slot,
 )
 from PySide6.QtGui import (
+    QAction,
     QColor,
     QContextMenuEvent,
     QCursor,
@@ -57,6 +59,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
+    QPushButton,
     QSizePolicy,
     QSlider,
     QSpinBox,
@@ -71,6 +74,7 @@ from shiboken6 import Shiboken
 from ...assets import IconName
 from ...types import Frame, Time
 from ...vsenv import run_in_loop
+from ..cache.job import RenderJob
 from ..icon import IconReloadMixin
 from ..outputs import AudioOutput
 from ..settings import SettingsManager
@@ -91,6 +95,21 @@ def generate_label_format(notch_interval_t: Time, end_time: Time) -> str:
         return "{M}:{S:02d}"
 
     return "{S}.{ms:03d}"
+
+
+class CacheRenderAction(StrEnum):
+    RENDER = "render", "Render range"
+    PAUSE = "pause", "Pause render"
+    RESUME = "resume", "Resume render"
+
+    label: str
+
+    def __new__(cls, value: str, label: str) -> Self:
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.label = label
+
+        return obj
 
 
 class Notch[T: (Time, Frame)]:
@@ -154,12 +173,13 @@ class CustomNotch[T: (Time, Frame)](Notch[T]):
         line: QLineF | None = None,
         end_line: QLineF | None = None,
         label: str = "",
-        *,
+        hover_label: bool = True,
         seekable: bool = True,
     ) -> None:
         # mypy bug
         super().__init__(data, end_data, color, line, end_line, label)  # type: ignore[arg-type]
         self.id = id
+        self.hover_label = hover_label
         self.seekable = seekable
 
     @override
@@ -426,10 +446,10 @@ class TimelineHoverPopup(QWidget):
             return self._label_index
 
         entries = list[tuple[float, str, QColor]]()
-        for provider_notches in timeline.custom_notches.values():
-            for p_notch in provider_notches:
-                if label_text := self._format_notch_label(p_notch):
-                    entries.append((p_notch.line.x1(), label_text, p_notch.color))
+        for p_notch in chain.from_iterable(timeline.custom_notches.values()):
+            if p_notch.hover_label and (label_text := self._format_notch_label(p_notch)):
+                entries.append((p_notch.line.x1(), label_text, p_notch.color))
+
         entries.sort(key=itemgetter(0))
 
         xs = [x for x, _, _ in entries]
@@ -584,6 +604,15 @@ class TimelineHoverPopup(QWidget):
 class Timeline(QWidget):
     # Signal emits (Frame, Time) when the user clicks on the timeline
     clicked = Signal(object, object)
+    # Signal emits the Frame under the mouse right before the context menu opens
+    contextMenuRequested = Signal(object)
+    # Signals of the render cache actions of the context menu.
+    cacheStartRequested = Signal(object)
+    cacheEndRequested = Signal(object)
+    cacheRenderToggled = Signal()
+    cacheClearRequested = Signal()
+    # Emits the frames in flight of the script, or None to use the global setting.
+    cacheConcurrencyChanged = Signal(object)
 
     # Predefined intervals for frame notches
     NOTCH_INTERVALS_F = tuple(
@@ -605,14 +634,17 @@ class Timeline(QWidget):
     HOVER_TIME_FORMAT = "{H:02d}:{M:02d}:{S:02d}.{ms:03d}"
     HOVER_PADDING_H = 6
 
+    CACHE_RANGE_NOTCH_KEY = "vsview.render_cache.range"
+    CACHE_FRAMES_NOTCH_KEY = "vsview.render_cache.frames"
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setAutoFillBackground(True)
 
         SettingsManager.signals.connect_global_weak(self._on_settings_changed)
 
         self._mode: Literal["frame", "time"] = SettingsManager.global_settings.timeline.mode
-
-        self.setAutoFillBackground(True)
+        self._menu_frame = Frame(0)
 
         self.rect_f = QRectF()
         self.scroll_rect = QRectF()
@@ -657,6 +689,7 @@ class Timeline(QWidget):
 
         # Context menu for mode switching
         self.context_menu = QMenu(self)
+        self.context_menu.setToolTipsVisible(True)
 
         # Segmented control for mode selection
         self.mode_selector = SegmentedControl(["Frame", "Time"], self)
@@ -666,6 +699,54 @@ class Timeline(QWidget):
         self.mode_selector_action = QWidgetAction(self.context_menu)
         self.mode_selector_action.setDefaultWidget(self.mode_selector)
         self.context_menu.addAction(self.mode_selector_action)
+        self.context_menu.addSeparator()
+
+        cache_title = QLabel("Cache", self.context_menu)
+        cache_title.setContentsMargins(8, 4, 8, 4)
+        cache_title_font = cache_title.font()
+        cache_title_font.setBold(True)
+        cache_title.setFont(cache_title_font)
+
+        cache_title_action = QWidgetAction(self.context_menu)
+        cache_title_action.setDefaultWidget(cache_title)
+        self.context_menu.addAction(cache_title_action)
+
+        self.cache_start_action = QAction("Set start", self.context_menu)
+        self.cache_end_action = QAction("Set end", self.context_menu)
+        self.cache_render_action = QAction(CacheRenderAction.RENDER.label, self.context_menu)
+        self.cache_clear_action = QAction("Clear range", self.context_menu)
+
+        self.cache_start_action.triggered.connect(self._on_cache_start_triggered)
+        self.cache_end_action.triggered.connect(self._on_cache_end_triggered)
+        self.cache_render_action.triggered.connect(self._on_cache_render_triggered)
+        self.cache_clear_action.triggered.connect(self._on_cache_clear_triggered)
+
+        self.context_menu.addActions(
+            [self.cache_start_action, self.cache_end_action, self.cache_render_action, self.cache_clear_action]
+        )
+
+        concurrency_widget = QWidget(self.context_menu)
+        concurrency_layout = QHBoxLayout(concurrency_widget)
+        concurrency_layout.setContentsMargins(8, 4, 8, 4)
+        concurrency_layout.addWidget(QLabel("Frames in Flight", concurrency_widget))
+
+        self.cache_concurrency_spinbox = QSpinBox(concurrency_widget)
+        self.cache_concurrency_spinbox.setRange(RenderJob.MIN_CONCURRENCY, RenderJob.MAX_CONCURRENCY)
+        self.cache_concurrency_spinbox.setKeyboardTracking(False)
+        self.cache_concurrency_spinbox.setToolTip(
+            "Number of frames the background render of this script requests at the same time.\n"
+            "More frames use more memory."
+        )
+        self.cache_concurrency_spinbox.valueChanged.connect(self._on_cache_concurrency_changed)
+        concurrency_layout.addWidget(self.cache_concurrency_spinbox)
+
+        self.cache_concurrency_action = QWidgetAction(self.context_menu)
+        self.cache_concurrency_action.setDefaultWidget(concurrency_widget)
+        self.context_menu.addAction(self.cache_concurrency_action)
+
+        self.cache_concurrency_reset_action = QAction("Reset to Global", self.context_menu)
+        self.cache_concurrency_reset_action.triggered.connect(self._on_cache_concurrency_reset_triggered)
+        self.context_menu.addAction(self.cache_concurrency_reset_action)
 
     @property
     def total_frames(self) -> int:
@@ -732,6 +813,10 @@ class Timeline(QWidget):
 
     @override
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        self._menu_frame = self._clamp_frame(self.x_to_frame(event.pos().x()))
+        self.cache_start_action.setText(f"Set start at {self._menu_frame}")
+        self.cache_end_action.setText(f"Set end at {self._menu_frame}")
+        self.contextMenuRequested.emit(self._menu_frame)
         self.context_menu.exec(event.globalPos())
 
     @override
@@ -750,6 +835,9 @@ class Timeline(QWidget):
 
         with QPainter(self) as painter:
             self.draw_widget(painter)
+
+        if Shiboken.isValid(self.hover_popup) and self.hover_popup.isVisible():
+            self.hover_popup.update()
 
     def draw_widget(self, painter: QPainter) -> None:
         setup_key = Notch.CacheKey(self.rect_f, self.total_frames)
@@ -1160,6 +1248,7 @@ class Timeline(QWidget):
         label: str = "",
         id: Hashable | None = None,
         *,
+        hover_label: bool = True,
         seekable: bool = True,
     ) -> None:
         cursor_x = self.cursor_to_x(data)
@@ -1182,6 +1271,7 @@ class Timeline(QWidget):
                 cursor_line,
                 end_line,
                 label,
+                hover_label=hover_label,
                 seekable=seekable,
             )
         )
@@ -1198,6 +1288,76 @@ class Timeline(QWidget):
             )
         )
         self._notches_version += 1
+
+    def set_cache_actions(
+        self,
+        render: CacheRenderAction,
+        *,
+        can_render: bool,
+        can_clear: bool,
+        concurrency: int,
+        concurrency_overridden: bool,
+        unavailable_reason: str | None = None,
+    ) -> None:
+        available = unavailable_reason is None
+
+        self.cache_render_action.setText(render.label)
+
+        with QSignalBlocker(self.cache_concurrency_spinbox):
+            self.cache_concurrency_spinbox.setValue(concurrency)
+
+        self.cache_concurrency_action.defaultWidget().setEnabled(available)
+
+        for action, enabled in (
+            (self.cache_start_action, available),
+            (self.cache_end_action, available),
+            (self.cache_render_action, available and can_render),
+            (self.cache_clear_action, available and can_clear),
+            (self.cache_concurrency_reset_action, available and concurrency_overridden),
+        ):
+            action.setEnabled(enabled)
+            action.setToolTip(unavailable_reason or "")
+
+    def set_cache_notches(
+        self,
+        start: int | None,
+        end: int | None,
+        range_label: str,
+        runs: Iterable[tuple[int, int]],
+    ) -> None:
+        """
+        Show the render cache range and its cached frames, in place of the ones shown before.
+
+        Args:
+            start: The first frame of the range, or None when it is unset.
+            end: The last frame of the range, or None when it is unset.
+            range_label: The label of the range when both ends are set.
+            runs: The cached frames, as inclusive `(first, last)` runs.
+        """
+        self.custom_notches.pop(Timeline.CACHE_RANGE_NOTCH_KEY, None)
+        self.custom_notches.pop(Timeline.CACHE_FRAMES_NOTCH_KEY, None)
+
+        color = self.palette().color(QPalette.ColorRole.Highlight)
+
+        if start is not None and end is not None:
+            self.add_notch(Timeline.CACHE_RANGE_NOTCH_KEY, Frame(start), Frame(end), color, range_label)
+        elif start is not None:
+            self.add_notch(Timeline.CACHE_RANGE_NOTCH_KEY, Frame(start), color=color, label="Cache start")
+        elif end is not None:
+            self.add_notch(Timeline.CACHE_RANGE_NOTCH_KEY, Frame(end), color=color, label="Cache end")
+
+        # The runs end one frame later than their last frame, so their fill covers that frame too.
+        for first, last in runs:
+            self.add_notch(
+                Timeline.CACHE_FRAMES_NOTCH_KEY,
+                Frame(first),
+                Frame(last + 1),
+                color,
+                hover_label=False,
+                seekable=False,
+            )
+
+        self.update()
 
     def seek_points(self, *, starts_only: bool = False) -> Iterator[Frame | Time]:
         """
@@ -1260,6 +1420,35 @@ class Timeline(QWidget):
     @Slot(int)
     def _on_mode_segment_changed(self, index: int) -> None:
         self.mode = "frame" if index == 0 else "time"
+
+    @Slot()
+    def _on_cache_start_triggered(self) -> None:
+        self.cacheStartRequested.emit(self._menu_frame)
+
+    @Slot()
+    def _on_cache_end_triggered(self) -> None:
+        self.cacheEndRequested.emit(self._menu_frame)
+
+    @Slot()
+    def _on_cache_render_triggered(self) -> None:
+        self.cacheRenderToggled.emit()
+
+    @Slot()
+    def _on_cache_clear_triggered(self) -> None:
+        self.cacheClearRequested.emit()
+
+    @Slot(int)
+    def _on_cache_concurrency_changed(self, value: int) -> None:
+        self.cache_concurrency_reset_action.setEnabled(True)
+        self.cacheConcurrencyChanged.emit(value)
+
+    @Slot()
+    def _on_cache_concurrency_reset_triggered(self) -> None:
+        with QSignalBlocker(self.cache_concurrency_spinbox):
+            self.cache_concurrency_spinbox.setValue(SettingsManager.global_settings.render_cache.concurrency)
+
+        self.cache_concurrency_reset_action.setEnabled(False)
+        self.cacheConcurrencyChanged.emit(None)
 
 
 def _show_focus_for_user(self: QAbstractSpinBox) -> None:
@@ -1374,6 +1563,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
     settingsChanged = Signal(int, float, bool)  # seek_step, speed, uncapped
     playZone = Signal(int, bool, int)  # zone_frames, loop, int
+    playCacheRange = Signal(bool, int)  # loop, step
     volumeChanged = Signal(float)  # volume 0.0-1.0
     muteChanged = Signal(bool)  # is_muted
     audioDelayChanged = Signal(float)  # seconds
@@ -1578,6 +1768,12 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         self.play_zone_btn = self.make_tool_button(IconName.PLAY, "Play Zone", zone_widget)
         self.play_zone_btn.clicked.connect(self._on_play_zone_clicked)
 
+        # Play cache range button, enabled by the render cache when the current output has a full range
+        self.play_cache_btn = QPushButton("Play cache range", zone_widget)
+        self.play_cache_btn.setToolTip("Play the render cache range, with the Loop and Play Step settings")
+        self.play_cache_btn.setEnabled(False)
+        self.play_cache_btn.clicked.connect(self._on_play_cache_clicked)
+
         # Loop checkbox
         self.loop_checkbox = QCheckBox("Loop")
         self.loop_checkbox.toggled.connect(self._on_loop_changed)
@@ -1601,6 +1797,7 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         zone_controls_layout = QHBoxLayout(zone_controls_row)
         zone_controls_layout.setContentsMargins(0, 0, 0, 0)
         zone_controls_layout.setSpacing(4)
+        zone_controls_layout.addWidget(self.play_cache_btn)
         zone_controls_layout.addStretch()
         zone_controls_layout.addWidget(self.play_zone_btn)
         zone_controls_layout.addWidget(self.loop_checkbox)
@@ -1890,6 +2087,11 @@ class PlaybackContainer(QWidget, IconReloadMixin):
     @Slot()
     def _on_play_zone_clicked(self) -> None:
         self.playZone.emit(self.settings.zone_frames, self.settings.loop, self.settings.step)
+        self.context_menu.close()
+
+    @Slot()
+    def _on_play_cache_clicked(self) -> None:
+        self.playCacheRange.emit(self.settings.loop, self.settings.step)
         self.context_menu.close()
 
     @Slot(bool)

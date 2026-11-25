@@ -183,7 +183,7 @@ def test_seek_to_notch_visits_the_seekable_notches_of_every_provider(
     timeline.add_notch("bookmarks", Time(seconds=2), label="Bookmark")
     timeline.add_notch("bookmarks", Frame(90), label="Bookmark")
     timeline.add_notch("bookmarks", Frame(150), label="Past the clip")
-    timeline.add_notch("hidden", Frame(30), Frame(40), seekable=False)
+    timeline.set_cache_notches(None, None, "", [(30, 40)])
 
     def seek(*, forward: bool) -> int:
         ws.seek_to_notch(forward=forward, starts_only=starts_only)

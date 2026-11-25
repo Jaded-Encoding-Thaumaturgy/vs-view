@@ -27,7 +27,15 @@ class VideoOutputProxy:
     """Name of the video output."""
 
     vs_output: vs.VideoOutputTuple = field(hash=False, compare=False)
-    """The object created by `vapoursynth.get_outputs()`."""
+    """
+    The output tuple that the view and the tools render from.
+
+    When the render cache is on, its clip takes cached frames from disk and the other frames from `source_clip`.
+    Use it to read frames.
+    """
+
+    source_clip: vs.VideoNode = field(hash=False, compare=False)
+    """The clip that the script set as output, before the render cache wraps it."""
 
     props: Mapping[int, Mapping[str, Any]] = field(hash=False, compare=False)
     """Frame properties of the clip."""

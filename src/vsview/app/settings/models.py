@@ -15,7 +15,7 @@ from threading import Lock
 from typing import Annotated, Any, Generic, Literal, NamedTuple, TypeVar, get_args, get_origin, override
 
 import vapoursynth as vs
-from jetpytools import classproperty
+from jetpytools import clamp, classproperty
 from platformdirs import user_config_path
 from pydantic import (
     AfterValidator,
@@ -39,6 +39,8 @@ from ...assets import ICON_PROVIDERS
 from ...assets.themes import ThemeRegistry
 from ...env import getenv_bool
 from ...types import VPath
+from ..cache.job import RenderJob
+from ..cache.storage import CUSTOM_ROOT_NAME, default_root
 from ..themes import AppearanceManager
 from .action import ActionID
 from .enums import Resizer
@@ -493,6 +495,64 @@ class PlaybackSettings(BaseModel):
             tooltip="Interval for updating the FPS display in seconds",
         ),
     ] = 1.0
+
+
+class RenderCacheSettings(BaseModel):
+    """Settings for the background render cache"""
+
+    __section__ = "Render Cache"
+
+    enabled: Annotated[
+        bool,
+        Checkbox(
+            label="Render Cache",
+            text="Enable the render cache",
+            tooltip="Render a frame range in the background and play it back from disk.\n"
+            "Applies on the next script load.",
+        ),
+    ] = True
+
+    scratch_directory: Annotated[
+        str,
+        LineEdit(
+            label="Cache Directory",
+            tooltip="Directory for the cached frames. Applies after a restart.\n"
+            f"VSView creates a {CUSTOM_ROOT_NAME} folder in it and only writes there.\n"
+            f"Leave it empty to use the default directory:\n{default_root()}",
+        ),
+    ] = ""
+
+    max_disk_gb: Annotated[
+        int,
+        Spin(
+            label="Disk Quota",
+            min=5,
+            max=2000,
+            suffix=" GB",
+            tooltip="Maximum disk space for the cached frames of all open scripts",
+        ),
+    ] = 50
+
+    concurrency: Annotated[
+        int,
+        Spin(
+            label="Frames in Flight",
+            min=RenderJob.MIN_CONCURRENCY,
+            max=RenderJob.MAX_CONCURRENCY,
+            suffix=" frames",
+            tooltip="Number of frames the background render requests at the same time.\n"  # no fmt
+            "Read when a render starts.",
+        ),
+    ] = max(2, (os.cpu_count() or 16) // 4)
+
+    render_after_reload: Annotated[
+        bool,
+        Checkbox(
+            label="After Reload",
+            text="Render again after reload",
+            tooltip="After a reload, restart the renders that were started before it.",
+        ),
+    ] = False
 
 
 class ViewSettings(BaseModel):
@@ -972,6 +1032,7 @@ class GlobalSettings(BaseSettings):
     appearance: AppearanceSettings = AppearanceSettings()
     timeline: TimelineSettings = TimelineSettings()
     playback: PlaybackSettings = PlaybackSettings()
+    render_cache: RenderCacheSettings = RenderCacheSettings()
     view: ViewSettings = ViewSettings()
 
     # Hidden
@@ -1082,6 +1143,34 @@ class LocalTimelineSettings(BaseModel):
     ] = Field(default=None, validate_default=True)
 
 
+class CacheRange(BaseModel):
+    """An inclusive frame range of the render cache."""
+
+    start: int | None = None
+    end: int | None = None
+    started: bool = Field(default=False, exclude=True)
+    """A render of this range was started in this session. Used by `render_after_reload`."""
+
+    @property
+    def frames(self) -> range | None:
+        """The frames of the range, when both ends are set."""
+        if self.start is None or self.end is None:
+            return None
+        return range(self.start, self.end + 1)
+
+
+class LocalRenderCacheSettings(BaseModel):
+    ranges: dict[int, CacheRange] = Field(default_factory=dict)
+    """Cache ranges keyed by the VapourSynth output index."""
+    concurrency: Annotated[
+        int | None,
+        AfterValidator(
+            lambda v: clamp(v, RenderJob.MIN_CONCURRENCY, RenderJob.MAX_CONCURRENCY) if v is not None else None
+        ),
+    ] = None
+    """Frames in flight of this script, or None to use the global setting."""
+
+
 class SynchronizationSettings(BaseModel):
     __section__ = "Synchronization"
 
@@ -1174,3 +1263,4 @@ class LocalSettings(BaseSettings):
     synchronization: SynchronizationSettings = Field(default_factory=SynchronizationSettings)
     layout: LayoutSettings = Field(default_factory=LayoutSettings)
     view: LocalViewSettings = Field(default_factory=LocalViewSettings)
+    render_cache: LocalRenderCacheSettings = Field(default_factory=LocalRenderCacheSettings)

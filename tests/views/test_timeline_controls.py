@@ -740,6 +740,37 @@ def test_hover_popup_culling_follows_notch_changes(
     assert paint_labels() == ["third"]
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param(lambda tl: tl.force_cursor(Frame(10)), id="cursor"),
+        pytest.param(lambda tl: tl.set_cache_notches(10, 50, "Cache 5 / 41", [(10, 14)]), id="cache-notches"),
+    ],
+)
+@pytest.mark.parametrize("popup_visible", [True, False])
+def test_hover_popup_repaints_with_the_timeline(
+    timeline_control_bar: TimelineControlBar,
+    qtbot: QtBot,
+    mocker: MockerFixture,
+    change: Any,
+    popup_visible: bool,
+) -> None:
+    timeline_control_bar.show()
+    qtbot.waitExposed(timeline_control_bar)
+    timeline = timeline_control_bar.timeline
+    popup = timeline.hover_popup
+    popup.update_state(500)
+    popup.setVisible(popup_visible)
+    qtbot.wait(0)
+    paint_spy = mocker.spy(timeline, "draw_widget")
+    popup_update_spy = mocker.spy(popup, "update")
+
+    change(timeline)
+
+    qtbot.waitUntil(lambda: paint_spy.called, timeout=1000)
+    assert popup_update_spy.called is popup_visible
+
+
 def test_timeline_skips_custom_notches_outside_the_bar(qtbot: QtBot, mocker: MockerFixture) -> None:
     timeline = Timeline()
     qtbot.addWidget(timeline)

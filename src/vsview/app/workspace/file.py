@@ -155,6 +155,9 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
 
         self.local_settings.timeline.mode = self.tbar.timeline.mode
 
+        self.local_settings.render_cache.ranges = self.render_cache.ranges
+        self.local_settings.render_cache.concurrency = self.render_cache.concurrency_override
+
         # Save view state
         with suppress(TypeError):
             view = self.tab_manager.current_view
@@ -193,6 +196,9 @@ class BaseGenericFileWorkspace[PathLike: os.PathLike[str]](LoaderWorkspace[PathL
 
         if tab_index is None:
             self.outputs_manager.current_video_index = self.local_settings.last_output_tab_index
+
+        self.render_cache.set_ranges(self.local_settings.render_cache.ranges)
+        self.render_cache.set_concurrency_override(self.local_settings.render_cache.concurrency)
 
         if not PluginManager.load_failed:
             self.plugin_controller.populate_local_settings()

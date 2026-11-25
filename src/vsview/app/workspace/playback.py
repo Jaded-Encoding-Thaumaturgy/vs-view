@@ -165,6 +165,8 @@ class PlaybackManager(QObject):
 
     loadFailed = Signal()  # error during frame render
 
+    playbackStateChanged = Signal(bool)  # is playing
+
     def __init__(
         self,
         loop: QtEventLoop,
@@ -434,6 +436,25 @@ class PlaybackManager(QObject):
         if self.state.is_playing:
             self._stop_playback()
 
+    def play_range(self, play_range: range, loop: bool = False) -> None:
+        if not play_range or self.state.is_playing:
+            return
+
+        if play_range.start == self.state.current_frame:
+            self._play(play_range, loop)
+            return
+
+        def on_rendered(f: Future[int]) -> None:
+            # A seek made while the first frame rendered replaces this playback.
+            if f.exception() is None and f.result() == 0 and self.state.current_frame == play_range.start:
+                self._play(play_range, loop)
+
+        self.request_frame(play_range.start, on_rendered)
+
+    def _play(self, play_range: range, loop: bool) -> None:
+        self._tbar.playback_container.play_pause_btn.setChecked(True)
+        self._begin_playback(play_range=play_range, loop=loop)
+
     @run_in_loop(return_future=False)
     def invalidate_renders(self) -> None:
         """Drop the result of every frame render that is still running."""
@@ -456,6 +477,7 @@ class PlaybackManager(QObject):
         self._playback_epoch += 1
         self.invalidate_renders()
         self.state.is_playing = True
+        self.playbackStateChanged.emit(True)
         GarbageCollector.defer_full_collections(self)
         self._start_playback(self._playback_epoch, play_range, loop)
 
@@ -538,6 +560,7 @@ class PlaybackManager(QObject):
         self._playback_epoch += 1
         self._stop_audio()
         self.state.is_playing = False
+        self.playbackStateChanged.emit(False)
         GarbageCollector.resume_full_collections(self)
 
         self.state.reset()
@@ -872,10 +895,7 @@ class PlaybackManager(QObject):
             voutput.vs_output.clip.num_frames - 1,
         )
 
-        play_range = range(self.state.current_frame, end_frame + direction, step)
-
-        self._tbar.playback_container.play_pause_btn.setChecked(True)
-        self._begin_playback(play_range=play_range, loop=loop)
+        self._play(range(self.state.current_frame, end_frame + direction, step), loop)
 
     @Slot(float)
     def _on_audio_delay_changed(self, delay_s: float) -> None:
