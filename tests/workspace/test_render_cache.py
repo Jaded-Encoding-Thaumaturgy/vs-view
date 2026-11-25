@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
-import vapoursynth as vs
+from pytest_mock import MockerFixture
 from pytestqt.qtbot import QtBot
 
 from tests.scripts import blank_clip_script, dual_output_script, script_source
@@ -33,8 +33,11 @@ def scratch_directory(tmp_path: Path) -> Iterator[Path]:
 
 @pytest.fixture
 def new_workspace(
-    qt_event_loop: QtEventLoop, qtbot: QtBot, init_plugin_manager: PluginManager
+    qt_event_loop: QtEventLoop, qtbot: QtBot, init_plugin_manager: PluginManager, mocker: MockerFixture
 ) -> Callable[[], PythonScriptWorkspace]:
+    # The dialog blocks the event loop, so a script error would hang the test instead of failing it.
+    mocker.patch("vsview.app.error.display_error_dialog", return_value=0)
+
     def create() -> PythonScriptWorkspace:
         ws = PythonScriptWorkspace()
         qtbot.addWidget(ws)
@@ -57,6 +60,7 @@ def _script(tmp_path: Path, script: Callable[..., None] = blank_clip_script) -> 
 
 def _second_output_script(length: int = 100) -> None:
     """The green output of `dual_output_script` alone, still at index 1."""
+    import vapoursynth as vs
 
     clip = vs.core.std.BlankClip(
         length=length, width=64, height=64, format=vs.RGB24, fpsnum=24, fpsden=1, color=[0, 255, 0]
