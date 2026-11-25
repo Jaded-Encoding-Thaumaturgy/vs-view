@@ -139,8 +139,30 @@ The Timeline provides precise navigation and visual reference markers for the ac
 
 Right-click the Timeline to switch display mode:
 
+<figure markdown="span">
+    ![](../../assets/timeline_context_menu.png){ loading=lazy }
+</figure>
+
+### Mode
+
 - **Frame**: Shows frame-based scale labels.
 - **Time**: Shows timestamp-based scale labels.
+
+### Render Cache
+
+The **Cache** section in the Timeline menu controls the render cache for the current output.
+The header shows the cache state and progress.
+
+The actions are:
+
+- **Set start** and **Set end**: Set the cache range to the frame you right-clicked.
+- **Render range**: Renders the range in the background. It changes to **Pause render** or **Resume render** while a render is active.
+- **Clear range**: Removes the range and deletes its cached frames.
+- **Frames in Flight**: How many frames the render requests at once. Higher values use more memory. It applies only to the current script. **Reset to Global** restores the global value.
+
+When the cache cannot be used, the actions are disabled. You can hover over one to see why.
+
+The Timeline shows the cache range and cached frames as notches.
 
 
 ## 5. Tool Docks
