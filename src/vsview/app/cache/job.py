@@ -192,22 +192,15 @@ class RenderJob:
 
             error: Exception | None = None
             try:
-                frame = request.frame.result()
-            except vs.Error as e:
-                error = e
-            else:
-                with self._lock:
-                    cancelled = self._cancelled
-                if not cancelled:
-                    try:
+                with request.frame.result() as frame:
+                    with self._lock:
+                        cancelled = self._cancelled
+                    if not cancelled:
                         self.store.write(request.n, frame)
-                    except (ValueError, RenderCacheError) as e:
-                        error = e
-                    else:
                         with self._lock:
                             self._write_times.append(time.perf_counter())
-                    finally:
-                        frame.close()
+            except (vs.Error, ValueError, RenderCacheError) as e:
+                error = e
 
             with self._lock:
                 self._in_flight -= 1
