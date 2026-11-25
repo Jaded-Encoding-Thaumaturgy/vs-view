@@ -216,7 +216,7 @@ class LoaderWorkspace[T](BaseWorkspace):
         self.tbar.timeline.cacheRenderToggled.connect(self.render_cache.toggle_render)
         self.tbar.timeline.cacheClearRequested.connect(self.render_cache.clear)
         self.tbar.timeline.cacheConcurrencyChanged.connect(self.render_cache.set_concurrency_override)
-        self.tbar.playback_container.playCacheRange.connect(self._on_play_cache_range)
+        self.tbar.playback_container.zoneToCacheRequested.connect(self._on_zone_to_cache_requested)
 
         self._set_shorcuts()
         self._register_shortcuts()
@@ -288,6 +288,17 @@ class LoaderWorkspace[T](BaseWorkspace):
         sm.register_shortcut(
             ActionID.JUMP_TO_FRAME,
             self.tbar.playback_container.frame_edit.show_focus_for_user,
+            self.loaded_page,
+        )
+        sm.register_shortcut(ActionID.ZONE_PLAY, self.tbar.playback_container.zone_btn.click, self.loaded_page)
+        sm.register_shortcut(
+            ActionID.ZONE_SET_START,
+            lambda: self.tbar.playback_container.set_zone_start(self.playback.state.current_frame),
+            self.loaded_page,
+        )
+        sm.register_shortcut(
+            ActionID.ZONE_SET_END,
+            lambda: self.tbar.playback_container.set_zone_end(self.playback.state.current_frame),
             self.loaded_page,
         )
 
@@ -1020,7 +1031,7 @@ class LoaderWorkspace[T](BaseWorkspace):
             self.render_cache.range_label(),
             self.render_cache.cached_runs(),
         )
-        self.tbar.playback_container.play_cache_btn.setEnabled(r.frames is not None)
+        self.tbar.playback_container.zone_editor.set_cache_state(r.frames, self.render_cache.unavailable_reason())
 
     @Slot(object)
     def _on_timeline_context_menu(self, frame: Frame) -> None:
@@ -1043,13 +1054,17 @@ class LoaderWorkspace[T](BaseWorkspace):
             unavailable_reason=self.render_cache.unavailable_reason(),
         )
 
-    @Slot(bool, int)
-    def _on_play_cache_range(self, loop: bool, step: int) -> None:
-        if (r := self.render_cache.current_range()) is None or (frames := r.frames) is None:
+    @Slot()
+    def _on_zone_to_cache_requested(self) -> None:
+        if not (voutput := self.outputs_manager.current_voutput):
             return
 
-        # A negative step plays the range backwards, from its end.
-        self.playback.play_range(frames[::step], loop)
+        self.render_cache.set_range(
+            *self.tbar.playback_container.zone_editor.settings.bounds(
+                self.playback.state.current_frame,
+                voutput.vs_output.clip.num_frames,
+            )
+        )
 
     def seek_to_notch(self, *, forward: bool, starts_only: bool = False) -> None:
         """

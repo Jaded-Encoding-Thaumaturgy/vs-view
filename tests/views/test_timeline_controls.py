@@ -11,6 +11,7 @@ from PySide6.QtGui import (
     QContextMenuEvent,
     QFocusEvent,
     QFontMetrics,
+    QHelpEvent,
     QHideEvent,
     QImage,
     QMouseEvent,
@@ -25,13 +26,13 @@ from shiboken6 import Shiboken
 
 from vsview.app.outputs.audio import PrettyChannelsLayout
 from vsview.app.settings import SettingsManager
+from vsview.app.views.components import StepSpinBox
 from vsview.app.views.timeline import (
     CustomNotch,
     FrameEdit,
     HoverLabel,
     Notch,
     PlaybackContainer,
-    StepSpinBox,
     Timeline,
     TimelineControlBar,
     TimelineHoverPopup,
@@ -787,25 +788,55 @@ def test_timeline_skips_custom_notches_outside_the_bar(qtbot: QtBot, mocker: Moc
 
 
 # PlaybackContainer Tests
-def test_playback_container_loop_and_play_zone(timeline_control_bar: TimelineControlBar, qtbot: QtBot) -> None:
+def test_playback_container_zone_button_plays_the_zone(timeline_control_bar: TimelineControlBar, qtbot: QtBot) -> None:
     container = timeline_control_bar.playback_container
-    timeline_control_bar.set_data(1000, [(i + 1) / 25.0 for i in range(1000)])
 
-    zone_emissions: list[tuple[int, bool, int]] = []
-    container.playZone.connect(lambda z, loop, step: zone_emissions.append((z, loop, step)))
+    with qtbot.waitSignal(container.playZone, timeout=1000):
+        container.zone_btn.click()
 
-    container.loop_checkbox.setChecked(True)
-    assert container.settings.loop is True
 
-    container.zone_frame_spinbox.setValue(350)
-    assert container.settings.zone_frames == 350
-    assert timeline_control_bar.cum_durations is not None
-    assert len(timeline_control_bar.cum_durations) == 1000
-    assert container.zone_time_edit.time() == timeline_control_bar.cum_durations[349].to_qtime()
+def test_playback_container_editor_play_button_closes_the_editor_and_plays_the_zone(
+    timeline_control_bar: TimelineControlBar, qtbot: QtBot
+) -> None:
+    container = timeline_control_bar.playback_container
+    container.zone_menu.popup(QPoint(0, 0))
 
-    qtbot.mouseClick(container.play_zone_btn, Qt.MouseButton.LeftButton)
-    assert len(zone_emissions) == 1
-    assert zone_emissions[0] == (350, True, 1)
+    with qtbot.waitSignal(container.playZone, timeout=1000):
+        container.zone_editor.play_btn.click()
+
+    assert container.zone_menu.isVisible() is False
+
+
+def test_playback_container_zone_tooltip_follows_the_current_frame(timeline_control_bar: TimelineControlBar) -> None:
+    container = timeline_control_bar.playback_container
+    container.zone_editor.settings.length = 10
+    container.frame_edit.setValue(40)
+
+    QApplication.sendEvent(container.zone_btn, QHelpEvent(QEvent.Type.ToolTip, QPoint(1, 1), QPoint(1, 1)))
+
+    assert "40-49" in container.zone_btn.toolTip()
+
+
+@pytest.mark.parametrize(
+    ("set_end", "expected"),
+    [(False, (30, 49)), (True, (40, 60))],
+    ids=["start", "end"],
+)
+def test_playback_container_set_zone_bound_freezes_the_zone_around_the_current_frame(
+    timeline_control_bar: TimelineControlBar, set_end: bool, expected: tuple[int, int]
+) -> None:
+    container = timeline_control_bar.playback_container
+    container.zone_editor.settings.length = 10
+    container.frame_edit.setValue(40)
+
+    if set_end:
+        container.set_zone_end(60)
+    else:
+        container.set_zone_start(30)
+
+    zone = container.zone_editor.settings
+    assert (zone.start, zone.end, zone.follow) == (*expected, False)
+    assert (container.zone_editor.start_frame_edit.value(), container.zone_editor.end_frame_edit.value()) == expected
 
 
 def test_playback_container_step_spinbox_skips_zero(qtbot: QtBot) -> None:
@@ -829,22 +860,6 @@ def test_playback_container_step_spinbox_skips_zero(qtbot: QtBot) -> None:
     # Step down from 2 to 1
     spinbox.stepBy(-1)
     assert spinbox.value() == 1
-
-
-def test_playback_container_step_changed_handler(qtbot: QtBot) -> None:
-    container = PlaybackContainer()
-    qtbot.addWidget(container)
-
-    container.settings.step = 1
-    # When zero is passed, resets to -1 if step > 0
-    container.step_frame_spinbox.valueChanged.emit(0)
-    assert container.settings.step == -1
-
-    container.step_frame_spinbox.valueChanged.emit(0)
-    assert container.settings.step == 1
-
-    container.step_frame_spinbox.setValue(5)
-    assert container.settings.step == 5
 
 
 def test_playback_container_seek_step_settings(qtbot: QtBot) -> None:
@@ -1046,11 +1061,13 @@ def test_timeline_control_bar_set_data_synchronization(timeline_control_bar: Tim
 
     # Frame spinbox / edit maximums synchronized to 249 (total_frames - 1)
     assert bar.playback_container.frame_edit.maximum() == 249
-    assert bar.playback_container.zone_frame_spinbox.maximum() == 249
+    assert bar.playback_container.zone_editor.start_frame_edit.maximum() == 249
+    assert bar.playback_container.zone_editor.end_frame_edit.maximum() == 249
+    assert bar.playback_container.zone_editor.length_frame_edit.maximum() == 250
 
     # Time edit maximums synchronized to 10 seconds
     assert bar.playback_container.time_edit.maximumTime() == Time(seconds=10.0).to_qtime()
-    assert bar.playback_container.zone_time_edit.maximumTime() == Time(seconds=10.0).to_qtime()
+    assert bar.playback_container.zone_editor.length_time_edit.maximumTime() == Time(seconds=10.0).to_qtime()
 
 
 def test_timeline_control_bar_playback_controls_enabled(
@@ -1207,9 +1224,6 @@ def test_playback_container_context_menu_shows_the_current_settings(
     container.settings.seek_step = 7
     container.settings.speed = 4.5
     container.settings.uncapped = True
-    container.settings.zone_frames = 30
-    container.settings.step = -2
-    container.settings.loop = True
 
     open_context_menu(container, mocker)
 
@@ -1218,9 +1232,6 @@ def test_playback_container_context_menu_shows_the_current_settings(
     assert container.speed_slider.value() == 75
     assert container.uncap_checkbox.isChecked() is True
     assert container.speed_slider.isEnabled() is False
-    assert container.zone_frame_spinbox.value() == 30
-    assert container.step_frame_spinbox.value() == -2
-    assert container.loop_checkbox.isChecked() is True
 
 
 @pytest.mark.parametrize("matches_global", [True, False])
@@ -1237,17 +1248,6 @@ def test_playback_container_context_menu_enables_reset_actions_only_for_changed_
 
     assert container.reset_seek_step_to_global_action.isEnabled() is not matches_global
     assert container.reset_audio_delay_to_global_action.isEnabled() is not matches_global
-
-
-def test_playback_container_zone_time_changed(timeline_control_bar: TimelineControlBar) -> None:
-    bar = timeline_control_bar
-    bar.set_data(100, [(i + 1) / 25.0 for i in range(100)])
-    pc = bar.playback_container
-
-    # Changing zone_time_edit updates zone_frame_spinbox and settings.zone_frames
-    pc.zone_time_edit.setTime(QTime(0, 0, 2, 0))
-    assert pc.settings.zone_frames == 50
-    assert pc.zone_frame_spinbox.value() == 50
 
 
 def test_playback_container_audio_delay_reset_to_global(qtbot: QtBot) -> None:
@@ -1316,7 +1316,7 @@ def test_timeline_zero_frame_clips_bounds(timeline_control_bar: TimelineControlB
 
     assert bar.total_frames == 0
     assert bar.playback_container.frame_edit.maximum() == 0
-    assert bar.playback_container.zone_frame_spinbox.maximum() == 1
+    assert bar.playback_container.zone_editor.length_frame_edit.maximum() == 1
 
 
 def test_timeline_custom_notches_line_coordinates_updated_on_scroll_rect_recalculated(

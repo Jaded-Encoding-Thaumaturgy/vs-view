@@ -86,6 +86,7 @@ Playback Controls combine transport buttons, direct navigation fields, and audio
 - **Play / Pause**: Starts or stops playback. During playback, seek buttons and time/frame fields are disabled, but Play / Pause remains available to stop playback.
 - **Time field**: Seeks directly to a specific timestamp.
 - **Frame field**: Seeks directly to a specific frame number.
+- **Zone**: Plays the zone. Click its arrow to edit the zone (see [Zone Playback](#zone-playback)).
 - **Mute + Volume**: Toggles mute and adjusts playback volume (enabled only when audio outputs are available).
 
 Right-click the Playback Controls area for advanced settings:
@@ -97,8 +98,24 @@ Right-click the Playback Controls area for advanced settings:
 - **Seek Step**: Sets the N-frame jump size, with **Reset to Global** to restore the default value from the global settings.
 - **Speed Limit**: Sets playback speed from 0.25x to 8.00x in 0.25x steps, with a reset button for 1.00x.
 - **Uncap FPS**: Removes the speed limit.
-- **Zone Playback**: Defines a zone by time/frame, then plays that zone with optional **Loop** and configurable **Play Step** (negative values allowed!).
 - **Audio Output / Delay**: Selects audio output and adjusts sync delay (-10000 ms to +10000 ms), with **Reset to Global** to restore the default value from the global settings.
+
+### Zone Playback
+
+The zone button plays a range of frames. Click its arrow to open the zone editor:
+
+<figure markdown="span">
+    ![](../../assets/playback_zone_editor.png){ loading=lazy }
+</figure>
+
+- **Current**: Plays **Length** frames from the current frame instead of a fixed range. Start and End then follow the current frame. With a negative **Play Step**, the zone ends at the current frame.
+- **Start / End**: The first and last frames of the zone, as a time or a frame number. The crosshair button sets the bound to the current frame.
+- **Length**: The number of frames in the zone, or their duration.
+- **Play Step**: Plays every Nth frame. Negative values play the zone backwards, from its end.
+- **From cache / To cache**: Copies the render cache range into the zone, or the zone into the render cache range.
+- **Loop**: Plays the zone again from its start when it ends.
+
+The zone is saved with the file and is shared by all outputs. The **Play Zone**, **Set Zone Start** and **Set Zone End** shortcuts have no default key. You can set them in the Settings Dialog.
 
 ## 4. Timeline
 

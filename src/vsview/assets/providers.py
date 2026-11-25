@@ -70,6 +70,9 @@ class IconName(StrEnum):
     CHECK_CIRCLE = "check-circle"
     WARNING_CIRCLE = "warning-circle"
     CLOSE = "x"
+    BRACKETS_SQUARE = "brackets-square"
+    CROSSHAIR = "crosshair-simple"
+    DATABASE = "database"
 
     modifier: str
 
@@ -240,6 +243,8 @@ class MaterialProvider(IconProvider):
         IconName.INFO: "information",
         IconName.WARNING_CIRCLE: "alert-circle",
         IconName.CLOSE: "close",
+        IconName.BRACKETS_SQUARE: "code-brackets",
+        IconName.CROSSHAIR: "crosshairs",
     }
 
     @property
@@ -310,6 +315,8 @@ class LucideProvider(IconProvider):
         IconName.MONITOR_UP: "monitor-up",
         IconName.CHECK_CIRCLE: "circle-check",
         IconName.WARNING_CIRCLE: "circle-exclamation-point",
+        IconName.BRACKETS_SQUARE: "brackets",
+        IconName.CROSSHAIR: "crosshair",
     }
 
     @property

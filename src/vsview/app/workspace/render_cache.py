@@ -182,6 +182,18 @@ class RenderCacheController(QObject):
         r.end = frame
         self._on_range_changed(voutput)
 
+    def set_range(self, start: int, end: int) -> None:
+        if (voutput := self._current_cacheable) is None:
+            return
+
+        r = self._ranges.setdefault(voutput.vs_index, CacheRange())
+
+        if (r.start, r.end) == (start, end):
+            return
+
+        r.start, r.end = start, end
+        self._on_range_changed(voutput)
+
     @Slot()
     def toggle_render(self) -> None:
         if (voutput := self._current_cacheable) is None:

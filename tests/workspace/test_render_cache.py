@@ -290,12 +290,12 @@ def test_clear_deletes_the_cached_frames_and_the_range(
     assert _notch_spans(ws, Timeline.CACHE_RANGE_NOTCH_KEY) == set()
 
 
-def test_play_cache_range_is_enabled_only_with_a_full_range(
+def test_zone_from_cache_is_enabled_only_with_a_full_range(
     qtbot: QtBot, tmp_path: Path, new_workspace: Callable[[], PythonScriptWorkspace]
 ) -> None:
     ws = new_workspace()
     _load(qtbot, ws, _script(tmp_path))
-    button = ws.tbar.playback_container.play_cache_btn
+    button = ws.tbar.playback_container.zone_editor.from_cache_btn
     enabled = [button.isEnabled()]
 
     ws.render_cache.set_start(5)
@@ -308,20 +308,47 @@ def test_play_cache_range_is_enabled_only_with_a_full_range(
     assert enabled == [False, False, True, False]
 
 
-def test_play_cache_range_plays_the_range_with_the_play_step(
+def test_zone_from_cache_plays_the_cache_range_with_the_play_step(
     qtbot: QtBot, tmp_path: Path, new_workspace: Callable[[], PythonScriptWorkspace]
 ) -> None:
     ws = new_workspace()
     _load(qtbot, ws, _script(tmp_path))
     ws.render_cache.set_start(5)
     ws.render_cache.set_end(9)
-    ws.tbar.playback_container.settings.step = -1
+    container = ws.tbar.playback_container
+    container.zone_editor.settings.step = -1
     frames = list[int]()
     ws.playback.timelineCursorChanged.connect(frames.append)
 
-    ws.tbar.playback_container.play_cache_btn.click()
+    container.zone_editor.from_cache_btn.click()
+    container.zone_btn.click()
     qtbot.waitUntil(
         lambda: frames[-1:] == [5] and not ws.playback.state.is_playing and ws.playback.is_idle, timeout=TIMEOUT_MS
     )
 
     assert frames == [9, 8, 7, 6, 5]
+
+
+@pytest.mark.parametrize(
+    ("follow", "expected"),
+    [(False, (10, 20)), (True, (25, 29))],
+    ids=["exact_range", "from_current_frame"],
+)
+def test_zone_to_cache_sets_the_cache_range_to_the_zone(
+    qtbot: QtBot,
+    tmp_path: Path,
+    new_workspace: Callable[[], PythonScriptWorkspace],
+    follow: bool,
+    expected: tuple[int, int],
+) -> None:
+    ws = new_workspace()
+    _load(qtbot, ws, _script(tmp_path))
+    ws.playback.state.current_frame = 25
+    zone = ws.tbar.playback_container.zone_editor.settings
+    zone.start, zone.end, zone.length, zone.follow = 10, 20, 5, follow
+
+    ws.tbar.playback_container.zone_editor.to_cache_btn.click()
+
+    r = ws.render_cache.current_range()
+    assert r is not None
+    assert (r.start, r.end) == expected

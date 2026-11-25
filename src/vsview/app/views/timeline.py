@@ -15,18 +15,15 @@ from typing import Any, Literal, NamedTuple, Self, override
 
 from jetpytools import clamp, complex_hash
 from PySide6.QtCore import (
-    QEasingCurve,
     QEvent,
     QLineF,
+    QObject,
     QPoint,
     QPointF,
-    QPropertyAnimation,
     QRectF,
-    QSequentialAnimationGroup,
     QSignalBlocker,
     QSize,
     Qt,
-    QTime,
     Signal,
     Slot,
 )
@@ -47,23 +44,18 @@ from PySide6.QtGui import (
     QPen,
     QResizeEvent,
     QRgba64,
-    QValidator,
 )
 from PySide6.QtWidgets import (
-    QAbstractSpinBox,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
-    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QMenu,
-    QPushButton,
     QSizePolicy,
     QSlider,
     QSpinBox,
-    QTimeEdit,
     QToolButton,
     QToolTip,
     QWidget,
@@ -78,7 +70,9 @@ from ..cache.job import RenderJob
 from ..icon import IconReloadMixin
 from ..outputs import AudioOutput
 from ..settings import SettingsManager
-from .components import SegmentedControl
+from ..settings.models import ZoneSettings
+from .components import FrameEdit, SegmentedControl, TimeEdit
+from .zone import ZoneEditor
 
 logger = getLogger(__name__)
 
@@ -1451,110 +1445,11 @@ class Timeline(QWidget):
         self.cacheConcurrencyChanged.emit(None)
 
 
-def _show_focus_for_user(self: QAbstractSpinBox) -> None:
-    self.setFocus()
-    self.selectAll()
-
-    accent = self.palette().color(QPalette.ColorRole.Accent)
-    effect = QGraphicsDropShadowEffect(self)
-    effect.setBlurRadius(0)
-    effect.setColor(accent)
-    effect.setOffset(0, 0)
-    self.setGraphicsEffect(effect)
-
-    # Ramp up: fast
-    anim_in = QPropertyAnimation(effect, b"blurRadius", self)
-    anim_in.setDuration(200)
-    anim_in.setStartValue(0.0)
-    anim_in.setEndValue(50.0)
-    anim_in.setEasingCurve(QEasingCurve.Type.OutCubic)
-
-    # Decay: slow fade
-    anim_out = QPropertyAnimation(effect, b"blurRadius", self)
-    anim_out.setDuration(800)
-    anim_out.setStartValue(50.0)
-    anim_out.setEndValue(0.0)
-    anim_out.setEasingCurve(QEasingCurve.Type.InCubic)
-
-    group = QSequentialAnimationGroup(self)
-    group.addAnimation(anim_in)
-    group.addAnimation(anim_out)
-    group.finished.connect(effect.deleteLater)
-    group.start(QSequentialAnimationGroup.DeletionPolicy.DeleteWhenStopped)
-
-
-class FrameEdit(QSpinBox):
-    frameChanged = Signal(Frame, Frame)
-
-    def __init__(self, parent: QWidget) -> None:
-        super().__init__(parent)
-        self.valueChanged.connect(self._on_value_changed)
-
-        self.setMinimum(0)
-        self.setKeyboardTracking(False)
-
-        self.old_value = self.value()
-
-    @override
-    def validate(self, input_text: str, pos: int) -> tuple[QValidator.State, str, int]:
-        if input_text.isdigit():
-            val = int(input_text)
-
-            if val > self.maximum():
-                max_str = str(self.maximum())
-                return QValidator.State.Acceptable, max_str, len(max_str)
-
-        return super().validate(input_text, pos)
-
-    show_focus_for_user = _show_focus_for_user
-
-    @Slot(int)
-    def _on_value_changed(self, value: int) -> None:
-        self.frameChanged.emit(Frame(value), Frame(self.old_value))
-        self.old_value = value
-
-
-class TimeEdit(QTimeEdit):
-    valueChanged = Signal(QTime, QTime)
-
-    def __init__(self, parent: QWidget) -> None:
-        super().__init__(parent)
-        self.timeChanged.connect(self._on_time_changed)
-
-        self.setDisplayFormat("HH:mm:ss.zzz")
-        self.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
-        self.setMinimumTime(QTime())
-        self.setKeyboardTracking(False)
-
-        self.old_time = self.time()
-
-    show_focus_for_user = _show_focus_for_user
-
-    @Slot(QTime)
-    def _on_time_changed(self, value: QTime) -> None:
-        self.valueChanged.emit(self.time(), self.old_time)
-        self.old_time = self.time()
-
-
-class StepSpinBox(QSpinBox):
-    @override
-    def stepBy(self, steps: int) -> None:
-        if self.value() == 1 and steps < 0:
-            self.setValue(-1)
-        elif self.value() == -1 and steps > 0:
-            self.setValue(1)
-        else:
-            super().stepBy(steps)
-
-
 @dataclass(slots=True, repr=False, eq=False, match_args=False)
 class PlaybackSettings:
     seek_step: int = 1
     speed: float = 1.0
     uncapped: bool = False
-    zone_frames: int = 100
-    loop: bool = False
-    step: int = 1
 
 
 class PlaybackContainer(QWidget, IconReloadMixin):
@@ -1562,8 +1457,8 @@ class PlaybackContainer(QWidget, IconReloadMixin):
     ICON_COLOR = QPalette.ColorRole.ButtonText
 
     settingsChanged = Signal(int, float, bool)  # seek_step, speed, uncapped
-    playZone = Signal(int, bool, int)  # zone_frames, loop, int
-    playCacheRange = Signal(bool, int)  # loop, step
+    playZone = Signal()
+    zoneToCacheRequested = Signal()
     volumeChanged = Signal(float)  # volume 0.0-1.0
     muteChanged = Signal(bool)  # is_muted
     audioDelayChanged = Signal(float)  # seconds
@@ -1575,6 +1470,8 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.setObjectName(self.__class__.__name__)
+
+        self.settings = PlaybackSettings()
 
         self.current_layout = QHBoxLayout(self)
         self.current_layout.setContentsMargins(4, 0, 4, 0)
@@ -1597,6 +1494,22 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         self.frame_edit = FrameEdit(self)
         self.current_layout.addWidget(self.frame_edit)
+
+        self.zone_btn = self._make_button(IconName.BRACKETS_SQUARE, "Play zone")
+        self.zone_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.zone_btn.clicked.connect(self.playZone)
+        self.zone_btn.installEventFilter(self)
+
+        self.zone_menu = QMenu(self.zone_btn)
+        self.zone_menu.aboutToShow.connect(self._on_zone_menu_about_to_show)
+        self.zone_editor = ZoneEditor(ZoneSettings(), self.zone_menu)
+        self.zone_editor.playRequested.connect(self._on_zone_play_requested)
+        self.zone_editor.zoneToCacheRequested.connect(self._on_zone_to_cache_requested)
+
+        zone_action = QWidgetAction(self.zone_menu)
+        zone_action.setDefaultWidget(self.zone_editor)
+        self.zone_menu.addAction(zone_action)
+        self.zone_btn.setMenu(self.zone_menu)
 
         self.current_layout.addSpacing(5)
 
@@ -1740,80 +1653,6 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         self.context_menu.addSeparator()
 
-        # Zone Playback section
-        zone_widget = QWidget(self.context_menu)
-        zone_layout = QFormLayout(zone_widget)
-        zone_layout.setContentsMargins(6, 6, 6, 6)
-
-        # Time edit
-        self.zone_time_edit = TimeEdit(zone_widget)
-        self.zone_time_edit.valueChanged.connect(self._on_zone_time_changed)
-
-        # Frame count spinbox
-        self.zone_frame_spinbox = FrameEdit(zone_widget)
-        self.zone_frame_spinbox.setMinimum(1)
-        self.zone_frame_spinbox.setMaximum(1_000_000)
-        self.zone_frame_spinbox.setFixedWidth(90)
-        self.zone_frame_spinbox.frameChanged.connect(self._on_zone_frames_changed)
-
-        # Row with both edits
-        zone_edits_row = QWidget(zone_widget)
-        zone_edits_layout = QHBoxLayout(zone_edits_row)
-        zone_edits_layout.setContentsMargins(0, 0, 0, 0)
-        zone_edits_layout.setSpacing(4)
-        zone_edits_layout.addWidget(self.zone_time_edit)
-        zone_edits_layout.addWidget(self.zone_frame_spinbox)
-
-        # Play zone button
-        self.play_zone_btn = self.make_tool_button(IconName.PLAY, "Play Zone", zone_widget)
-        self.play_zone_btn.clicked.connect(self._on_play_zone_clicked)
-
-        # Play cache range button, enabled by the render cache when the current output has a full range
-        self.play_cache_btn = QPushButton("Play cache range", zone_widget)
-        self.play_cache_btn.setToolTip("Play the render cache range, with the Loop and Play Step settings")
-        self.play_cache_btn.setEnabled(False)
-        self.play_cache_btn.clicked.connect(self._on_play_cache_clicked)
-
-        # Loop checkbox
-        self.loop_checkbox = QCheckBox("Loop")
-        self.loop_checkbox.toggled.connect(self._on_loop_changed)
-
-        # Step spinbox
-        self.step_frame_spinbox = StepSpinBox(zone_widget, minimum=-1_000_000, maximum=1_000_000, value=1)
-        self.step_frame_spinbox.setFixedWidth(90)
-        self.step_frame_spinbox.setToolTip("Step size (negative values are allowed)")
-        self.step_frame_spinbox.valueChanged.connect(self._on_step_changed)
-
-        # Row with play step
-        zone_play_step_row = QWidget(zone_widget)
-        zone_play_step_layout = QHBoxLayout(zone_play_step_row)
-        zone_play_step_layout.setContentsMargins(0, 0, 0, 0)
-        zone_play_step_layout.setSpacing(4)
-        zone_play_step_layout.addStretch()
-        zone_play_step_layout.addWidget(self.step_frame_spinbox)
-
-        # Row with loop and play button
-        zone_controls_row = QWidget(zone_widget)
-        zone_controls_layout = QHBoxLayout(zone_controls_row)
-        zone_controls_layout.setContentsMargins(0, 0, 0, 0)
-        zone_controls_layout.setSpacing(4)
-        zone_controls_layout.addWidget(self.play_cache_btn)
-        zone_controls_layout.addStretch()
-        zone_controls_layout.addWidget(self.play_zone_btn)
-        zone_controls_layout.addWidget(self.loop_checkbox)
-
-        zone_layout.addRow("Zone Time/Frame", zone_edits_row)
-        zone_layout.addRow("Play Step", zone_play_step_row)
-        zone_layout.addRow(zone_controls_row)
-
-        zone_action = QWidgetAction(self.context_menu)
-        zone_action.setDefaultWidget(zone_widget)
-        self.context_menu.addAction(zone_action)
-
-        self.settings = PlaybackSettings()
-
-        self.context_menu.addSeparator()
-
         # Audio
         self.audio_widget = QWidget(self.context_menu)
         audio_layout = QFormLayout(self.audio_widget)
@@ -1922,6 +1761,16 @@ class PlaybackContainer(QWidget, IconReloadMixin):
         return self._cum_durations
 
     @override
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self.zone_btn and event.type() == QEvent.Type.ToolTip:
+            zone = self.zone_editor.settings
+            start, end = zone.bounds(self.frame_edit.value(), self.total_frames)
+            mode = "from the current frame" if zone.follow else "range"
+            self.zone_btn.setToolTip(f"Play zone {mode}: {start}-{end}\nClick the arrow to edit the zone")
+
+        return super().eventFilter(watched, event)
+
+    @override
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         with QSignalBlocker(self.seek_step_spinbox):
             self.seek_step_spinbox.setValue(self.settings.seek_step)
@@ -1935,20 +1784,6 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         self.speed_slider.setEnabled(not self.settings.uncapped)
         self.speed_reset_btn.setEnabled(not self.settings.uncapped)
-
-        with QSignalBlocker(self.zone_frame_spinbox):
-            self.zone_frame_spinbox.setValue(self.settings.zone_frames)
-
-        if self.cum_durations:
-            idx = min(self.settings.zone_frames - 1, len(self.cum_durations) - 1)
-            with QSignalBlocker(self.zone_time_edit):
-                self.zone_time_edit.setTime(self.cum_durations[idx].to_qtime() if idx >= 0 else QTime())
-
-        with QSignalBlocker(self.step_frame_spinbox):
-            self.step_frame_spinbox.setValue(self.settings.step)
-
-        with QSignalBlocker(self.loop_checkbox):
-            self.loop_checkbox.setChecked(self.settings.loop)
 
         self.reset_seek_step_to_global_action.setEnabled(
             self.settings.seek_step != SettingsManager.global_settings.timeline.seek_step
@@ -1969,20 +1804,21 @@ class PlaybackContainer(QWidget, IconReloadMixin):
 
         total_time = self._cum_durations[-1] if self._cum_durations else Time()
 
-        max_zone = max(1, total_frames - 1)
-        self.settings.zone_frames = clamp(self.settings.zone_frames, 1, max_zone)
-
-        with QSignalBlocker(self.zone_frame_spinbox):
-            self.zone_frame_spinbox.setMaximum(Frame(max_zone))
-
-        with QSignalBlocker(self.zone_time_edit):
-            self.zone_time_edit.setMaximumTime(total_time.to_qtime())
-
         with QSignalBlocker(self.frame_edit):
             self.frame_edit.setMaximum(Frame(max(0, total_frames - 1)))
 
         with QSignalBlocker(self.time_edit):
             self.time_edit.setMaximumTime(total_time.to_qtime())
+
+        self.zone_editor.set_data(total_frames, cum_durations)
+
+    def set_zone_start(self, frame: int) -> None:
+        self.zone_editor.refresh(self.frame_edit.value())
+        self.zone_editor.set_start(frame)
+
+    def set_zone_end(self, frame: int) -> None:
+        self.zone_editor.refresh(self.frame_edit.value())
+        self.zone_editor.set_end(frame)
 
     @run_in_loop
     def set_audio_outputs(self, aoutputs: list[AudioOutput], index: int | None = None) -> None:
@@ -2064,52 +1900,19 @@ class PlaybackContainer(QWidget, IconReloadMixin):
     def _emit_settings(self) -> None:
         self.settingsChanged.emit(self.settings.seek_step, self.settings.speed, self.settings.uncapped)
 
-    @Slot(object, object)
-    def _on_zone_frames_changed(self, new_frame: int, old_frame: int) -> None:
-        self.settings.zone_frames = new_frame
-
-        # Convert frames to time
-        if self.cum_durations:
-            with QSignalBlocker(self.zone_time_edit):
-                self.zone_time_edit.setTime(self.cum_durations[new_frame - 1].to_qtime() if new_frame > 0 else QTime())
-
-    @Slot(QTime, QTime)
-    def _on_zone_time_changed(self, new_time: QTime, old_time: QTime) -> None:
-        # Convert time to frames
-        if self.cum_durations:
-            frames = max(1, bisect_right(self.cum_durations, Time.from_qtime(new_time)))
-
-            self.settings.zone_frames = frames
-
-            with QSignalBlocker(self.zone_frame_spinbox):
-                self.zone_frame_spinbox.setValue(frames)
+    @Slot()
+    def _on_zone_menu_about_to_show(self) -> None:
+        self.zone_editor.refresh(self.frame_edit.value())
 
     @Slot()
-    def _on_play_zone_clicked(self) -> None:
-        self.playZone.emit(self.settings.zone_frames, self.settings.loop, self.settings.step)
-        self.context_menu.close()
+    def _on_zone_play_requested(self) -> None:
+        self.zone_menu.close()
+        self.playZone.emit()
 
     @Slot()
-    def _on_play_cache_clicked(self) -> None:
-        self.playCacheRange.emit(self.settings.loop, self.settings.step)
-        self.context_menu.close()
-
-    @Slot(bool)
-    def _on_loop_changed(self, checked: bool) -> None:
-        self.settings.loop = checked
-
-    @Slot(int)
-    def _on_step_changed(self, value: int) -> None:
-        if value == 0:
-            new_value = 1 if self.settings.step < 0 else -1
-
-            with QSignalBlocker(self.step_frame_spinbox):
-                self.step_frame_spinbox.setValue(new_value)
-
-            self.settings.step = new_value
-            return
-
-        self.settings.step = value
+    def _on_zone_to_cache_requested(self) -> None:
+        self.zone_menu.close()
+        self.zoneToCacheRequested.emit()
 
     @Slot(bool)
     def _on_mute_clicked(self, checked: bool) -> None:

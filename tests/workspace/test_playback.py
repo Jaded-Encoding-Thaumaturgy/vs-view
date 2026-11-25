@@ -22,6 +22,7 @@ from vsview.app.outputs.audio import AudioOutput
 from vsview.app.outputs.video import VideoMetadata, VideoOutput
 from vsview.app.packing import Packer
 from vsview.app.plugins.manager import PluginManager
+from vsview.app.settings.models import ZoneSettings
 from vsview.app.views.timeline import TimelineControlBar
 from vsview.app.workspace.playback import PlaybackManager, PlaybackState
 from vsview.types import Frame
@@ -800,31 +801,41 @@ def test_playback_shows_each_frame_in_order_and_stops_on_the_last_one(
 
 
 @pytest.mark.parametrize(
-    ("start", "zone_frames", "step", "expected"),
+    ("zone", "current", "expected"),
     [
-        (2, 4, 1, [3, 4, 5, 6]),
-        (5, 10, -1, [4, 3, 2, 1, 0]),
-        (0, 6, 2, [2, 4, 6]),
-        (7, 10, 1, [8, 9]),
+        (ZoneSettings(length=4), 2, [3, 4, 5]),
+        (ZoneSettings(length=10, step=-1), 5, [4, 3, 2, 1, 0]),
+        (ZoneSettings(length=6, step=2), 0, [2, 4]),
+        (ZoneSettings(length=10), 7, [8, 9]),
+        (ZoneSettings(start=3, end=6, follow=False), 0, [3, 4, 5, 6]),
+        (ZoneSettings(start=3, end=6, follow=False, step=-1), 0, [6, 5, 4, 3]),
     ],
-    ids=["forward", "backward_clamped_at_first_frame", "every_second_frame", "clamped_at_last_frame"],
+    ids=[
+        "from_current_frame",
+        "from_current_frame_backward_clamped_at_first_frame",
+        "from_current_frame_every_second_frame",
+        "from_current_frame_clamped_at_last_frame",
+        "exact_range",
+        "exact_range_backward",
+    ],
 )
-def test_play_zone_plays_from_the_current_frame_and_stops_at_the_zone_end(
+def test_play_zone_plays_each_frame_of_the_zone_once(
     playback_manager_setup: PlaybackManagerSetup,
     use_voutput: Callable[[VideoOutput], VideoOutput],
     create_test_video_output: Callable[[int], VideoOutput],
     qtbot: QtBot,
-    start: int,
-    zone_frames: int,
-    step: int,
+    zone: ZoneSettings,
+    current: int,
     expected: list[int],
 ) -> None:
     manager, _, _, _, _, tbar = playback_manager_setup
     use_voutput(create_test_video_output(10))
-    manager.state.current_frame = start
+    manager.state.current_frame = current
+    tbar.playback_container.zone_editor.settings = zone
     frames = record_frames(manager)
 
-    tbar.playback_container.playZone.emit(zone_frames, False, step)
+    tbar.playback_container.playZone.emit()
+    qtbot.waitUntil(lambda: frames[-1:] == expected[-1:], timeout=5000)
     wait_until_stopped(manager, qtbot)
 
     assert frames == expected
@@ -838,9 +849,10 @@ def test_play_zone_with_loop_starts_again_from_the_zone_start(
 ) -> None:
     manager, _, _, _, _, tbar = playback_manager_setup
     use_voutput(create_test_video_output(10))
+    tbar.playback_container.zone_editor.settings = ZoneSettings(length=3, loop=True)
     frames = record_frames(manager)
 
-    tbar.playback_container.playZone.emit(2, True, 1)
+    tbar.playback_container.playZone.emit()
     qtbot.waitUntil(lambda: len(frames) >= 7, timeout=5000)
     manager.stop()
 

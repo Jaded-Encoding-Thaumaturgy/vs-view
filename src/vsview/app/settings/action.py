@@ -77,6 +77,9 @@ class ActionID(StrEnum):
     # fmt: on
     JUMP_TO_TIME = "workspace.loader.timeline.jump_to_time", "Jump to Time", "Ctrl+F"
     JUMP_TO_FRAME = "workspace.loader.timeline.jump_to_frame", "Jump to Frame", "Ctrl+G"
+    ZONE_PLAY = "workspace.loader.timeline.play_zone", "Play Zone", ""
+    ZONE_SET_START = "workspace.loader.timeline.set_zone_start", "Set Zone Start", ""
+    ZONE_SET_END = "workspace.loader.timeline.set_zone_end", "Set Zone End", ""
 
     # Render cache
     CACHE_SET_START = "workspace.loader.render_cache.set_start", "Set Cache Start", "I"

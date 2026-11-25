@@ -1116,6 +1116,78 @@ def fallback_global(attr: str) -> Callable[[Any | None], Any]:
     return validator
 
 
+class ZoneSettings(BaseModel):
+    start: int = 0
+    end: int = 99
+    length: int = 100
+    follow: bool = True
+    """Play `length` frames from the current frame instead of the fixed `start`-`end` range."""
+    loop: bool = False
+    step: int = 1
+
+    def bounds(self, current: int, total: int) -> tuple[int, int]:
+        """Inclusive frame bounds of the zone in a clip of `total` frames."""
+        last = max(0, total - 1)
+
+        # The zone is shared by all the outputs, so it is clamped to each clip instead of being stored clamped.
+        if not self.follow:
+            start = clamp(self.start, 0, last)
+            return start, clamp(self.end, start, last)
+
+        current = clamp(current, 0, last)
+
+        return (
+            (current, min(last, current + self.length - 1))
+            if self.step > 0
+            else (max(0, current - self.length + 1), current)
+        )
+
+    def frames(self, current: int, total: int) -> range:
+        start, end = self.bounds(current, total)
+        return range(start, end + 1)[:: self.step]
+
+    def set_follow(self, follow: bool, current: int, total: int) -> None:
+        if follow:
+            self.follow = True
+        elif self.follow:
+            self._freeze(current, total)
+
+    def set_start(self, frame: int, current: int, total: int) -> None:
+        if self.follow:
+            self._freeze(current, total)
+
+        self.start = frame
+        self.end = max(self.end, frame)
+        self.length = self.end - self.start + 1
+
+    def set_end(self, frame: int, current: int, total: int) -> None:
+        if self.follow:
+            self._freeze(current, total)
+
+        self.end = frame
+        self.start = min(self.start, frame)
+        self.length = self.end - self.start + 1
+
+    def set_length(self, length: int, total: int) -> None:
+        if self.follow:
+            self.length = length
+            return
+
+        self.end = min(max(0, total - 1), self.start + length - 1)
+        self.length = self.end - self.start + 1
+
+    def set_range(self, start: int, end: int) -> None:
+        self.follow = False
+        self.start = start
+        self.end = end
+        self.length = end - start + 1
+
+    def _freeze(self, current: int, total: int) -> None:
+        self.start, self.end = self.bounds(current, total)
+        self.length = self.end - self.start + 1
+        self.follow = False
+
+
 class LocalPlaybackSettings(BaseModel):
     seek_step: Annotated[
         int,
@@ -1123,9 +1195,7 @@ class LocalPlaybackSettings(BaseModel):
     ] = Field(default=None, validate_default=True)
     speed: float = 1.0
     uncapped: bool = False
-    zone_frames: int = 100
-    loop: bool = False
-    step: int = 1
+    zone: ZoneSettings = Field(default_factory=ZoneSettings)
 
     last_audio_index: Annotated[int, AfterValidator(lambda i: max(0, i))] = 0
     current_volume: float = 0.5

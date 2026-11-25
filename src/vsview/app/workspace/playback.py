@@ -881,21 +881,13 @@ class PlaybackManager(QObject):
         if self.state.is_playing:
             self._restart_playback()
 
-    @Slot(int, bool, int)
-    def _on_play_zone(self, zone_frames: int, loop: bool, step: int) -> None:
-        """Play a specific zone of frames."""
+    @Slot()
+    def _on_play_zone(self) -> None:
         if not (voutput := self._outputs_manager.current_voutput):
             return
 
-        direction = 1 if step > 0 else -1
-
-        end_frame = clamp(
-            self.state.current_frame + (zone_frames * direction),
-            0,
-            voutput.vs_output.clip.num_frames - 1,
-        )
-
-        self._play(range(self.state.current_frame, end_frame + direction, step), loop)
+        zone = self._tbar.playback_container.zone_editor.settings
+        self.play_range(zone.frames(self.state.current_frame, voutput.vs_output.clip.num_frames), zone.loop)
 
     @Slot(float)
     def _on_audio_delay_changed(self, delay_s: float) -> None:

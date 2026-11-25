@@ -14,8 +14,10 @@ from PySide6.QtCore import (
     QPointF,
     QPropertyAnimation,
     QRectF,
+    QSequentialAnimationGroup,
     QSize,
     Qt,
+    QTime,
     QTimer,
     QVariantAnimation,
     Signal,
@@ -32,25 +34,31 @@ from PySide6.QtGui import (
     QPen,
     QResizeEvent,
     QShowEvent,
+    QValidator,
 )
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QBoxLayout,
     QButtonGroup,
     QCheckBox,
     QFormLayout,
     QFrame,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QMenu,
     QProgressBar,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
+    QTimeEdit,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from ...assets import loading_icon
+from ...types import Frame
 from ..icon import IconReloadMixin
 
 
@@ -649,3 +657,99 @@ class NonClosingMenu(QMenu):
             return action.trigger()
 
         return super().mouseReleaseEvent(event)
+
+
+def _show_focus_for_user(self: QAbstractSpinBox) -> None:
+    self.setFocus()
+    self.selectAll()
+
+    accent = self.palette().color(QPalette.ColorRole.Accent)
+    effect = QGraphicsDropShadowEffect(self)
+    effect.setBlurRadius(0)
+    effect.setColor(accent)
+    effect.setOffset(0, 0)
+    self.setGraphicsEffect(effect)
+
+    # Ramp up: fast
+    anim_in = QPropertyAnimation(effect, b"blurRadius", self)
+    anim_in.setDuration(200)
+    anim_in.setStartValue(0.0)
+    anim_in.setEndValue(50.0)
+    anim_in.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    # Decay: slow fade
+    anim_out = QPropertyAnimation(effect, b"blurRadius", self)
+    anim_out.setDuration(800)
+    anim_out.setStartValue(50.0)
+    anim_out.setEndValue(0.0)
+    anim_out.setEasingCurve(QEasingCurve.Type.InCubic)
+
+    group = QSequentialAnimationGroup(self)
+    group.addAnimation(anim_in)
+    group.addAnimation(anim_out)
+    group.finished.connect(effect.deleteLater)
+    group.start(QSequentialAnimationGroup.DeletionPolicy.DeleteWhenStopped)
+
+
+class FrameEdit(QSpinBox):
+    frameChanged = Signal(Frame, Frame)
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.valueChanged.connect(self._on_value_changed)
+
+        self.setMinimum(0)
+        self.setKeyboardTracking(False)
+
+        self.old_value = self.value()
+
+    @override
+    def validate(self, input_text: str, pos: int) -> tuple[QValidator.State, str, int]:
+        if input_text.isdigit():
+            val = int(input_text)
+
+            if val > self.maximum():
+                max_str = str(self.maximum())
+                return QValidator.State.Acceptable, max_str, len(max_str)
+
+        return super().validate(input_text, pos)
+
+    show_focus_for_user = _show_focus_for_user
+
+    @Slot(int)
+    def _on_value_changed(self, value: int) -> None:
+        self.frameChanged.emit(Frame(value), Frame(self.old_value))
+        self.old_value = value
+
+
+class TimeEdit(QTimeEdit):
+    valueChanged = Signal(QTime, QTime)
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.timeChanged.connect(self._on_time_changed)
+
+        self.setDisplayFormat("HH:mm:ss.zzz")
+        self.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
+        self.setMinimumTime(QTime())
+        self.setKeyboardTracking(False)
+
+        self.old_time = self.time()
+
+    show_focus_for_user = _show_focus_for_user
+
+    @Slot(QTime)
+    def _on_time_changed(self, value: QTime) -> None:
+        self.valueChanged.emit(self.time(), self.old_time)
+        self.old_time = self.time()
+
+
+class StepSpinBox(QSpinBox):
+    @override
+    def stepBy(self, steps: int) -> None:
+        if self.value() == 1 and steps < 0:
+            self.setValue(-1)
+        elif self.value() == -1 and steps > 0:
+            self.setValue(1)
+        else:
+            super().stepBy(steps)
